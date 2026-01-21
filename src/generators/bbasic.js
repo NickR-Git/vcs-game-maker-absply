@@ -469,7 +469,7 @@ Blockly.BBasic.generateAnimations = function() {
 
     return `  rem Animation ${animationIndex} ${animation.name} for ${name}:\n\n` +
       `  ${name}frame = ${name}frame + 1\n` +
-      `  if ${name}frame = ${totalDuration} then ${name}frame = 0\n\n` +
+      `  if ${name}frame >= ${totalDuration} then ${name}frame = 0\n\n` +
       stateMachine.join('\n\n') +
       `\n\n${animationLabel}animationEnd`;
   };
