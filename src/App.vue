@@ -183,6 +183,7 @@
       clipped
       right
       permanent
+      class="emulator-drawer"
       :width="emulatorWidth"
     >
       <div
@@ -196,7 +197,7 @@
       </v-btn>
     </v-navigation-drawer>
 
-    <v-main>
+    <v-main class="app-main">
       <router-view/>
     </v-main>
 
@@ -302,6 +303,23 @@ export default {
 }
 </style>
 <style scoped>
+/* Vuetify animates the drawer's width over 200ms, but the emulator's scale is
+   applied instantly, so the two visibly drift apart while dragging. This drawer
+   is permanent and never slides open, so the width transition serves no
+   purpose; dropping it keeps the column and the emulator in lockstep. */
+.emulator-drawer {
+  transition-property: transform, visibility;
+}
+
+/* Vuetify offsets the main content with an animated padding matching the
+   drawer width, which makes the Blockly canvas ease into its new size while
+   the column and emulator resize instantly. It also means the canvas is
+   measured mid-animation when it reflows. Both drawers here are permanent, so
+   nothing needs to animate. */
+.app-main {
+  transition: none;
+}
+
 .emulator-resize-handle {
   position: absolute;
   left: 0;
