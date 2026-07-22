@@ -183,8 +183,14 @@
       clipped
       right
       permanent
+      :width="emulatorWidth"
     >
-      <div id="javatari-target-container"></div>
+      <div
+        class="emulator-resize-handle"
+        title="Drag to resize the emulator"
+        @mousedown.prevent="startResize"
+      ></div>
+      <div id="javatari-target-container" :style="emulatorScaleStyle"></div>
       <v-btn block color="primary" @click="handleRomDownload">
         Get generated ROM
       </v-btn>
@@ -204,9 +210,26 @@
 import {useErrorStorage} from './hooks/project';
 import {name, version} from '../package.json';
 
+// Javatari renders at a fixed size and never reflows to fit its container, so
+// the emulator is scaled with a CSS transform instead. These are its natural
+// dimensions at scale 1, including the margin reserved for the console panel.
+const EMULATOR_BASE_WIDTH = 256;
+const EMULATOR_BASE_HEIGHT = 276;
+const EMULATOR_MIN_WIDTH = 200;
+const EMULATOR_MAX_WIDTH = 900;
+// Keep enough room for the editor when dragging on smaller screens.
+const EDITOR_MIN_WIDTH = 320;
+const EMULATOR_WIDTH_KEY = 'vcs-game-maker.emulatorWidth';
+
+const readStoredWidth = () => {
+  const stored = parseInt(localStorage.getItem(EMULATOR_WIDTH_KEY), 10);
+  return Number.isFinite(stored) ? stored : EMULATOR_BASE_WIDTH;
+};
+
 export default {
   data: () => ({
     drawer: null,
+    emulatorWidth: readStoredWidth(),
   }),
   setup() {
     const errorStorage = useErrorStorage();
@@ -219,7 +242,43 @@ export default {
     document.getElementById('javatari-target-container').appendChild(javatariScreen);
     javatariScreen.style = '';
   },
+  beforeDestroy() {
+    this.stopResize();
+  },
+  computed: {
+    emulatorScaleStyle() {
+      const scale = this.emulatorWidth / EMULATOR_BASE_WIDTH;
+      return {
+        '--emulator-scale': scale,
+        'height': `${Math.round(EMULATOR_BASE_HEIGHT * scale)}px`,
+      };
+    },
+  },
   methods: {
+    startResize() {
+      window.addEventListener('mousemove', this.doResize);
+      window.addEventListener('mouseup', this.stopResize);
+      document.body.style.userSelect = 'none';
+      document.body.style.cursor = 'ew-resize';
+    },
+    doResize(event) {
+      const maxWidth = Math.min(EMULATOR_MAX_WIDTH, window.innerWidth - EDITOR_MIN_WIDTH);
+      const width = window.innerWidth - event.clientX;
+      this.emulatorWidth = Math.round(
+          Math.min(maxWidth, Math.max(EMULATOR_MIN_WIDTH, width)));
+    },
+    stopResize() {
+      window.removeEventListener('mousemove', this.doResize);
+      window.removeEventListener('mouseup', this.stopResize);
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+      localStorage.setItem(EMULATOR_WIDTH_KEY, String(this.emulatorWidth));
+      // Nudge layout-sensitive widgets (the Blockly canvas sizes its SVG from
+      // its container, and only reflows on a window resize). This has to wait
+      // for the drawer's new width to be applied to the DOM, otherwise they
+      // measure the previous layout.
+      this.$nextTick(() => window.dispatchEvent(new Event('resize')));
+    },
     handleRomDownload() {
       const blob = new Blob([Javatari.compiledResult.output], {type: 'application/octet-stream'});
       const link = document.createElement('a');
@@ -230,7 +289,33 @@ export default {
   },
 };
 </script>
+<!-- Unscoped: #javatari-screen is injected by Javatari at runtime, so it never
+     carries this component's scope attribute. -->
+<style>
+#javatari-target-container {
+  overflow: hidden;
+}
+
+#javatari-target-container > #javatari-screen {
+  transform: scale(var(--emulator-scale, 1));
+  transform-origin: top left;
+}
+</style>
 <style scoped>
+.emulator-resize-handle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: ew-resize;
+  z-index: 2;
+}
+
+.emulator-resize-handle:hover {
+  background-color: rgba(0, 0, 0, 0.15);
+}
+
 .v-list-item__icon {
   margin-right: 12px !important;
 }
