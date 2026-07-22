@@ -18,6 +18,7 @@ import {sumBy} from 'lodash';
 import {useBackgroundsStorage, useConfigurationStorage, usePlayer0Storage, usePlayer1Storage} from '../hooks/project';
 import {processBackgroundStorageDefaults} from '../blocks/background';
 import {matrixToPlayfield} from '../utils/pixels';
+import {CUSTOM_SCORE_FONT} from '../utils/score-font';
 import {processPlayerStorageDefaults} from './bbasic/sprites';
 
 const handlebarsTemplate = Handlebars.compile(templateText);
@@ -409,13 +410,22 @@ Blockly.BBasic.generateConfiguration = function() {
     return '';
   }
 
-  const {showScore, showBlankLines} = configurationStorage.value;
+  const {showScore, showBlankLines, scoreFont} = configurationStorage.value;
 
   const kernelOptionsConfigurationCode = (showBlankLines ?? true) ? '' : 'set kernel_options no_blank_lines';
   const scoreConfigurationCode = (showScore ?? true) ? '' : 'const noscore = 1';
+  // The bundled compiler ignores this and gets its digits swapped in directly
+  // instead, but it keeps the generated source correct for real batari Basic.
+  // Custom digits live in the compiler's include, so there is no directive that
+  // would carry them into an exported source file.
+  const scoreFontConfigurationCode = !scoreFont ? '' :
+    scoreFont === CUSTOM_SCORE_FONT ?
+      'rem Custom score font: digits are supplied by the compiler include.' :
+      `const font = ${scoreFont}`;
   return [
     kernelOptionsConfigurationCode,
     scoreConfigurationCode,
+    scoreFontConfigurationCode,
   ].join('\n ');
 };
 

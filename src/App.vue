@@ -42,6 +42,10 @@
           <v-icon>mdi-speaker</v-icon>
         </v-btn>
 
+        <v-btn to="/scorefont" link class="scorefont-item" title="Score font" elevation="0">
+          <v-icon>mdi-numeric</v-icon>
+        </v-btn>
+
         <v-btn to="/configuration" link class="configuration-item" title="Options" elevation="0">
           <v-icon>mdi-cog</v-icon>
         </v-btn>
@@ -133,6 +137,19 @@
           </v-list-item-icon>
           <v-list-item-content>
             <v-list-item-title>Sound</v-list-item-title>
+          </v-list-item-content>
+        </v-list-item>
+
+        <v-list-item
+          to="/scorefont"
+          link
+          class="scorefont-item"
+        >
+          <v-list-item-icon>
+            <v-icon>mdi-numeric</v-icon>
+          </v-list-item-icon>
+          <v-list-item-content>
+            <v-list-item-title>Score font</v-list-item-title>
           </v-list-item-content>
         </v-list-item>
 
@@ -424,6 +441,13 @@ export default {
 .sound-item > .v-list-item__content {
   color: rgb(156, 39, 176) !important;
   border-left-color: rgb(156, 39, 176) !important;
+}
+
+.scorefont-item,
+.scorefont-item > .v-list-item__icon > .theme--light.v-icon,
+.scorefont-item > .v-list-item__content {
+  color: #f2691e !important;
+  border-left-color: #f2691e !important;
 }
 
 .configuration-item,

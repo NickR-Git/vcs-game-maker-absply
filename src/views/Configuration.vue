@@ -34,10 +34,13 @@ export default defineComponent({
 
     const configurationState = computed({
       get() {
+        // scoreFont is chosen on the Score font tab, but is kept here so that
+        // changing any other option round-trips it instead of dropping it.
         const DEFAULT_CONFIGURATION = {
           showScore: true,
           showBlankLines: true,
           romSize: '4k',
+          scoreFont: '',
         };
 
         try {
@@ -60,7 +63,11 @@ export default defineComponent({
       configurationState.value = configurationState.value;
     };
 
-    return {configurationState, handleChangeConfiguration, romSizeOptions: ROM_SIZE_OPTIONS};
+    return {
+      configurationState,
+      handleChangeConfiguration,
+      romSizeOptions: ROM_SIZE_OPTIONS,
+    };
   },
   methods: {
   },

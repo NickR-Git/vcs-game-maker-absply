@@ -41,7 +41,8 @@ import blocklyToolboxBackground from 'raw-loader!./blockly-toolbox-background.xm
 import blocklyToolboxExampleEvent from 'raw-loader!./blockly-toolbox-example-event.xml';
 
 import BlocklyBB from '../generators/bbasic';
-import {useWorkspaceStorage, useErrorStorage} from '../hooks/project';
+import {applyScoreFont} from '../utils/score-font';
+import {useWorkspaceStorage, useErrorStorage, useConfigurationStorage} from '../hooks/project';
 import {useGeneratedBasic} from '../hooks/generated';
 
 const preprocessError = (code, e) => {
@@ -102,6 +103,7 @@ export default {
     },
     workspaceStorage: useWorkspaceStorage(),
     errorStorage: useErrorStorage(),
+    configurationStorage: useConfigurationStorage(),
   }),
   methods: {
     showCode() {
@@ -116,6 +118,9 @@ export default {
       this.generatedBasic.value = code;
       try {
         this.errorStorage.value = '';
+        // The compiler has no font support of its own, so point its score
+        // digits at the selected font before building.
+        applyScoreFont(this.configurationStorage.value?.scoreFont);
         const compiledResult = bBasic(code);
         Javatari.fileLoader.loadFromContent('main.bin', compiledResult.output);
 
