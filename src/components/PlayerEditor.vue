@@ -197,18 +197,25 @@ export default defineComponent({
     const handleAddFrame = (animation, frame) => {
       const frames = animation.frames;
       const maxId = getMaxId(frames);
+      // Prefill the new frame with the previous frame's graphic (a copy, so
+      // editing it does not change the frame it came from), falling back to an
+      // empty grid when the animation has no frames yet.
+      const previousFrame = frames[frames.length - 1];
+      const pixels = previousFrame ?
+        structuredClone(previousFrame.pixels) :
+        playfieldToMatrix(
+            '........\n'+
+            '........\n'+
+            '........\n'+
+            '........\n'+
+            '........\n'+
+            '........\n'+
+            '........\n'+
+            '........');
       const newFrame = {
         id: maxId+1,
         duration: 10,
-        pixels: playfieldToMatrix(
-            '........\n'+
-            '........\n'+
-            '........\n'+
-            '........\n'+
-            '........\n'+
-            '........\n'+
-            '........\n'+
-            '........'),
+        pixels,
       };
 
       animation.frames.push(newFrame);
