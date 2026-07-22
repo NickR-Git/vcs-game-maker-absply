@@ -4,6 +4,9 @@ import {COLOR_ICON, SCORE_ICON} from './icon';
 
 const SCORE_COLOR = '#f2691e';
 
+// The score is six digits, numbered left to right.
+const SCORE_DIGIT_OPTIONS = [...Array(6).keys()].map((n) => [`${n + 1}`, `${n + 1}`]);
+
 const SCORE_BAR_OPTIONS = [
   ['1', 'pfscore1'],
   ['2', 'pfscore2'],
@@ -87,6 +90,44 @@ Blockly.defineBlocksWithJsonArray([
     'nextStatement': null,
     'colour': SCORE_COLOR,
     'extensions': ['math_change_tooltip'],
+  },
+  // Block for a single score digit getter.
+  {
+    'type': `score_digit_get`,
+    'message0': `${SCORE_ICON} Score digit %1`,
+    'args0': [
+      {
+        'type': 'field_dropdown',
+        'name': 'DIGIT',
+        'options': SCORE_DIGIT_OPTIONS,
+      },
+    ],
+    'output': 'Number',
+    'colour': SCORE_COLOR,
+    'tooltip': `Reads a single score digit (0 to 9), counting from the left. ` +
+      `Store it in a variable before comparing it.`,
+  },
+  // Block for a single score digit setter.
+  {
+    'type': `score_digit_set`,
+    'message0': `${SCORE_ICON} Score digit %1: set to: %2`,
+    'args0': [
+      {
+        'type': 'field_dropdown',
+        'name': 'DIGIT',
+        'options': SCORE_DIGIT_OPTIONS,
+      },
+      {
+        'type': 'input_value',
+        'name': 'VALUE',
+        'check': 'Number',
+      },
+    ],
+    'previousStatement': null,
+    'nextStatement': null,
+    'colour': SCORE_COLOR,
+    'tooltip': `Sets a single score digit, counting from the left, without ` +
+      `changing the other digits. Use a value from 0 to 9.`,
   },
   // Block for the score bar getter.
   {

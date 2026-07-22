@@ -1,6 +1,6 @@
 <template>
   <v-card>
-    <v-card-title>Score font</v-card-title>
+    <v-card-title>Score</v-card-title>
     <v-card-text>
       <v-select
         v-model="selectedFont"
@@ -18,7 +18,7 @@
             <pixel-editor
               :width="8"
               :height="8"
-              :aspectRatio="160/192"
+              :aspectRatio="PIXEL_ASPECT"
               v-model="state.digits[index]"
               fgColor="#f2691e"
               :name="'score-font-digit-' + index"
@@ -47,6 +47,12 @@ import {
   fontToDigits,
   processScoreFontDefaults,
 } from '../utils/score-font';
+
+// Score digits are drawn with player graphics, one colour clock per pixel, and
+// those 160 clocks are stretched across a 4:3 frame, so on screen each pixel
+// ends up twice as wide as it is tall (measured at 1.998:1 in the emulator).
+// The grid is square, so this doubles as the preview's width-to-height ratio.
+const PIXEL_ASPECT = 2;
 
 const SCORE_FONT_OPTIONS = [
   {text: 'Default', value: ''},
@@ -111,6 +117,7 @@ export default defineComponent({
       handleReset,
       selectedFont,
       scoreFontOptions: SCORE_FONT_OPTIONS,
+      PIXEL_ASPECT,
     };
   },
 });

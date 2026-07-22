@@ -36,7 +36,7 @@ const routes = [
   },
   {
     path: '/scorefont',
-    name: 'Score font',
+    name: 'Score',
     component: () => import('../views/ScoreFontEditor.vue'),
   },
   {

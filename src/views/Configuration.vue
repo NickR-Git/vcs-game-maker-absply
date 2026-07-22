@@ -34,7 +34,7 @@ export default defineComponent({
 
     const configurationState = computed({
       get() {
-        // scoreFont is chosen on the Score font tab, but is kept here so that
+        // scoreFont is chosen on the Score tab, but is kept here so that
         // changing any other option round-trips it instead of dropping it.
         const DEFAULT_CONFIGURATION = {
           showScore: true,

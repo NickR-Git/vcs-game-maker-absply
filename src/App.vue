@@ -42,7 +42,7 @@
           <v-icon>mdi-speaker</v-icon>
         </v-btn>
 
-        <v-btn to="/scorefont" link class="scorefont-item" title="Score font" elevation="0">
+        <v-btn to="/scorefont" link class="scorefont-item" title="Score" elevation="0">
           <v-icon>mdi-numeric</v-icon>
         </v-btn>
 
@@ -149,7 +149,7 @@
             <v-icon>mdi-numeric</v-icon>
           </v-list-item-icon>
           <v-list-item-content>
-            <v-list-item-title>Score font</v-list-item-title>
+            <v-list-item-title>Score</v-list-item-title>
           </v-list-item-content>
         </v-list-item>
 
