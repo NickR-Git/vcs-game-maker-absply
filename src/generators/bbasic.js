@@ -194,6 +194,7 @@ Blockly.BBasic.finish = function(code) {
   code = code.replaceAll(/(\W)not_(switch\w+(\W?))/g, '$1 !$2');
 
   const generatedConfiguration = Blockly.BBasic.generateConfiguration();
+  const generatedRomSize = Blockly.BBasic.generateRomSize();
   const generatedBackgrounds = Blockly.BBasic.generateBackgrounds();
   const generatedAnimations = Blockly.BBasic.generateAnimations();
 
@@ -210,7 +211,7 @@ Blockly.BBasic.finish = function(code) {
   const generatedBody = definitions.join('\n\n') + '\n\n\n' + code;
   return handlebarsTemplate({generatedBody, generatedBackgrounds, generatedAnimations,
     systemStartEvent, titleStartEvent, titleUpdateEvent, gamePlayStartEvent,
-    gameOverStartEvent, gameOverUpdateEvent, generatedConfiguration});
+    gameOverStartEvent, gameOverUpdateEvent, generatedConfiguration, generatedRomSize});
 };
 
 Blockly.BBasic.normalizeIndents = function(code) {
@@ -418,6 +419,14 @@ Blockly.BBasic.generateConfiguration = function() {
   ].join('\n ');
 };
 
+const SUPPORTED_ROM_SIZES = ['2k', '4k', '8k', '16k', '32k'];
+
+Blockly.BBasic.generateRomSize = function() {
+  const configurationStorage = useConfigurationStorage();
+  const romSize = configurationStorage && configurationStorage.value && configurationStorage.value.romSize;
+  return `set romsize ${SUPPORTED_ROM_SIZES.includes(romSize) ? romSize : '4k'}`;
+};
+
 Blockly.BBasic.generateBackgrounds = function() {
   const backgroundsStorage = useBackgroundsStorage();
 
@@ -520,6 +529,7 @@ Blockly.BBasic.generateAnimations = function() {
   return player0Code + '\n\n\n' + player1Code;
 };
 import background from './bbasic/background';
+import bit from './bbasic/bit';
 import collision from './bbasic/collision';
 import color from './bbasic/color';
 import colour from './bbasic/colour';
@@ -536,7 +546,7 @@ import sprites from './bbasic/sprites';
 import text from './bbasic/text';
 import variables from './bbasic/variables';
 
-[background, collision, color, colour, event, input, logic, loops, math, procedures,
+[background, bit, collision, color, colour, event, input, logic, loops, math, procedures,
   random, score, sound, sprites, text, variables]
     .forEach((init) => init(Blockly));
 

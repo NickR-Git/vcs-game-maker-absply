@@ -1,6 +1,6 @@
 import * as Blockly from 'blockly/core';
 
-import {PLAYER_ICON, MISSILE_ICON, BALL_ICON, COLOR_ICON, HEIGHT_ICON, ANIMATION_ICON, VISIBILITY_ICON, HORIZONTAL_ICON, VERTICAL_ICON, MIRROR_ICON} from './icon';
+import {PLAYER_ICON, MISSILE_ICON, BALL_ICON, COLOR_ICON, HEIGHT_ICON, ANIMATION_ICON, VISIBILITY_ICON, HORIZONTAL_ICON, VERTICAL_ICON, MIRROR_ICON, FRAME_ICON} from './icon';
 
 const buildPlayerOptions = (name) => [
   [HORIZONTAL_ICON + ' X', `${name}x`],
@@ -34,7 +34,7 @@ const MISSILE_SIZE_OPTIONS = [
   ['8', '$30'],
 ];
 
-const buildSpriteBlocks = ({name, description, icon, options=[], writeOnlyOptions=[], colour}) => {
+const buildSpriteBlocks = ({name, description, icon, options=[], writeOnlyOptions=[], readOnlyOptions=[], colour}) => {
   Blockly.defineBlocksWithJsonArray([
     // Block for the getter.
     {
@@ -44,7 +44,7 @@ const buildSpriteBlocks = ({name, description, icon, options=[], writeOnlyOption
         {
           'type': 'field_dropdown',
           'name': 'VAR',
-          options,
+          'options': [...options, ...readOnlyOptions],
         },
       ],
       'output': 'Number',
@@ -146,6 +146,9 @@ buildSpriteBlocks({
   writeOnlyOptions: [
     [VISIBILITY_ICON + ' Visibility', 'player0visibility'],
   ],
+  readOnlyOptions: [
+    [FRAME_ICON + ' Frame', 'player0frame'],
+  ],
 });
 
 buildPlayerBlocks({
@@ -163,6 +166,9 @@ buildSpriteBlocks({
   options: buildPlayerOptions('player1'),
   writeOnlyOptions: [
     [VISIBILITY_ICON + ' Visibility', 'player1visibility'],
+  ],
+  readOnlyOptions: [
+    [FRAME_ICON + ' Frame', 'player1frame'],
   ],
 });
 

@@ -21,10 +21,13 @@ import BlocklyComponent from './BlocklyComponent.vue';
 import '../blocks/prompt-fix';
 
 import '../blocks/background';
+import '../blocks/bit';
 import '../blocks/collision';
 import '../blocks/color';
 import '../blocks/event';
 import '../blocks/input';
+import '../blocks/loops';
+import '../blocks/math';
 import '../blocks/random';
 import '../blocks/score';
 import '../blocks/sound';
@@ -80,6 +83,14 @@ export default {
         length: 3,
         colour: '#ccc',
         snap: true,
+      },
+      zoom: {
+        controls: true,
+        wheel: true,
+        startScale: 1.0,
+        maxScale: 3,
+        minScale: 0.3,
+        scaleSpeed: 1.2,
       },
       toolbox: Handlebars.compile(blocklyToolboxTemplate)({
         blocklyToolboxPlayer0Movement,
