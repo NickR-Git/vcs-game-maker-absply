@@ -212,25 +212,33 @@ import {useErrorStorage} from './hooks/project';
 import {name, version} from '../package.json';
 
 // Javatari renders at a fixed size and never reflows to fit its container, so
-// the emulator is scaled with a CSS transform instead. These are its natural
-// dimensions at scale 1, including the margin reserved for the console panel.
-const EMULATOR_BASE_WIDTH = 256;
-const EMULATOR_BASE_HEIGHT = 276;
+// the emulator is scaled with a CSS transform instead. It picks that size from
+// the space available when it starts, so it varies with the window and has to
+// be measured rather than assumed.
+const EMULATOR_DEFAULT_WIDTH = 256;
 const EMULATOR_MIN_WIDTH = 200;
 const EMULATOR_MAX_WIDTH = 900;
 // Keep enough room for the editor when dragging on smaller screens.
 const EDITOR_MIN_WIDTH = 320;
 const EMULATOR_WIDTH_KEY = 'vcs-game-maker.emulatorWidth';
+// How long to keep waiting for Javatari to lay out before giving up. A timer
+// is used rather than an animation frame so this still settles when the window
+// is in the background.
+const EMULATOR_MEASURE_RETRIES = 60;
+const EMULATOR_MEASURE_INTERVAL = 50;
 
 const readStoredWidth = () => {
   const stored = parseInt(localStorage.getItem(EMULATOR_WIDTH_KEY), 10);
-  return Number.isFinite(stored) ? stored : EMULATOR_BASE_WIDTH;
+  return Number.isFinite(stored) ? stored : EMULATOR_DEFAULT_WIDTH;
 };
 
 export default {
   data: () => ({
     drawer: null,
     emulatorWidth: readStoredWidth(),
+    emulatorScale: 1,
+    emulatorHeight: null,
+    resizing: false,
   }),
   setup() {
     const errorStorage = useErrorStorage();
@@ -242,21 +250,56 @@ export default {
     const javatariScreen = document.getElementById('javatari-screen');
     document.getElementById('javatari-target-container').appendChild(javatariScreen);
     javatariScreen.style = '';
+    this.updateEmulatorScale();
+    window.addEventListener('resize', this.handleWindowResize);
   },
   beforeDestroy() {
     this.stopResize();
+    window.removeEventListener('resize', this.handleWindowResize);
   },
   computed: {
     emulatorScaleStyle() {
-      const scale = this.emulatorWidth / EMULATOR_BASE_WIDTH;
       return {
-        '--emulator-scale': scale,
-        'height': `${Math.round(EMULATOR_BASE_HEIGHT * scale)}px`,
+        '--emulator-scale': this.emulatorScale,
+        'height': this.emulatorHeight === null ? null : `${this.emulatorHeight}px`,
       };
     },
   },
+  watch: {
+    emulatorWidth() {
+      // Wait for the drawer's new width to reach the DOM before measuring.
+      this.$nextTick(this.updateEmulatorScale);
+    },
+  },
   methods: {
+    // Javatari's own size is whatever it chose at startup, so scale it to the
+    // column by measuring both. offsetWidth/offsetHeight are layout sizes and
+    // so are unaffected by the transform already applied.
+    // Listener wrapper, so the event object is not taken as a retry count.
+    handleWindowResize() {
+      this.updateEmulatorScale();
+    },
+    updateEmulatorScale(retriesLeft = EMULATOR_MEASURE_RETRIES) {
+      const container = document.getElementById('javatari-target-container');
+      const screen = document.getElementById('javatari-screen');
+      if (!container || !screen) return;
+      // Javatari lays out after this component mounts, so it may still have no
+      // size. Measuring then would collapse the container to zero height and
+      // clip the emulator away entirely.
+      if (!screen.offsetWidth || !screen.offsetHeight) {
+        if (retriesLeft > 0) {
+          window.setTimeout(
+              () => this.updateEmulatorScale(retriesLeft - 1), EMULATOR_MEASURE_INTERVAL);
+        }
+        return;
+      }
+      const marginBottom = parseFloat(getComputedStyle(screen).marginBottom) || 0;
+      this.emulatorScale = container.clientWidth / screen.offsetWidth;
+      this.emulatorHeight =
+        Math.round((screen.offsetHeight + marginBottom) * this.emulatorScale);
+    },
     startResize() {
+      this.resizing = true;
       window.addEventListener('mousemove', this.doResize);
       window.addEventListener('mouseup', this.stopResize);
       document.body.style.userSelect = 'none';
@@ -269,6 +312,8 @@ export default {
           Math.min(maxWidth, Math.max(EMULATOR_MIN_WIDTH, width)));
     },
     stopResize() {
+      if (!this.resizing) return;
+      this.resizing = false;
       window.removeEventListener('mousemove', this.doResize);
       window.removeEventListener('mouseup', this.stopResize);
       document.body.style.userSelect = '';
