@@ -263,11 +263,7 @@ export default {
     return {errorStorage, name, version};
   },
   mounted() {
-    // Ugly hack in order to move the Javatari screen to a Vue component.
-    const javatariScreen = document.getElementById('javatari-screen');
-    document.getElementById('javatari-target-container').appendChild(javatariScreen);
-    javatariScreen.style = '';
-    this.updateEmulatorScale();
+    this.attachEmulator();
     window.addEventListener('resize', this.handleWindowResize);
   },
   beforeDestroy() {
@@ -292,6 +288,25 @@ export default {
     // Javatari's own size is whatever it chose at startup, so scale it to the
     // column by measuring both. offsetWidth/offsetHeight are layout sizes and
     // so are unaffected by the transform already applied.
+    // Ugly hack in order to move the Javatari screen to a Vue component.
+    // Javatari builds its screen on its own schedule, so it may not exist yet
+    // when this component mounts. Appending it then threw, leaving the emulator
+    // missing entirely, so wait for it instead.
+    attachEmulator(retriesLeft = EMULATOR_MEASURE_RETRIES) {
+      const container = document.getElementById('javatari-target-container');
+      const javatariScreen = document.getElementById('javatari-screen');
+      if (!container) return;
+      if (!javatariScreen) {
+        if (retriesLeft > 0) {
+          window.setTimeout(
+              () => this.attachEmulator(retriesLeft - 1), EMULATOR_MEASURE_INTERVAL);
+        }
+        return;
+      }
+      container.appendChild(javatariScreen);
+      javatariScreen.style = '';
+      this.updateEmulatorScale();
+    },
     // Listener wrapper, so the event object is not taken as a retry count.
     handleWindowResize() {
       this.updateEmulatorScale();
