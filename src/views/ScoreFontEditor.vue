@@ -11,8 +11,14 @@
         Draw the ten score digits below. They are used when the score font is
         set to <strong>Custom</strong>.
       </p>
+      <editor-zoom v-model="zoom" />
       <div class="digit-list">
-        <div class="digit" v-for="(digit, index) in state.digits" :key="index">
+        <div
+          class="digit"
+          :style="{width: digitWidth}"
+          v-for="(digit, index) in state.digits"
+          :key="index"
+        >
           <div class="digit-label">{{ index }}</div>
           <div class="digit-editor">
             <pixel-editor
@@ -38,8 +44,10 @@
 <script>
 import {computed, defineComponent} from '@vue/composition-api';
 
+import EditorZoom from '../components/EditorZoom.vue';
 import PixelEditor from '../components/PixelEditor.vue';
 import {useConfigurationStorage, useScoreFontStorage} from '../hooks/project';
+import {useEditorZoom} from '../hooks/zoom';
 import {SCORE_FONT_NAMES} from '../generators/score-fonts';
 import {
   CUSTOM_SCORE_FONT,
@@ -54,6 +62,9 @@ import {
 // The grid is square, so this doubles as the preview's width-to-height ratio.
 const PIXEL_ASPECT = 2;
 
+// Width of one digit editor at 100% zoom.
+const DIGIT_BASE_WIDTH = 120;
+
 const SCORE_FONT_OPTIONS = [
   {text: 'Default', value: ''},
   ...SCORE_FONT_NAMES.map((name) => ({text: name, value: name})),
@@ -61,10 +72,12 @@ const SCORE_FONT_OPTIONS = [
 ];
 
 export default defineComponent({
-  components: {PixelEditor},
+  components: {EditorZoom, PixelEditor},
   setup() {
     const scoreFontStorage = useScoreFontStorage();
     const configurationStorage = useConfigurationStorage();
+    const zoom = useEditorZoom('scorefont');
+    const digitWidth = computed(() => `${Math.round(DIGIT_BASE_WIDTH * zoom.value)}px`);
 
     // Only this one option is owned here, so it is merged into the stored
     // configuration rather than replacing it.
@@ -118,6 +131,8 @@ export default defineComponent({
       selectedFont,
       scoreFontOptions: SCORE_FONT_OPTIONS,
       PIXEL_ASPECT,
+      zoom,
+      digitWidth,
     };
   },
 });
@@ -129,9 +144,7 @@ export default defineComponent({
   gap: 16px;
 }
 
-.digit {
-  width: 120px;
-}
+/* Width is set inline from the zoom factor. */
 
 .digit-label {
   font-weight: bold;
