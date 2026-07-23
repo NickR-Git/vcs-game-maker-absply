@@ -7,7 +7,7 @@
           <v-list-item v-for="animation in state.animations" v-bind:key="animation.id">
             <v-list-item-content>
                 <v-list-item-title>
-                  <v-text-field label="Animation name" v-model="animation.name" />
+                  <v-text-field label="Animation name" v-model="animation.name" @change="handleChildChange" />
 
                   <v-menu
                         top
@@ -100,6 +100,7 @@
                         v-model.number="frame.duration"
                         hide-details
                         type="number"
+                        @change="handleChildChange"
                       />
                       <pixel-editor
                         :width="8"
