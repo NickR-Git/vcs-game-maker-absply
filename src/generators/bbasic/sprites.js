@@ -96,6 +96,13 @@ export default (Blockly) => {
   };
 
   const createGeneratorForPlayer = (name) => {
+    // The dropdown already holds the animation's position in the list, which is
+    // what the generated animation dispatch compares against.
+    Blockly.BBasic[`sprite_${name}_animation_select`] = function(block) {
+      const index = block.getFieldValue('VAR') || '0';
+      return [index, Blockly.BBasic.ORDER_ATOMIC];
+    };
+
     Blockly.BBasic[`sprite_${name}_size`] = function(block) {
       const size = block.getFieldValue('SIZE') || '0';
       const varName = name + 'size';

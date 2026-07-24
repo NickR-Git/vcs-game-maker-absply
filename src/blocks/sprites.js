@@ -1,6 +1,41 @@
 import * as Blockly from 'blockly/core';
 
+import {processPlayerStorageDefaults} from '../generators/bbasic/sprites';
+import {usePlayer0Storage, usePlayer1Storage} from '../hooks/project';
 import {PLAYER_ICON, MISSILE_ICON, BALL_ICON, COLOR_ICON, HEIGHT_ICON, ANIMATION_ICON, VISIBILITY_ICON, HORIZONTAL_ICON, VERTICAL_ICON, MIRROR_ICON, FRAME_ICON} from './icon';
+
+// The generated code dispatches on the animation's position in the list
+// ("if player0animation = 2 ..."), not on its id, so the option value is the
+// index. Storage is read afresh on each call rather than through a cached
+// computed, so renamed and added animations show up without a reload.
+const buildAnimationOptions = (storageFactory) => () => {
+  try {
+    const player = processPlayerStorageDefaults(storageFactory());
+    return player.animations.map((animation, index) =>
+      [animation.name || `Unnamed ${index + 1}`, `${index}`]);
+  } catch (e) {
+    console.error('Failed to list animation options', e);
+    return [['Error', '0']];
+  }
+};
+
+// Defined programmatically because a JSON definition can only hold a fixed list
+// of options, and this one has to be rebuilt each time the dropdown opens.
+const buildAnimationSelectBlock = ({name, description, icon, colour, storageFactory}) => {
+  // Value block: picks an animation by name and reports its number, so it can
+  // be plugged into the sprite setter or anywhere else a number is wanted.
+  Blockly.Blocks[`sprite_${name}_animation_select`] = {
+    init: function() {
+      this.appendDummyInput()
+          .appendField(`${icon} ${description} ${ANIMATION_ICON} Animation:`)
+          .appendField(
+              new Blockly.FieldDropdown(buildAnimationOptions(storageFactory)), 'VAR');
+      this.setOutput(true, 'Number');
+      this.setColour(colour);
+      this.setTooltip(`Selects one of ${description}'s animations by name`);
+    },
+  };
+};
 
 const buildPlayerOptions = (name) => [
   [HORIZONTAL_ICON + ' X', `${name}x`],
@@ -158,6 +193,14 @@ buildPlayerBlocks({
   colour: 'red',
 });
 
+buildAnimationSelectBlock({
+  name: 'player0',
+  description: 'Player 0',
+  icon: PLAYER_ICON,
+  colour: 'red',
+  storageFactory: usePlayer0Storage,
+});
+
 buildSpriteBlocks({
   name: 'player1',
   description: 'Player 1',
@@ -177,6 +220,14 @@ buildPlayerBlocks({
   description: 'Player 1',
   icon: PLAYER_ICON,
   colour: 'blue',
+});
+
+buildAnimationSelectBlock({
+  name: 'player1',
+  description: 'Player 1',
+  icon: PLAYER_ICON,
+  colour: 'blue',
+  storageFactory: usePlayer1Storage,
 });
 
 buildSpriteBlocks({
