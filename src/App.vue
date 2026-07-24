@@ -279,6 +279,10 @@ export default {
   beforeDestroy() {
     this.stopResize();
     window.removeEventListener('resize', this.handleWindowResize);
+    if (this.emulatorResizeObserver) {
+      this.emulatorResizeObserver.disconnect();
+      this.emulatorResizeObserver = null;
+    }
   },
   computed: {
     emulatorScaleStyle() {
@@ -315,7 +319,36 @@ export default {
       }
       container.appendChild(javatariScreen);
       javatariScreen.style = '';
+      this.observeEmulatorSize(container);
       this.updateEmulatorScale();
+    },
+    // A single measurement is fragile: if it runs while the container's width
+    // has not settled to the drawer width yet, the scale comes out too large,
+    // the fixed container height too tall, and the ROM buttons get pushed out
+    // of the drawer. Re-measuring whenever the container's width actually
+    // changes makes the height self-correct once layout settles, instead of
+    // staying wrong until the user resizes.
+    observeEmulatorSize(container) {
+      if (this.emulatorResizeObserver || typeof ResizeObserver === 'undefined') {
+        return;
+      }
+      // The callback sets the container's height, which the observer reports
+      // back as a size change; reacting to that would loop. Only the width
+      // matters for the scale and we never set it here, so ignore reports that
+      // leave it unchanged, and defer to an animation frame so the measurement
+      // never runs inside notification delivery.
+      this.emulatorResizeObserver = new ResizeObserver(() => {
+        if (this.emulatorResizePending) return;
+        this.emulatorResizePending = true;
+        window.requestAnimationFrame(() => {
+          this.emulatorResizePending = false;
+          const width = container.clientWidth;
+          if (width === this.lastEmulatorWidth) return;
+          this.lastEmulatorWidth = width;
+          this.updateEmulatorScale();
+        });
+      });
+      this.emulatorResizeObserver.observe(container);
     },
     // Listener wrapper, so the event object is not taken as a retry count.
     handleWindowResize() {

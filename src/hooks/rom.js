@@ -1,38 +1,55 @@
 'use strict';
 
 import Vue from 'vue';
-import VueCompositionApi, {ref} from '@vue/composition-api';
+import VueCompositionApi from '@vue/composition-api';
 
+import Blockly from 'blockly';
 import bBasic from 'batari-basic';
 
+import '../blocks';
+import BlocklyBB from '../generators/bbasic';
 import {applyScoreFont} from '../utils/score-font';
 import {showError} from '../utils/build-error';
 import {useGeneratedBasic} from './generated';
-import {useConfigurationStorage, useErrorStorage} from './project';
+import {useConfigurationStorage, useErrorStorage, useWorkspaceStorage} from './project';
+import {markRomUpToDate, markRomOutdated, useRomOutdated} from './rom-status';
 
 Vue.use(VueCompositionApi);
 
-// Compiling is slow and a faulty program can hang the whole app, so it no
-// longer happens on every edit: the editor only flags the ROM as stale, and the
-// emulator is refreshed on demand.
-const romOutdated = ref(true);
+export {markRomOutdated, useRomOutdated};
 
-export const useRomOutdated = () => romOutdated;
+const EMPTY_WORKSPACE = '<xml xmlns="https://developers.google.com/blockly/xml"/>';
 
-export const markRomOutdated = () => {
-  romOutdated.value = true;
+// The generated bBasic bakes in the backgrounds, animations and score font read
+// from storage, so it has to be regenerated from the current project at build
+// time; a graphics edit alone would otherwise leave the cached code stale.
+// Generated headlessly so this works from any tab, not just the editor.
+const regenerateCode = () => {
+  const xmlText = useWorkspaceStorage().value;
+  const workspace = new Blockly.Workspace();
+  try {
+    const dom = Blockly.Xml.textToDom(
+        xmlText && xmlText !== 'null' ? xmlText : EMPTY_WORKSPACE);
+    Blockly.Xml.domToWorkspace(dom, workspace);
+    return BlocklyBB.workspaceToCode(workspace);
+  } finally {
+    workspace.dispose();
+  }
 };
 
 /**
- * Compiles the current generated bBasic and loads it into the emulator.
+ * Compiles the current project into a ROM and loads it into the emulator.
  * @return {boolean} Whether the ROM was built.
  */
 export const buildRom = () => {
   const errorStorage = useErrorStorage();
-  const code = useGeneratedBasic().value;
 
-  if (!code) {
-    errorStorage.value = 'There is no generated code to build yet.';
+  let code;
+  try {
+    code = regenerateCode();
+    useGeneratedBasic().value = code;
+  } catch (e) {
+    showError(errorStorage, 'Error while generating bBasic code', code, e);
     return false;
   }
 
@@ -46,7 +63,7 @@ export const buildRom = () => {
 
     // TODO: Implement this without a global variable
     Javatari.compiledResult = compiledResult;
-    romOutdated.value = false;
+    markRomUpToDate();
     return true;
   } catch (e) {
     showError(errorStorage, 'Error while compiling bBasic code', code, e);
