@@ -14,8 +14,6 @@
 <script>
 import Handlebars from 'handlebars';
 
-import bBasic from 'batari-basic';
-
 import BlocklyComponent from './BlocklyComponent.vue';
 
 import '../blocks/prompt-fix';
@@ -41,35 +39,10 @@ import blocklyToolboxBackground from 'raw-loader!./blockly-toolbox-background.xm
 import blocklyToolboxExampleEvent from 'raw-loader!./blockly-toolbox-example-event.xml';
 
 import BlocklyBB from '../generators/bbasic';
-import {applyScoreFont} from '../utils/score-font';
-import {useWorkspaceStorage, useErrorStorage, useConfigurationStorage} from '../hooks/project';
+import {showError} from '../utils/build-error';
+import {useWorkspaceStorage, useErrorStorage} from '../hooks/project';
 import {useGeneratedBasic} from '../hooks/generated';
-
-const preprocessError = (code, e) => {
-  if (!code) return e;
-  try {
-    const codeLines = code.split('\n');
-
-    return `${e}`.split('\n')
-        .map((line) => {
-          const parts = /^Line (\d+):\s*(.*)/g.exec(line);
-          if (!parts) return line;
-
-          const position = parseInt(parts[1]);
-          const rest = parts[2];
-          return `Line ${position}: ${rest}` + '\n' + codeLines[position - 1];
-        })
-        .join('\n');
-  } catch (e2) {
-    logger.warn('Error while preprocessing error message', e2);
-    return e;
-  }
-};
-
-const showError = (errorStorage, msg, code, e) => {
-  console.error(msg, e);
-  errorStorage.value = `${msg}: ${preprocessError(code, e)}`;
-};
+import {markRomOutdated} from '../hooks/rom';
 
 export default {
   components: {BlocklyComponent},
@@ -103,9 +76,11 @@ export default {
     },
     workspaceStorage: useWorkspaceStorage(),
     errorStorage: useErrorStorage(),
-    configurationStorage: useConfigurationStorage(),
   }),
   methods: {
+    // Only the bBasic source is refreshed as blocks change; compiling it into a
+    // ROM is left to the "Update ROM" button, since a build is slow and a
+    // faulty program can lock up the emulator along with the rest of the app.
     showCode() {
       let code;
       try {
@@ -115,19 +90,11 @@ export default {
         return;
       }
 
-      this.generatedBasic.value = code;
-      try {
-        this.errorStorage.value = '';
-        // The compiler has no font support of its own, so point its score
-        // digits at the selected font before building.
-        applyScoreFont(this.configurationStorage.value?.scoreFont);
-        const compiledResult = bBasic(code);
-        Javatari.fileLoader.loadFromContent('main.bin', compiledResult.output);
-
-        // TODO: Implement this without a global variable
-        Javatari.compiledResult = compiledResult;
-      } catch (e) {
-        showError(this.errorStorage, 'Error while compiling bBasic code', code, e);
+      // Blockly reports UI-only changes too (opening the toolbox, scrolling),
+      // so compare the code rather than trusting the event.
+      if (code !== this.generatedBasic.value) {
+        this.generatedBasic.value = code;
+        markRomOutdated();
       }
     },
   },

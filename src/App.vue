@@ -209,7 +209,15 @@
         @mousedown.prevent="startResize"
       ></div>
       <div id="javatari-target-container" :style="emulatorScaleStyle"></div>
-      <v-btn block color="primary" @click="handleRomDownload">
+      <v-btn
+        block
+        :color="romOutdated ? 'warning' : 'primary'"
+        :loading="building"
+        @click="handleRomUpdate"
+      >
+        {{ romOutdated ? 'Update ROM' : 'ROM up to date' }}
+      </v-btn>
+      <v-btn block color="primary" class="mt-2" @click="handleRomDownload">
         Get generated ROM
       </v-btn>
     </v-navigation-drawer>
@@ -226,6 +234,7 @@
 
 <script>
 import {useErrorStorage} from './hooks/project';
+import {buildRom, useRomOutdated} from './hooks/rom';
 import {name, version} from '../package.json';
 
 // Javatari renders at a fixed size and never reflows to fit its container, so
@@ -256,11 +265,12 @@ export default {
     emulatorScale: 1,
     emulatorHeight: null,
     resizing: false,
+    building: false,
   }),
   setup() {
     const errorStorage = useErrorStorage();
     console.info('Text', version);
-    return {errorStorage, name, version};
+    return {errorStorage, romOutdated: useRomOutdated(), name, version};
   },
   mounted() {
     this.attachEmulator();
@@ -357,7 +367,25 @@ export default {
       // measure the previous layout.
       this.$nextTick(() => window.dispatchEvent(new Event('resize')));
     },
+    // Compiling blocks the main thread, so hand the browser a chance to paint
+    // the button's progress state before starting.
+    handleRomUpdate() {
+      if (this.building) return;
+      this.building = true;
+      window.setTimeout(() => {
+        try {
+          buildRom();
+        } finally {
+          this.building = false;
+        }
+      }, 0);
+    },
     handleRomDownload() {
+      if (!window.Javatari?.compiledResult) {
+        this.errorStorage.value =
+          'There is no compiled ROM yet; use "Update ROM" first.';
+        return;
+      }
       const blob = new Blob([Javatari.compiledResult.output], {type: 'application/octet-stream'});
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
