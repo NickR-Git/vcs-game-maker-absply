@@ -109,6 +109,14 @@ export default (Blockly) => {
       return `${varName} = ${varName} & $F8\n` +
         `${varName} = ${varName} | ${size}\n`;
     };
+
+    // Bit 6 of the size variable pauses the animation: the frame counter is
+    // frozen while it is set. It is unused by NUSIZ, so it rides along
+    // harmlessly when the size variable is loaded into the register.
+    Blockly.BBasic[`sprite_${name}_animation_playback`] = function(block) {
+      const paused = block.getFieldValue('STATE') === 'pause';
+      return `${name}size{6} = ${paused ? 1 : 0}\n`;
+    };
   };
 
   const createGeneratorForMissile = (name) => {

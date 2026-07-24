@@ -486,9 +486,14 @@ Blockly.BBasic.generateAnimations = function() {
         endLabel;
     });
 
+    // Bit 6 of the size variable is the pause flag (see the playback block):
+    // while it is set, the frame counter is frozen, holding the current frame.
+    const pauseSkipLabel = `${animationLabel}pauseSkip`;
     return `  rem Animation ${animationIndex} ${animation.name} for ${name}:\n\n` +
+      `  if ${name}size{6} then goto ${pauseSkipLabel}\n` +
       `  ${name}frame = ${name}frame + 1\n` +
-      `  if ${name}frame >= ${totalDuration} then ${name}frame = 0\n\n` +
+      `  if ${name}frame >= ${totalDuration} then ${name}frame = 0\n` +
+      `${pauseSkipLabel}\n\n` +
       stateMachine.join('\n\n') +
       `\n\n${animationLabel}animationEnd`;
   };

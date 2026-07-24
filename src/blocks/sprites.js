@@ -2,7 +2,7 @@ import * as Blockly from 'blockly/core';
 
 import {processPlayerStorageDefaults} from '../generators/bbasic/sprites';
 import {usePlayer0Storage, usePlayer1Storage} from '../hooks/project';
-import {PLAYER_ICON, MISSILE_ICON, BALL_ICON, COLOR_ICON, HEIGHT_ICON, ANIMATION_ICON, VISIBILITY_ICON, HORIZONTAL_ICON, VERTICAL_ICON, MIRROR_ICON, FRAME_ICON} from './icon';
+import {PLAYER_ICON, MISSILE_ICON, BALL_ICON, COLOR_ICON, HEIGHT_ICON, ANIMATION_ICON, VISIBILITY_ICON, HORIZONTAL_ICON, VERTICAL_ICON, MIRROR_ICON, FRAME_ICON, PLAY_ICON, PAUSE_ICON} from './icon';
 
 // The generated code dispatches on the animation's position in the list
 // ("if player0animation = 2 ..."), not on its id, so the option value is the
@@ -147,6 +147,25 @@ const buildPlayerBlocks = ({name, description, icon, colour}) => {
       'nextStatement': null,
       colour,
       'extensions': ['math_change_tooltip'],
+    },
+    // Block for pausing/resuming a player's animation.
+    {
+      'type': `sprite_${name}_animation_playback`,
+      'message0': `${icon} ${description} ${ANIMATION_ICON} animation %1`,
+      'args0': [
+        {
+          'type': 'field_dropdown',
+          'name': 'STATE',
+          'options': [
+            [`${PLAY_ICON} Play`, 'play'],
+            [`${PAUSE_ICON} Pause`, 'pause'],
+          ],
+        },
+      ],
+      'previousStatement': null,
+      'nextStatement': null,
+      colour,
+      'tooltip': `Plays or pauses ${description}'s animation`,
     },
   ]);
 };
