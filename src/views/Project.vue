@@ -464,18 +464,31 @@ export default defineComponent({
           // The user closing/cancelling the picker throws AbortError -
           // not a real failure, nothing to report or recover from.
           if (e && e.name === 'AbortError') return;
-          console.error('Error while saving project', e);
+          // Chrome throws this SecurityError unconditionally when the app
+          // is embedded in a cross-origin iframe - the spec disallows the
+          // picker there outright, with no permissions-policy/allow
+          // attribute able to override it (confirmed as the actual
+          // reported bug: "Save"/"Save As" silently doing nothing when
+          // embedded that way). Falls through to the same download-based
+          // fallback used on a browser that never had the File System
+          // Access API at all, rather than leaving the user with no way
+          // to save.
+          if (!(e && e.name === 'SecurityError')) {
+            console.error('Error while saving project', e);
+            return;
+          }
+        }
+        if (handle) {
+          const writable = await handle.createWritable();
+          await writable.write(projectYaml);
+          await writable.close();
+          this.data.activeFileHandle = handle;
+          // So "Save" keeps working as "Save" after a reload too - see
+          // utils/file-handle-storage.js's own comment.
+          persistActiveFileHandle(handle);
+          appendCompileLog(`Game saved to ${handle.name}`, 'stage');
           return;
         }
-        const writable = await handle.createWritable();
-        await writable.write(projectYaml);
-        await writable.close();
-        this.data.activeFileHandle = handle;
-        // So "Save" keeps working as "Save" after a reload too - see
-        // utils/file-handle-storage.js's own comment.
-        persistActiveFileHandle(handle);
-        appendCompileLog(`Game saved to ${handle.name}`, 'stage');
-        return;
       }
 
       const projectBlob = new Blob([projectYaml], {type: 'text/yaml'});
@@ -591,7 +604,14 @@ export default defineComponent({
           handles = await window.showOpenFilePicker({types: FILE_PICKER_TYPES});
         } catch (e) {
           if (e && e.name === 'AbortError') return;
-          console.error('Error while opening project', e);
+          // Same cross-origin-iframe SecurityError as handleSaveProjectAs
+          // above - falls through to the plain file input below instead of
+          // leaving "Open Project" dead in that context.
+          if (!(e && e.name === 'SecurityError')) {
+            console.error('Error while opening project', e);
+            return;
+          }
+          this.$refs.importFileInput.click();
           return;
         }
         const [handle] = handles;
