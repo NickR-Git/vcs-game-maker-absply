@@ -173,7 +173,7 @@
           v-model="configurationState.enableCycleScore"
           @change="handleChangeConfiguration"
           label="Show remaining CPU cycles as the score (cyclescore)"
-          hint="Displays an estimate (accurate to about +/- 64 cycles) of how many machine cycles are left in the current frame, using the score digits - white means positive (cycles to spare), red means negative (over budget). Only measures +/- 2000 cycles; a bigger deficit may show garbage or crash. Meant for debugging - turn it back off before shipping."
+          hint="Displays an estimate (accurate to about +/- 64 cycles) of how many machine cycles are left in the current frame, using the score digits - white means positive (cycles to spare), red means negative (over budget). Only measures +/- 2000 cycles; a bigger deficit may show garbage or crash. Meant for debugging - turn it back off before shipping. Has no effect while a Title screen is being shown."
           persistent-hint
           class="option-switch"
         />
@@ -212,7 +212,7 @@
           v-model="configurationState.showVariableComments"
           @change="handleChangeConfiguration"
           label="Show detailed comments in generated code"
-          hint="Adds a short comment next to each reserved variable's own &quot;dim&quot; line, and each data table, in the Generated tab explaining what it's for."
+          hint="Adds a short comment next to each reserved variable's &quot;dim&quot; line, and each data table, in the generated bBasic code explaining what it's for."
           persistent-hint
           class="option-switch"
         />

@@ -211,6 +211,58 @@ export const generateTextStaticOffsetTables = (Blockly, bank) => {
     ` data ${linesMaxName}\n  ${linesMax}\nend`;
 };
 
+const TEXT_ROW2_OFFSET_TABLE_ID = '__text_row2_offsets';
+
+export const trackTextRow2OffsetUsage = (Blockly, bank) => {
+  Blockly.BBasic.trackDataTableBank(TEXT_ROW2_OFFSET_TABLE_ID, bank);
+};
+
+// "Show text row 2 ID [n]" (text_minikernel_show_by_id_row, ROW=2) needs a
+// row 1 it can point TextIndex at that's ALWAYS blank, immediately followed
+// by whichever entry's own first line the runtime id picks - text12b.asm's
+// own row 2 is always read from TextIndex+TEXT_MESSAGE_LENGTH (see
+// text_minikernel_show_row's own comment), so there's no shortcut here the
+// way ROW=1 gets (its own row 1 already comes from text_static_offsets
+// unmodified - see text_minikernel_show_by_id_row's own comment - and ROW=1
+// just forces row 2 off instead of needing new data at all). One [blank,
+// entry's first line] PAIR is built here for every Text tab entry (id-order,
+// position 0 = the same blank guard row text_static_offsets itself reserves
+// - see getStaticMessageLayout's own comment), reusing the exact same
+// freeTypedMessages array/table-building code every OTHER free-typed/row
+// entry already goes through (see registerFreeTypedRowMessage's own
+// comment) - only built once per project (cached on Blockly.BBasic, reset
+// per build in bbasic.js's own init()) even though generateTextRow2OffsetsTable
+// below can run once per bank.
+const ensureTextRow2Pairs = (Blockly) => {
+  if (Blockly.BBasic.textRow2PairOffsets) return Blockly.BBasic.textRow2PairOffsets;
+  const maxWidth = resolveTextMaxDisplayWidth();
+  const entries = [{text: ''}, ...listTextStrings()];
+  Blockly.BBasic.freeTypedMessages = Blockly.BBasic.freeTypedMessages || [];
+  const messages = Blockly.BBasic.freeTypedMessages;
+  const offsets = entries.map(({text}) => {
+    const offset = staticMessageRegionEnd() + messages.length * TEXT_MESSAGE_LENGTH;
+    const firstLine = text ? (splitMessageLines(text, maxWidth)[0] || '') : '';
+    messages.push('', firstLine);
+    return offset;
+  });
+  Blockly.BBasic.textRow2PairOffsets = offsets;
+  return offsets;
+};
+
+// Only built/reserved when a "Show text row 2 ID" block actually exists
+// somewhere in the project (Blockly.BBasic.textShowByIdRow2Used, a real
+// block-type pre-scan set in bbasic.js's own init()) - a project using only
+// ROW=1 by-id blocks (or the free-typed/named row blocks) never pays for
+// this second, parallel copy of every Text tab entry's own first line.
+export const generateTextRow2OffsetsTable = (Blockly, bank) => {
+  if (!Blockly.BBasic.textShowByIdRow2Used) return '';
+  const usage = Blockly.BBasic.dataTableBankUsage[TEXT_ROW2_OFFSET_TABLE_ID];
+  if (!(usage ? usage.has(bank) : bank === 1)) return '';
+  const offsets = ensureTextRow2Pairs(Blockly);
+  const tableName = bankSuffixedTableName('text_row2_offsets', bank);
+  return ` data ${tableName}\n  ${offsets.join(', ')}\nend`;
+};
+
 export default (Blockly) => {
   const markTextMinikernelUsed = () => {
     Blockly.BBasic.textMinikernelUsed = true;
@@ -245,6 +297,16 @@ export default (Blockly) => {
   // false: "Scroll text lines down" still reveals it, one row at a time,
   // just never automatically.
   const namedMessageWrapToLine2 = (id) => getStaticMessageLayout()[namedMessagePosition(id)].wrapToLine2;
+  // Just this entry's own FIRST line of raw text (before glyph-encoding) -
+  // used by text_minikernel_show_named_row below, which only ever shows one
+  // row of a named entry (no word-wrap/scrolling), same "first line only"
+  // rule as encodeTextMessage would apply to a would-be single-row version
+  // of this entry anyway.
+  const namedMessageFirstLine = (id) => {
+    const entry = listTextStrings().find((candidate) => `${candidate.id}` === `${id}`);
+    if (!entry) return '';
+    return splitMessageLines(entry.text, resolveTextMaxDisplayWidth())[0] || '';
+  };
 
   // Free-typed messages ("Show text: <literal>") have no Text tab entry to
   // number them by, so they keep the old lazy, dedup-by-content scheme,
@@ -266,6 +328,26 @@ export default (Blockly) => {
     }
     const offset = staticMessageRegionEnd() + index * TEXT_MESSAGE_LENGTH;
     return {offset, maxOffset: 0};
+  };
+
+  // "Show text row 1/2" (text_minikernel_show_row) - reuses the SAME
+  // freeTypedMessages array/region as registerFreeTypedMessage above (built
+  // into the final table by the exact same "one row per array entry" code,
+  // see this.freeTypedMessages' own use near the bottom of this file), but
+  // always pushes TWO entries at once (row 1's text, then row 2's text -
+  // whichever one wasn't set comes out blank) so they land at consecutive
+  // offsets in the table, matching what text12b.asm's own "textkernel2ndrow"
+  // expects (row 2 is always read from TextIndex+TEXT_MESSAGE_LENGTH,
+  // unconditionally). Never deduped against an existing single-row entry the
+  // way registerFreeTypedMessage's own text.indexOf is - an existing entry
+  // has no guaranteed real row 2 sitting right after it, so reusing one here
+  // could read someone else's unrelated row as row 2.
+  const registerFreeTypedRowMessage = (row, text) => {
+    Blockly.BBasic.freeTypedMessages = Blockly.BBasic.freeTypedMessages || [];
+    const messages = Blockly.BBasic.freeTypedMessages;
+    const offset = staticMessageRegionEnd() + messages.length * TEXT_MESSAGE_LENGTH;
+    messages.push(row === '2' ? '' : text, row === '2' ? text : '');
+    return offset;
   };
 
   // Emits the write every "Show text"/"Show text with ID"/"Clear text" code
@@ -356,6 +438,21 @@ export default (Blockly) => {
       setTextRow2ActiveCode(wrapToLine2 && lineCount >= 2) +
       setTextLinesRangeCode(offset, maxOffset);
   };
+  // Puts a named entry's own first line on just one row, reusing the same
+  // registerFreeTypedRowMessage mechanism text_minikernel_show_row uses for
+  // its own free-typed text - the entry's OWN justify setting isn't applied
+  // here (registerFreeTypedRowMessage always left-justifies, the same
+  // limitation "Show text: <free-typed text>" already has - see
+  // registerFreeTypedMessage's own comment), only its raw first-line text.
+  Blockly.BBasic['text_minikernel_show_named_row'] = function(block) {
+    markTextMinikernelUsed();
+    const row = block.getFieldValue('ROW');
+    const id = block.getFieldValue('TEXT_ID');
+    const offset = registerFreeTypedRowMessage(row, namedMessageFirstLine(id));
+    return emitScrollSetup(offset, 0, DEFAULT_SCROLL_SPEED, DEFAULT_SCROLL_PAUSE) +
+      setTextRow2ActiveCode(true) +
+      setTextLinesRangeCode(offset, offset);
+  };
   // Scroll named block: uses the SAME position to look up that entry's own
   // page-0 offset/maxOffset in the scroll append region (see
   // getNamedScrollLayout in text-scroll.js) - naturally maxOffset = 0 for a
@@ -385,6 +482,20 @@ export default (Blockly) => {
     return emitScrollSetup(entry.offset, entry.maxOffset, DEFAULT_SCROLL_SPEED, DEFAULT_SCROLL_PAUSE) +
       setTextRow2ActiveCode(false) +
       setTextLinesRangeCode(entry.offset, entry.offset);
+  };
+
+  // Always forces row 2 ON (true) regardless of which row (1 or 2) was
+  // actually set - registerFreeTypedRowMessage above always compiles in a
+  // real row 2 right after row 1 (blank for whichever row wasn't chosen),
+  // so the kernel should always draw it, never fall back to the blank guard
+  // row setTextRow2ActiveCode(false) would otherwise point it at.
+  Blockly.BBasic['text_minikernel_show_row'] = function(block) {
+    markTextMinikernelUsed();
+    const row = block.getFieldValue('ROW');
+    const offset = registerFreeTypedRowMessage(row, block.getFieldValue('TEXT'));
+    return emitScrollSetup(offset, 0, DEFAULT_SCROLL_SPEED, DEFAULT_SCROLL_PAUSE) +
+      setTextRow2ActiveCode(true) +
+      setTextLinesRangeCode(offset, offset);
   };
   Blockly.BBasic['text_minikernel_show_scroll'] = function(block) {
     markTextMinikernelUsed();
@@ -462,6 +573,61 @@ export default (Blockly) => {
       (Blockly.BBasic.isTextRow2Used() ? `TextRow2Active = ${hasRow2}\n` : '') +
       setTextLinesRangeCode(staticOffsets, linesMax);
   };
+  // Same runtime-id lookup as text_minikernel_show_by_id above, but shows
+  // just one row (1 or 2) of whichever entry the id picks - the OTHER row
+  // always comes out blank, same limitation every other "show row" block
+  // has (see text_minikernel_show_row's own comment).
+  //
+  // ROW=1 is essentially "free": an entry's own row 1 IS its own first line
+  // already (by construction - see getStaticMessageLayout's own comment),
+  // so this reuses the EXACT SAME text_static_offsets[id] lookup (and its
+  // own fast/slow path split) text_minikernel_show_by_id already has,
+  // just always forcing TextRow2Active off afterward instead of ever
+  // reading that entry's own real "has row 2" flag - blanking row 2
+  // regardless of whether the picked entry happens to wrap.
+  //
+  // ROW=2 has no such shortcut - text12b.asm's own row 2 is always read
+  // from TextIndex+TEXT_MESSAGE_LENGTH, so showing an ARBITRARY entry's
+  // first line on row 2 needs TextIndex pointed at a blank row immediately
+  // followed by that entry's own text - no existing row 1 in the table has
+  // a guaranteed-blank row right before it, so this reads its own separate,
+  // purpose-built text_row2_offsets[id] table instead (see
+  // generateTextRow2OffsetsTable's own comment above) - only ever built at
+  // all when this specific ROW=2 case is actually used somewhere.
+  Blockly.BBasic['text_minikernel_show_by_id_row'] = function(block) {
+    markTextMinikernelUsed();
+    const row = block.getFieldValue('ROW');
+    const argument0 = Blockly.BBasic.valueToCode(block, 'VALUE', Blockly.BBasic.ORDER_NONE) || '0';
+    const argPair = Blockly.BBasic.superchipRwPairs[functionCallDiscardVarName()];
+    const captureArg = `${argPair.write} = ${argument0}\n`;
+
+    if (row === '2') {
+      const bank = Blockly.BBasic.getCurrentBank();
+      trackTextRow2OffsetUsage(Blockly, bank);
+      const row2Offsets = `${bankSuffixedTableName('text_row2_offsets', bank)}[${argPair.read}]`;
+      return captureArg +
+        emitScrollSetup(row2Offsets, 0, DEFAULT_SCROLL_SPEED, DEFAULT_SCROLL_PAUSE) +
+        setTextRow2ActiveCode(true) +
+        setTextLinesRangeCode(row2Offsets, row2Offsets);
+    }
+
+    if (!Blockly.BBasic.isTextMultiRowUsed()) {
+      Blockly.BBasic.usesDivMul = true;
+      const offsetExpr = `${argPair.read} * ${TEXT_MESSAGE_LENGTH}`;
+      return captureArg +
+        emitScrollSetup(offsetExpr, 0, DEFAULT_SCROLL_SPEED, DEFAULT_SCROLL_PAUSE) +
+        setTextRow2ActiveCode(false) +
+        setTextLinesRangeCode(offsetExpr, offsetExpr);
+    }
+    const bank = Blockly.BBasic.getCurrentBank();
+    trackTextStaticOffsetUsage(Blockly, bank);
+    const staticOffsets = `${bankSuffixedTableName('text_static_offsets', bank)}[${argPair.read}]`;
+    return captureArg +
+      emitScrollSetup(staticOffsets, 0, DEFAULT_SCROLL_SPEED, DEFAULT_SCROLL_PAUSE) +
+      setTextRow2ActiveCode(false) +
+      setTextLinesRangeCode(staticOffsets, staticOffsets);
+  };
+
   // Scroll by-id block: normally WHICH entry gets shown isn't known until
   // runtime, so the offset needs the real "text_offsets[id]" table lookup -
   // but every entry's own maxOffset is Text tab data, known at compile time
@@ -829,7 +995,8 @@ export default (Blockly) => {
   // below, which always force TextRow2Active to 0), so this only reflects
   // what the PLAIN Show text blocks can ever act on.
   Blockly.BBasic.isTextRow2Used = function() {
-    return this.isTextMinikernelActive() && listTextStrings().some((entry) => entry.wrapToLine2);
+    return this.isTextMinikernelActive() &&
+      (listTextStrings().some((entry) => entry.wrapToLine2) || !!this.textRowSetUsed);
   };
 
   // Whether TextRow2Active itself needs to be dimmed - a BROADER condition

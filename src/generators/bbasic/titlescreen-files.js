@@ -20,7 +20,7 @@ const fetchText = (path) => fetch(path).then((r) => r.text());
 // bank rather than each getting its own).
 let staticFilesPromise = null;
 const STATIC_FILES = [
-  'layoutmacros.asm', 'dpcfix.asm', 'position48.asm', 'player_kernel.asm',
+  'layoutmacros.asm', 'dpcfix.asm', 'position48.asm', 'player_kernel.asm', 'score_kernel.asm',
 ];
 const getStaticFiles = () => {
   if (!staticFilesPromise) {

@@ -47,6 +47,11 @@ export const MAX_KERNEL_COPIES_PER_TYPE = 8;
 // TitleScreenEditor.vue's own canAddCardType.
 export const MAX_PLAYER_CARDS = 1;
 
+// Same project-wide singleton reasoning as MAX_PLAYER_CARDS above, for the
+// "score" minikernel (draws the real bB "score" variable) - only one real
+// score display exists regardless of how many cards ask for it.
+export const MAX_SCORE_CARDS = 1;
+
 // A blank starting image for a freshly added bitmap card. A single row (an
 // earlier default) rendered as a barely-visible sliver, unlike every other
 // tab's own "add" default (PlayerEditor.vue's handleAddFrame starts frames

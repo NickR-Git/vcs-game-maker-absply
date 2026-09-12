@@ -2,8 +2,10 @@
 
 import {TITLE_SCREEN_KERNEL_TYPES, MAX_KERNEL_COPIES_PER_TYPE,
   processTitleScreenStorageDefaults} from '../../blocks/titlescreen';
-import {useTitleScreenStorage, usePlayer0Storage, usePlayer1Storage} from '../../hooks/project';
+import {useTitleScreenStorage, usePlayer0Storage, usePlayer1Storage,
+  useConfigurationStorage} from '../../hooks/project';
 import {processPlayerStorageDefaults} from './sprites';
+import {resolveScoreDigitBytes} from '../../utils/score-font';
 
 // Packs one pixel row (an array of 0/1 values, PixelEditor.vue's own
 // format) into one byte per 8-pixel-wide column block, left pixel = high
@@ -209,6 +211,27 @@ const buildPlayerDataAsm = (card) => {
   return {code: lines.join('\n'), heights};
 };
 
+// The "score" minikernel's own digit table (miniscoretable, read directly
+// by score_kernel.asm's own draw_score_display - see public/bb19/
+// titlescreen/score_kernel.asm) - the same 10 digit shapes the Score tab's
+// own currently-selected font uses (resolveScoreDigitBytes, same source
+// buildScoreFontOverride/hooks/rom.js draws from for the STANDARD score
+// kernel), not always the stock Default font. Squish/Squish Custom get
+// padded back out to a full 8 rows per digit there too - this minikernel's
+// own drawing routine always draws a fixed height, it has no equivalent of
+// the standard kernel's own "fontstyle = SQUISH" row-shrinking trick, so a
+// Squish font just renders at normal (non-shrunk) height here. Unlike the
+// player minikernel, this card has no editable fields of its own: the
+// digits it draws (the real "score" bB variable) and their color (the real
+// "scorecolor" variable) are exactly the same ones the Score category's
+// existing blocks already read/write.
+const buildScoreDataAsm = () => {
+  const config = useConfigurationStorage().value || {};
+  const lines = ['miniscoretable'];
+  resolveScoreDigitBytes(config.scoreFont).forEach((byte) => lines.push(`\t.byte ${byte}`));
+  return lines.join('\n');
+};
+
 // Assigns every card, across EVERY screen, a physical kernel copy slot
 // (type_N, e.g. "48x1_3") - the kernel ships exactly 8 pre-built copies of
 // each bitmap type project-wide (see MAX_KERNEL_COPIES_PER_TYPE's own
@@ -235,6 +258,11 @@ const assignKernelSlots = (screens) => {
   // one).
   let hasPlayerCard = false;
   let playerHeights = null;
+  // Same project-wide singleton reasoning as hasPlayerCard above, for the
+  // "score" minikernel (draw_score_display, layoutmacros.asm's own
+  // "draw_score" macro) - only one real "score" bB variable/display exists
+  // regardless of how many cards might ask for it.
+  let hasScoreCard = false;
 
   // Maps "screenId:cardId" (a card's own id is only unique within its
   // screen, not project-wide - see handleAddCard's own getMaxId) to its
@@ -262,6 +290,14 @@ const assignKernelSlots = (screens) => {
         cardSlotsByRef[`${screen.id}:${card.id}`] = 'player';
         return;
       }
+      if (card.type === 'score') {
+        if (hasScoreCard) return;
+        hasScoreCard = true;
+        layoutLines.push(' draw_score');
+        dataBlocks.push(buildScoreDataAsm());
+        cardSlotsByRef[`${screen.id}:${card.id}`] = 'score';
+        return;
+      }
       const typeInfo = TITLE_SCREEN_KERNEL_TYPES[card.type];
       if (!typeInfo) return;
       const slot = (slotByType[card.type] || 0) + 1;
@@ -286,7 +322,7 @@ const assignKernelSlots = (screens) => {
     });
   });
 
-  return {usedKernelKeys, dataBlocks, screenPlans, cardSlotsByRef, hasPlayerCard, playerHeights};
+  return {usedKernelKeys, dataBlocks, screenPlans, cardSlotsByRef, hasPlayerCard, playerHeights, hasScoreCard};
 };
 
 // Every internal label the driver body below defines gets an "@" prefix -
@@ -313,7 +349,7 @@ const assignKernelSlots = (screens) => {
 // the SAME per-copy kernel files - 48x1_X_kernel.asm's own position48 calls
 // via plain same-bank "jsr" - being reachable from multiple different
 // banks, which they can't be without their own bank-switch trampolines).
-const buildDriverAsm = (selectedIdVarName, screenPlans, usedKernelKeys, hasPlayerCard) => {
+const buildDriverAsm = (selectedIdVarName, screenPlans, usedKernelKeys, hasPlayerCard, hasScoreCard) => {
   const lines = ['asm'];
 
   lines.push(
@@ -435,6 +471,9 @@ const buildDriverAsm = (selectedIdVarName, screenPlans, usedKernelKeys, hasPlaye
   if (hasPlayerCard) {
     lines.push('\tinclude "player_kernel.asm"', '');
   }
+  if (hasScoreCard) {
+    lines.push('\tinclude "score_kernel.asm"', '');
+  }
 
   lines.push(
       '@PFWAIT',
@@ -515,7 +554,7 @@ const TITLE_SCREEN_SUBROUTINE_NAME = '_titlescreen_system';
 // Player animations already use.
 export const registerTitleScreenSubroutine = (Blockly, {selectedIdVarName}) => {
   const titleScreen = processTitleScreenStorageDefaults(useTitleScreenStorage());
-  const {usedKernelKeys, dataBlocks, screenPlans, cardSlotsByRef, hasPlayerCard, playerHeights} =
+  const {usedKernelKeys, dataBlocks, screenPlans, cardSlotsByRef, hasPlayerCard, playerHeights, hasScoreCard} =
     assignKernelSlots(titleScreen.screens);
 
   Blockly.BBasic.titleScreenUsedKernelKeys = usedKernelKeys;
@@ -542,7 +581,7 @@ export const registerTitleScreenSubroutine = (Blockly, {selectedIdVarName}) => {
     ' include "dpcfix.asm"\n' +
     screenPlans.map((plan) => ` include "titlescreen_layout_${plan.id}.asm"\n`).join('') +
     '@end\n' +
-    buildDriverAsm(selectedIdVarName, screenPlans, usedKernelKeys, hasPlayerCard);
+    buildDriverAsm(selectedIdVarName, screenPlans, usedKernelKeys, hasPlayerCard, hasScoreCard);
 };
 
 export default (Blockly) => {

@@ -1022,10 +1022,18 @@ export const buildRom = async () => {
       // on its own too, independent of whether the Text Minikernel is used -
       // combining it with one of the byte-swappable preset/custom fonts
       // isn't supported, so those are skipped whenever Squish is picked.
-      if (config.scoreFont === SQUISH_SCORE_FONT) {
+      // "Show remaining CPU cycles as the score" (config.enableCycleScore,
+      // bB's own "set debug cyclescore") always forces the stock/Default
+      // font here regardless of the Score tab's own selection - it reuses
+      // the standard kernel's own digit-drawing routine to overlay its cycle
+      // count, and a Custom/Squish font's own digit shapes would otherwise
+      // still get swapped in underneath that debug overlay, which isn't
+      // what a font picked for the REAL score digits should also affect.
+      const effectiveScoreFont = config.enableCycleScore ? null : config.scoreFont;
+      if (effectiveScoreFont === SQUISH_SCORE_FONT) {
         if (!textMinikernelActive) siblingFiles['score_graphics.asm'] = await getExtendedScoreGraphics();
       } else {
-        const scoreFontOverride = await buildScoreFontOverride(config.scoreFont);
+        const scoreFontOverride = await buildScoreFontOverride(effectiveScoreFont);
         if (scoreFontOverride) siblingFiles['score_graphics.asm'] = scoreFontOverride;
       }
       // Same override mechanism, for the Text Minikernel's own drawn

@@ -50,7 +50,7 @@ import {resolveProjectMusic, MUSIC_PLAY_RESET_NAME, MUSIC_PLAY_BY_ID_NAME,
   registerMusicPlayResetSubroutine, resolveMusicEventFlags,
   resolveNotePlayedInstruments, reserveMusicDevVars} from './bbasic/music';
 import {reserveTextScrollDevVars, generateTextScrollAdvance, generateTextOffsetTables} from './bbasic/text-scroll';
-import {generateTextStaticOffsetTables, textLinesBaseVarName, textLinesMaxVarName,
+import {generateTextStaticOffsetTables, generateTextRow2OffsetsTable, textLinesBaseVarName, textLinesMaxVarName,
   textRow2ColorVarName, textScrollCursorColorVarName, textEndIconColorVarName} from './bbasic/text-minikernel';
 
 const handlebarsTemplate = Handlebars.compile(templateText);
@@ -359,6 +359,12 @@ Blockly.BBasic.init = function(workspace) {
   // inflating that table's size on every single build until the page was
   // hard-reloaded.
   this.freeTypedMessages = [];
+  // Same reset reasoning as freeTypedMessages just below - ensureTextRow2Pairs
+  // (generators/bbasic/text-minikernel.js) caches its own one-time-per-build
+  // computation here; without resetting it, a later build would keep
+  // reusing a stale set of offsets (and never even recompute them if the
+  // Text tab's own entries changed).
+  this.textRow2PairOffsets = null;
   // Same reset reasoning as freeTypedMessages above, for free-typed "Show
   // text (scrolling): <literal>" messages (see registerFreeTypedScrollMessage
   // in generators/bbasic/text-scroll.js).
@@ -418,6 +424,32 @@ Blockly.BBasic.init = function(workspace) {
   // (or none at all) pays nothing for it.
   this.textRow2ColorBlockUsed = workspace.getAllBlocks(false).some((block) =>
     block.type === 'text_minikernel_set_color' && block.getFieldValue('ROW') === '2');
+  // "Show text row 1/2" (text_minikernel_show_row) always compiles in a real
+  // 2-row entry, regardless of which single row it's actually setting (see
+  // registerFreeTypedRowMessage's own comment in generators/bbasic/
+  // text-minikernel.js) - a real block-type pre-scan, since (unlike "Wrap to
+  // line 2") nothing on the Text tab itself reflects this block's own
+  // existence. Folded into isTextRow2Used() below so a project using ONLY
+  // this block (no Text tab entry ever wraps) still gets the real
+  // textkernel2ndrow row-2-drawing kernel feature turned on.
+  // Same "always compiles in a real 2-row entry" reasoning as
+  // text_minikernel_show_row just above, for its named-dropdown and
+  // runtime-id counterparts (text_minikernel_show_named_row/
+  // text_minikernel_show_by_id_row) - any of the three needs TextRow2Active
+  // real and dimmed.
+  const TEXT_SHOW_ROW_BLOCK_TYPES = ['text_minikernel_show_row', 'text_minikernel_show_named_row',
+    'text_minikernel_show_by_id_row'];
+  this.textRowSetUsed = workspace.getAllBlocks(false).some((block) => TEXT_SHOW_ROW_BLOCK_TYPES.includes(block.type));
+  // Whether a "Show text row ID" block's own ROW dropdown is specifically
+  // set to "2" - unlike ROW=1 (which reuses text_static_offsets[id]
+  // unmodified, since an entry's row 1 already IS its own first line), ROW=2
+  // needs its own separate, purpose-built text_row2_offsets[id] table (see
+  // generateTextRow2OffsetsTable's own comment in generators/bbasic/
+  // text-minikernel.js) - a project using only ROW=1 by-id blocks never
+  // pays for that second, parallel copy of every Text tab entry's own first
+  // line.
+  this.textShowByIdRow2Used = workspace.getAllBlocks(false).some((block) =>
+    block.type === 'text_minikernel_show_by_id_row' && block.getFieldValue('ROW') === '2');
   const textScrollCursorConfig = (useConfigurationStorage().value || {});
   this.textScrollCursorUsed = !!textScrollCursorConfig.enableTextScrollCursor;
   this.textLineScrollUsed =
@@ -2143,6 +2175,7 @@ Blockly.BBasic.generateRelocatedSections = function(eventResults) {
     const tablesForBank = Blockly.BBasic.generateDataTables(bank);
     const textOffsetTablesForBank = generateTextOffsetTables(Blockly, bank);
     const textStaticOffsetTablesForBank = generateTextStaticOffsetTables(Blockly, bank);
+    const textRow2OffsetsTableForBank = generateTextRow2OffsetsTable(Blockly, bank);
     return [
       ` bank ${bank}`,
       ...eventBodies,
@@ -2153,6 +2186,7 @@ Blockly.BBasic.generateRelocatedSections = function(eventResults) {
       tablesForBank,
       textOffsetTablesForBank,
       textStaticOffsetTablesForBank,
+      textRow2OffsetsTableForBank,
       ` bank 1`,
     ].filter(Boolean).join('\n\n');
   }).join('\n\n');
@@ -2231,6 +2265,11 @@ Blockly.BBasic.finish = function(code) {
   // static-offset tables (see their own comment in
   // generators/bbasic/text-minikernel.js) instead of the scroll ones.
   const generatedTextStaticOffsetTables = generateTextStaticOffsetTables(Blockly, 1);
+  // Same "bank 1's own copy here, each relocated bank gets its own copy in
+  // generateRelocatedSections" reasoning, for "Show text row 2 ID"'s own
+  // parallel offset table (see generateTextRow2OffsetsTable's own comment in
+  // generators/bbasic/text-minikernel.js).
+  const generatedTextRow2OffsetsTable = generateTextRow2OffsetsTable(Blockly, 1);
   // Same "bank 1's own copy here, each relocated bank gets its own copy in
   // generateRelocatedSections" reasoning as generatedTextOffsetTables just
   // above.
@@ -2328,7 +2367,7 @@ Blockly.BBasic.finish = function(code) {
     generatedAnimations, generatedDataTables, generatedRomNoiseChecks,
     generatedRainbowColorGraphics, generatedRainbowColorChecks, generatedMissileFireChecks,
     generatedSeekChecks,
-    generatedTextOffsetTables, generatedTextStaticOffsetTables, generatedJoyDir8Table,
+    generatedTextOffsetTables, generatedTextStaticOffsetTables, generatedTextRow2OffsetsTable, generatedJoyDir8Table,
     generatedSubroutines, generatedFunctions, generatedRelocatedEvents, generatedTextMinikernel,
     systemStartEvent, titleStartEvent, titleUpdateEvent, gamePlayStartEvent,
     gameOverStartEvent, gameOverUpdateEvent, generatedProjectInfo, generatedConfiguration, generatedRomSize,
@@ -3060,7 +3099,18 @@ Blockly.BBasic.generateConfiguration = function() {
   const configurationStorage = useConfigurationStorage();
   const config = (configurationStorage && configurationStorage.value) || {};
 
-  const {showScore, scoreFont, enableSuperchip, pfres, enablePfRowHeight, pfrowheight} = config;
+  const {showScore, enableSuperchip, pfres, enablePfRowHeight, pfrowheight} = config;
+  // "Show remaining CPU cycles as the score" (config.enableCycleScore, bB's
+  // own "set debug cyclescore") always forces the stock/Default font,
+  // regardless of the Score tab's own selection - same reasoning as hooks/
+  // rom.js's own identical effectiveScoreFont (which controls the ACTUAL
+  // score_graphics.asm digit bytes) - this one covers the SOURCE-level
+  // consts below it (fontstyle/fontcharsHEX), which independently control
+  // the score row's own physical height (Squish's "fontstyle = SQUISH" const
+  // shrinks it in the standard kernel) - left pointed at Squish while hooks/
+  // rom.js swaps in the Default, full-height digit graphics would shrink the
+  // row out from under graphics no longer sized to match it.
+  const scoreFont = config.enableCycleScore ? null : config.scoreFont;
 
   // batari Basic honours a single "set kernel_options" line, so every option
   // has to go on it together.

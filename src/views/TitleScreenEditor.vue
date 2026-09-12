@@ -193,6 +193,16 @@
                               />
                             </template>
 
+                            <template v-else-if="card.type === 'score'">
+                              <p class="v-messages theme--light v-messages__message titlescreen-player-hint">
+                                Shows the game's own score (6 digits), using the same font currently selected
+                                on the Score tab and colored via the Score category's "Score set color to"
+                                block (Actions tab) - nothing to configure here. The Options tab's "Show
+                                remaining CPU cycles as the score" has no effect here - it only overlays the
+                                standard game kernel's own score drawing, which a title screen never calls.
+                              </p>
+                            </template>
+
                             <template v-else-if="card.type === 'player'">
                               <div class="titlescreen-player-row">
                                 <v-select
@@ -262,7 +272,7 @@
                                   :height="card.pixels.length || 1"
                                   :aspectRatio="cardWidth(card) / (card.pixels.length || 1)"
                                   v-model="card.pixels"
-                                  fgColor="#ffffff"
+                                  :fgColor="editorFgColor(card)"
                                   :rowColors="editorRowColors(card)"
                                   :allowChangingHeight="true"
                                   :showClearButton="true"
@@ -376,8 +386,8 @@ import {useTitleScreenStorage, usePixelGridOverlayStorage,
   usePlayer0Storage, usePlayer1Storage} from '../hooks/project';
 import {useEditorZoom} from '../hooks/zoom';
 import {DEFAULT_ROW_COLOR} from '../blocks/background';
-import {TITLE_SCREEN_KERNEL_TYPES, MAX_KERNEL_COPIES_PER_TYPE, MAX_PLAYER_CARDS, blankTitleScreenPixels,
-  processTitleScreenStorageDefaults} from '../blocks/titlescreen';
+import {TITLE_SCREEN_KERNEL_TYPES, MAX_KERNEL_COPIES_PER_TYPE, MAX_PLAYER_CARDS, MAX_SCORE_CARDS,
+  blankTitleScreenPixels, processTitleScreenStorageDefaults} from '../blocks/titlescreen';
 import {processPlayerStorageDefaults} from '../generators/bbasic/sprites';
 
 export default defineComponent({
@@ -432,6 +442,7 @@ export default defineComponent({
     const cardTypeLabel = (card) => {
       if (card.type === 'space') return 'Space';
       if (card.type === 'player') return 'Player sprites';
+      if (card.type === 'score') return 'Score';
       return card.type;
     };
 
@@ -450,11 +461,28 @@ export default defineComponent({
       });
     };
 
+    // A 48x1 card (no row colors) has its own single fixed color
+    // (card.color) instead - PixelEditor.vue only ever falls back to its
+    // own fgColor prop when rowColors is null (see its own "(this.rowColors
+    // && this.rowColors[y]) || this.fgColor"), which this used to hardcode
+    // to plain white regardless of card.color - a real reported bug (48x1
+    // cards never previewed their own picked color, always drawing white).
+    // Irrelevant for a row-color card (editorRowColors above always wins
+    // there), but still needs SOME value - white matches the old hardcoded
+    // default for that case. Same black-nudge as editorRowColors above, for
+    // the same reason.
+    const editorFgColor = (card) => {
+      if (cardHasRowColors(card)) return '#ffffff';
+      const css = colorByteToCss(card.color || 0);
+      return css === '#000000' ? '#010101' : css;
+    };
+
     const addCardOptions = [
       {type: '48x1', label: '48x1 image (single color, half-height pixels)'},
       {type: '48x2', label: '48x2 image (per-row color, square pixels)'},
       {type: '96x2', label: '96x2 image (per-row color, wider, more ROM)'},
       {type: 'player', label: 'Player sprites (existing Player 0/1 animations)'},
+      {type: 'score', label: 'Score (the game\'s own score)'},
       {type: 'space', label: 'Space (blank gap)'},
     ];
 
@@ -464,13 +492,14 @@ export default defineComponent({
     // across EVERY title screen page in the project (see
     // generators/bbasic/titlescreen.js's own assignKernelSlots), not one
     // pool per page, so this counts cards on every page, not just the one
-    // currently being edited. "player" has its own, much smaller limit
-    // (MAX_PLAYER_CARDS - see its own comment in blocks/titlescreen.js) since
-    // there's only ever one player minikernel project-wide, not a numbered
-    // pool of 8.
+    // currently being edited. "player"/"score" have their own, much smaller
+    // limits (MAX_PLAYER_CARDS/MAX_SCORE_CARDS - see their own comments in
+    // blocks/titlescreen.js) since there's only ever one of each minikernel
+    // project-wide, not a numbered pool of 8.
     const countOfType = (type) => state.value.screens
         .reduce((total, screen) => total + screen.cards.filter((card) => card.type === type).length, 0);
-    const maxCopiesForType = (type) => type === 'player' ? MAX_PLAYER_CARDS : MAX_KERNEL_COPIES_PER_TYPE;
+    const maxCopiesForType = (type) => type === 'player' ? MAX_PLAYER_CARDS :
+      type === 'score' ? MAX_SCORE_CARDS : MAX_KERNEL_COPIES_PER_TYPE;
     const canAddCardType = (type) => type === 'space' || countOfType(type) < maxCopiesForType(type);
     const maxCopies = MAX_KERNEL_COPIES_PER_TYPE;
 
@@ -479,6 +508,7 @@ export default defineComponent({
       const maxId = getMaxId(screen.cards);
       const newCard = (() => {
         if (type === 'space') return {id: maxId + 1, type, lines: 10};
+        if (type === 'score') return {id: maxId + 1, type};
         if (type === 'player') {
           return {
             id: maxId + 1, type,
@@ -648,7 +678,7 @@ export default defineComponent({
       handleAddScreen, handleDeleteScreen,
       isScreenCollapsed, toggleScreenCollapsed,
       screenDragAttrs, screenDragCardClass, screenDragHandleListeners, screenDragTargetListeners,
-      cardWidth, editorWidth, cardHasRowColors, editorRowColors, cardTypeLabel,
+      cardWidth, editorWidth, cardHasRowColors, editorRowColors, editorFgColor, cardTypeLabel,
       addCardOptions, canAddCardType, maxCopies, maxCopiesForType, playerAnimationOptions,
       handleAddCard, handleDeleteCard,
       handleSetBackgroundColor, handleSetCardColor, handleClearCardColors,
@@ -953,6 +983,24 @@ export default defineComponent({
    (a sibling of .editor-container, not inside its v-card-text). */
 .add-frame-buttom {
   bottom: 8px;
+}
+
+/* Matches BackgroundEditor.vue's own identical .editor-container rule -
+   without this, the card just flows in normal page scroll (this tab never
+   had its own override, unlike Background's), and .add-frame-buttom above
+   (a sibling outside this card, not inside its own scroll region) ends up
+   anchored to some ancestor that scrolls the page along with it instead of
+   staying pinned in place - a real reported bug ("the add button should not
+   scroll"). Making THIS card itself the scrolling region (position:
+   absolute + overflow: auto, pinned to the full height of its own slot)
+   is what lets the button sit outside it and stay fixed regardless of how
+   far the card's own content scrolls. */
+.editor-container {
+  position: absolute;
+  overflow: auto;
+  top: 0;
+  bottom: 0;
+  width: 100%;
 }
 
 .titlescreen-add-limit-note {

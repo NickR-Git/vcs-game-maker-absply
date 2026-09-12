@@ -55,6 +55,29 @@ Blockly.Blocks['text_minikernel_show_named'] = {
   },
 };
 
+// Same dropdown as text_minikernel_show_named above, but puts just that
+// entry's own FIRST line on the chosen row (1 or 2) - the OTHER row always
+// comes out blank, same "no way to update just one row" limitation as
+// text_minikernel_show_row (see its own comment). Only the first line is
+// ever used here (no word-wrap/"Wrap to line 2"/scrolling) - for an entry
+// that needs more than a single row's worth of text, use plain "Show text"
+// instead.
+Blockly.Blocks['text_minikernel_show_named_row'] = {
+  init: function() {
+    this.appendDummyInput()
+        .appendField(`${TEXT_ICON} Show text row`)
+        .appendField(new Blockly.FieldDropdown([['1', '1'], ['2', '2']]), 'ROW')
+        .appendField(new Blockly.FieldDropdown(buildTextStringOptions), 'TEXT_ID');
+    this.setPreviousStatement(true, null);
+    this.setNextStatement(true, null);
+    this.setColour(TEXT_COLOR);
+    this.setTooltip('Displays a message defined on the Text tab on just one row (1 or 2) - the ' +
+      'OTHER row always comes out blank, since the two rows are always shown together. Only ' +
+      'that entry\'s own FIRST line is used (no word-wrap or scrolling) - use "Show text" ' +
+      'instead for a message that needs more than one row.');
+  },
+};
+
 // Same message-picking rules as text_minikernel_show_named above, with
 // SCROLL_SPEED/SCROLL_PAUSE fields added (see appendScrollInputs) to tune
 // the scroll that entry gets automatically if it's too long to fit
@@ -104,6 +127,37 @@ Blockly.defineBlocksWithJsonArray([
       'than the Text tab\'s own max display width - see "Scroll text" for a ' +
       'version with its own tunable scroll speed/pause.',
   },
+  // Sets ONE row directly (row 1 or row 2, picked from the dropdown) rather
+  // than a whole message - the OTHER row always comes out blank (see
+  // generators/bbasic/text-minikernel.js's own registerFreeTypedRowMessage):
+  // this always compiles in a real 2-row entry with the chosen row set to
+  // TEXT and the other row set to spaces, since the Text Minikernel's own
+  // row 2 is always read from a fixed offset right after row 1 (text12b.asm's
+  // own "textkernel2ndrow") - there's no way to update just one row while
+  // leaving whatever the OTHER row currently shows untouched.
+  {
+    'type': 'text_minikernel_show_row',
+    'message0': `${TEXT_ICON} Show text row %1 %2`,
+    'args0': [
+      {
+        'type': 'field_dropdown',
+        'name': 'ROW',
+        'options': [['1', '1'], ['2', '2']],
+      },
+      {
+        'type': 'field_input',
+        'name': 'TEXT',
+        'text': 'HELLO WORLD!',
+      },
+    ],
+    'previousStatement': null,
+    'nextStatement': null,
+    'colour': TEXT_COLOR,
+    'tooltip': 'Displays text on just one row (1 or 2) in place of the score, using the Text ' +
+      'Minikernel - the OTHER row always comes out blank, since the two rows are always shown ' +
+      'together. Use "Show text"/"Show text ID" instead for a message that fills both rows at ' +
+      'once (e.g. one you word-wrapped with "Multiline" on the Text tab).',
+  },
   // Sets the displayed message from a number expression (a variable,
   // computed value, or literal) rather than a fixed choice - the number is
   // the message's position on the Text tab (1 = the first message listed
@@ -127,6 +181,37 @@ Blockly.defineBlocksWithJsonArray([
       'value, so the message shown can be picked at runtime. If that message is longer than ' +
       'the Text tab\'s own max display width, it word-wraps onto a second line when that ' +
       'entry\'s own "Wrap to line 2" is on, otherwise it automatically scrolls.',
+  },
+  // Same runtime id lookup as text_minikernel_show_by_id above, but shows
+  // only that entry's own first line, on just one row (1 or 2) - the OTHER
+  // row always comes out blank, same limitation every other "show row"
+  // block has (see text_minikernel_show_row's own comment). ROW=2 costs
+  // extra ROM (a second, parallel copy of every Text tab entry's own first
+  // line - see generateTextRow2OffsetsTable's own comment in generators/
+  // bbasic/text-minikernel.js) - ROW=1 doesn't, since an entry's row 1 IS
+  // its own first line already.
+  {
+    'type': 'text_minikernel_show_by_id_row',
+    'message0': `${TEXT_ICON} Show text row %1 ID %2`,
+    'args0': [
+      {
+        'type': 'field_dropdown',
+        'name': 'ROW',
+        'options': [['1', '1'], ['2', '2']],
+      },
+      {
+        'type': 'input_value',
+        'name': 'VALUE',
+        'check': 'Number',
+      },
+    ],
+    'previousStatement': null,
+    'nextStatement': null,
+    'colour': TEXT_COLOR,
+    'tooltip': 'Displays the FIRST line of the message at this position on the Text tab (1 = ' +
+      'the first message listed there, 2 = the second, and so on) on just one row (1 or 2) - ' +
+      'the OTHER row always comes out blank. The number can be a variable or computed value, ' +
+      'so the message shown can be picked at runtime.',
   },
   // Clears whatever message is currently shown, without displaying a new
   // one - equivalent to "Show text" with an empty message, but reads clearer
