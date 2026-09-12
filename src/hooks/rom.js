@@ -10,6 +10,7 @@ import '../blocks';
 import BlocklyBB, {RELOCATABLE_EVENT_NAMES, SYSTEM_VARIABLES} from '../generators/bbasic';
 import {processPlayerStorageDefaults} from '../generators/bbasic/sprites';
 import {getExtendedScoreGraphics, getTextMinikernelSiblingFiles} from '../generators/bbasic/text-minikernel-files';
+import {getTitleScreenSiblingFiles} from '../generators/bbasic/titlescreen-files';
 import {processBackgroundStorageDefaults} from '../blocks/background';
 import {findSongById} from '../blocks/music';
 import {buildScoreFontOverride, SQUISH_SCORE_FONT} from '../utils/score-font';
@@ -574,6 +575,40 @@ const estimateFamilySize = (members) => members.reduce((sum, {kind, name}) =>
 const familyStillInBank1 = (members, banks) =>
   members.every(({kind, name}) => ((banks[kind] || {})[name] || 1) === 1);
 
+// True if ANYTHING outside this family bare-calls one of its own function
+// members directly - an ordinary user-authored subroutine (or an event)
+// that references a function this way, WITHOUT itself being pulled into
+// the family (computeFunctionFamilies only ever unions functions/wrapper
+// subroutines together - an ordinary subroutine bare-calling one of them is
+// invisible to it, on purpose: see pickRelocationCandidate's own comment on
+// why THAT subroutine stays excluded from independent relocation, pinned to
+// bank 1 forever). If such a caller exists, this family can never safely
+// relocate anywhere else: a bare function call has no bank-tag syntax (same
+// reason the family itself has to move as one atomic unit), so the moment
+// the family leaves bank 1, that external, bank-1-pinned caller's own calls
+// jump into whatever happens to be paged in at the family's old address
+// instead - a real reported bug this way ("Auto: failed" in the emulator,
+// confirmed directly: an ordinary subroutine bare-calling the exact same
+// auto-generated dispatch functions a real Function's own body also called
+// worked fine through the Function - itself a family member, always
+// reached via a bank-tagged wrapper - but crashed the moment those same
+// functions got relocated off bank 1 for unrelated reasons, since nothing
+// previously checked for this from the FUNCTION's own side). Checked
+// against every ordinary subroutine NOT already in this family, and every
+// event - the same two "bare-calls a function" pools pickRelocationCandidate
+// already excludes as STANDALONE candidates for the identical reason.
+const familyHasExternalBareCaller = (members) => {
+  const functionMemberNames = members.filter(({kind}) => kind === 'functionBanks').map(({name}) => name);
+  if (!functionMemberNames.length) return false;
+  const memberNames = new Set(members.map(({name}) => name));
+  const referencesAnyMember = (code) => functionMemberNames.some((name) => code.includes(`${name}(`));
+  const subroutineHit = BlocklyBB.getSubroutineNames()
+      .filter((name) => !memberNames.has(name))
+      .some((name) => referencesAnyMember(BlocklyBB.subroutines[name] || ''));
+  if (subroutineHit) return true;
+  return RELOCATABLE_EVENT_NAMES.some((name) => referencesAnyMember((BlocklyBB.gameEvents[name] || []).join('\n')));
+};
+
 // Largest-first, across every relocatable kind: relocating the biggest
 // still-inline unit (event, graphics - a background, a player's default
 // frame, or a single named animation, see wrapRelocatableGraphics - a
@@ -636,9 +671,14 @@ const pickRelocationCandidate = (banks, hasReservedMusicBank) => {
     // as one atomic unit (see setRelocationBank's own call sites in
     // buildRom() below, which iterate candidate.members instead of a single
     // kind/name whenever this is present), sized as the sum of every
-    // member's own estimate.
+    // member's own estimate. Excludes any family an ordinary subroutine or
+    // event bare-calls directly (see familyHasExternalBareCaller's own
+    // comment) - such a family can never safely leave bank 1 at all, so it's
+    // not a candidate here any more than an ordinary function-referencing
+    // subroutine/event is above.
     ...computeFunctionFamilies()
         .filter(({members}) => familyStillInBank1(members, banks))
+        .filter(({members}) => !familyHasExternalBareCaller(members))
         .map(({members}) => ({
           kind: 'family',
           name: members.map((m) => m.name).join(', '),
@@ -961,6 +1001,19 @@ export const buildRom = async () => {
       // "inline"-a-real-file mechanism was confirmed to break once relocated
       // to a bank other than 1.
       Object.assign(siblingFiles, BlocklyBB.playerAnimAsmFiles || {});
+      // The Titlescreen Kernel's own static shared helper code (public/bb19/
+      // titlescreen/) plus this build's own generated titlescreen_layout_N.asm
+      // (one per title screen page) and combined titlescreen_data.asm (see
+      // registerTitleScreenSubroutine in generators/bbasic/titlescreen.js) -
+      // same "siblings throughout the whole compile pipeline" reasoning as
+      // the Text Minikernel above. Only set at all once at least one "Draw
+      // title screen" block exists on the workspace (titleScreenUsedKernelKeys
+      // stays undefined otherwise), and only fetches the specific per-copy
+      // kernel files the project's own cards (across every page) actually use.
+      if (BlocklyBB.titleScreenUsedKernelKeys) {
+        Object.assign(siblingFiles, await getTitleScreenSiblingFiles(BlocklyBB.titleScreenUsedKernelKeys));
+        Object.assign(siblingFiles, BlocklyBB.titleScreenAsmFiles || {});
+      }
       // The compiler has no font support of its own, so point its score
       // digits at the selected font by overriding score_graphics.asm.
       // Squish is special (see utils/score-font.js/SQUISH_SCORE_FONT): it's
@@ -1040,6 +1093,30 @@ export const buildRom = async () => {
       markRomUpToDate();
       const capacity = computeRomCapacity(compiledResult);
       const maxBanks = BANK_COUNT_BY_ROMSIZE[config.romSize];
+      // Safety net for the "third overflow shape" isOverflowError's own
+      // comment documents (Superchip + a pfres above 12 + a bankswitched ROM
+      // above 8k): bank 1 can overflow its RORG'd segment without DASM
+      // raising ANY recognizable error at all - the assembly reports success,
+      // but the resulting binary is silently corrupt (confirmed directly: a
+      // real project matching that exact combination built with no errors,
+      // but showed garbled text and wrong scene graphics in the emulator,
+      // traced to bank 1 actually being over its real capacity - fixed by
+      // shrinking its content). computeRomCapacity's own bank1.freeBytes
+      // going negative is the same unambiguous "doesn't fit" signal a
+      // genuine assembler-caught overflow already gives the catch block
+      // below - thrown here (before this build is ever treated as a success,
+      // recorded as a relocation hint, or left loaded in the emulator) so
+      // it's caught by that exact same isOverflowError branch instead of
+      // duplicating the retry logic for this rare, quiet case. Scoped to
+      // bankswitched ROMs only (maxBanks truthy) - a 2k/4k ROM has no other
+      // bank to relocate into anyway, and DASM's own overflow detection
+      // there isn't masked by a bankswitch trampoline the way this specific
+      // failure mode requires.
+      if (maxBanks && capacity && capacity.bank1 && capacity.bank1.freeBytes < 0) {
+        throw new Error(
+            `segment overflow (bank 1 measured ${-capacity.bank1.freeBytes} bytes over capacity, ` +
+            'no assembler error raised)');
+      }
       // romSize is stored alongside the measurement (not just the bank
       // contents) so a LATER build's own proactive relocation pre-pass (see
       // its own comment near the top of this function) can confirm this

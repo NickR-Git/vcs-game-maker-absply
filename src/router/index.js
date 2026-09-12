@@ -20,6 +20,11 @@ const routes = [
         '../views/About.vue'),
   },
   {
+    path: '/titlescreen',
+    name: 'Title',
+    component: () => import('../views/TitleScreenEditor.vue'),
+  },
+  {
     path: '/player0',
     name: 'Player 0',
     component: () => import('../views/Player0Editor.vue'),

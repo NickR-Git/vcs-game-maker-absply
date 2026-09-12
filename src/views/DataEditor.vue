@@ -3,6 +3,15 @@
     <v-card class="editor-container" :ripple="false" @click="deselectCard">
       <v-card-title>Data</v-card-title>
       <v-card-text>
+        <p class="v-messages theme--light v-messages__message data-intro-paragraph">
+          Define read-only lookup tables here (0-255 byte values each), then read them at
+          runtime with the "Data table ID at index" block - useful for anything indexed by a
+          runtime variable, like per-scene stats or animation lookups. Each value can be typed
+          as plain decimal, binary, or hex, or toggled to a color/background/animation/sound/
+          song/text picker instead for convenience - the byte actually stored is the same
+          either way.
+        </p>
+
         <v-list class="data-list">
           <v-list-item class="entry-list-item" v-for="(table, index) in state.dataTables" v-bind:key="table.id">
             <v-list-item-content>
@@ -161,6 +170,19 @@
                       class="data-columns-field"
                     />
                   </div>
+                </v-card-text>
+
+                <v-card-text v-if="!isCollapsed(table)" class="data-notes-section">
+                  <v-textarea
+                    :value="table.notes"
+                    @input="(v) => handleNotesInput(table, v)"
+                    @change="handleChildChange"
+                    label="Notes"
+                    outlined
+                    rows="2"
+                    hide-details
+                    class="data-notes-field"
+                  />
                 </v-card-text>
 
                 <v-card-text v-if="!isCollapsed(table)" class="data-values-section">
@@ -445,7 +467,11 @@ export default defineComponent({
       state.value = state.value;
     };
 
-    const {isCollapsed, toggleCollapsed} = useCollapsedIds('data');
+    // Every card starts collapsed on every visit to this tab (see
+    // collapseAll's own comment in hooks/collapse.js), not just ones never
+    // expanded before.
+    const {isCollapsed, toggleCollapsed, collapseAll} = useCollapsedIds('data', true);
+    collapseAll();
 
     // Undo/redo for a whole table's own content (name/columns/values/
     // valueFormats - everything but its id), one stack pair per table id -
@@ -456,7 +482,7 @@ export default defineComponent({
     // Attack/Decay/Sustain/Release) since every field on a table - a typo'd
     // name, an accidental Columns change, a batch CSV import gone wrong - is
     // equally easy to want to step back from here.
-    const DATA_HISTORY_KEYS = ['name', 'columns', 'values', 'valueFormats'];
+    const DATA_HISTORY_KEYS = ['name', 'columns', 'values', 'valueFormats', 'notes'];
     const snapshotTable = (table) => JSON.stringify(
         DATA_HISTORY_KEYS.reduce((acc, key) => {
           acc[key] = table[key]; return acc;
@@ -509,6 +535,8 @@ export default defineComponent({
       instance.proxy.$set(table, 'columns', data.columns);
       table.values = data.values;
       instance.proxy.$set(table, 'valueFormats', data.valueFormats);
+      // Same $set reasoning - a table snapshotted before this field existed.
+      instance.proxy.$set(table, 'notes', data.notes);
       // Written directly (not through the watcher above) so restoring a
       // snapshot is never itself mistaken for a new edit worth recording.
       tableLastSnapshot[table.id] = snapshotJson;
@@ -643,6 +671,13 @@ export default defineComponent({
     const handleColumnsInput = (table, rawValue) => {
       instance.proxy.$set(table, 'columns', rawValue);
       instance.proxy.$forceUpdate();
+    };
+
+    // $set - same reasoning as handleColumnsInput above: a table saved before
+    // this field existed can't pick up a brand new property through a plain
+    // assignment, Vue 2 never notices it.
+    const handleNotesInput = (table, rawValue) => {
+      instance.proxy.$set(table, 'notes', rawValue);
     };
 
     const handleColumnsChange = (table) => {
@@ -1028,7 +1063,7 @@ export default defineComponent({
       handleDropdownValueInput, dropdownOptionsFor,
       FORMAT_ICONS, FORMAT_TOGGLE_TITLES,
       handleExportCsv, handleImportCsv,
-      tableColumns, handleColumnsInput, handleColumnsChange,
+      tableColumns, handleColumnsInput, handleColumnsChange, handleNotesInput,
       isCollapsed, toggleCollapsed,
       canUndoTable, canRedoTable, handleUndoTable, handleRedoTable,
       maxValues: MAX_DATA_TABLE_VALUES,
@@ -1168,6 +1203,24 @@ export default defineComponent({
    single v-card-text never had. */
 .data-name-section {
   padding-bottom: 0;
+}
+
+/* Same top/bottom padding removal as .data-name-section/.data-values-section
+   above - without it, this section's own default v-card-text padding stacks
+   on top of .data-name-section's already-zeroed bottom, reopening the same
+   gap that fix closed. */
+.data-notes-section {
+  padding-top: 0;
+  padding-bottom: 8px;
+}
+
+/* No margin above/below the field itself (Vuetify's own default input
+   spacing) - lets the zeroed section padding above/below actually bring the
+   field close to the name row and the values grid instead of leaving its own
+   gaps on both sides. */
+.data-notes-field {
+  margin-top: 0;
+  margin-bottom: 0;
 }
 
 .data-values-section {

@@ -1383,6 +1383,29 @@ export const resolveProjectMusic = (workspace, notePlayedIndexById = new Map()) 
     });
   });
 
+  // Whether a "Play sound" block (soundfx_play or simple_sound_set) exists
+  // anywhere in the project that could ever hand this SPECIFIC channel's
+  // hardware output back and forth with music - see generateMusicChecks'
+  // own resumeCheck/suppressibleWrite, which used to be generated for every
+  // music channel unconditionally as soon as ANY music existed at all,
+  // regardless of whether anything on that channel ever actually shared it
+  // with a sound effect. That cost 3 extra branch checks every single frame
+  // per channel (durationVar<>1/!activeBit/indexVar<3) plus an extra branch
+  // wrapping every register write during a note fetch, for a feature a
+  // project not actually interleaving sound effects with that channel's
+  // music never uses - channnel{channel}duration would just permanently
+  // read 0, so every one of those checks always took its own no-op branch.
+  // CHANNEL is a fixed dropdown field on both block types (not a runtime
+  // expression), so which channel each one targets is fully known here at
+  // compile time, same reasoning as soundEffectChannelHasEnvelope in
+  // soundfx.js.
+  const channelHasSoundEffectDuration = {};
+  channels.forEach((channel) => {
+    channelHasSoundEffectDuration[channel] = workspace.getAllBlocks(false).some((block) =>
+      (block.type === 'soundfx_play' || block.type === 'simple_sound_set') && block.isEnabled() &&
+      `${block.getFieldValue('CHANNEL')}` === `${channel}`);
+  });
+
   const channelPages = {};
   const channelHasEnvelope = {};
   const channelHasArpeggio = {};
@@ -1530,6 +1553,7 @@ export const resolveProjectMusic = (workspace, notePlayedIndexById = new Map()) 
     channelPageSongIds,
     channelHasEnvelope,
     channelHasArpeggio,
+    channelHasSoundEffectDuration,
     usesSongById,
     usesFilteredSongStopped,
     songSeqOffset,
@@ -2549,7 +2573,18 @@ export default (Blockly) => {
       // all" as one of its own trigger conditions - so this is always
       // safely resolvable whenever this function itself runs at all).
       const durationVar = resolveVar(`channnel${channel}duration`);
-      const suppressibleWrite = (tag, line) => [
+      // Only actually wraps writes in a suppression check when THIS channel
+      // has some "Play sound" block that could interleave with it (see
+      // channelHasSoundEffectDuration's own comment in resolveProjectMusic)
+      // - durationVar would otherwise permanently read 0 for this channel
+      // (nothing on it ever writes to it), making the check itself a
+      // guaranteed-always-false no-op paid on every wrapped write for
+      // nothing. The dev var itself still exists either way (reserved
+      // whenever music exists at all, regardless of per-channel use), so
+      // this only skips the wasted runtime branch, not anything that would
+      // leave durationVar unresolved.
+      const hasSoundEffectDuration = music.channelHasSoundEffectDuration[channel];
+      const suppressibleWrite = (tag, line) => !hasSoundEffectDuration ? [line] : [
         ` if ${durationVar} <> 0 then goto _musicsup${channel}_${tag}_skip`,
         line,
         `_musicsup${channel}_${tag}_skip`,
@@ -2882,8 +2917,13 @@ export default (Blockly) => {
           // same reasoning as suppressibleWrite's other callers, just gating
           // the whole tick rather than one write, since there's nothing
           // useful to advance while this channel's own AUDF is off-limits
-          // anyway.
-          ` if ${durationVar} <> 0 then goto _music${channel}_arp_skip`,
+          // anyway. Omitted outright (see hasSoundEffectDuration/
+          // suppressibleWrite's own identical gate above) when nothing on
+          // this channel could ever actually set durationVar nonzero in the
+          // first place - a raw check here, not routed through
+          // suppressibleWrite itself, so it needed its own explicit gate to
+          // stop paying for it too.
+          ...(hasSoundEffectDuration ? [` if ${durationVar} <> 0 then goto _music${channel}_arp_skip`] : []),
           // Only reaches the range/phase dispatch (which writes AUDF) on the
           // exact frame the flip actually happens - on every other frame
           // it's skipped outright rather than redundantly re-writing AUDF to
@@ -3037,7 +3077,15 @@ export default (Blockly) => {
         ...pagedReadLines(tables, pageVar, 'temp1', channel),
         ` ${targetVar} = temp1`,
       ];
-      const resumeCheck = [
+      // A pure no-op (nothing at all, not even the cheap-looking guard
+      // checks) when this channel never shares hardware with a "Play
+      // sound" block in the first place - see channelHasSoundEffectDuration
+      // above/suppressibleWrite's own identical gate. Without a sound
+      // effect ever able to set durationVar to 1 on this channel, every one
+      // of these three checks would run every single frame only to always
+      // take their own "skip" branch - real, paid-for cycles for a
+      // hand-off this channel can never actually receive.
+      const resumeCheck = !hasSoundEffectDuration ? [] : [
         ` if ${durationVar} <> 1 then goto _musicresume${channel}_skip`,
         ` if !${activeBit} then goto _musicresume${channel}_skip`,
         ` if ${indexVar} < 3 then goto _musicresume${channel}_skip`,

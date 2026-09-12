@@ -191,6 +191,32 @@ Blockly.defineBlocksWithJsonArray([
     'tooltip': 'Sets the color of the "end of message" icon that appears once there\'s nothing ' +
       'left to scroll down to.',
   },
+  // Runtime on/off switch for the scroll cursor (Text tab's own "Show a
+  // scroll cursor" switch) - a single block with a dropdown, matching
+  // text_minikernel_scroll_control's own "one flag write, several named
+  // choices" shape below, rather than two separate "show"/"hide" blocks.
+  // Hidden means neither the up/down arrows nor the "end of message" icon
+  // ever draw, regardless of whether the currently shown message actually
+  // has more to scroll to - visible restores the normal behavior of each
+  // showing exactly when it otherwise would.
+  {
+    'type': 'text_minikernel_scroll_cursor_visible',
+    'message0': `${TEXT_ICON} Text scroll cursor %1`,
+    'args0': [
+      {
+        'type': 'field_dropdown',
+        'name': 'ACTION',
+        'options': [['show', 'show'], ['hide', 'hide']],
+      },
+    ],
+    'previousStatement': null,
+    'nextStatement': null,
+    'colour': TEXT_COLOR,
+    'tooltip': 'Shows or hides the scroll cursor (up/down arrows and "end of message" icon) at ' +
+      'runtime. While hidden, neither ever draws, no matter how much of the message is left ' +
+      'to scroll to. Only has an effect if the Text tab\'s own "Show a scroll cursor" switch ' +
+      'is on - visible by default.',
+  },
   // Fades TextColor toward a target - same shared mechanism as Background's
   // own "Fade color to" (see blocks/background.js's own fade var-name
   // helpers and generateBackgroundFadeChecks in generators/bbasic/

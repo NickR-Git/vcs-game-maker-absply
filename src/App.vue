@@ -19,6 +19,10 @@
           <v-icon>mdi-chart-scatter-plot</v-icon>
         </v-btn>
 
+        <v-btn to="/titlescreen" link text class="titlescreen-item" title="Title" elevation="0">
+          <v-icon>mdi-image-frame</v-icon>
+        </v-btn>
+
         <v-btn to="/player0" link text class="player0-item" title="Player 0" elevation="0">
           <v-icon>mdi-human-handsup</v-icon>
         </v-btn>
@@ -91,6 +95,19 @@
           </v-list-item-icon>
           <v-list-item-content>
             <v-list-item-title>Actions</v-list-item-title>
+          </v-list-item-content>
+        </v-list-item>
+
+        <v-list-item
+          to="/titlescreen"
+          link
+          class="titlescreen-item"
+        >
+          <v-list-item-icon>
+            <v-icon>mdi-image-frame</v-icon>
+          </v-list-item-icon>
+          <v-list-item-content>
+            <v-list-item-title>Title α</v-list-item-title>
           </v-list-item-content>
         </v-list-item>
 
@@ -1160,7 +1177,9 @@ export default {
 .data-card,
 .soundfx-card,
 .text-card,
-.song-card {
+.song-card,
+.titlescreen-card,
+.titlescreen-screen-card {
   border-color: rgba(0, 0, 0, 0.24) !important;
 }
 
@@ -1182,6 +1201,8 @@ export default {
 .data-card.v-card--link,
 .animation-card.v-card--link,
 .background-card.v-card--link,
+.titlescreen-card.v-card--link,
+.titlescreen-screen-card.v-card--link,
 .editor-container.v-card--link {
   cursor: default;
 }
@@ -1191,6 +1212,8 @@ export default {
 .data-card.v-card--link::before,
 .animation-card.v-card--link::before,
 .background-card.v-card--link::before,
+.titlescreen-card.v-card--link::before,
+.titlescreen-screen-card.v-card--link::before,
 .editor-container.v-card--link::before {
   display: none !important;
 }
@@ -1200,6 +1223,8 @@ export default {
 .data-card.v-card--link:hover,
 .animation-card.v-card--link:hover,
 .background-card.v-card--link:hover,
+.titlescreen-card.v-card--link:hover,
+.titlescreen-screen-card.v-card--link:hover,
 .editor-container.v-card--link:hover {
   box-shadow: none !important;
 }
@@ -1219,7 +1244,9 @@ export default {
 .text-card-selected,
 .data-card-selected,
 .animation-card-selected,
-.background-card-selected {
+.background-card-selected,
+.titlescreen-card-selected,
+.titlescreen-screen-card-selected {
   border-color: var(--v-primary-base, #1976d2) !important;
   outline: 2px solid var(--v-primary-base, #1976d2) !important;
 }
@@ -1585,6 +1612,29 @@ html {
 
 .v-input--switch__thumb {
   box-shadow: none !important;
+}
+
+/* Shrinks the handle to the same diameter as the track's own height (14px,
+   giving it the same 7px radius as the track/channel), instead of
+   Vuetify's default handle (20px) sticking out past both edges of the
+   track. top is re-centered to match (Vuetify's own rule computes it as
+   half the DEFAULT 20px handle - "calc(50% - 10px)" - which no longer
+   centers a 14px one). */
+.v-input--switch__thumb {
+  width: 18px !important;
+  height: 18px !important;
+  top: calc(50% - 9px) !important;
+  margin-left: 1px;
+}
+
+/* Vuetify's own "on" position (translate(20px, 0), see its own
+   .v-input--switch.v-input--is-dirty rule) was tuned for the DEFAULT 20px
+   handle - shrinking the handle to 14px above (a 6px smaller diameter,
+   3px off each edge) left it 3px short of the track's own right edge once
+   turned on, reported as looking not far enough right. +3px restores the
+   same reach the original, larger handle had. */
+.v-application--is-ltr .v-input--switch.v-input--is-dirty .v-input--switch__thumb {
+  transform: translate(22px, 0) !important;
 }
 
 /* App-wide: lighter underline for a text field (or a v-select/v-combobox,
@@ -2112,6 +2162,17 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
 .actions-item > .v-list-item__content {
   color: rgb(76, 175, 80) !important;
   border-left-color: rgb(76, 175, 80) !important;
+}
+
+/* Never had a color rule of its own - fell back to the same unstyled
+   default the About tab (also with no rule of its own) renders with,
+   making the two tabs look identically colored despite being unrelated.
+   Deep purple isn't used by any other tab. */
+.titlescreen-item,
+.titlescreen-item > .v-list-item__icon > .theme--light.v-icon,
+.titlescreen-item > .v-list-item__content {
+  color: rgb(103, 58, 183) !important;
+  border-left-color: rgb(103, 58, 183) !important;
 }
 
 .player0-item,

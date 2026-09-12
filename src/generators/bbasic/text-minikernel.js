@@ -6,6 +6,7 @@ import {useConfigurationStorage} from '../../hooks/project';
 import {TEXT_MESSAGE_LENGTH, CHAR_TO_GLYPH, listTextStrings,
   resolveTextMaxDisplayWidth} from '../../blocks/text-strings';
 import {functionCallDiscardVarName} from '../../blocks/function';
+import {bankSuffixedTableName} from '../../blocks/data';
 import {getNamedScrollLayout, registerFreeTypedScrollMessage, buildTextScrollSetupLines,
   trackTextByIdScrollUsage, textScrollFarEndVarName,
   textScrollBaseVarName, textScrollStateVarName,
@@ -49,6 +50,18 @@ export const textScrollCursorColorVarName = () => '_textScrollCursorColor';
 // in utils/text-font.js for why it moved back to GRP1 (needing its own
 // repositioning HMOVE) after briefly sharing GRP0's own low nibble.
 export const textEndIconColorVarName = () => '_textEndIconColor';
+// The scroll cursor's own runtime show/hide flag (via "Text scroll cursor
+// show or hide", text_minikernel_scroll_cursor_visible below) rides in bit 0
+// of textScrollCursorColorVarName above instead of its own dev var - COLUP0
+// (what that var is written straight into every frame - see
+// buildTextScrollCursorOverride's own comment in utils/text-font.js) only
+// ever decodes bits 1-7 on real hardware, so bit 0 has zero effect on the
+// displayed color and was otherwise always 0 anyway (the "Color" picker
+// block - see color_get in blocks/color.js - only ever emits even values,
+// the same "real color bytes are always even" assumption
+// buildTextRow2ColorOverride's own $01 sentinel already relies on). 1 =
+// hidden, 0 (the normal/default state) = visible.
+export const TEXT_SCROLL_CURSOR_HIDDEN_BIT = 1;
 
 // The standard kernel's own code calls "jsr minikernel" as a plain,
 // same-bank call (never a bankswitched "BS_jsr") - so on a bankswitched ROM,
@@ -186,8 +199,16 @@ export const generateTextStaticOffsetTables = (Blockly, bank) => {
   // text_minikernel_show_named's own maxOffset - see its comment.
   const linesMax = layout.map((entry) =>
     `${entry.offset + Math.max(0, entry.lineCount - (entry.wrapToLine2 ? 2 : 1)) * TEXT_MESSAGE_LENGTH}`).join(', ');
-  return ` data text_static_offsets\n  ${offsets}\nend\n\n data text_has_row2\n  ${hasRow2Bytes}\nend\n\n` +
-    ` data text_lines_max\n  ${linesMax}\nend`;
+  // Bank-suffixed (see bankSuffixedTableName's own comment in blocks/data.js)
+  // - a project reading these from more than one bank (e.g. a "Show text ID"
+  // scroll block used both from ordinary code and from inside a relocated
+  // Function) needs a distinctly-named copy per bank, not just a second copy
+  // of the same name (a real reported duplicate-label assembly failure).
+  const staticOffsetsName = bankSuffixedTableName('text_static_offsets', bank);
+  const hasRow2Name = bankSuffixedTableName('text_has_row2', bank);
+  const linesMaxName = bankSuffixedTableName('text_lines_max', bank);
+  return ` data ${staticOffsetsName}\n  ${offsets}\nend\n\n data ${hasRow2Name}\n  ${hasRow2Bytes}\nend\n\n` +
+    ` data ${linesMaxName}\n  ${linesMax}\nend`;
 };
 
 export default (Blockly) => {
@@ -426,11 +447,20 @@ export default (Blockly) => {
     // line 2" on) - TextRow2Active isn't even dimmed otherwise (see
     // generateTextMinikernelDims), since nothing would ever need row 2 to
     // auto-draw in that case.
-    trackTextStaticOffsetUsage(Blockly, Blockly.BBasic.getCurrentBank());
+    const bank = Blockly.BBasic.getCurrentBank();
+    trackTextStaticOffsetUsage(Blockly, bank);
+    // Bank-suffixed reads (see bankSuffixedTableName's own comment in
+    // blocks/data.js) - this generator can run once per bank a "Show text
+    // ID" block happens to be reached from (ordinary code, or a relocated
+    // Function's own body), and each needs to read back the SAME bank's own
+    // copy of the table generateTextStaticOffsetTables emitted above.
+    const staticOffsets = `${bankSuffixedTableName('text_static_offsets', bank)}[${argPair.read}]`;
+    const hasRow2 = `${bankSuffixedTableName('text_has_row2', bank)}[${argPair.read}]`;
+    const linesMax = `${bankSuffixedTableName('text_lines_max', bank)}[${argPair.read}]`;
     return captureArg +
-      emitScrollSetup(`text_static_offsets[${argPair.read}]`, 0, DEFAULT_SCROLL_SPEED, DEFAULT_SCROLL_PAUSE) +
-      (Blockly.BBasic.isTextRow2Used() ? `TextRow2Active = text_has_row2[${argPair.read}]\n` : '') +
-      setTextLinesRangeCode(`text_static_offsets[${argPair.read}]`, `text_lines_max[${argPair.read}]`);
+      emitScrollSetup(staticOffsets, 0, DEFAULT_SCROLL_SPEED, DEFAULT_SCROLL_PAUSE) +
+      (Blockly.BBasic.isTextRow2Used() ? `TextRow2Active = ${hasRow2}\n` : '') +
+      setTextLinesRangeCode(staticOffsets, linesMax);
   };
   // Scroll by-id block: normally WHICH entry gets shown isn't known until
   // runtime, so the offset needs the real "text_offsets[id]" table lookup -
@@ -502,17 +532,24 @@ export default (Blockly) => {
     // above) - .write to capture, .read for every use after.
     const argPair = Blockly.BBasic.superchipRwPairs[functionCallDiscardVarName()];
     const captureArg = `${argPair.write} = ${argument0}\n`;
+    // Bank-suffixed reads (see bankSuffixedTableName's own comment in
+    // blocks/data.js) - this generator can run once per bank a "Scroll text
+    // ID" block happens to be reached from (ordinary code, or a relocated
+    // Function's own body), and each needs to read back the SAME bank's own
+    // copy of whichever table(s) generateTextOffsetTables emitted there.
+    const bank = Blockly.BBasic.getCurrentBank();
+    const offsets = `${bankSuffixedTableName('text_offsets', bank)}[${argPair.read}]`;
     if (!layout.some((entry) => entry.maxOffset > 0)) {
-      return captureArg + emitScrollSetup(`text_offsets[${argPair.read}]`, 0, ...scrollFieldCodes(block)) +
+      return captureArg + emitScrollSetup(offsets, 0, ...scrollFieldCodes(block)) +
         setTextRow2ActiveCode(false) +
-        setTextLinesRangeCode(`text_offsets[${argPair.read}]`, `text_offsets[${argPair.read}]`);
+        setTextLinesRangeCode(offsets, offsets);
     }
 
-    trackTextByIdScrollUsage(Blockly, Blockly.BBasic.getCurrentBank());
-    return captureArg + emitScrollSetup(
-        `text_offsets[${argPair.read}]`, `text_scroll_max[${argPair.read}]`, ...scrollFieldCodes(block)) +
+    trackTextByIdScrollUsage(Blockly, bank);
+    const scrollMax = `${bankSuffixedTableName('text_scroll_max', bank)}[${argPair.read}]`;
+    return captureArg + emitScrollSetup(offsets, scrollMax, ...scrollFieldCodes(block)) +
       setTextRow2ActiveCode(false) +
-      setTextLinesRangeCode(`text_offsets[${argPair.read}]`, `text_offsets[${argPair.read}]`);
+      setTextLinesRangeCode(offsets, offsets);
   };
 
   Blockly.BBasic['text_minikernel_clear'] = function(block) {
@@ -604,6 +641,22 @@ export default (Blockly) => {
     const varName = Blockly.BBasic.nameDB_.getName(
         textEndIconColorVarName(), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
     return `${varName} = ${argument0}\n`;
+  };
+
+  // The scroll cursor's own runtime show/hide flag (see
+  // TEXT_SCROLL_CURSOR_HIDDEN_BIT's own comment above) - a read-modify-write
+  // of the cursor color var's own bit 0, read by buildTextScrollCursorOverride's
+  // own spliced asm. Leaves every other bit (the actual color) untouched, so
+  // hiding/showing the cursor never disturbs whatever color it was last set
+  // to.
+  Blockly.BBasic['text_minikernel_scroll_cursor_visible'] = function(block) {
+    markTextMinikernelUsed();
+    const varName = Blockly.BBasic.nameDB_.getName(
+        textScrollCursorColorVarName(), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+    const action = block.getFieldValue('ACTION');
+    return action === 'hide' ?
+      `${varName} = ${varName} | ${TEXT_SCROLL_CURSOR_HIDDEN_BIT}\n` :
+      `${varName} = ${varName} & $FE\n`;
   };
 
   Blockly.BBasic['text_minikernel_fade_to'] = function(block) {
@@ -891,6 +944,9 @@ export default (Blockly) => {
       lines.push(` ${row2Color} = $01`);
     }
     if (this.textScrollCursorUsed) {
+      // $0E's own bit 0 is already 0 (even), so this doubles as the
+      // "visible by default" default too - see TEXT_SCROLL_CURSOR_HIDDEN_BIT's
+      // own comment above.
       const cursorColor = Blockly.BBasic.nameDB_.getName(
           textScrollCursorColorVarName(), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
       lines.push(` ${cursorColor} = $0E`);

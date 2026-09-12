@@ -8,6 +8,7 @@
 // runtime check, that the "Show text" block generators just call into.
 
 import {TEXT_MESSAGE_LENGTH, CHAR_TO_GLYPH, listTextStrings, resolveTextMaxDisplayWidth} from '../../blocks/text-strings';
+import {bankSuffixedTableName} from '../../blocks/data';
 import {getStaticMessageLayout, staticMessageRegionEnd} from './text-minikernel-layout';
 
 // One shared copy of this runtime state project-wide, reconfigured by
@@ -496,5 +497,11 @@ export const generateTextOffsetTables = (Blockly, bank) => {
   const layout = getNamedScrollLayout();
   const offsets = layout.map((entry) => `${entry.offset}`).join(', ');
   const maxOffsets = layout.map((entry) => `${entry.maxOffset}`).join(', ');
-  return ` data text_offsets\n  ${offsets}\nend\n\n data text_scroll_max\n  ${maxOffsets}\nend`;
+  // Bank-suffixed (see bankSuffixedTableName's own comment in blocks/data.js)
+  // - a project reading these from more than one bank needs a distinctly
+  // named copy per bank, not a second copy sharing the same name (a real
+  // reported duplicate-label assembly failure).
+  const offsetsName = bankSuffixedTableName('text_offsets', bank);
+  const scrollMaxName = bankSuffixedTableName('text_scroll_max', bank);
+  return ` data ${offsetsName}\n  ${offsets}\nend\n\n data ${scrollMaxName}\n  ${maxOffsets}\nend`;
 };

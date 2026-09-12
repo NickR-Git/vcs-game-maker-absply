@@ -344,13 +344,27 @@ export default {
     // built-in way to change its own row count after construction (see
     // initEditor's own comment), so without this, every other frame would
     // keep silently rendering at its OLD height/content until manually
-    // reopened. Guarded on an actual length mismatch (not just any "value"
-    // change) so this doesn't also fire - and redundantly reinitialize,
-    // discarding the in-progress draw - on every ordinary pixel edit,
-    // which updates "value" just as often but never changes its length.
+    // reopened.
+    //
+    // A same-LENGTH "value" change also needs picking up - e.g. Copy/Paste
+    // Frame (PlayerEditor.vue's own handlePasteFrame) pastes another
+    // frame's pixels straight into this one's "value" prop with no local
+    // draw stroke involved at all - confirmed as a real reported bug: when
+    // the pasted frame happened to be the same height as this one, the
+    // canvas kept showing its OLD content until manually reopened, even
+    // though "value" (and the row-color sidebar, a separate component bound
+    // directly to frame.rowColors) had already updated. Guarded on an
+    // actual PIXEL mismatch against what's currently drawn (not just any
+    // "value" change) so an ordinary same-height pixel edit doesn't
+    // redundantly redraw itself on every stroke - that echo already matches
+    // what's on screen, since it's this same instance's own just-emitted
+    // change coming back through its own prop.
     value(newValue) {
-      if (this.editor && newValue && newValue.length !== this.editor.height) {
+      if (!this.editor || !newValue) return;
+      if (newValue.length !== this.editor.height) {
         this.initEditor(newValue.length, newValue);
+      } else if (!isMatrixEqual(newValue, this.getPixels())) {
+        this.setPixels(newValue);
       }
     },
   },
@@ -617,6 +631,11 @@ export default {
       const previousTool = this.editor.tool === this.eraser ? 'eraser' : 'pencil';
       this.setPixels(null);
       this.$emit('input', this.getPixels());
+      // Separate from 'input' (an ordinary pixel edit) - lets a caller reset
+      // this graphic's own color fields (row colors, a single fixed color,
+      // whatever it has) alongside the pixels specifically on a real Clear
+      // click, without every plain drawing stroke also wiping colors.
+      this.$emit('clear');
       // v-btn-toggle lights up whichever child's value was just clicked -
       // without this, Clear itself would stay visually "selected" even
       // though it isn't a real drawing tool (editor.tool is untouched).

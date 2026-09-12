@@ -209,7 +209,7 @@ export default defineComponent({
     // Same width, same per-pixel size as a real glyph tile - the cursor is
     // TEXT_CURSOR_WIDTH (4) pixels wide, identical to TEXT_GLYPH_WIDTH.
     const cursorGlyphWidth = computed(() => `${Math.round(GLYPH_BASE_WIDTH * zoom.value)}px`);
-    const {isCollapsed, toggleCollapsed} = useCollapsedIds('text-font-card');
+    const {isCollapsed, toggleCollapsed} = useCollapsedIds('text-font-card', true);
 
     // Whether the Text tab's own "Show a blinking scroll cursor" switch is
     // on - read directly (not passed as a prop) since nothing else about
