@@ -65,6 +65,135 @@ const FADE_LABEL_TAG_BY_VAR = {
   player0realcolor: 'p0', player1realcolor: 'p1',
 };
 
+// Shared by every "Background [Set/Clear/Flip] line from X/Y to X/Y" block
+// (background_draw_line) - a runtime implementation of Bresenham's line
+// algorithm, needed because (unlike background_change_hv_line's own
+// straight horizontal/vertical runs, which are always axis-aligned and so
+// can compile straight to a single pfhline/pfvline macro call) an arbitrary
+// line's own endpoints can be variables, not fixed numbers known at compile
+// time - there's no way to know in advance how many pixels it needs, or
+// which ones, without actually running the algorithm.
+//
+// One subroutine PER OPERATION ACTUALLY USED (Set/Clear/Flip - see
+// BACKGROUND_LINE_SUBROUTINE_NAMES below), not one shared routine with a
+// runtime dispatch - a project using only "Set" line blocks (the common
+// case) gets exactly one copy, no dispatch branching, and no separate
+// "which operation" variable to track at all; only a project that mixes
+// Set/Clear/Flip line blocks pays for more than one copy of this routine.
+// Still only ONE copy PER operation regardless of how many line blocks use
+// it (see registerKeypadPollSubroutine's own identical "one shared copy,
+// called via gosub" reasoning in generators/bbasic/input.js).
+//
+// The "err" term is tracked with a fixed +128 bias throughout (comparing
+// against 128 instead of 0) rather than as a true signed value - this
+// codebase's own "dim"'d variables are plain unsigned bytes, and while
+// ADD/SUBTRACT wrap correctly for negative values via ordinary two's-
+// complement arithmetic, an UNSIGNED ">"/"<" comparison on a wrapped
+// negative value reads it as a huge positive number instead, which would
+// send the algorithm the wrong way at exactly the values where a plain sign
+// check matters most. Biasing keeps every comparison safely within 0-255
+// with no wraparound, as long as neither operand's own true magnitude ever
+// approaches ~127 - true for every coordinate range this app's own
+// playfield editor (32 pixels wide, well under 127 tall even with Superchip
+// RAM's own largest pfres) can ever produce.
+//
+// 7 dedicated dev vars: the current point (x1,y1), target point (x2,y2),
+// distances (dx,dy), and the error accumulator - down from an earlier design
+// that also had a loop counter and a runtime operation selector (9 vars).
+// The loop counter turned out to be redundant: since x1 (low branch) or y1
+// (high branch) already walks toward the target by exactly 1 every
+// iteration, checking "have I just plotted the target point?" right after
+// each plot is an equally valid stop condition, using state this routine
+// already has to track anyway - see the "goto"-based loop below instead of
+// the earlier "for/next" one. The operation selector is gone because the
+// operation is now baked into which subroutine gets called (see above)
+// instead of being read at runtime.
+//
+// An even earlier version tried to save vars a different way - keeping
+// x1/y1/x2/y2/dx/dy in the shared temp1-temp6 scratch registers instead
+// (the same ones background_change_pixel/background_change_hv_line use) -
+// that was wrong, and a real reported bug (a couple of pixels drawn, then
+// nothing, instead of a continuous line): pfpixel's OWN implementation
+// (public/bb19/includes/pf_drawing.asm's own setuppointers) uses temp1 AND
+// temp2 as ITS OWN internal scratch while computing the byte/row address -
+// "stx temp2" / "sta temp1" - clobbering whatever this routine had stored
+// there the instant the FIRST pfpixel call happened. background_change_pixel
+// gets away with temp1/temp2 only because it uses them for one single,
+// immediate call and never reads them again - safe for a one-shot hand-off,
+// not for state that has to survive across a whole loop of repeated pfpixel
+// calls. temp1/temp2 are still used here, but only as that same kind of
+// momentary hand-off, immediately before each individual plot - x1/y1
+// themselves live in their own dedicated vars.
+export const BACKGROUND_LINE_SUBROUTINE_NAMES = {
+  on: '_bgDrawLineOn', off: '_bgDrawLineOff', flip: '_bgDrawLineFlip',
+};
+// operations: a Set/array of which of 'on'/'off'/'flip' to actually build a
+// subroutine for (see backgroundLineOperationsUsed's own pre-scan in
+// generators/bbasic.js) - an operation nothing ever uses gets no subroutine
+// at all, not even an unused/dead one.
+export const registerBackgroundLineSubroutine = (Blockly, names, operations) => {
+  const {x1, y1, x2, y2, dx, dy, err} = names;
+  // Every label DEFINITION needs an "@ " prefix (goto/gosub REFERENCES to it
+  // stay bare) - Blockly.BBasic.normalizeIndents (run on every generated
+  // subroutine body, and on the whole program's own top-level code too -
+  // see finish()'s own call) blindly indents every line, which breaks a
+  // plain label's own required column-0 placement; "@ " is stripped back
+  // out afterward, restoring it. Same convention controls_if's own "@
+  // ${bodyLabel}" already uses for its own goto targets (see logic.js) -
+  // this isn't specific to raw "asm...end" blocks the way it might look
+  // from titlescreen.js's own comments, it's universal to every label
+  // Blockly.BBasic ever generates. Confirmed as a real, reproduced build
+  // failure without it ("Unknown keyword: _lineDrawLow" - the indented
+  // label was read as an attempted statement/command instead).
+  operations.forEach((operation) => {
+    // Every internal label is tagged with the operation (e.g. "_lineDrawLowOn"
+    // vs "_lineDrawLowOff") - these are real, global assembly labels once
+    // compiled, not scoped to this one subroutine, so a project using more
+    // than one operation (e.g. both "Set" and "Clear" line blocks) would
+    // otherwise get a duplicate-label build error the moment a second one of
+    // these subroutines was registered with the exact same internal label
+    // names as the first.
+    const tag = operation.charAt(0).toUpperCase() + operation.slice(1);
+    const plot = [
+      `temp1 = ${x1}`,
+      `temp2 = ${y1}`,
+      `pfpixel temp1 temp2 ${operation}`,
+    ].join('\n');
+
+    Blockly.BBasic.subroutines[BACKGROUND_LINE_SUBROUTINE_NAMES[operation]] = [
+      `if ${x2} >= ${x1} then ${dx} = ${x2} - ${x1} else ${dx} = ${x1} - ${x2}`,
+      `if ${y2} >= ${y1} then ${dy} = ${y2} - ${y1} else ${dy} = ${y1} - ${y2}`,
+      `if ${dx} < ${dy} then goto _lineDrawHigh${tag}`,
+      '',
+      `@ _lineDrawLow${tag}`,
+      `${err} = 128 + ${dy} + ${dy} - ${dx}`,
+      `@ _lineLowLoop${tag}`,
+      plot,
+      `if ${x1} = ${x2} then return`,
+      `if ${err} <= 128 then goto _lineSkipYLow${tag}`,
+      `if ${y1} < ${y2} then ${y1} = ${y1} + 1 else ${y1} = ${y1} - 1`,
+      `${err} = ${err} - ${dx} - ${dx}`,
+      `@ _lineSkipYLow${tag}`,
+      `${err} = ${err} + ${dy} + ${dy}`,
+      `if ${x1} < ${x2} then ${x1} = ${x1} + 1 else ${x1} = ${x1} - 1`,
+      `goto _lineLowLoop${tag}`,
+      '',
+      `@ _lineDrawHigh${tag}`,
+      `${err} = 128 + ${dx} + ${dx} - ${dy}`,
+      `@ _lineHighLoop${tag}`,
+      plot,
+      `if ${y1} = ${y2} then return`,
+      `if ${err} <= 128 then goto _lineSkipXHigh${tag}`,
+      `if ${x1} < ${x2} then ${x1} = ${x1} + 1 else ${x1} = ${x1} - 1`,
+      `${err} = ${err} - ${dy} - ${dy}`,
+      `@ _lineSkipXHigh${tag}`,
+      `${err} = ${err} + ${dx} + ${dx}`,
+      `if ${y1} < ${y2} then ${y1} = ${y1} + 1 else ${y1} = ${y1} - 1`,
+      `goto _lineHighLoop${tag}`,
+    ].join('\n');
+  });
+};
+
 export default (Blockly) => {
   // A compile-time constant, not runtime state - the playfield's vertical
   // resolution is a single fixed ROM-wide setting (see effectiveBackgroundRows'
@@ -738,6 +867,30 @@ export default (Blockly) => {
       `temp3 = ${argumentY}\n` +
       `temp1 = ${argumentLineLength} + ${direction == 'pfhline' ? 'temp2' : 'temp3'} - 1\n` +
       `${direction} temp2 temp3 temp1 ${operation}\n`;
+  };
+
+  Blockly.BBasic[`background_draw_line`] = function(block) {
+    // Block for drawing an arbitrary (diagonal) line between two points -
+    // see registerBackgroundLineSubroutine's own comment for the runtime
+    // Bresenham's-line-algorithm this gosubs into, and for why X1/Y1/X2/Y2
+    // need their own dedicated vars rather than temp1-temp4 (pfpixel's own
+    // implementation clobbers temp1/temp2 internally). OPERATION picks
+    // which of the (up to 3) pre-built subroutines to gosub directly - a
+    // compile-time choice fixed per block instance, not a runtime value.
+    const operation = block.getFieldValue('OPERATION');
+    const argumentX1 = Blockly.BBasic.valueToCode(block, 'X1', Blockly.BBasic.ORDER_ASSIGNMENT) || '0';
+    const argumentY1 = Blockly.BBasic.valueToCode(block, 'Y1', Blockly.BBasic.ORDER_ASSIGNMENT) || '0';
+    const argumentX2 = Blockly.BBasic.valueToCode(block, 'X2', Blockly.BBasic.ORDER_ASSIGNMENT) || '0';
+    const argumentY2 = Blockly.BBasic.valueToCode(block, 'Y2', Blockly.BBasic.ORDER_ASSIGNMENT) || '0';
+    const names = Blockly.BBasic.backgroundLineVarNames;
+    const subroutineName = BACKGROUND_LINE_SUBROUTINE_NAMES[operation];
+    const suffix = Blockly.BBasic.bankJumpSuffix(
+        Blockly.BBasic.getCurrentBank(), Blockly.BBasic.getSubroutineBank(subroutineName));
+    return `${names.x1} = ${argumentX1}\n` +
+      `${names.y1} = ${argumentY1}\n` +
+      `${names.x2} = ${argumentX2}\n` +
+      `${names.y2} = ${argumentY2}\n` +
+      `gosub ${subroutineName}${suffix}\n`;
   };
 
   Blockly.BBasic[`background_clear`] = function(block) {

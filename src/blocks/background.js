@@ -550,6 +550,50 @@ Blockly.defineBlocksWithJsonArray([
     'colour': BACKGROUND_COLOR,
     'tooltip': `Draws an horizontal/vertical line.`,
   },
+  // Block for drawing an arbitrary (diagonal) line between two points - see
+  // generators/bbasic/background.js's own registerBackgroundLineSubroutine
+  // for the runtime Bresenham's-line-algorithm implementation this needs
+  // (the endpoints can be variables, not just fixed numbers known at compile
+  // time, so this can't be pre-flattened into a fixed run of pfpixel calls
+  // the way background_change_hv_line's own straight runs can).
+  {
+    'type': `background_draw_line`,
+    'message0': `${BACKGROUND_ICON} Background %1 line from X %2 Y %3 to X %4 Y %5`,
+    'args0': [
+      {
+        'type': 'field_dropdown',
+        'name': 'OPERATION',
+        'options': BACKGROUND_PFPIXEL_OPTIONS,
+      },
+      {
+        'type': 'input_value',
+        'name': 'X1',
+        'check': 'Number',
+      },
+      {
+        'type': 'input_value',
+        'name': 'Y1',
+        'check': 'Number',
+      },
+      {
+        'type': 'input_value',
+        'name': 'X2',
+        'check': 'Number',
+      },
+      {
+        'type': 'input_value',
+        'name': 'Y2',
+        'check': 'Number',
+      },
+    ],
+    'inputsInline': true,
+    'previousStatement': null,
+    'nextStatement': null,
+    'colour': BACKGROUND_COLOR,
+    'tooltip': `Draws a straight line of any angle between two playfield points, unlike ` +
+      `"Background Horizontally/Vertically pixels", which only draws straight up/down or ` +
+      `left/right.`,
+  },
   // Block for reading the playfield's vertical resolution (row count)
   {
     'type': `background_get_resolution`,

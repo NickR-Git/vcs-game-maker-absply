@@ -635,6 +635,21 @@ Blockly.BBasic.init = function(workspace) {
   this.keypad0Used = workspace.getAllBlocks(false).some((block) => KEYPAD_BLOCK_TYPES['0'].includes(block.type));
   this.keypad1Used = workspace.getAllBlocks(false).some((block) => KEYPAD_BLOCK_TYPES['1'].includes(block.type));
 
+  // Which OPERATION(s) "Background [Set/Clear/Flip] line from X/Y to X/Y"
+  // actually uses, project-wide - a real block-field pre-scan, since (unlike
+  // the fixed straight runs background_change_hv_line can pre-flatten at
+  // compile time) an arbitrary line's own endpoints can be variables, so
+  // this needs a real runtime Bresenham's-line-algorithm subroutine (see
+  // registerBackgroundLineSubroutine in generators/bbasic/background.js) -
+  // one PER operation actually used (a project using only "Set" line blocks
+  // never pays for a "Clear"/"Flip" copy), and a project using none of this
+  // block at all pays nothing for its own dev vars either.
+  this.backgroundLineOperationsUsed = new Set(
+      workspace.getAllBlocks(false)
+          .filter((block) => block.type === 'background_draw_line')
+          .map((block) => block.getFieldValue('OPERATION')));
+  this.backgroundLineUsed = this.backgroundLineOperationsUsed.size > 0;
+
   // Whether any "Draw title screen" block exists at all - has to be known
   // before reserveDevVar hands out user variable letters below (see
   // titleScreenSelectedIdVarName's own reservation further down), same
@@ -1097,6 +1112,34 @@ Blockly.BBasic.init = function(workspace) {
   // comment on why registering any earlier here would just get wiped out).
   if (this.keypad0Used) this.keypadLeftVarName = reserveDevVar(keypadKeyVarName('0'), undefined, 'keypad 0 poll result');
   if (this.keypad1Used) this.keypadRightVarName = reserveDevVar(keypadKeyVarName('1'), undefined, 'keypad 1 poll result');
+
+  // Same bucket again, for the shared background line-drawing subroutine's
+  // own working variables (see registerBackgroundLineSubroutine in
+  // generators/bbasic/background.js) - resolved names captured on "this"
+  // (not just reserved) for the same reason as keypadLeftVarName/
+  // keypadRightVarName just above: registering the subroutine's own body
+  // needs them, but has to wait until "this.subroutines = {}" below runs
+  // first. 7 vars: the current point/target point/distances/error term -
+  // no separate loop counter (the current point already walking toward the
+  // target IS the loop's own stop condition) or operation selector (the
+  // operation is baked into which of the - up to 3 - subroutines gets
+  // called, not read at runtime). An earlier version tried to keep the
+  // current point/target point/distances in the shared temp1-temp6 scratch
+  // registers instead of dedicated vars entirely, which was wrong (see
+  // registerBackgroundLineSubroutine's own comment for the real, reported
+  // bug this caused: pfpixel's own implementation clobbers temp1/temp2
+  // internally, corrupting them the instant the first pixel was plotted).
+  if (this.backgroundLineUsed) {
+    this.backgroundLineVarNames = {
+      x1: reserveDevVar('_lineX1', undefined, 'background line: current X position'),
+      y1: reserveDevVar('_lineY1', undefined, 'background line: current Y position'),
+      x2: reserveDevVar('_lineX2', undefined, 'background line: end X position'),
+      y2: reserveDevVar('_lineY2', undefined, 'background line: end Y position'),
+      dx: reserveDevVar('_lineDX', undefined, 'background line: X distance'),
+      dy: reserveDevVar('_lineDY', undefined, 'background line: Y distance'),
+      err: reserveDevVar('_lineErr', undefined, 'background line: Bresenham error term'),
+    };
+  }
 
   // Which Title Screen page a "Draw title screen" block wants drawn next -
   // written right before that block's own gosub into the one shared
@@ -1601,6 +1644,13 @@ Blockly.BBasic.init = function(workspace) {
       useLeft: this.keypad0Used, useRight: this.keypad1Used,
       leftVarName: this.keypadLeftVarName, rightVarName: this.keypadRightVarName,
     });
+  }
+
+  // Same timing/reasoning as registerKeypadPollSubroutine above - needs
+  // backgroundLineVarNames, already resolved earlier via reserveDevVar (see
+  // backgroundLineUsed's own pre-scan).
+  if (this.backgroundLineUsed) {
+    registerBackgroundLineSubroutine(Blockly, this.backgroundLineVarNames, this.backgroundLineOperationsUsed);
   }
 
   // Same timing/reasoning as registerKeypadPollSubroutine above - has to
@@ -3842,7 +3892,7 @@ Blockly.BBasic.generateAnimations = function() {
   const player1Code = processAnimations('player1', playerAnimationsStorage);
   return player0Code + '\n\n\n' + player1Code;
 };
-import background, {backgroundGetPixelDevVarsNeeded} from './bbasic/background';
+import background, {backgroundGetPixelDevVarsNeeded, registerBackgroundLineSubroutine} from './bbasic/background';
 import bit from './bbasic/bit';
 import collision from './bbasic/collision';
 import color from './bbasic/color';
