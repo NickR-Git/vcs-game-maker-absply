@@ -2,7 +2,7 @@
   <player-editor
     :storageFactory="usePlayerAnimationsStorage"
     title="Sprite"
-    fgColor="blue"
+    fgColor="orange"
     name="player"
   />
 </template>

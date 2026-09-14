@@ -69,7 +69,7 @@
                 :height="activeDigitHeight"
                 :aspectRatio="PIXEL_ASPECT"
                 v-model="state.digits[index]"
-                fgColor="#f2691e"
+                fgColor="orange"
                 :showClearButton="true"
                 :name="'score-font-digit-' + index"
                 :allowChangingHeight="false"

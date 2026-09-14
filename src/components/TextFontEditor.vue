@@ -50,7 +50,7 @@
                 :height="TEXT_CURSOR_HEIGHT"
                 :aspectRatio="PIXEL_ASPECT"
                 v-model="state.cursor"
-                fgColor="#f2691e"
+                fgColor="orange"
                 :showClearButton="true"
                 name="text-font-cursor"
                 :allowChangingHeight="false"
@@ -73,7 +73,7 @@
                         v-for="(pixel, colIndex) in row"
                         :key="colIndex"
                         class="glyph-preview-cell"
-                        :style="{backgroundColor: pixel ? '#f2691e' : '#000'}"
+                        :style="{backgroundColor: pixel ? '#FF9800' : '#000'}"
                       />
                     </div>
                   </div>
@@ -98,7 +98,7 @@
                 :height="TEXT_GLYPH_HEIGHT"
                 :aspectRatio="PIXEL_ASPECT"
                 v-model="state.glyphs[index]"
-                fgColor="#f2691e"
+                fgColor="orange"
                 :showClearButton="true"
                 :name="'text-font-glyph-' + index"
                 :allowChangingHeight="false"
@@ -133,7 +133,7 @@
                         v-for="(pixel, colIndex) in row"
                         :key="colIndex"
                         class="glyph-preview-cell"
-                        :style="{backgroundColor: pixel ? '#f2691e' : '#000'}"
+                        :style="{backgroundColor: pixel ? '#FF9800' : '#000'}"
                       />
                     </div>
                   </div>
