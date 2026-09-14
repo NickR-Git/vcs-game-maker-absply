@@ -1,7 +1,7 @@
 import * as Blockly from 'blockly/core';
 
-import {processPlayerStorageDefaults} from '../generators/bbasic/sprites';
-import {usePlayer0Storage, usePlayer1Storage} from '../hooks/project';
+import {processPlayerAnimationsStorageDefaults} from '../generators/bbasic/sprites';
+import {usePlayerAnimationsStorage} from '../hooks/project';
 import {PLAYER_ICON, MISSILE_ICON, BALL_ICON, COLOR_ICON, HEIGHT_ICON, ANIMATION_ICON, VISIBILITY_ICON, HORIZONTAL_ICON, VERTICAL_ICON, MIRROR_ICON, FRAME_ICON, PLAY_ICON, PAUSE_ICON, PRIORITY_ICON, DATA_ICON, SEEK_ICON} from './icon';
 
 const PRIORITY_COLOUR = '#009688';
@@ -12,7 +12,7 @@ const PRIORITY_COLOUR = '#009688';
 // computed, so renamed and added animations show up without a reload.
 const buildAnimationOptions = (storageFactory) => () => {
   try {
-    const player = processPlayerStorageDefaults(storageFactory());
+    const player = processPlayerAnimationsStorageDefaults(storageFactory());
     return player.animations.map((animation, index) =>
       [animation.name || `Unnamed ${index + 1}`, `${index}`]);
   } catch (e) {
@@ -601,7 +601,7 @@ buildAnimationSelectBlock({
   description: 'Player 0',
   icon: PLAYER_ICON,
   colour: 'red',
-  storageFactory: usePlayer0Storage,
+  storageFactory: usePlayerAnimationsStorage,
 });
 
 buildSpriteBlocks({
@@ -630,7 +630,7 @@ buildAnimationSelectBlock({
   description: 'Player 1',
   icon: PLAYER_ICON,
   colour: 'blue',
-  storageFactory: usePlayer1Storage,
+  storageFactory: usePlayerAnimationsStorage,
 });
 
 buildSpriteBlocks({

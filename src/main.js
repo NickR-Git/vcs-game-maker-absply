@@ -7,7 +7,14 @@ import App from './App.vue';
 import vuetify from './plugins/vuetify';
 import router from './router';
 import {clearProjectStorage, useLoadLastProjectStorage} from './hooks/project';
+import {migrateLegacyPlayerAnimationsInLocalStorage} from './hooks/migrate-player-animations';
 import './registerServiceWorker';
+
+// Combines an existing project's own separate legacy Player 0/Player 1
+// animation storage into the single shared pool this app now uses - see
+// that function's own comment for why this has to run before the app is
+// created, same timing reasoning as the loadLastProject check just below.
+migrateLegacyPlayerAnimationsInLocalStorage();
 
 // Whether to restore the last saved project on startup is a user preference
 // (see the Options tab) rather than always-on - when disabled, every launch

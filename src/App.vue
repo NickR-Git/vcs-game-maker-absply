@@ -23,11 +23,7 @@
           <v-icon>mdi-image-frame</v-icon>
         </v-btn>
 
-        <v-btn to="/player0" link text class="player0-item" title="Player 0" elevation="0">
-          <v-icon>mdi-human-handsup</v-icon>
-        </v-btn>
-
-        <v-btn to="/player1" link text class="player1-item" title="Player 1" elevation="0">
+        <v-btn to="/player" link text class="player-item" title="Sprite" elevation="0">
           <v-icon>mdi-human-handsup</v-icon>
         </v-btn>
 
@@ -112,28 +108,15 @@
         </v-list-item>
 
         <v-list-item
-          to="/player0"
+          to="/player"
           link
-          class="player0-item"
+          class="player-item"
         >
           <v-list-item-icon>
             <v-icon>mdi-human-handsup</v-icon>
           </v-list-item-icon>
           <v-list-item-content>
-            <v-list-item-title>Player 0</v-list-item-title>
-          </v-list-item-content>
-        </v-list-item>
-
-        <v-list-item
-          to="/player1"
-          link
-          class="player1-item"
-        >
-          <v-list-item-icon>
-            <v-icon>mdi-human-handsup</v-icon>
-          </v-list-item-icon>
-          <v-list-item-content>
-            <v-list-item-title>Player 1</v-list-item-title>
+            <v-list-item-title>Sprite</v-list-item-title>
           </v-list-item-content>
         </v-list-item>
 
@@ -2114,11 +2097,11 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
    colors looking washed out compared to the top bar's for any tab that
    wasn't the current page - confirmed directly via computed style: both
    already resolved to the exact same "color: rgb(...)" (the shared
-   .actions-item/.player0-item/etc rules below already cover both bars
+   .actions-item/.player-item/etc rules below already cover both bars
    identically), it was purely this element-wide opacity multiplying that
    same color down for the sidebar alone. */
 
-/* The top v-app-bar's own tab buttons (.actions-item/.player0-item/etc,
+/* The top v-app-bar's own tab buttons (.actions-item/.player-item/etc,
    the exact same class names as the sidebar's own v-list-item entries just
    above - see the rules right below this one) used to render with
    Vuetify's own default v-btn appearance, a solid light grey fill
@@ -2175,16 +2158,9 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
   border-left-color: rgb(103, 58, 183) !important;
 }
 
-.player0-item,
-.player0-item > .v-list-item__icon > .theme--light.v-icon,
-.player0-item > .v-list-item__content {
-  color: rgb(244, 67, 54) !important;
-  border-left-color: rgb(244, 67, 54) !important;
-}
-
-.player1-item,
-.player1-item > .v-list-item__icon > .theme--light.v-icon,
-.player1-item > .v-list-item__content {
+.player-item,
+.player-item > .v-list-item__icon > .theme--light.v-icon,
+.player-item > .v-list-item__content {
   color: rgb(33, 150, 243) !important;
   border-left-color: rgb(33, 150, 243) !important;
 }

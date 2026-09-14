@@ -46,7 +46,7 @@
           v-model="configurationState.enableSuperchip"
           @change="handleToggleSuperchip"
           label="Enable Superchip RAM for higher-resolution playfields"
-          hint="Adds a Superchip (SC) to the ROM and lets the playfield use more than 11 rows. Requires an 8k or larger ROM (bumped automatically if needed), and horizontal playfield scrolling (left/right) isn't supported once this is on. Per-row playfield colors (pfcolors) don't render correctly with Superchip yet, so they're left out of the generated code while this is on - backgrounds can still have row colors set in the editor for whenever that's fixed. Also moves the app's own bookkeeping variables off letters and into extra Superchip RAM, freeing every letter (a-z) for your own variables."
+          hint="Adds a Superchip (SC) to the ROM and lets the playfield use more than 11 rows. Requires an 8k or larger ROM (bumped automatically if needed), and horizontal playfield scrolling (left/right) isn't supported once this is on. Also moves the app's own bookkeeping variables off letters and into extra Superchip RAM, freeing every letter (a-z) for your own variables."
           persistent-hint
           class="option-switch"
         />
@@ -117,7 +117,7 @@
           v-model="configurationState.enablePlayer0SpriteColors"
           @change="handleChangeConfiguration"
           label="Enable per-row Player 0 sprite colors (playercolors)"
-          hint="Lets Player 0 show a different color on every row, the same way backgrounds can. Unlike per-row playfield colors below, this works fine with Superchip RAM on. Costs missile0 (can't be used as a sprite anywhere in the project once this is on) and paddle input. batari Basic requires player1colors alongside playercolors, so turning this on also turns on (and locks on) Player 1 sprite colors below, costing missile1 too."
+          hint="Lets Player 0 show a different color on every row, the same way backgrounds can. Costs missile0 (can't be used as a sprite anywhere in the project once this is on) and paddle input. batari Basic requires player1colors alongside playercolors, so turning this on also turns on (and locks on) Player 1 sprite colors below, costing missile1 too."
           persistent-hint
           class="option-switch"
         />
@@ -129,16 +129,15 @@
           label="Enable per-row Player 1 sprite colors (player1colors)"
           :hint="player0RainbowColorsActive ?
             'Forced on: batari Basic requires player1colors whenever playercolors (Player 0 sprite colors, above) is on.' :
-            'Lets Player 1 show a different color on every row, the same way backgrounds can. Unlike per-row playfield colors below, this works fine with Superchip RAM on. Costs missile1 (can\'t be used as a sprite anywhere in the project once this is on) - unlike Player 0 sprite colors, this works on its own with no other cost.'"
+            'Lets Player 1 show a different color on every row, the same way backgrounds can. Costs missile1 (can\'t be used as a sprite anywhere in the project once this is on) - unlike Player 0 sprite colors, this works on its own with no other cost.'"
           persistent-hint
           class="option-switch"
         />
         <v-switch
           v-model="configurationState.enablePfColors"
           @change="handleChangeConfiguration"
-          :disabled="configurationState.enableSuperchip"
           label="Enable per-row playfield colors (pfcolors)"
-          hint="Backgrounds can still have row colors set while this is off; they just won't be included in the generated code. Disabled while Superchip RAM is on - see below."
+          hint="Backgrounds can still have row colors set while this is off; they just won't be included in the generated code. Works fine together with Superchip RAM."
           persistent-hint
           class="option-switch"
         />
@@ -460,23 +459,10 @@ export default defineComponent({
     const romSizeOptions = computed(() => configurationState.value.enableSuperchip ?
       ROM_SIZE_OPTIONS.slice(MIN_SUPERCHIP_ROM_SIZE_INDEX) : ROM_SIZE_OPTIONS);
 
-    // pfcolors and Superchip's higher-resolution playfield don't render
-    // correctly together (last row black, and with more than one background
-    // the colors come out wrong and the black area returns), so the two
-    // options can't both be on. Per-row SPRITE colors doesn't share this
-    // problem - it reads through player0color/player1color (aliased onto
-    // paddle/missile1y - see ROM_NOISE_COLOR_REGISTERS' own comment in
-    // generators/bbasic/sprites.js), a completely separate pointer from the
-    // playfield's own pfcolortable, and testing confirms it renders
-    // correctly with Superchip on - so it's deliberately NOT excluded here.
-    // Inlining random-number calls (see
-    // useInlineRand in bbasic.js) only makes sense on a bankswitched ROM
-    // size too, so it's forced off whenever the ROM size changes away from
-    // one.
-    const enforceSuperchipPfColorsExclusivity = (state) => {
-      if (state.enableSuperchip) {
-        state.enablePfColors = false;
-      }
+    // Inlining random-number calls (see useInlineRand in bbasic.js) only
+    // makes sense on a bankswitched ROM size, so it's forced off whenever
+    // the ROM size changes away from one.
+    const enforceInlineRandExclusivity = (state) => {
       if (!BANK_COUNT_BY_ROMSIZE[state.romSize]) {
         state.enableInlineRand = false;
       }
@@ -486,7 +472,7 @@ export default defineComponent({
     const handleChangeConfiguration = () => {
       const state = configurationState.value;
       if (player0RainbowColorsActive.value) state.showBlankLines = true;
-      configurationState.value = enforceSuperchipPfColorsExclusivity(state);
+      configurationState.value = enforceInlineRandExclusivity(state);
     };
 
     // The playfield's vertical resolution (pfres) is a single setting for the
@@ -499,7 +485,7 @@ export default defineComponent({
       if (state.enableSuperchip && ROM_SIZE_OPTIONS.indexOf(state.romSize) < MIN_SUPERCHIP_ROM_SIZE_INDEX) {
         state.romSize = ROM_SIZE_OPTIONS[MIN_SUPERCHIP_ROM_SIZE_INDEX];
       }
-      configurationState.value = enforceSuperchipPfColorsExclusivity(state);
+      configurationState.value = enforceInlineRandExclusivity(state);
 
       reflowBackgroundsToHeight(backgroundsStorage, effectiveBackgroundRows(state));
     };

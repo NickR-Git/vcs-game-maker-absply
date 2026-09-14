@@ -319,12 +319,12 @@ import {saveAs} from 'file-saver';
 
 import {useCollapsedIds} from '../hooks/collapse';
 import {useDragReorder, CSS_CLASS_DRAGGING} from '../hooks/drag-reorder';
-import {useBackgroundsStorage, useDataTablesStorage, usePlayer0Storage, usePlayer1Storage,
+import {useBackgroundsStorage, useDataTablesStorage, usePlayerAnimationsStorage,
   useSoundEffectsStorage, useSongsStorage, useTextStringsStorage} from '../hooks/project';
 import {DEFAULT_DATA_TABLES, DEFAULT_DATA_TABLE_COLUMNS, MAX_DATA_TABLE_VALUES,
   processDataTablesStorageDefaults} from '../blocks/data';
 import {processBackgroundStorageDefaults} from '../blocks/background';
-import {processPlayerStorageDefaults} from '../generators/bbasic/sprites';
+import {processPlayerAnimationsStorageDefaults} from '../generators/bbasic/sprites';
 import {processSoundEffectsStorageDefaults} from '../blocks/soundfx';
 import {processSongsStorageDefaults} from '../blocks/music';
 import {processTextStringsStorageDefaults} from '../blocks/text-strings';
@@ -403,20 +403,25 @@ export default defineComponent({
     const backgroundOptions = computed(() =>
       processBackgroundStorageDefaults(backgroundsStorage).backgrounds
           .map(({id, name}) => ({text: name || `Unnamed ${id}`, value: id})));
-    const player0Storage = usePlayer0Storage();
-    const player1Storage = usePlayer1Storage();
+    const playerAnimationsStorage = usePlayerAnimationsStorage();
     // Same {text, value} shape as backgroundOptions above, but the VALUE is
-    // each animation's own INDEX in the list, not an id - matching
+    // each animation's own INDEX in the shared pool, not an id - matching
     // blocks/sprites.js's own buildAnimationOptions exactly (see its
     // comment: the generated code dispatches on "player0animation = N"
     // against the animation's position in the list, not any stored id, so
     // that's what a data table value needs to hold too for this to mean
-    // anything once read back by a Data block).
-    const playerAnimationOptions = (playerStorage) => computed(() =>
-      processPlayerStorageDefaults(playerStorage).animations
+    // anything once read back by a Data block). Both hardware players share
+    // the exact same list now (see hooks/project.js's own
+    // usePlayerAnimationsStorage), so player0Options/player1Options below
+    // are identical - kept as two separate names since Data blocks still
+    // let a cell independently be formatted as "Player 0 animation" or
+    // "Player 1 animation" (see FORMAT_CYCLE below), not because the
+    // underlying options actually differ.
+    const playerOptions = computed(() =>
+      processPlayerAnimationsStorageDefaults(playerAnimationsStorage).animations
           .map((animation, index) => ({text: animation.name || `Unnamed ${index + 1}`, value: index})));
-    const player0Options = playerAnimationOptions(player0Storage);
-    const player1Options = playerAnimationOptions(player1Storage);
+    const player0Options = playerOptions;
+    const player1Options = playerOptions;
     // Same {id, name} -> {text, value} shape as backgroundOptions - sound
     // effects/songs/text strings are all referenced by their own stored id
     // (not a list position, unlike player animations above), matching
@@ -1280,8 +1285,8 @@ export default defineComponent({
   color: rgba(0, 0, 0, 0.87) !important;
 }
 
-/* Same red/blue/orange App.vue's own .player0-item/.player1-item/
-   .background-item sidebar tabs use for their identical icons - overrides
+/* Same red/blue/orange App.vue's own .player-item/.background-item
+   sidebar tabs use for their identical icons - overrides
    .data-flat-icon-btn's own dim grey above (both rest and hover) so this
    toggle button's icon reads as "Player 0"/"Player 1"/"Background" by color
    the same way the sidebar already does, not just by title text on hover.

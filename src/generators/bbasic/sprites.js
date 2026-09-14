@@ -42,8 +42,11 @@ export const DEFAULT_SPRITES={
   ],
 };
 
-export const processPlayerStorageDefaults = (playerStorage) => {
-  const player = playerStorage.value;
+// playerAnimationsStorage is the ONE shared pool (see
+// hooks/project.js's usePlayerAnimationsStorage) - both hardware players
+// (Player 0 and Player 1) read from this same storage/animation list now.
+export const processPlayerAnimationsStorageDefaults = (playerAnimationsStorage) => {
+  const player = playerAnimationsStorage.value;
   if (!player?.animations?.length) {
     return structuredClone(DEFAULT_SPRITES);
   }

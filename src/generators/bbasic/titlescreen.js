@@ -2,9 +2,9 @@
 
 import {TITLE_SCREEN_KERNEL_TYPES, MAX_KERNEL_COPIES_PER_TYPE,
   processTitleScreenStorageDefaults} from '../../blocks/titlescreen';
-import {useTitleScreenStorage, usePlayer0Storage, usePlayer1Storage,
+import {useTitleScreenStorage, usePlayerAnimationsStorage,
   useConfigurationStorage} from '../../hooks/project';
-import {processPlayerStorageDefaults} from './sprites';
+import {processPlayerAnimationsStorageDefaults} from './sprites';
 import {resolveScoreDigitBytes} from '../../utils/score-font';
 
 // Packs one pixel row (an array of 0/1 values, PixelEditor.vue's own
@@ -124,20 +124,18 @@ const buildCardDataAsm = (card, key, typeInfo) => {
   return lines.join('\n');
 };
 
-const PLAYER_STORAGE_FACTORIES = {0: usePlayer0Storage, 1: usePlayer1Storage};
-
 // Resolves a "player" card's own player0Animation/player1Animation field
-// (an index into that player's own animations array, same convention as
+// (an index into the shared animation pool, same convention as
 // sprite_player0_animation_select's own dropdown - see blocks/sprites.js's
 // own buildAnimationOptions) into the actual frame data the kernel's own
 // player_kernel.asm needs. An unresolved/empty slot falls back to a single
 // blank (all-zero) row - GRP0/GRP1 draw nothing for a zero byte regardless
 // of position or color, so a slot nobody configured is always safe to leave
 // wherever the game happens to have last positioned that player.
-const resolvePlayerSlotFrames = (animationIndex, playerIndex) => {
+const resolvePlayerSlotFrames = (animationIndex) => {
   const blank = {height: 1, frames: [[new Array(8).fill(0)]], hasRowColors: false};
   if (animationIndex === undefined || animationIndex === null || animationIndex === '') return blank;
-  const player = processPlayerStorageDefaults(PLAYER_STORAGE_FACTORIES[playerIndex]());
+  const player = processPlayerAnimationsStorageDefaults(usePlayerAnimationsStorage());
   const animation = player.animations[Number(animationIndex)];
   if (!animation || !animation.frames || !animation.frames.length) return blank;
   // The kernel indexes frames as one flat array, a fixed number of rows
@@ -194,7 +192,7 @@ const buildPlayerDataAsm = (card) => {
     const animationIndex = playerIndex === 0 ? card.player0Animation : card.player1Animation;
     const rawFallbackColor = playerIndex === 0 ? card.player0Color : card.player1Color;
     const fallbackColor = rawFallbackColor != null ? rawFallbackColor : 0x0e;
-    const {height, frames, hasRowColors} = resolvePlayerSlotFrames(animationIndex, playerIndex);
+    const {height, frames, hasRowColors} = resolvePlayerSlotFrames(animationIndex);
     heights[playerIndex] = height;
     lines.push(`bmp_player${playerIndex}_height = ${height}`, `bmp_player${playerIndex}`);
     frames.forEach((rows) => {
