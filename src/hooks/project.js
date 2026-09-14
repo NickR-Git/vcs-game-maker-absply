@@ -23,10 +23,14 @@ export const useJsonProjectStorage = (type) => useJsonLocalStorage(keyOf(type));
 export const useWorkspaceStorage = () => useProjectStorage('workspace');
 export const useBackgroundsStorage = () =>
   withRomInvalidation(useJsonProjectStorage('backgrounds'));
-export const usePlayer0Storage = () =>
-  withRomInvalidation(useJsonProjectStorage('player0'));
-export const usePlayer1Storage = () =>
-  withRomInvalidation(useJsonProjectStorage('player1'));
+// One shared pool of animations, usable by either hardware player (Player 0
+// or Player 1) - replaces the old, separate 'player0'/'player1' storage keys
+// (each with its own independent animation list). See
+// hooks/migrate-player-animations.js for the one-time migration that
+// combines an existing project's own separate player0/player1 animations
+// into this pool the first time it's read.
+export const usePlayerAnimationsStorage = () =>
+  withRomInvalidation(useJsonProjectStorage('playerAnimations'));
 // A pure editor convenience (see components/QuickColorPalette.vue) - a
 // curated shortlist of color bytes for fast reuse while picking row
 // colors, shared across every tab that shows a Quick colors bar (Player 0,
@@ -58,9 +62,12 @@ export const useTitleScreenStorage = () =>
 
 // Everything that makes up a project. Kept in one place so starting fresh and
 // clearing on launch can't drift apart as new pieces are added.
+// 'player0'/'player1' are kept here (even though nothing writes them anymore)
+// so a fresh project also clears any legacy pre-migration remnants left over
+// from an older saved project - see hooks/migrate-player-animations.js.
 export const PROJECT_STORAGE_TYPES = [
-  'workspace', 'backgrounds', 'player0', 'player1', 'configuration', 'scoreFont', 'soundEffects',
-  'dataTables', 'textStrings', 'songs', 'titleScreen',
+  'workspace', 'backgrounds', 'player0', 'player1', 'playerAnimations', 'configuration',
+  'scoreFont', 'soundEffects', 'dataTables', 'textStrings', 'songs', 'titleScreen',
 ];
 
 /**

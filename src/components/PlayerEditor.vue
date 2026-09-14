@@ -323,7 +323,7 @@ import QuickColorPalette from '../components/QuickColorPalette.vue';
 import {useCollapsedIds} from '../hooks/collapse';
 import {useDragReorder} from '../hooks/drag-reorder';
 import {DEFAULT_ROW_COLOR} from '../blocks/background';
-import {DEFAULT_SPRITES, processPlayerStorageDefaults} from '../generators/bbasic/sprites';
+import {DEFAULT_SPRITES, processPlayerAnimationsStorageDefaults} from '../generators/bbasic/sprites';
 import {useColorPaletteStorage, useConfigurationStorage, usePixelGridOverlayStorage} from '../hooks/project';
 import {useEditorZoom} from '../hooks/zoom';
 import {colorByteToCss} from '../utils/palette';
@@ -358,13 +358,11 @@ export const sortImportedAnimationFrameFiles = (files) => {
 };
 
 // Clipboard for one frame's whole row-color list (see handleCopyRowColors/
-// handlePasteRowColors) - module-scope, not a ref inside setup(), since
-// Player0Editor.vue/Player1Editor.vue each mount their own separate
-// PlayerEditor instance (see the zoom/collapsed-ids hooks' own per-player
-// comments just below); a plain instance ref would only let colors be
-// copied between frames of the SAME player, but a copied row-color set is
-// just as meaningful pasted onto the other player's own frame. null until
-// the first copy. Same "module-scope ref shared across instances" pattern
+// handlePasteRowColors) - module-scope, not a ref inside setup(), so a
+// copied row-color set survives navigating away from this tab and back
+// (this component is destroyed/recreated on navigation - see
+// hooks/collapse.js's own comment on that lifecycle). null until the first
+// copy. Same "module-scope ref shared across instances" pattern
 // Configuration.vue's own collapsedSections uses for the same reason.
 const copiedFrameRowColors = ref(null);
 
@@ -380,7 +378,6 @@ export default defineComponent({
   components: {EditorZoom, PixelEditor, PixelGridToggle, PlayfieldColorStrip, QuickColorPalette},
   props: ['storageFactory', 'title', 'fgColor', 'name'],
   setup(props) {
-    // Player 0 and Player 1 are separate instances, so each keeps its own zoom.
     const zoom = useEditorZoom(props.name);
     // Shared across Player 0/1 AND the Background tab (see
     // PixelGridToggle.vue's own comment) - not per-player like zoom above.
@@ -406,17 +403,19 @@ export default defineComponent({
     const configurationStorage = useConfigurationStorage();
     // Per-row SPRITE colors (batari Basic playercolors/player1colors) - see
     // the Options tab's own "Enable per-row Player 0/1 sprite colors"
-    // toggles (one per player, since player1colors is valid on its own but
-    // playercolors isn't - see generateConfiguration's own comment in
-    // generators/bbasic.js) - same reasoning as BackgroundEditor's own
-    // pfColorsEnabled. props.name ('player0'/'player1') picks the matching
-    // toggle for whichever player THIS instance is editing (see
-    // PlayerEditor's own "name" prop - this component is instantiated once
-    // per player).
-    const configKey = props.name === 'player0' ? 'enablePlayer0SpriteColors' : 'enablePlayer1SpriteColors';
-    const spriteColorsEnabled = computed(() =>
-      (configurationStorage && configurationStorage.value && configurationStorage.value[configKey]) ??
-        false);
+    // toggles (still two independent, per-hardware-player toggles - see
+    // generateConfiguration's own comment in generators/bbasic.js for why
+    // player1colors is valid on its own but playercolors isn't). This
+    // editor is now a SINGLE shared tab (one pool of animations either
+    // hardware player can use - see PlayerEditorView.vue), not one instance
+    // per player, so it has no "which player" context of its own anymore -
+    // the row-color painting UI shows if EITHER player's own toggle is on,
+    // since a shared animation's rowColors data is meaningful to show/edit
+    // as long as at least one hardware player would actually render it.
+    const spriteColorsEnabled = computed(() => {
+      const config = configurationStorage && configurationStorage.value;
+      return !!(config && (config.enablePlayer0SpriteColors || config.enablePlayer1SpriteColors));
+    });
 
     // Read-only here - components/QuickColorPalette.vue (mounted above)
     // owns writing to this same shared storage; this component only needs
@@ -455,10 +454,7 @@ export default defineComponent({
     // selectCard/selectedCardId/deselectCard pattern as MusicEditor.vue's
     // own song cards and the other tabs' own entry cards (see
     // MusicEditor.vue's own comment for the full reasoning): plain local
-    // component state, not persisted, not wired into anything else. Shared
-    // between Player 0 and Player 1 (both just PlayerEditor with different
-    // props), each with its own independent selection since they're
-    // separate component instances.
+    // component state, not persisted, not wired into anything else.
     const selectedCardId = ref(null);
     const selectCard = (id) => {
       selectedCardId.value = id;
@@ -471,7 +467,7 @@ export default defineComponent({
     const state = computed({
       get() {
         try {
-          const player = processPlayerStorageDefaults(playerStorage);
+          const player = processPlayerAnimationsStorageDefaults(playerStorage);
           // `!animation.id` (rather than == null) would also be true for
           // animation.id === 0 - a real, already-assigned id now that new
           // animations start there (see handleAddAnimation below), not a
@@ -504,7 +500,7 @@ export default defineComponent({
           });
           return player;
         } catch (e) {
-          console.error('Error loading player 0 from local storage', e);
+          console.error('Error loading player animations from local storage', e);
           return DEFAULT_SPRITES;
         }
       },
@@ -518,20 +514,14 @@ export default defineComponent({
       state.value = state.value;
     };
 
-    // Player 0 and Player 1 are separate instances, so each keeps its own
-    // set of collapsed animations - same reasoning as the zoom above. Every
-    // card starts collapsed on every visit to this tab (see collapseAll's
-    // own comment in hooks/collapse.js), not just ones never expanded
-    // before.
+    // Every card starts collapsed on every visit to this tab (see
+    // collapseAll's own comment in hooks/collapse.js), not just ones never
+    // expanded before.
     const {isCollapsed, toggleCollapsed, collapseAll} = useCollapsedIds(props.name, true);
     collapseAll();
 
     // Card reordering - same hook/pattern as Text/SoundFX/Data/Music/
-    // Background (see hooks/drag-reorder.js's own comment). No per-player
-    // key needed here, unlike useCollapsedIds/useEditorZoom above: Player0/
-    // Player1Editor.vue each mount their own separate PlayerEditor
-    // instance, so this setup() (and the fresh refs useDragReorder creates)
-    // already runs once per player with no shared state to collide.
+    // Background (see hooks/drag-reorder.js's own comment).
     const {dragAttrs, dragCardClass, dragHandleListeners, dragTargetListeners} = useDragReorder(
         () => state.value.animations,
         (items) => {

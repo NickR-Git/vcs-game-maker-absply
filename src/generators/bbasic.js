@@ -15,7 +15,7 @@ import templateText from 'raw-loader!./bbasic.bb.hbs';
 import Handlebars from 'handlebars';
 import {sumBy, chunk} from 'lodash';
 
-import {useBackgroundsStorage, useConfigurationStorage, useDataTablesStorage, usePlayer0Storage, usePlayer1Storage} from '../hooks/project';
+import {useBackgroundsStorage, useConfigurationStorage, useDataTablesStorage, usePlayerAnimationsStorage} from '../hooks/project';
 import {getRelocationBanks} from '../hooks/relocation-banks';
 import {DEFAULT_ROW_COLOR, processBackgroundStorageDefaults,
   backgroundFadeTimerVarName, backgroundFadePaceVarName, backgroundFadeTargetVarName,
@@ -38,7 +38,7 @@ import {registerKeypadPollSubroutine, generateJoystickDirection8Table,
   generateJoystickButtonChecks, generateJoystickDoubleTapChecks} from './bbasic/input';
 import {collisionMoveOldXVar, collisionMoveOldYVar} from './bbasic/collision';
 import {scoreBkColorVarName} from './bbasic/score';
-import {processPlayerStorageDefaults, generateRomNoiseChecks, generateRainbowColorChecks,
+import {processPlayerAnimationsStorageDefaults, generateRomNoiseChecks, generateRainbowColorChecks,
   generateRainbowColorGraphics, rainbowColorNeedsPlayerColors, rainbowColorNeedsPlayer1Colors,
   reserveRomNoiseDevVars, reserveRainbowColorDevVars,
   generateMissileFireChecks, reserveMissileFireDevVars,
@@ -2831,16 +2831,21 @@ Blockly.BBasic.backgroundRealColorRawTarget = function() {
 // background to have its own row color list, since the compiled kernel
 // always draws every background's playfield from the same color table.
 //
-// Off while Superchip RAM is enabled. buildRom's compiler-output patch (see
-// patchSuperchipPfColorsPointer in hooks/rom.js) fixes most of the pfcolors +
-// Superchip breakage, but the very last row still renders black, and with
-// more than one background the colors come out wrong and the black area
-// returns - not fully root-caused yet, so the combination is disabled again
-// until that's sorted out.
+// Previously forced off while Superchip RAM was enabled, based on an
+// earlier diagnosis (see git history around "patchSuperchipPfColorsPointer",
+// since removed) that the compiler hardcoded the pfcolors table pointer as
+// "pfcolorlabelN-84", wrong for any pfres other than 12. That diagnosis was
+// wrong: the compiler's own generated assembly already wraps that pointer
+// setup in a real "ifconst pfres ... else ... endif" (confirmed directly by
+// inspecting the compiled output before assembling) - the "-84" form only
+// ever sits in the untaken else branch once pfres is defined, so DASM
+// already resolves to the correct pfres-relative pointer on its own, no
+// patch needed. Retested directly (Superchip on, pfres=24, two backgrounds,
+// distinct row colors) and the playfield renders every row's own color
+// correctly, no black rows, nothing broken - so this is safe to allow.
 Blockly.BBasic.usePlayfieldRowColors = function() {
   const configurationStorage = useConfigurationStorage();
   const config = (configurationStorage && configurationStorage.value) || {};
-  if (config.enableSuperchip) return false;
   return config.enablePfColors ?? false;
 };
 
@@ -2854,12 +2859,12 @@ Blockly.BBasic.usePlayfieldRowColors = function() {
 // on the canvas - unlike that block-presence check (rainbowColorUsedFor),
 // this is the user explicitly opting in ahead of time, the same way
 // enablePfColors is a standing toggle rather than being driven by which
-// backgrounds happen to have custom row colors set. Deliberately NOT
-// excluded while Superchip RAM is on (unlike usePlayfieldRowColors just
-// above) - per-row sprite colors reads through player0color/player1color
-// (aliased onto paddle/missile1y), a completely separate pointer from the
-// playfield's own pfcolortable, and testing confirms it renders correctly
-// with Superchip on. name is 'player0' or 'player1'.
+// backgrounds happen to have custom row colors set. Never excluded while
+// Superchip RAM is on - per-row sprite colors reads through
+// player0color/player1color (aliased onto paddle/missile1y), a completely
+// separate pointer from the playfield's own pfcolortable, and testing
+// confirms it renders correctly with Superchip on. name is 'player0' or
+// 'player1'.
 Blockly.BBasic.useSpriteColorsFor = function(name) {
   const configurationStorage = useConfigurationStorage();
   const config = (configurationStorage && configurationStorage.value) || {};
@@ -3776,7 +3781,7 @@ Blockly.BBasic.generateAnimations = function() {
   const processAnimations = (name, playerStorage) => {
     let playerData = null;
     try {
-      playerData = processPlayerStorageDefaults(playerStorage);
+      playerData = processPlayerAnimationsStorageDefaults(playerStorage);
     } catch (e) {
       console.error(`Failed to load ${name} data`, e);
     }
@@ -3824,8 +3829,17 @@ Blockly.BBasic.generateAnimations = function() {
       `\n\n${animationsEndLabel}`;
   };
 
-  const player0Code = processAnimations('player0', usePlayer0Storage());
-  const player1Code = processAnimations('player1', usePlayer1Storage());
+  // Both hardware players compile from the SAME shared animation pool now
+  // (see hooks/project.js's usePlayerAnimationsStorage) - each is still
+  // called separately (its own label prefix, its own relocatable unit per
+  // animation), so the compiled ROM still contains two independent copies
+  // of any animation both players use. True byte-level dedup would need a
+  // pointer-aliasing scheme (like sprite_*_rom_noise's own player0pointer/
+  // player1pointer trick) plus bank-pinning in the relocator - a separate,
+  // bigger change, not done here.
+  const playerAnimationsStorage = usePlayerAnimationsStorage();
+  const player0Code = processAnimations('player0', playerAnimationsStorage);
+  const player1Code = processAnimations('player1', playerAnimationsStorage);
   return player0Code + '\n\n\n' + player1Code;
 };
 import background, {backgroundGetPixelDevVarsNeeded} from './bbasic/background';

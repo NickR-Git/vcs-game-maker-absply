@@ -207,7 +207,7 @@
                               <div class="titlescreen-player-row">
                                 <v-select
                                   label="Player 0 animation"
-                                  :items="playerAnimationOptions(0)"
+                                  :items="playerAnimationOptions()"
                                   v-model="card.player0Animation"
                                   hide-details
                                   class="titlescreen-player-select"
@@ -223,7 +223,7 @@
                               <div class="titlescreen-player-row">
                                 <v-select
                                   label="Player 1 animation"
-                                  :items="playerAnimationOptions(1)"
+                                  :items="playerAnimationOptions()"
                                   v-model="card.player1Animation"
                                   hide-details
                                   class="titlescreen-player-select"
@@ -383,12 +383,12 @@ import PlayfieldColorStrip from '../components/PlayfieldColorStrip.vue';
 import {useCollapsedIds} from '../hooks/collapse';
 import {useDragReorder} from '../hooks/drag-reorder';
 import {useTitleScreenStorage, usePixelGridOverlayStorage,
-  usePlayer0Storage, usePlayer1Storage} from '../hooks/project';
+  usePlayerAnimationsStorage} from '../hooks/project';
 import {useEditorZoom} from '../hooks/zoom';
 import {DEFAULT_ROW_COLOR} from '../blocks/background';
 import {TITLE_SCREEN_KERNEL_TYPES, MAX_KERNEL_COPIES_PER_TYPE, MAX_PLAYER_CARDS, MAX_SCORE_CARDS,
   blankTitleScreenPixels, processTitleScreenStorageDefaults} from '../blocks/titlescreen';
-import {processPlayerStorageDefaults} from '../generators/bbasic/sprites';
+import {processPlayerAnimationsStorageDefaults} from '../generators/bbasic/sprites';
 
 export default defineComponent({
   name: 'TitleScreenEditor',
@@ -533,16 +533,16 @@ export default defineComponent({
     };
 
     // Animation dropdown options for a "player" card's own Player 0/1
-    // fields - same "index into that player's own animations array, storage
-    // read fresh every call" convention as blocks/sprites.js's own
-    // buildAnimationOptions (see its own comment), so a renamed/added
+    // fields - both dropdowns share the same pool of animations now (see
+    // hooks/project.js's usePlayerAnimationsStorage), same "index into the
+    // pool, storage read fresh every call" convention as blocks/sprites.js's
+    // own buildAnimationOptions (see its own comment), so a renamed/added
     // animation shows up here without a reload. An empty option lets a card
     // draw just one of the two players, falling back to a single blank row
     // for the other (see resolvePlayerSlotFrames in generators/bbasic/
     // titlescreen.js).
-    const playerAnimationOptions = (playerIndex) => {
-      const storage = playerIndex === 0 ? usePlayer0Storage() : usePlayer1Storage();
-      const player = processPlayerStorageDefaults(storage);
+    const playerAnimationOptions = () => {
+      const player = processPlayerAnimationsStorageDefaults(usePlayerAnimationsStorage());
       return [
         {text: 'None', value: ''},
         ...player.animations.map((animation, index) =>

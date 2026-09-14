@@ -8,7 +8,7 @@ import {preprocessBatariBasic, compileBatariBasicToAsm, assembleBatariBasic} fro
 
 import '../blocks';
 import BlocklyBB, {RELOCATABLE_EVENT_NAMES, SYSTEM_VARIABLES} from '../generators/bbasic';
-import {processPlayerStorageDefaults} from '../generators/bbasic/sprites';
+import {processPlayerAnimationsStorageDefaults} from '../generators/bbasic/sprites';
 import {getExtendedScoreGraphics, getTextMinikernelSiblingFiles} from '../generators/bbasic/text-minikernel-files';
 import {getTitleScreenSiblingFiles} from '../generators/bbasic/titlescreen-files';
 import {processBackgroundStorageDefaults} from '../blocks/background';
@@ -22,7 +22,7 @@ import {showError} from '../utils/build-error';
 import {computeRomCapacity} from '../utils/rom-capacity';
 import {useGeneratedBasic} from './generated';
 import {appendCompileLog, clearCompileLog, useBackgroundsStorage, useConfigurationStorage, useErrorStorage,
-  usePlayer0Storage, usePlayer1Storage, useTextFontStorage, useWorkspaceStorage} from './project';
+  usePlayerAnimationsStorage, useTextFontStorage, useWorkspaceStorage} from './project';
 import {getRelocationBanks, resetRelocationBanks, setRelocationBank,
   recordSuccessfulRelocationBanks, seedRelocationBanksFromLastSuccess} from './relocation-banks';
 import {markRomUpToDate, markRomOutdated, useRomOutdated, useHasCompiledRom} from './rom-status';
@@ -178,24 +178,6 @@ export const usesPlayer0RainbowColors = () => {
 };
 
 
-// The compiler hardcodes the pfcolors table pointer as "pfcolorlabelN-84",
-// which only lands on the right byte when the kernel's own row index starts
-// at 84 - true for the standard (pfres-less) kernel, but Superchip's
-// explicit "const pfres" changes that starting index to 132-pfres*4, which
-// only equals 84 when pfres is exactly 12. For any other pfres this pointer
-// is simply wrong, misaligning every row's color read - confirmed by
-// comparing resolved ROM addresses and compiling with the offset corrected
-// by hand. Patched here, after compiling and before assembling, since nothing
-// in the source-level template controls this constant.
-//
-// This does NOT fully fix pfcolors+Superchip - the very last playfield row
-// still renders black regardless of pfres. Root cause not yet found.
-const patchSuperchipPfColorsPointer = ({mainAsm, workDir}, config) => {
-  if (!config.enableSuperchip || !config.pfres) return {mainAsm, workDir};
-  const correctOffset = 132 - config.pfres * 4;
-  return {mainAsm: mainAsm.replace(/pfcolorlabel(\d+)-84/g, `pfcolorlabel$1-${correctOffset}`), workDir};
-};
-
 // "segment overflow" is DASM's plain "ran out of room in this bank"
 // message. "Origin Reverse-indexed" is a second, differently-worded DASM
 // error also seen from an over-full bank - not confirmed to be tied to any
@@ -254,7 +236,6 @@ export const BANK_COUNT_BY_ROMSIZE = {'8k': 2, '16k': 4, '32k': 8, '64k': 16};
 const BACKGROUND_UNIT_RE = /^background(\d+)$/;
 const PLAYER_ANIMATION_UNIT_RE = /^(player[01])animation(\d+)$/;
 const PLAYER_DEFAULT_UNIT_RE = /^(player[01])default$/;
-const PLAYER_STORAGE_FACTORIES = {player0: usePlayer0Storage, player1: usePlayer1Storage};
 const resolveGraphicsUnitLabel = (unitKey) => {
   const backgroundMatch = BACKGROUND_UNIT_RE.exec(unitKey);
   if (backgroundMatch) {
@@ -269,9 +250,9 @@ const resolveGraphicsUnitLabel = (unitKey) => {
   }
   const animationMatch = PLAYER_ANIMATION_UNIT_RE.exec(unitKey);
   if (animationMatch) {
-    const [, player, index] = animationMatch;
+    const [, , index] = animationMatch;
     try {
-      const data = processPlayerStorageDefaults(PLAYER_STORAGE_FACTORIES[player]());
+      const data = processPlayerAnimationsStorageDefaults(usePlayerAnimationsStorage());
       const animation = data.animations[Number(index)];
       return (animation && animation.name) || `Unnamed ${Number(index) + 1}`;
     } catch (e) {
@@ -1088,8 +1069,7 @@ export const buildRom = async () => {
       appendCompileLog('Preprocessing...', 'stage');
       const preprocessed = await preprocessBatariBasic(code, log);
       appendCompileLog('Compiling to assembly...', 'stage');
-      const compiled = patchSuperchipPfColorsPointer(
-          await compileBatariBasicToAsm(preprocessed, siblingFiles, log), config);
+      const compiled = await compileBatariBasicToAsm(preprocessed, siblingFiles, log);
       appendCompileLog('Assembling ROM...', 'stage');
       const compiledResult = await assembleBatariBasic(compiled.mainAsm, compiled.workDir, log);
       Javatari.fileLoader.loadFromContent('main.bin', compiledResult.output);
