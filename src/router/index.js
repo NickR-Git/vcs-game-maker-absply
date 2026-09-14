@@ -26,7 +26,7 @@ const routes = [
   },
   {
     path: '/player',
-    name: 'Sprite',
+    name: 'Sprites',
     component: () => import('../views/PlayerEditorView.vue'),
   },
   {

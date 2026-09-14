@@ -23,7 +23,7 @@
           <v-icon>mdi-image-frame</v-icon>
         </v-btn>
 
-        <v-btn to="/player" link text class="player-item" title="Sprite" elevation="0">
+        <v-btn to="/player" link text class="player-item" title="Sprites" elevation="0">
           <v-icon>mdi-human-handsup</v-icon>
         </v-btn>
 
@@ -116,7 +116,7 @@
             <v-icon>mdi-human-handsup</v-icon>
           </v-list-item-icon>
           <v-list-item-content>
-            <v-list-item-title>Sprite</v-list-item-title>
+            <v-list-item-title>Sprites</v-list-item-title>
           </v-list-item-content>
         </v-list-item>
 
