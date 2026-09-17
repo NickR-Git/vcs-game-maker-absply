@@ -146,6 +146,7 @@ import YAML from 'yaml';
 
 import {appendCompileLog, useBackgroundsStorage, useConfigurationStorage, useDataTablesStorage, usePlayerAnimationsStorage, useProjectAutoIncrementVersionStorage, useScoreFontStorage, useSongsStorage, useSoundEffectsStorage, useSquishCustomScoreFontStorage, useTextFontStorage, useTextStringsStorage, useWorkspaceStorage} from '../hooks/project';
 import {combineLegacyPlayerAnimations, remapPlayer1AnimationIndexesInWorkspaceXml} from '../hooks/migrate-player-animations';
+import {migrateLegacyPlayerBlocksInWorkspaceXml} from '../hooks/migrate-player-blocks';
 import {getDateInfix} from '../utils/date';
 import {resetMusicEditorActiveState} from '../hooks/music-editor-state';
 import {matrixToPlayfield, playfieldToMatrix} from '../utils/pixels';
@@ -713,6 +714,15 @@ export default defineComponent({
             remapPlayer1AnimationIndexesInWorkspaceXml(this.workspaceStorage, offset);
         }
       }
+
+      // Rewrites any old sprite_player0_*/sprite_player1_* blocks a project
+      // saved before Player 0/1 shared one combined block type still has -
+      // see that function's own comment in hooks/migrate-player-blocks.js.
+      // Has to run AFTER remapPlayer1AnimationIndexesInWorkspaceXml just
+      // above, not before: that remap finds its target blocks by the OLD
+      // "sprite_player1_animation_select" type string, which this migration
+      // renames away.
+      this.workspaceStorage = migrateLegacyPlayerBlocksInWorkspaceXml(this.workspaceStorage);
 
       if (project['score-font']) {
         this.scoreFontStorage = {

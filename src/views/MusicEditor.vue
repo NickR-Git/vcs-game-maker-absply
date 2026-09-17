@@ -27,9 +27,9 @@
           <span class="dim-percent">{{ dimSoundFxPercentDisplay }}%</span>
         </div>
         <p class="dim-hint v-messages theme--light v-messages__message">
-          When DIM is on, every note plays at the volume above, as a percentage of its own set volume - same
-          setting as the Sound tab's own DIM (changing it here changes it there too). Off: notes play at their
-          own set volume.
+          When DIM is on, every note plays at the volume above, as a percentage of its set volume - same
+          setting as the Sound tab's DIM (changing it here changes it there too). Off: notes play at their
+          set volume.
         </p>
       </v-card-text>
       <v-card-text class="song-list-section">

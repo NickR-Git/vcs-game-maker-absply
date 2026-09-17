@@ -12,7 +12,17 @@
           either way.
         </p>
 
-        <v-list class="data-list">
+        <div class="data-filter-row">
+          <v-switch
+            v-model="dataColumns"
+            label="Columns"
+            title="Lay data table cards out in multiple columns when there's room, instead of one full-width column."
+            hide-details
+            class="data-columns-switch"
+          />
+        </div>
+
+        <v-list class="data-list" :class="{'data-list--single-column': !dataColumns}">
           <v-list-item class="entry-list-item" v-for="(table, index) in state.dataTables" v-bind:key="table.id">
             <v-list-item-content>
               <v-card
@@ -320,7 +330,7 @@ import {saveAs} from 'file-saver';
 import {useCollapsedIds} from '../hooks/collapse';
 import {useDragReorder, CSS_CLASS_DRAGGING} from '../hooks/drag-reorder';
 import {useBackgroundsStorage, useDataTablesStorage, usePlayerAnimationsStorage,
-  useSoundEffectsStorage, useSongsStorage, useTextStringsStorage} from '../hooks/project';
+  useSoundEffectsStorage, useSongsStorage, useTextStringsStorage, useDataColumnsStorage} from '../hooks/project';
 import {DEFAULT_DATA_TABLES, DEFAULT_DATA_TABLE_COLUMNS, MAX_DATA_TABLE_VALUES,
   processDataTablesStorageDefaults} from '../blocks/data';
 import {processBackgroundStorageDefaults} from '../blocks/background';
@@ -394,6 +404,7 @@ export default defineComponent({
   components: {ColorSwatchPicker},
   setup() {
     const dataTablesStorage = useDataTablesStorage();
+    const dataColumns = useDataColumnsStorage();
     const backgroundsStorage = useBackgroundsStorage();
     // {text, value} pairs for the 'background' format's dropdown (see
     // valueFormat/FORMAT_CYCLE below) - same {id, name} source
@@ -1060,6 +1071,7 @@ export default defineComponent({
     };
 
     return {
+      dataColumns,
       selectedCardId, selectCard, deselectCard,
       state, handleChildChange, handleAddTable, handleDeleteTable, handleDuplicateTable,
       copiedTableData, handleCopyTable, handlePasteTable,
@@ -1100,20 +1112,63 @@ export default defineComponent({
   padding-right: 0;
 }
 
+.data-filter-row {
+  display: flex;
+  align-items: center;
+}
+
+/* Same margin-top/padding-top override as SoundFXEditor.vue's own
+   .soundfx-columns-switch - Vuetify's own selection-control margin-top
+   (meant for stacking below other fields) otherwise pushes this out of
+   line with the intro paragraph above it. */
+.data-columns-switch {
+  flex: 0 0 auto;
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}
+
 /* Same fix, and matching 8px/12px values, as BackgroundEditor.vue's own
    .background-list/.entry-list-item rules - v-list-item__content's default
    12px top/bottom padding was adding extra space between cards beyond
    anything explicitly set (there was no explicit gap here at all before),
    so this tab's own card spacing didn't match the Background tab's.
-   flex+gap plays the role .background-list's own CSS grid gap does (this
-   tab stays single-column); margin-top puts back the space above the FIRST
-   card that zeroing v-list-item__content's own padding would otherwise
-   have also removed. */
+   margin-top puts back the space above the FIRST card that zeroing
+   v-list-item__content's own padding would otherwise have also removed.
+   Multi-column grid by default now (see the "Columns" switch above, same
+   SoundFXEditor.vue/TextEditor.vue own .soundfx-list/.text-list pattern) -
+   .data-list--single-column below switches back to one full-width column,
+   for a table with enough columns of its own that squeezing it into a grid
+   cell would cramp it. */
 .data-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
   gap: 8px;
   margin-top: 12px;
+  /* Grid items stretch to fill their row's height by default (same fix as
+     SoundFXEditor.vue's own .soundfx-list) - a collapsed card next to an
+     expanded one (or just a shorter table next to a longer one) in the
+     same row would otherwise stretch tall to match it, instead of sitting
+     flush at the top like its own content actually sizes to. */
+  align-items: start;
+}
+
+/* Single full-width column instead of the grid .data-list defaults to (see
+   that rule's own comment) - toggled via the "Columns" switch above. No
+   max-width on .data-card either way (see its own comment) - a table with
+   many columns needs the full width of whichever container it lands in,
+   single column or grid cell, to keep them all visible without shrinking
+   each one down too far. */
+.data-list--single-column {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Same reasoning as SoundFXEditor.vue's own identical rule - Vuetify's
+   v-list-item (.entry-list-item) doesn't stretch to its flex container's
+   full width on its own, leaving .data-card's own width: 100% only filling
+   100% of that un-stretched item instead of the whole row. */
+.data-list--single-column .entry-list-item {
+  width: 100%;
 }
 
 /* overflow: visible added alongside the padding reset (see MusicEditor.vue's

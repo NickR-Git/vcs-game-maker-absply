@@ -157,8 +157,9 @@ export const countUsedVariables = () =>
   });
 
 // Whether the project needs "playercolors" (player0's own per-row sprite
-// color kernel option) - either a real sprite_player0_rainbow_colors block
-// on the canvas, or the standing "Enable per-row Player 0 sprite colors"
+// color kernel option) - either a real sprite_player_rainbow_colors block
+// (PLAYER field set to Player 0) on the canvas, or the standing "Enable
+// per-row Player 0 sprite colors"
 // toggle (see useSpriteColorsFor in generators/bbasic.js) - needed by
 // Configuration.vue to force "Show blank lines" AND the Player 1 sprite
 // colors toggle back on (disabling both) whenever either is active. See
@@ -174,7 +175,8 @@ export const usesPlayer0RainbowColors = () => {
   if (config.enablePlayer0SpriteColors) return true;
   return withHeadlessWorkspace((workspace) =>
     workspace.getAllBlocks(false).some((block) =>
-      block.type === 'sprite_player0_rainbow_colors' && block.isEnabled()));
+      block.type === 'sprite_player_rainbow_colors' && block.getFieldValue('PLAYER') === '0' &&
+      block.isEnabled()));
 };
 
 
@@ -1010,7 +1012,11 @@ export const buildRom = async () => {
       // count, and a Custom/Squish font's own digit shapes would otherwise
       // still get swapped in underneath that debug overlay, which isn't
       // what a font picked for the REAL score digits should also affect.
-      const effectiveScoreFont = config.enableCycleScore ? null : config.scoreFont;
+      // "Show NTSC scanlines used as the score" (config.enableScanlinesDebug)
+      // forces the same thing, for the same reason - it pokes plain digits
+      // straight into the score too, sized for the standard kernel's own
+      // full-height digits, not Squish's shorter ones.
+      const effectiveScoreFont = (config.enableCycleScore || config.enableScanlinesDebug) ? null : config.scoreFont;
       if (effectiveScoreFont === SQUISH_SCORE_FONT) {
         if (!textMinikernelActive) siblingFiles['score_graphics.asm'] = await getExtendedScoreGraphics();
       } else {

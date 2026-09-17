@@ -1610,14 +1610,31 @@ html {
   margin-left: 1px;
 }
 
+/* App-wide, every tab: Vuetify's default track width (36px, see
+   .v-input--switch__track in node_modules/vuetify/dist/vuetify.css) shrunk
+   to 32px - this used to be scoped to just the Options tab's own
+   .option-switch class, so every OTHER tab's switches (Sound's DIM/
+   Columns, Text/Data's own Columns, etc.) stayed at the wider default
+   instead of matching it (a real reported inconsistency). Made global,
+   here, instead of copy-pasting the same rule's scoped class onto every
+   other view. */
+.v-input--switch__track {
+  width: 32px !important;
+}
+
 /* Vuetify's own "on" position (translate(20px, 0), see its own
    .v-input--switch.v-input--is-dirty rule) was tuned for the DEFAULT 20px
    handle - shrinking the handle to 14px above (a 6px smaller diameter,
    3px off each edge) left it 3px short of the track's own right edge once
    turned on, reported as looking not far enough right. +3px restores the
-   same reach the original, larger handle had. */
+   same reach the original, larger handle had. Then shortened another 4px
+   (22px -> 18px), same reasoning as the track-width rule just above: this
+   value has to stay in sync with the 36px -> 32px track shrink (both now
+   app-wide, not just Options-tab-scoped), so the thumb still lands flush
+   against the track's own right edge instead of overshooting it once
+   checked. */
 .v-application--is-ltr .v-input--switch.v-input--is-dirty .v-input--switch__thumb {
-  transform: translate(22px, 0) !important;
+  transform: translate(18px, 0) !important;
 }
 
 /* App-wide: lighter underline for a text field (or a v-select/v-combobox,

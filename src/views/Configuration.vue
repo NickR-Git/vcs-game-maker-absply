@@ -46,7 +46,7 @@
           v-model="configurationState.enableSuperchip"
           @change="handleToggleSuperchip"
           label="Enable Superchip RAM for higher-resolution playfields"
-          hint="Adds a Superchip (SC) to the ROM and lets the playfield use more than 11 rows. Requires an 8k or larger ROM (bumped automatically if needed), and horizontal playfield scrolling (left/right) isn't supported once this is on. Also moves the app's own bookkeeping variables off letters and into extra Superchip RAM, freeing every letter (a-z) for your own variables."
+          hint="Adds a Superchip (SC) to the ROM and lets the playfield use more than 11 rows. Requires an 8k or larger ROM (bumped automatically if needed), and horizontal playfield scrolling (left/right) isn't supported once this is on. Also moves the app's bookkeeping variables off letters and into extra Superchip RAM, freeing every letter (a-z) for your variables."
           persistent-hint
           class="option-switch"
         />
@@ -60,7 +60,7 @@
           label="Playfield vertical resolution (pfres)"
           :hint="configurationState.enableSuperchip ?
             'Up to 32 rows. Values that don\'t evenly divide 96 (3, 4, 6, 8, 12, 16, 24, 32) may leave the screen slightly shorter than normal.' :
-            'Only takes effect with Superchip RAM on above - the standard kernel always uses its own fixed 11-row default otherwise.'"
+            'Only takes effect with Superchip RAM on above - the standard kernel always uses a fixed 11-row default otherwise.'"
           persistent-hint
           class="pfres-field"
         />
@@ -97,7 +97,7 @@
           v-model="configurationState.enableRand16"
           @change="handleChangeConfiguration"
           label="Use 16-bit random number generator (rand16)"
-          hint="Widens the random number generator's own cycle length before it starts visibly repeating - every Random block on the Actions tab still reads the same 'rand' either way, this only changes how long it takes before that sequence repeats. Costs one extra variable."
+          hint="Widens the random number generator's cycle length before it starts visibly repeating - every Random block on the Actions tab still reads the same 'rand' either way, this only changes how long it takes before that sequence repeats. Costs one extra variable."
           persistent-hint
           class="option-switch"
         />
@@ -129,7 +129,7 @@
           label="Enable per-row Player 1 sprite colors (player1colors)"
           :hint="player0RainbowColorsActive ?
             'Forced on: batari Basic requires player1colors whenever playercolors (Player 0 sprite colors, above) is on.' :
-            'Lets Player 1 show a different color on every row, the same way backgrounds can. Costs missile1 (can\'t be used as a sprite anywhere in the project once this is on) - unlike Player 0 sprite colors, this works on its own with no other cost.'"
+            'Lets Player 1 show a different color on every row, the same way backgrounds can. Costs missile1 (can\'t be used as a sprite anywhere in the project once this is on) - unlike Player 0 sprite colors, this works alone with no other cost.'"
           persistent-hint
           class="option-switch"
         />
@@ -176,6 +176,14 @@
           persistent-hint
           class="option-switch"
         />
+        <v-switch
+          v-model="configurationState.enableScanlinesDebug"
+          @change="handleChangeConfiguration"
+          label="Show NTSC scanlines used as the score"
+          hint="Writes the playfield kernel's scanline count (out of the 192-line NTSC visible picture) into the score once at startup, computed from the current pfres/pfrowheight settings. Useful for spotting a kernel overrun that shows up as screen rolling/tearing. Meant for debugging - turn it back off before shipping."
+          persistent-hint
+          class="option-switch"
+        />
       </div>
 
       <v-divider class="my-2" />
@@ -196,7 +204,7 @@
         <v-switch
           v-model="projectAutoIncrementVersion"
           label="Auto-increment version on save"
-          hint="Bumps the last segment of the Project tab's own Version field (e.g. 1.2.3 -> 1.2.4) every time you save the project."
+          hint="Bumps the last segment of the Project tab's Version field (e.g. 1.2.3 -> 1.2.4) every time you save the project."
           persistent-hint
           class="option-switch"
         />
@@ -247,7 +255,7 @@
           v-if="isElectron"
           v-model="stellaPathStorage"
           label="Stella installation location"
-          hint="Path to the Stella executable, used by the emulator preview's own 'Test in Stella' button. You need to install Stella yourself first - this only points the app at it."
+          hint="Path to the Stella executable, used by the emulator preview's 'Test in Stella' button. You need to install Stella yourself first - this only points the app at it."
           persistent-hint
           class="stella-path-field"
         >
@@ -329,6 +337,7 @@ const DEFAULT_CONFIGURATION = {
   enableInlineRand: true,
   enableRand16: true,
   enableCycleScore: false,
+  enableScanlinesDebug: false,
   pfres: 24,
   enablePfRowHeight: false,
   pfrowheight: 8,
@@ -547,6 +556,7 @@ export default defineComponent({
       state.enableInlineRand = DEFAULT_CONFIGURATION.enableInlineRand;
       state.enableRand16 = DEFAULT_CONFIGURATION.enableRand16;
       state.enableCycleScore = DEFAULT_CONFIGURATION.enableCycleScore;
+      state.enableScanlinesDebug = DEFAULT_CONFIGURATION.enableScanlinesDebug;
       state.muteAllAudio = DEFAULT_CONFIGURATION.muteAllAudio;
       state.showVariableComments = DEFAULT_CONFIGURATION.showVariableComments;
       configurationState.value = state;
@@ -641,7 +651,14 @@ export default defineComponent({
   padding-left: 4px;
 }
 
-/* Vuetify aligns a switch's hint under the toggle track by default; indent it
+/* Track width (32px) and checked-state thumb travel (18px) are now App.vue's
+   own global ".v-input--switch__track"/".v-input--switch.v-input--is-dirty
+   .v-input--switch__thumb" rules, applying the same narrower toggle style
+   to every tab, not just this one - see App.vue's own comment for why (a
+   real reported inconsistency: every other tab's switches stayed at
+   Vuetify's wider default). Nothing left to scope here.
+
+   Vuetify aligns a switch's hint under the toggle track by default; indent it
    to line up under the label text instead, matching the toggle's own width. */
 .option-switch >>> .v-messages {
   margin-left: 46px;

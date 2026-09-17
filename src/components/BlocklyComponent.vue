@@ -249,17 +249,51 @@ Blockly.Scrollbar.scrollbarThickness = 13;
 // other block flyoutCategoryBlocks builds - math_change, variables_get -
 // are untouched; only the variables_set entry gets a VALUE child appended
 // after the fact.
-const originalFlyoutCategoryBlocks = Blockly.Variables.flyoutCategoryBlocks;
-Blockly.Variables.flyoutCategoryBlocks = function(workspace) {
-  const xmlList = originalFlyoutCategoryBlocks.call(this, workspace);
-  xmlList.forEach((element) => {
-    if (element.tagName !== 'block' || element.getAttribute('type') !== 'variables_set') return;
-    const value = Blockly.Xml.textToDom(
-        '<value name="VALUE"><shadow type="math_number"><field name="NUM">0</field></shadow></value>');
-    element.appendChild(value);
-  });
-  return xmlList;
-};
+//
+// bit_get/bit_set/system_variable_get (see blocks/bit.js) are also spliced
+// in here, at the very front of whatever flyoutCategoryBlocks itself
+// returns - Blockly.Variables.flyoutCategory (the outer function a
+// "custom=VARIABLE" toolbox category actually calls - see
+// blockly-toolbox.xml.hbs) builds the "Create variable..." button ITSELF
+// and prepends it before ever calling this function (confirmed directly
+// against node_modules/blockly/core/variables.js), so flyoutCategoryBlocks
+// only ever returns the per-variable get/set/change blocks, never the
+// button - prepending here lands the three extra blocks right after the
+// button and before any of the user's variables, as intended. They belong
+// in the Variables category alongside the standard get/set/change blocks,
+// but a plain <block> listed as that category's XML child in the toolbox
+// is silently ignored (the "custom" attribute hands its entire flyout
+// content to flyoutCategory/flyoutCategoryBlocks instead) - this is the
+// only way to place a static block inside a dynamic category at all.
+//
+// Guarded (isExtraBlocksPatch) against re-wrapping itself, same reasoning
+// as the parseBlockColour/ToolboxCategory.parseColour_ guards below - this
+// one was originally left unguarded, which would re-append another VALUE
+// child and another copy of the three extra blocks on every dev-server
+// hot-reload of this file, compounding with each edit.
+if (!Blockly.Variables.flyoutCategoryBlocks.isExtraBlocksPatch) {
+  const originalFlyoutCategoryBlocks = Blockly.Variables.flyoutCategoryBlocks;
+  Blockly.Variables.flyoutCategoryBlocks = function(workspace) {
+    const xmlList = originalFlyoutCategoryBlocks.call(this, workspace);
+    xmlList.forEach((element) => {
+      if (element.tagName !== 'block' || element.getAttribute('type') !== 'variables_set') return;
+      const value = Blockly.Xml.textToDom(
+          '<value name="VALUE"><shadow type="math_number"><field name="NUM">0</field></shadow></value>');
+      element.appendChild(value);
+    });
+    const extraBlocks = Blockly.Xml.textToDom(
+        '<xml>' +
+        '<block type="bit_get"></block>' +
+        '<block type="bit_set">' +
+        '<value name="VALUE"><shadow type="logic_boolean"><field name="BOOL">TRUE</field></shadow></value>' +
+        '</block>' +
+        '<block type="system_variable_get"></block>' +
+        '</xml>',
+    ).children;
+    return [...extraBlocks, ...xmlList];
+  };
+  Blockly.Variables.flyoutCategoryBlocks.isExtraBlocksPatch = true;
+}
 
 // See Configuration.vue's "Arrange Blockly zoom controls horizontally along
 // the bottom edge" switch - a live read (not cached at patch time, since

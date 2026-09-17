@@ -192,6 +192,10 @@ export const useSoundFxColumnsStorage = () =>
 // above, for the Text tab's own card list (TextEditor.vue's .text-list).
 export const useTextColumnsStorage = () =>
   useBooleanAppSetting('vcs-game-maker.textColumns', true);
+// Same "standing app preference" reasoning as useSoundFxColumnsStorage
+// above, for the Data tab's own card list (DataEditor.vue's .data-list).
+export const useDataColumnsStorage = () =>
+  useBooleanAppSetting('vcs-game-maker.dataColumns', true);
 // Same "standing app preference, not a project setting" reasoning as the
 // others above - a real reported correction (it started out living in
 // configurationState/Project.vue's own configuration bag, meaning it reset

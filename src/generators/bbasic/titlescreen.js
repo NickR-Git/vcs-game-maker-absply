@@ -126,7 +126,7 @@ const buildCardDataAsm = (card, key, typeInfo) => {
 
 // Resolves a "player" card's own player0Animation/player1Animation field
 // (an index into the shared animation pool, same convention as
-// sprite_player0_animation_select's own dropdown - see blocks/sprites.js's
+// sprite_player_animation_select's own dropdown - see blocks/sprites.js's
 // own buildAnimationOptions) into the actual frame data the kernel's own
 // player_kernel.asm needs. An unresolved/empty slot falls back to a single
 // blank (all-zero) row - GRP0/GRP1 draw nothing for a zero byte regardless

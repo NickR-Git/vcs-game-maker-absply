@@ -212,6 +212,20 @@ export const seekThrottleResetVarName = (name) => `_${name}SeekThrottleReset`;
 export const missileFireThrottleVarName = (name) => `_${name}FireThrottle`;
 export const missileFireThrottleResetVarName = (name) => `_${name}FireThrottleReset`;
 
+// sprite_*_bounce's own Combat-style state (see its own generator further
+// down for the stage sequence this backs) - stageVar tracks how many
+// consecutive stuck frames have been seen so far (0 = not currently stuck),
+// origDirVar freezes the heading the FIRST stuck frame started from (every
+// later stage keeps reflecting/reversing that same original heading, not
+// whatever the previous stage just computed), and frameVar is the
+// framecounter value the last time this object's Bounce block ran, the only
+// way to tell "still the same collision, one frame later" apart from "a
+// brand new collision" apart with no dedicated event to hook a reset into
+// (see generateMissileFireChecks' own comment on why).
+export const missileBounceStageVarName = (name) => `_${name}BounceStage`;
+export const missileBounceOrigDirVarName = (name) => `_${name}BounceOrigDir`;
+export const missileBounceFrameVarName = (name) => `_${name}BounceFrame`;
+
 // Compile-time lookup, not a runtime one: walks up from the trigger block
 // through its own enclosing STATEMENT blocks (getSurroundParent, not the
 // getParent()-loop background.js's own isInsideFunctionDefine uses - that
@@ -307,6 +321,27 @@ export const reserveMissileFireDevVars = (reserveDevVar, usedFor) => {
     reserveDevVar(missileFireThrottleVarName(name), undefined, 'this missile\'s "throttle movement" countdown');
     reserveDevVar(missileFireThrottleResetVarName(name), undefined,
         'this missile\'s "throttle movement" countdown reset value');
+  });
+};
+
+// Same reasoning as reserveMissileFireDevVars above, for sprite_*_bounce's
+// own Combat-style state (see missileBounceStageVarName's own comment) -
+// called with a pre-scanned Set of which missile/ball names actually have a
+// Bounce block used anywhere in the project. Deliberately separate from
+// reserveMissileFireDevVars/missileFireUsedFor: dirVar itself is needed
+// whenever EITHER Fire or Bounce is used (Bounce reads/writes it even
+// without a matching Fire block), but this extra state is only ever touched
+// by Bounce's own generator, so a project using Fire without Bounce
+// shouldn't pay for three unused dev vars per missile.
+export const reserveMissileBounceDevVars = (reserveDevVar, usedFor) => {
+  if (!usedFor || !usedFor.size) return;
+  usedFor.forEach((name) => {
+    reserveDevVar(missileBounceStageVarName(name), undefined,
+        'this missile\'s Combat-style bounce: consecutive stuck frames so far (0-3)');
+    reserveDevVar(missileBounceOrigDirVarName(name), undefined,
+        'this missile\'s Combat-style bounce: heading when the current collision started');
+    reserveDevVar(missileBounceFrameVarName(name), undefined,
+        'this missile\'s Combat-style bounce: framecounter value at the last bounce');
   });
 };
 
@@ -516,9 +551,26 @@ export const generateRainbowColorChecks = (Blockly) => {
 // x=x-speed : y=y-speed"-style line would silently only ever run the first
 // statement. No multiplication anywhere: every direction's own step is
 // always exactly -speed/0/+speed, so applying speed is a plain add/subtract.
+// Per-direction (x, y) step multipliers for the "16 directions" mode - see
+// sprite_*_fire's tooltip in blocks/sprites.js. There's no trig here: the 8
+// halfway points inserted between the original compass points each move at
+// full speed on their dominant axis and HALF speed (integer division,
+// rounds down) on the other, the same coarse lookup-table approximation
+// classic 2600 games used instead of real sine/cosine (see this app's
+// research into how Combat's shells ricochet). Index matches ANGLE's 0-15,
+// clockwise from Up, same convention as the 8-way scale just with a step
+// inserted between each original point.
+const DIRECTION16_STEPS = [
+  [0, -1], [1, -2], [1, -1], [2, -1],
+  [1, 0], [2, 1], [1, 1], [1, 2],
+  [0, 1], [-1, 2], [-1, 1], [-2, 1],
+  [-1, 0], [-2, -1], [-1, -1], [-1, -2],
+];
+
 export const generateMissileFireChecks = (Blockly) => {
   const used = Blockly.BBasic.missileFireUsedFor;
   if (!used || !used.size) return '';
+  const used16 = Blockly.BBasic.missileFire16UsedFor;
   const resolveVar = (canonicalName) =>
     Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
   const flagsVar = resolveVar(missileFireFlagsVarName());
@@ -531,11 +583,20 @@ export const generateMissileFireChecks = (Blockly) => {
     const activeBit = missileFireActiveBit(name);
     const throttleVar = resolveVar(missileFireThrottleVarName(name));
     const throttleResetVar = resolveVar(missileFireThrottleResetVarName(name));
-    lines.push(
-        ` if !${flagsVar}{${activeBit}} then goto ${doneLabel}`,
-        ` ${throttleVar} = ${throttleVar} - 1`,
-        ` if ${throttleVar} then goto ${doneLabel}`,
-        ` ${throttleVar} = ${throttleResetVar}`,
+    // Every "if dirVar = N then ..." line only ever conditions the ONE
+    // statement right after "then" (see this function's long-standing
+    // comment further down) - a step whose (x, y) pair has BOTH a nonzero x
+    // and y (every 16-way entry except the 4 pure compass points) needs two
+    // separate lines, one per axis, both guarded by the same dirVar check,
+    // rather than one combined statement.
+    const dispatch = used16 && used16.has(name) ?
+      DIRECTION16_STEPS.flatMap(([xStep, yStep], dir) => [
+        ...(xStep ? [` if ${dirVar} = ${dir} then ${name}x = ${name}x ${xStep > 0 ? '+' : '-'} ` +
+          `${Math.abs(xStep) === 1 ? speedVar : `(${speedVar}/2)`}`] : []),
+        ...(yStep ? [` if ${dirVar} = ${dir} then ${name}y = ${name}y ${yStep > 0 ? '+' : '-'} ` +
+          `${Math.abs(yStep) === 1 ? speedVar : `(${speedVar}/2)`}`] : []),
+      ]) :
+      [
         // X dispatch: Up-Right/Right/Down-Right (1,2,3) step +speed,
         // Down-Left/Left/Up-Left (5,6,7) step -speed, Up/Down (0,4) untouched.
         ` if ${dirVar} = 1 then ${name}x = ${name}x + ${speedVar}`,
@@ -552,6 +613,13 @@ export const generateMissileFireChecks = (Blockly) => {
         ` if ${dirVar} = 7 then ${name}y = ${name}y - ${speedVar}`,
         ` if ${dirVar} = 0 then ${name}y = ${name}y - ${speedVar}`,
         ` if ${dirVar} = 1 then ${name}y = ${name}y - ${speedVar}`,
+      ];
+    lines.push(
+        ` if !${flagsVar}{${activeBit}} then goto ${doneLabel}`,
+        ` ${throttleVar} = ${throttleVar} - 1`,
+        ` if ${throttleVar} then goto ${doneLabel}`,
+        ` ${throttleVar} = ${throttleResetVar}`,
+        ...dispatch,
         // Off-screen (standard NTSC playfield bounds) stops the movement -
         // clears the active bit so this missile's own dispatch above is
         // skipped every frame from here on - WITHOUT touching its own
@@ -739,15 +807,27 @@ export default (Blockly) => {
     };
   };
 
-  const createGeneratorForPlayer = (name) => {
+  // Player 0/1 now share these six combined block types (sprite_player_size,
+  // etc. - see PLAYER_OPTIONS' own comment in blocks/sprites.js), so this is
+  // called once, not once per name (unlike createGeneratorForSprite/
+  // createGeneratorForFireBall below, still per-name for Missile 0/1/Ball) -
+  // each generator resolves which player THIS block instance is set to via
+  // resolvePlayerName, reading the PLAYER field at generation time instead
+  // of a closed-over name.
+  const createGeneratorForPlayer = () => {
+    const resolvePlayerName = (block) => `player${block.getFieldValue('PLAYER') === '1' ? '1' : '0'}`;
+
     // The dropdown already holds the animation's position in the list, which is
-    // what the generated animation dispatch compares against.
-    Blockly.BBasic[`sprite_${name}_animation_select`] = function(block) {
+    // what the generated animation dispatch compares against - player-
+    // independent (the shared animation pool), so no resolvePlayerName call
+    // needed here at all.
+    Blockly.BBasic['sprite_player_animation_select'] = function(block) {
       const index = block.getFieldValue('VAR') || '0';
       return [index, Blockly.BBasic.ORDER_ATOMIC];
     };
 
-    Blockly.BBasic[`sprite_${name}_size`] = function(block) {
+    Blockly.BBasic['sprite_player_size'] = function(block) {
+      const name = resolvePlayerName(block);
       const size = block.getFieldValue('SIZE') || '0';
       const varName = name + 'size';
       return `${varName} = ${varName} & $F8\n` +
@@ -757,7 +837,8 @@ export default (Blockly) => {
     // Bit 6 of the size variable pauses the animation: the frame counter is
     // frozen while it is set. It is unused by NUSIZ, so it rides along
     // harmlessly when the size variable is loaded into the register.
-    Blockly.BBasic[`sprite_${name}_animation_playback`] = function(block) {
+    Blockly.BBasic['sprite_player_animation_playback'] = function(block) {
+      const name = resolvePlayerName(block);
       const paused = block.getFieldValue('STATE') === 'pause';
       return `${name}size{6} = ${paused ? 1 : 0}\n`;
     };
@@ -785,7 +866,8 @@ export default (Blockly) => {
     // romNoiseUsedFor itself is populated by a pre-scan in bbasic.js's
     // init() (see reserveRomNoiseDevVars' own comment for why it has to be
     // known before this generator ever runs), not mutated here.
-    Blockly.BBasic[`sprite_${name}_rom_noise`] = function(block) {
+    Blockly.BBasic['sprite_player_rom_noise'] = function(block) {
+      const name = resolvePlayerName(block);
       const resolveVar = (canonicalName) =>
         Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
       const offsetVar = resolveVar(romNoiseOffsetVarName(name));
@@ -815,20 +897,22 @@ export default (Blockly) => {
     // block the same as the trigger above (either one on a player is
     // enough to reserve that player's dev vars), so the flag var is always
     // guaranteed to exist here.
-    Blockly.BBasic[`sprite_${name}_rom_noise_stop`] = function(block) {
+    Blockly.BBasic['sprite_player_rom_noise_stop'] = function(block) {
+      const name = resolvePlayerName(block);
       const resolveVar = (canonicalName) =>
         Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
       const flagsVar = resolveVar(romNoiseFlagsVarName());
       return `${flagsVar}{${romNoiseActiveBit(name)}} = 0\n`;
     };
 
-    // Trigger for sprite_${name}_rainbow_colors - see this file's own
+    // Trigger for sprite_player_rainbow_colors - see this file's own
     // ROM_NOISE_COLOR_REGISTERS comment for the real kernel mechanism this
     // uses, and generateRainbowColorChecks for the per-frame write this
-    // only primes (same trigger+check split as sprite_${name}_rom_noise's
+    // only primes (same trigger+check split as sprite_player_rom_noise's
     // own trigger, and for the same reason: this line alone would only ever
     // take effect for a single instant, not stick).
-    Blockly.BBasic[`sprite_${name}_rainbow_colors`] = function(block) {
+    Blockly.BBasic['sprite_player_rainbow_colors'] = function(block) {
+      const name = resolvePlayerName(block);
       const resolveVar = (canonicalName) =>
         Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
       const offsetVar = resolveVar(rainbowColorOffsetVarName(name));
@@ -839,12 +923,13 @@ export default (Blockly) => {
         `${flagsVar}{${rainbowColorActiveBit(name)}} = 1\n`;
     };
 
-    // Clears the active flag sprite_${name}_rainbow_colors' own trigger
+    // Clears the active flag sprite_player_rainbow_colors' own trigger
     // sets - see that block's own tooltip/comment for what this can and
     // can't undo. rainbowColorUsedFor's own pre-scan in bbasic.js's init()
     // treats this block the same as the trigger above, so the flag var is
     // always guaranteed to exist here.
-    Blockly.BBasic[`sprite_${name}_rainbow_colors_stop`] = function(block) {
+    Blockly.BBasic['sprite_player_rainbow_colors_stop'] = function(block) {
+      const name = resolvePlayerName(block);
       const resolveVar = (canonicalName) =>
         Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
       const flagsVar = resolveVar(romNoiseFlagsVarName());
@@ -852,8 +937,17 @@ export default (Blockly) => {
     };
   };
 
-  const createGeneratorForMissileSize = (name) => {
-    Blockly.BBasic[`sprite_${name}_size`] = function(block) {
+  // Missile 0/1 now share this one combined block type (sprite_missile_size
+  // - see MISSILE_OPTIONS' own comment in blocks/sprites.js, same "one
+  // combined type with a dropdown field" treatment Player 0/1 already got),
+  // so this is called once, not once per name - Ball has no equivalent
+  // block at all (its own width is set through sprite_ball_set's own
+  // "Width" option instead, see buildMissileOptions/writeOnlyOptions), so
+  // there's no third name to worry about here the way createGeneratorFor
+  // FireBall below has to.
+  const createGeneratorForMissileSize = () => {
+    Blockly.BBasic['sprite_missile_size'] = function(block) {
+      const name = `missile${block.getFieldValue('MISSILE') === '1' ? '1' : '0'}`;
       const size = block.getFieldValue('SIZE') || 0;
       const varName = name.replace('missile', 'player') + 'size';
       return `${varName} = ${varName} & $0F\n` +
@@ -865,7 +959,17 @@ export default (Blockly) => {
   // missile1/ball (nothing here is missile-specific: ballx/bally are plain
   // bB vars exactly like missile0x/missile0y, and missileFireActiveBit/
   // missileFireDirVarName/missileFireSpeedVarName already cover 'ball' too).
-  const createGeneratorForFireBall = (name) => {
+  // registrationName is the block-type suffix to register under
+  // (sprite_${registrationName}_fire/_bounce) - 'ball' for Ball's own
+  // still-separate-from-Missile-0/1 blocks, 'missile' for the combined
+  // Missile 0/1 type (see MISSILE_OPTIONS' own comment in blocks/
+  // sprites.js). resolveName(block) resolves the REAL object name
+  // ('missile0'/'missile1'/'ball') this particular block instance means,
+  // read fresh every time a generator runs rather than closed over once -
+  // Ball's own generator context passes a fixed () => 'ball' (nothing to
+  // resolve, it never had a twin), Missile's reads the MISSILE dropdown
+  // field.
+  const createGeneratorForFireBall = (registrationName, resolveName) => {
     // TRIGGER only - see sprite_${name}_rom_noise's own top-of-block comment
     // for why a one-shot assignment here can't be the whole story:
     // generateMissileFireChecks (spliced into commongamelogic) does the
@@ -892,7 +996,8 @@ export default (Blockly) => {
     // missileFireUsedFor's own pre-scan in bbasic.js's init() treats this
     // block type as "in use" (same reasoning as romNoiseUsedFor), so every
     // dev var referenced here is always guaranteed to already exist.
-    Blockly.BBasic[`sprite_${name}_fire`] = function(block) {
+    Blockly.BBasic[`sprite_${registrationName}_fire`] = function(block) {
+      const name = resolveName(block);
       const resolveVar = (canonicalName) =>
         Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
       const dirVar = resolveVar(missileFireDirVarName(name));
@@ -901,7 +1006,13 @@ export default (Blockly) => {
       const x = Blockly.BBasic.valueToCode(block, 'X', Blockly.BBasic.ORDER_ASSIGNMENT) || '0';
       const y = Blockly.BBasic.valueToCode(block, 'Y', Blockly.BBasic.ORDER_ASSIGNMENT) || '0';
       const angle = Blockly.BBasic.valueToCode(block, 'ANGLE', Blockly.BBasic.ORDER_ASSIGNMENT) || '255';
-      const defaultAngle = block.getFieldValue('DEFAULT_ANGLE') || '0';
+      // "default" only ever offers the 8 original compass points (see
+      // MISSILE_FIRE_DEFAULT_ANGLE_OPTIONS in blocks/sprites.js) regardless
+      // of "16 directions" - doubled here to land on the matching index of
+      // the finer 0-15 scale (0=Up stays 0, 2=Right becomes 8, ...) so the
+      // fallback always points the same real direction either way.
+      const is16 = block.getFieldValue('DIRECTIONS16') === 'TRUE';
+      const defaultAngle = (parseInt(block.getFieldValue('DEFAULT_ANGLE'), 10) || 0) * (is16 ? 2 : 1);
       const speed = block.getFieldValue('SPEED') || '1';
       const activeBit = missileFireActiveBit(name);
       // "throttle movement" - see this block's own tooltip and
@@ -920,36 +1031,130 @@ export default (Blockly) => {
         `${flagsVar}{${activeBit}} = 1\n`;
     };
 
-    // Reverses whatever direction this object is CURRENTLY fired at by a
-    // flat 180 degrees (dirVar is 0-7, clockwise from Up - see
-    // sprite_${name}_fire's own tooltip) - no screen-edge or collision
-    // detection of its own, just the flip (confirmed with the user: no
-    // "gravity"/physics here, only the direction change), so it's meant to
-    // be placed behind whatever check the user's own project already has
-    // for deciding a bounce should happen. "+4, wrap back into 0-7 if it
-    // overflowed past 7" rather than a real modulo (bB has no "mod"
-    // operator, and dirVar is always already 0-7 or the sentinel 255 -
-    // whatever a stray reversal of 255 produces is harmless, just
-    // meaningless, since dirVar is never read at all while this object
-    // isn't actively flying - see generateMissileFireChecks' own
-    // "!flagsVar{activeBit}" early-out). missileFireUsedFor's own pre-scan
-    // in bbasic.js's init() treats sprite_${name}_bounce the same as
-    // sprite_${name}_fire (both reference dirVar), so it's always
-    // guaranteed to already exist here even if this project only ever
-    // places a Bounce block for this name and never a Fire block.
-    Blockly.BBasic[`sprite_${name}_bounce`] = function() {
+    // Reflects whatever direction this object is CURRENTLY fired at
+    // (dirVar - see sprite_${name}_fire's own tooltip), using the same
+    // adaptive multi-frame guessing Combat (1977) uses for its own tank
+    // shells (see buildBounceBlock's own top comment in blocks/sprites.js
+    // for the plain-English version) - no screen-edge or collision
+    // detection of its own, just the direction math (confirmed with the
+    // user: no "gravity"/physics here), so it's meant to be placed behind
+    // whatever check the user's own project already has for deciding a
+    // bounce should happen, called every frame that check stays true.
+    //
+    // dirVar is on a 0 to (N-1) clockwise-from-Up scale, N=8 or N=16
+    // depending on missileFire16UsedFor (same object-wide 8-way/16-way
+    // decision sprite_${name}_fire's own trigger already makes - see that
+    // generator's own comment; a project firing this object in 16-direction
+    // mode needs its Bounce reflections computed on that same finer scale,
+    // and dirVar itself has no room to record which scale is in use).
+    // Reflecting across an axis is "a constant minus dirVar" on this scale
+    // (not a rotation): mirroring across a VERTICAL wall (flip the X
+    // component, keep Y) is (N - dir) mod N, and mirroring across a
+    // HORIZONTAL wall (flip Y, keep X) is (N/2 - dir) mod N - both derived
+    // by checking a few concrete compass directions by hand against
+    // DIRECTION16_STEPS' own X/Y signs. Reversing BOTH axes (the pre-
+    // existing, pre-Combat "corner" fallback this block used to always do
+    // unconditionally) is a rotation instead - "dir + N/2" - which is why
+    // it can't share the other two stages' "constant - dir" shape.
+    //
+    // Combat's own three stages, replayed here as three labelled blocks of
+    // code (bB's "if ... then" only conditions a single statement, so a
+    // multi-line stage needs "if condition then goto label" + a fallthrough
+    // guard instead of one compound if): stage 1 (this is the FIRST frame
+    // this object has been stuck) mirrors the ORIGINAL heading across a
+    // vertical wall; stage 2 (STILL stuck the very next frame) mirrors that
+    // same original heading across a horizontal wall instead (not stage
+    // 1's result - Combat's own "+180 to the previous guess" description
+    // and "reflect the original across a horizontal wall" both land on the
+    // identical angle by construction, see the comment above; starting
+    // fresh from origDirVar every stage avoids ever compounding rounding/
+    // wrap quirks across stages); stage 3+ (still stuck after that) gives
+    // up guessing which wall and just reverses the ORIGINAL heading by 180
+    // degrees outright (assume a corner), and stays there for as long as
+    // the collision keeps being reported, rather than cycling back through
+    // stage 1 again - Combat's own eventual steady-state once genuinely
+    // wedged against a corner.
+    //
+    // "Still stuck the very next frame" vs. "a brand new collision" is told
+    // apart the only way available with no dedicated "collision ended"
+    // event to hook a reset into: frameVar remembers the framecounter value
+    // from this object's last Bounce call, and any gap other than exactly 1
+    // frame (including the very first call ever, when frameVar is still its
+    // undim'd 0) resets stageVar back to 0, restarting the guess sequence
+    // fresh - matching a real new collision, not a continuation.
+    // reserveMissileBounceDevVars (see bbasic.js's own init()) guarantees
+    // stageVar/origDirVar/frameVar already exist here whenever this
+    // generator runs, same pre-scan pattern as every other "*UsedFor" dev
+    // var reservation in this file.
+    Blockly.BBasic[`sprite_${registrationName}_bounce`] = function(block) {
+      const name = resolveName(block);
       const resolveVar = (canonicalName) =>
         Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
       const dirVar = resolveVar(missileFireDirVarName(name));
-      return `${dirVar} = ${dirVar} + 4\n` +
-        `if ${dirVar} > 7 then ${dirVar} = ${dirVar} - 8\n`;
+      const stageVar = resolveVar(missileBounceStageVarName(name));
+      const origDirVar = resolveVar(missileBounceOrigDirVarName(name));
+      const frameVar = resolveVar(missileBounceFrameVarName(name));
+      const steps = (Blockly.BBasic.missileFire16UsedFor || new Set()).has(name) ? 16 : 8;
+      const half = steps / 2;
+      const blockNumber = Blockly.BBasic.blockNumbers.next(`bounce_${name}`);
+      const stage1Label = `_bounce_${name}_${blockNumber}_s1`;
+      const stage2Label = `_bounce_${name}_${blockNumber}_s2`;
+      const stage3Label = `_bounce_${name}_${blockNumber}_s3`;
+      const doneLabel = `_bounce_${name}_${blockNumber}_done`;
+      return (
+        // "Still the same collision, one frame later" check - done via a
+        // plain equality comparison, not "framecounter - 1" inline in the
+        // condition, matching every other generator in this file (arithmetic
+        // always lands in an assignment of its own, never inline inside an
+        // "if"). frameVar is advanced to what it'd need to equal for a
+        // genuine one-frame gap FIRST, compared, THEN overwritten with the
+        // real framecounter value for next time - byte-wrapping (0/255
+        // rollover) falls out of this correctly for free, no special case
+        // needed, since frameVar and framecounter are both plain bytes.
+        ` ${frameVar} = ${frameVar} + 1\n` +
+        ` if ${frameVar} <> framecounter then ${stageVar} = 0\n` +
+        ` ${frameVar} = framecounter\n` +
+        ` if ${stageVar} = 0 then goto ${stage1Label}\n` +
+        ` if ${stageVar} = 1 then goto ${stage2Label}\n` +
+        ` goto ${stage3Label}\n` +
+        `${stage1Label}\n` +
+        ` ${origDirVar} = ${dirVar}\n` +
+        ` ${dirVar} = ${steps} - ${origDirVar}\n` +
+        ` if ${dirVar} = ${steps} then ${dirVar} = 0\n` +
+        ` ${stageVar} = 1\n` +
+        ` goto ${doneLabel}\n` +
+        `${stage2Label}\n` +
+        ` ${dirVar} = ${steps} - ${origDirVar}\n` +
+        ` if ${dirVar} = ${steps} then ${dirVar} = 0\n` +
+        ` ${dirVar} = ${dirVar} + ${half}\n` +
+        ` if ${dirVar} >= ${steps} then ${dirVar} = ${dirVar} - ${steps}\n` +
+        ` ${stageVar} = 2\n` +
+        ` goto ${doneLabel}\n` +
+        `${stage3Label}\n` +
+        ` ${dirVar} = ${origDirVar} + ${half}\n` +
+        ` if ${dirVar} >= ${steps} then ${dirVar} = ${dirVar} - ${steps}\n` +
+        ` ${stageVar} = 3\n` +
+        `${doneLabel}\n`
+      );
     };
   };
 
-  ['player0', 'player1', 'missile0', 'missile1', 'ball'].forEach(createGeneratorForSprite);
-  ['player0', 'player1'].forEach(createGeneratorForPlayer);
-  ['missile0', 'missile1'].forEach(createGeneratorForMissileSize);
-  ['missile0', 'missile1', 'ball'].forEach(createGeneratorForFireBall);
+  // 'player'/'missile' register the combined sprite_player_get/set/change
+  // and sprite_missile_get/set/change types (see PLAYER_OPTIONS'/
+  // MISSILE_OPTIONS' own comments in blocks/sprites.js) -
+  // createGeneratorForSprite's own get/set/change bodies only ever read
+  // VAR's already-real-variable-name value, never `name` itself, so this
+  // needs no changes beyond two extra names to register under.
+  ['player', 'missile', 'ball'].forEach(createGeneratorForSprite);
+  createGeneratorForPlayer();
+  createGeneratorForMissileSize();
+  // Ball keeps its own separate block type (never had a twin to combine
+  // with - see createGeneratorForFireBall's own comment); Missile 0/1
+  // share the combined 'missile' type, resolving which one a given block
+  // instance means from its own MISSILE field.
+  createGeneratorForFireBall('ball', () => 'ball');
+  createGeneratorForFireBall('missile',
+      (block) => `missile${block.getFieldValue('MISSILE') === '1' ? '1' : '0'}`);
 
   // Just captures the target/speed and sets the active bit for whichever
   // object OBJECT picks - the actual per-frame movement happens in

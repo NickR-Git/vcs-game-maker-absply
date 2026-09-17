@@ -689,7 +689,7 @@ Blockly.defineBlocksWithJsonArray([
     'previousStatement': null,
     'nextStatement': null,
     'colour': BACKGROUND_COLOR,
-    'tooltip': `Turns off every playfield pixel, the same as batari Basic's own "pfclear".`,
+    'tooltip': `Turns off every playfield pixel, the same as batari Basic's "pfclear".`,
   },
   // Block for scrolling the background
   {
@@ -717,6 +717,37 @@ Blockly.defineBlocksWithJsonArray([
     'nextStatement': null,
     'colour': BACKGROUND_COLOR,
     'tooltip': `Draws the screen`,
+  },
+  // Standard kernel's own undocumented "shakescreen" hook (see
+  // generateShakeScreenChecks' own comment in generators/bbasic/
+  // background.js for the real per-frame mechanism this drives) - a whole-
+  // screen effect, not a background/playfield one specifically, same
+  // reasoning draw_screen above already lives in this file despite not
+  // being "background_"-prefixed. Self-contained, unlike every other
+  // trigger block in this codebase (Fire/Bounce/Seek/Fade all leave their
+  // own timing up to the user) - confirmed with the user: a raw on/off
+  // toggle only sets a constant one-scanline offset, not an actual
+  // vibration, so a useful "shake" needs the frame-by-frame alternation
+  // built in, not left for the user to wire up themselves.
+  {
+    'type': `screen_shake`,
+    'message0': `${BACKGROUND_ICON} Shake screen for %1 frames`,
+    'args0': [
+      {
+        'type': 'input_value',
+        'name': 'FRAMES',
+        'check': 'Number',
+      },
+    ],
+    'inputsInline': true,
+    'previousStatement': null,
+    'nextStatement': null,
+    'colour': BACKGROUND_COLOR,
+    'tooltip': 'Vibrates the whole screen up and down by one scanline, every other frame, for roughly ' +
+      'this many frames, then stops automatically. Only needs to be triggered once - the shake keeps ' +
+      'running by itself every frame afterward, even from inside an "if" block that only briefly ' +
+      'becomes true, same as "Fade color to". Triggering it again while already shaking restarts the ' +
+      'countdown at the new frame count, rather than stacking.',
   },
 ]);
 
@@ -752,7 +783,7 @@ Blockly.Blocks['background_fade_finished'] = {
     this.setNextStatement(true);
     this.setColour(BACKGROUND_COLOR);
     this.setTooltip('Runs the connected blocks once, the moment a matching "Fade" block (same Background/' +
-      'Playfield choice) reaches its own target color. Does nothing if no matching fade ever runs anywhere ' +
+      'Playfield choice) reaches its target color. Does nothing if no matching fade ever runs anywhere ' +
       'in the project.');
   },
 };
@@ -775,6 +806,6 @@ Blockly.Blocks['background_fade_active'] = {
     this.setOutput(true, 'Boolean');
     this.setColour(BACKGROUND_COLOR);
     this.setTooltip('True while the Background or Playfield color is in the middle of a "Fade" - from the ' +
-      'moment a "Fade" block triggers it until it reaches its own target color, false the rest of the time.');
+      'moment a "Fade" block triggers it until it reaches its target color, false the rest of the time.');
   },
 };

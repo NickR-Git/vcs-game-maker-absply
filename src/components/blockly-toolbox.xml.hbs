@@ -62,7 +62,7 @@
             <statement name="DO">
                 <block type="draw_screen">
                     <next>
-                        <block type="sprite_player0_change">
+                        <block type="sprite_player_change">
                             <field name="VAR">player0x</field>
                             <value name="DELTA">
                                 <shadow type="math_number">
@@ -126,16 +126,7 @@
         </block>
         <block type="random_get"></block>
         <block type="random_range_get"></block>
-        <block type="bit_get"></block>
-        <block type="bit_set">
-            <value name="VALUE">
-                <shadow type="logic_boolean">
-                    <field name="BOOL">TRUE</field>
-                </shadow>
-            </value>
-        </block>
-        <block type="system_variable_get"></block>
-        <block type="sprite_player0_set">
+        <block type="sprite_player_set">
             <field name="VAR">player0x</field>
             <value name="VALUE">
                 <shadow type="math_number">
@@ -146,7 +137,8 @@
                 </block>
             </value>
         </block>
-        <block type="sprite_player1_set">
+        <block type="sprite_player_set">
+            <field name="PLAYER">1</field>
             <field name="VAR">player1y</field>
             <value name="VALUE">
                 <shadow type="math_number">
@@ -177,25 +169,25 @@
     </category>
     <category name="Sprites" colour="red">
 
-        <block type="sprite_player0_get"></block>
-        <block type="sprite_player0_set">
+        <block type="sprite_player_get"></block>
+        <block type="sprite_player_set">
             <value name="VALUE">
                 <shadow type="math_number">
                     <field name="NUM">1</field>
                 </shadow>
             </value>
         </block>
-        <block type="sprite_player0_change">
+        <block type="sprite_player_change">
             <value name="DELTA">
                 <shadow type="math_number">
                     <field name="NUM">1</field>
                 </shadow>
             </value>
         </block>
-        <block type="sprite_player0_size" />
-        <block type="sprite_player0_animation_select"></block>
-        <block type="sprite_player0_animation_playback"></block>
-        <block type="sprite_player0_rom_noise">
+        <block type="sprite_player_size" />
+        <block type="sprite_player_animation_select"></block>
+        <block type="sprite_player_animation_playback"></block>
+        <block type="sprite_player_rom_noise">
             <value name="OFFSET">
                 <shadow type="math_number">
                     <field name="NUM">0</field>
@@ -207,87 +199,61 @@
                 </shadow>
             </value>
         </block>
-        <block type="sprite_player0_rom_noise_stop"></block>
+        <block type="sprite_player_rom_noise_stop"></block>
         {{#if enablePlayer0SpriteColors}}
-        <block type="sprite_player0_rainbow_colors">
+        <block type="sprite_player_rainbow_colors">
             <value name="OFFSET">
                 <shadow type="math_number">
                     <field name="NUM">0</field>
                 </shadow>
             </value>
         </block>
-        <block type="sprite_player0_rainbow_colors_stop"></block>
-        {{/if}}
-        <block type="sprite_player0_set">
-            <field name="VAR">player0realcolor</field>
-            <value name="VALUE">
-                <shadow type="color_get">
-                    <field name="COLOR">212</field>
-                </shadow>
-            </value>
-        </block>
-        <block type="sprite_player_fade_to">
-            <field name="VAR">player0realcolor</field>
-            <value name="VALUE">
-                <shadow type="color_get">
-                    <field name="COLOR">212</field>
-                </shadow>
-            </value>
-            <value name="FRAMES">
-                <shadow type="math_number">
-                    <field name="NUM">30</field>
-                </shadow>
-            </value>
-        </block>
-        <block type="sprite_player_fade_finished">
-            <field name="VAR">player0realcolor</field>
-        </block>
-        <block type="sprite_player_fade_active">
-            <field name="VAR">player0realcolor</field>
-        </block>
-
-        <block type="sprite_player1_get"></block>
-        <block type="sprite_player1_set">
-            <value name="VALUE">
-                <shadow type="math_number">
-                    <field name="NUM">1</field>
-                </shadow>
-            </value>
-        </block>
-        <block type="sprite_player1_change">
-            <value name="DELTA">
-                <shadow type="math_number">
-                    <field name="NUM">1</field>
-                </shadow>
-            </value>
-        </block>
-        <block type="sprite_player1_size" />
-        <block type="sprite_player1_animation_select"></block>
-        <block type="sprite_player1_animation_playback"></block>
-        <block type="sprite_player1_rom_noise">
-            <value name="OFFSET">
-                <shadow type="math_number">
-                    <field name="NUM">0</field>
-                </shadow>
-            </value>
-            <value name="HEIGHT">
-                <shadow type="math_number">
-                    <field name="NUM">8</field>
-                </shadow>
-            </value>
-        </block>
-        <block type="sprite_player1_rom_noise_stop"></block>
+        <block type="sprite_player_rainbow_colors_stop"></block>
+        {{else}}
         {{#if enablePlayer1SpriteColors}}
-        <block type="sprite_player1_rainbow_colors">
+        <block type="sprite_player_rainbow_colors">
+            <field name="PLAYER">1</field>
             <value name="OFFSET">
                 <shadow type="math_number">
                     <field name="NUM">0</field>
                 </shadow>
             </value>
         </block>
-        <block type="sprite_player1_rainbow_colors_stop"></block>
+        <block type="sprite_player_rainbow_colors_stop">
+            <field name="PLAYER">1</field>
+        </block>
         {{/if}}
-        <block type="sprite_player1_set">
+        {{/if}}
+        <block type="sprite_player_set">
+            <field name="VAR">player0realcolor</field>
+            <value name="VALUE">
+                <shadow type="color_get">
+                    <field name="COLOR">212</field>
+                </shadow>
+            </value>
+        </block>
+        <block type="sprite_player_fade_to">
+            <field name="VAR">player0realcolor</field>
+            <value name="VALUE">
+                <shadow type="color_get">
+                    <field name="COLOR">212</field>
+                </shadow>
+            </value>
+            <value name="FRAMES">
+                <shadow type="math_number">
+                    <field name="NUM">30</field>
+                </shadow>
+            </value>
+        </block>
+        <block type="sprite_player_fade_finished">
+            <field name="VAR">player0realcolor</field>
+        </block>
+        <block type="sprite_player_fade_active">
+            <field name="VAR">player0realcolor</field>
+        </block>
+
+        <block type="sprite_player_set">
+            <field name="PLAYER">1</field>
             <field name="VAR">player1realcolor</field>
             <value name="VALUE">
                 <shadow type="color_get">
@@ -315,23 +281,23 @@
             <field name="VAR">player1realcolor</field>
         </block>
 
-        <block type="sprite_missile0_get"></block>
-        <block type="sprite_missile0_set">
+        <block type="sprite_missile_get"></block>
+        <block type="sprite_missile_set">
             <value name="VALUE">
                 <shadow type="math_number">
                     <field name="NUM">1</field>
                 </shadow>
             </value>
         </block>
-        <block type="sprite_missile0_change">
+        <block type="sprite_missile_change">
             <value name="DELTA">
                 <shadow type="math_number">
                     <field name="NUM">1</field>
                 </shadow>
             </value>
         </block>
-        <block type="sprite_missile0_size" />
-        <block type="sprite_missile0_set">
+        <block type="sprite_missile_size" />
+        <block type="sprite_missile_set">
             <field name="VAR">missile0width</field>
             <value name="VALUE">
                 <shadow type="math_number">
@@ -339,7 +305,7 @@
                 </shadow>
             </value>
         </block>
-        <block type="sprite_missile0_fire">
+        <block type="sprite_missile_fire">
             <value name="X">
                 <shadow type="math_number">
                     <field name="NUM">0</field>
@@ -356,25 +322,32 @@
                 </shadow>
             </value>
         </block>
-        <block type="sprite_missile0_bounce"></block>
+        <block type="sprite_missile_bounce"></block>
 
-        <block type="sprite_missile1_get"></block>
-        <block type="sprite_missile1_set">
+        <block type="sprite_missile_get">
+            <field name="MISSILE">1</field>
+        </block>
+        <block type="sprite_missile_set">
+            <field name="MISSILE">1</field>
             <value name="VALUE">
                 <shadow type="math_number">
                     <field name="NUM">1</field>
                 </shadow>
             </value>
         </block>
-        <block type="sprite_missile1_change">
+        <block type="sprite_missile_change">
+            <field name="MISSILE">1</field>
             <value name="DELTA">
                 <shadow type="math_number">
                     <field name="NUM">1</field>
                 </shadow>
             </value>
         </block>
-        <block type="sprite_missile1_size" />
-        <block type="sprite_missile1_set">
+        <block type="sprite_missile_size">
+            <field name="MISSILE">1</field>
+        </block>
+        <block type="sprite_missile_set">
+            <field name="MISSILE">1</field>
             <field name="VAR">missile1width</field>
             <value name="VALUE">
                 <shadow type="math_number">
@@ -382,7 +355,8 @@
                 </shadow>
             </value>
         </block>
-        <block type="sprite_missile1_fire">
+        <block type="sprite_missile_fire">
+            <field name="MISSILE">1</field>
             <value name="X">
                 <shadow type="math_number">
                     <field name="NUM">0</field>
@@ -399,7 +373,9 @@
                 </shadow>
             </value>
         </block>
-        <block type="sprite_missile1_bounce"></block>
+        <block type="sprite_missile_bounce">
+            <field name="MISSILE">1</field>
+        </block>
 
         <block type="sprite_ball_get"></block>
         <block type="sprite_ball_set">
@@ -455,10 +431,9 @@
 
         <block type="object_seek_arrived"></block>
 
-        <block type="sprite_priority_set"></block>
-
     </category>
     <category name="Background" colour="#ffa500">
+        <block type="sprite_priority_set"></block>
         <block type="background_select"></block>
         <block type="background_set">
             <value name="VALUE">
@@ -581,6 +556,13 @@
         </block>
         <block type="background_clear"></block>
         <block type="draw_screen"></block>
+        <block type="screen_shake">
+            <value name="FRAMES">
+                <shadow type="math_number">
+                    <field name="NUM">20</field>
+                </shadow>
+            </value>
+        </block>
     </category>
     <category name="Sound" colour="rgb(156, 39, 176)">
         <block type="simple_sound_set"></block>

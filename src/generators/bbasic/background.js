@@ -194,6 +194,80 @@ export const registerBackgroundLineSubroutine = (Blockly, names, operations) => 
   });
 };
 
+// screen_shake's own countdown (see generateShakeScreenChecks below for the
+// per-frame use of it) - only reserved when a screen_shake block is
+// actually on the canvas (screenShakeUsed, same early-pre-scan pattern as
+// every other feature's own "*Used"/"*UsedFor" dev var reservation).
+export const shakeScreenFramesVarName = () => '_shakeScreenFrames';
+
+// Unlike every other feature in this file, this ALSO has to reserve the
+// literal bareword "shakescreen" itself, not just a private canonical dev
+// var - std_kernel.asm reads/gates on that exact symbol directly ("ifconst
+// shakescreen"/"bit shakescreen" - see generateShakeScreenChecks' own
+// comment), and nothing in 2600basic.h ever pre-declares it the way
+// player0frame/newbackground/etc. are (confirmed by grepping the bundled
+// bB compiler's own includes - this feature is genuinely undocumented,
+// bB itself expects the USER's own program to dim it). Emitting "dim
+// shakescreen = <letter>" both reserves the real RAM byte the kernel reads
+// every frame AND satisfies "ifconst shakescreen" by itself, the same way
+// "rand16" (see its own reserveDevVar call site in generators/bbasic.js)
+// already relies on a plain, never-colliding literal name passing through
+// nameDB_.getName() completely unchanged - no separate "const shakescreen
+// = 1" needed (or wanted: that would declare it as a compile-time constant
+// instead of a RAM variable, breaking the runtime "bit shakescreen" read).
+export const reserveShakeScreenDevVar = (reserveDevVar, used) => {
+  if (!used) return;
+  reserveDevVar('shakescreen', undefined,
+      'literal name the standard kernel checks for/reads every frame to drive screen shake');
+  reserveDevVar(shakeScreenFramesVarName(), undefined, 'frames remaining in the current screen shake');
+};
+
+// Spliced into commongamelogic (see bbasic.bb.hbs) once, unconditionally -
+// unlike every per-object check elsewhere in this codebase (Fire/Bounce/
+// Seek), there's only ever one screen, so no per-name loop or label-
+// uniquing is needed here.
+//
+// Drives the standard kernel's own undocumented "shakescreen" hook (see
+// std_kernel.asm's own "ifconst shakescreen"/"doshakescreen" - confirmed by
+// reading that file directly, since this feature was never actually
+// documented anywhere in the bB community): every frame, the kernel checks
+// bit 7 of the runtime "shakescreen" variable - clear (0-127) inserts one
+// extra scanline wait at a fixed point in the frame, shifting that whole
+// frame's picture down by one scanline; set (128-255) draws normally. Held
+// at a constant value, that's just a static one-line offset, not a
+// vibration - screen_shake's own block is a self-contained "for N frames"
+// effect (confirmed with the user), so this alternates shakescreen between
+// 0 and 128 every other frame (using bit 0 of the countdown itself, READ
+// BEFORE decrementing it, as the parity signal, rather than a second dev
+// var) for as long as framesVar is still counting down, and settles back
+// to 128 (off) the instant it hits zero so the picture doesn't stay
+// shifted after the effect ends. Reading the parity before the decrement
+// (rather than after) matters at the boundary: a 1-frame shake has to
+// actually show one shaken frame, not silently do nothing because its only
+// countdown value (1, odd) got consumed by the decrement before ever being
+// tested.
+export const generateShakeScreenChecks = (Blockly) => {
+  if (!Blockly.BBasic.screenShakeUsed) return '';
+  const resolveVar = (canonicalName) =>
+    Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+  const framesVar = resolveVar(shakeScreenFramesVarName());
+  const shakeVar = resolveVar('shakescreen');
+  return [
+    ` if ${framesVar} = 0 then goto _shakescreen_off`,
+    ` if ${framesVar}{0} then goto _shakescreen_on`,
+    ` ${shakeVar} = 128`,
+    ` goto _shakescreen_decrement`,
+    `_shakescreen_on`,
+    ` ${shakeVar} = 0`,
+    `_shakescreen_decrement`,
+    ` ${framesVar} = ${framesVar} - 1`,
+    ` goto _shakescreen_done`,
+    `_shakescreen_off`,
+    ` ${shakeVar} = 128`,
+    `_shakescreen_done`,
+  ].join('\n') + '\n';
+};
+
 export default (Blockly) => {
   // A compile-time constant, not runtime state - the playfield's vertical
   // resolution is a single fixed ROM-wide setting (see effectiveBackgroundRows'
@@ -910,6 +984,19 @@ export default (Blockly) => {
     return 'COLUP1 = player1color\n' +
       'COLUP0 = player0color\n' +
       'drawscreen\n';
+  };
+
+  // (Re)starts the countdown generateShakeScreenChecks counts down every
+  // frame - just the countdown, same "trigger sets state, a separate
+  // generate*Checks does the per-frame work" split as every other
+  // multi-frame effect in this codebase. screenShakeUsed's own pre-scan in
+  // bbasic.js's init() guarantees framesVar already exists here.
+  Blockly.BBasic[`screen_shake`] = function(block) {
+    const resolveVar = (canonicalName) =>
+      Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+    const framesVar = resolveVar(shakeScreenFramesVarName());
+    const frames = Blockly.BBasic.valueToCode(block, 'FRAMES', Blockly.BBasic.ORDER_ASSIGNMENT) || '0';
+    return `${framesVar} = ${frames}\n`;
   };
 };
 

@@ -47,10 +47,10 @@ Blockly.Blocks['text_minikernel_show_named'] = {
     this.setNextStatement(true, null);
     this.setColour(TEXT_COLOR);
     this.setTooltip('Displays a message defined on the Text tab, in place of the score, ' +
-      'using the Text Minikernel. If the message is longer than the Text tab\'s own max ' +
-      'display width, it word-wraps onto a second line when that entry\'s own "Wrap to ' +
+      'using the Text Minikernel. If the message is longer than the Text tab\'s max ' +
+      'display width, it word-wraps onto a second line when that entry\'s "Wrap to ' +
       'line 2" is on, otherwise it automatically scrolls back and forth - see "Scroll ' +
-      'text" for a version with its own tunable scroll speed/pause (which always scrolls ' +
+      'text" for a version with a tunable scroll speed/pause (which always scrolls ' +
       'on a single line, ignoring "Wrap to line 2").');
   },
 };
@@ -73,7 +73,7 @@ Blockly.Blocks['text_minikernel_show_named_row'] = {
     this.setColour(TEXT_COLOR);
     this.setTooltip('Displays a message defined on the Text tab on just one row (1 or 2) - the ' +
       'OTHER row always comes out blank, since the two rows are always shown together. Only ' +
-      'that entry\'s own FIRST line is used (no word-wrap or scrolling) - use "Show text" ' +
+      'that entry\'s FIRST line is used (no word-wrap or scrolling) - use "Show text" ' +
       'instead for a message that needs more than one row.');
   },
 };
@@ -95,9 +95,9 @@ Blockly.Blocks['text_minikernel_show_named_scroll'] = {
     this.setNextStatement(true, null);
     this.setColour(TEXT_COLOR);
     this.setTooltip('Displays a message defined on the Text tab, in place of the score, ' +
-      'using the Text Minikernel, with its own scroll speed/pause. Only takes effect if the ' +
-      'message is longer than the Text tab\'s own max display width - ignored otherwise. ' +
-      'Always scrolls on a single line, even if that entry\'s own "Wrap to line 2" is on - ' +
+      'using the Text Minikernel, with a tunable scroll speed/pause. Only takes effect if the ' +
+      'message is longer than the Text tab\'s max display width - ignored otherwise. ' +
+      'Always scrolls on a single line, even if that entry\'s "Wrap to line 2" is on - ' +
       'use "Show text" instead for that.');
   },
 };
@@ -124,8 +124,8 @@ Blockly.defineBlocksWithJsonArray([
     'colour': TEXT_COLOR,
     'tooltip': 'Displays a message in place of the score, using the Text Minikernel ' +
       '(A-Z, 0-9, and basic punctuation). Automatically scrolls back and forth if longer ' +
-      'than the Text tab\'s own max display width - see "Scroll text" for a ' +
-      'version with its own tunable scroll speed/pause.',
+      'than the Text tab\'s max display width - see "Scroll text" for a ' +
+      'version with a tunable scroll speed/pause.',
   },
   // Sets ONE row directly (row 1 or row 2, picked from the dropdown) rather
   // than a whole message - the OTHER row always comes out blank (see
@@ -179,8 +179,8 @@ Blockly.defineBlocksWithJsonArray([
     'tooltip': 'Displays the message at this position on the Text tab (1 = the first message ' +
       'listed there, 2 = the second, and so on) - the number can be a variable or computed ' +
       'value, so the message shown can be picked at runtime. If that message is longer than ' +
-      'the Text tab\'s own max display width, it word-wraps onto a second line when that ' +
-      'entry\'s own "Wrap to line 2" is on, otherwise it automatically scrolls.',
+      'the Text tab\'s max display width, it word-wraps onto a second line when that ' +
+      'entry\'s "Wrap to line 2" is on, otherwise it automatically scrolls.',
   },
   // Same runtime id lookup as text_minikernel_show_by_id above, but shows
   // only that entry's own first line, on just one row (1 or 2) - the OTHER
@@ -243,7 +243,7 @@ Blockly.defineBlocksWithJsonArray([
     'colour': TEXT_COLOR,
     'tooltip': 'Sets the color of Text Minikernel messages - "row 2" only matters for a wrapped ' +
       'message\'s second line (a message with "Wrap to line 2" on, or one long enough to ' +
-      'word-wrap that far on its own). Defaults to "row 1", matching this block\'s own old, ' +
+      'word-wrap that far by itself). Defaults to "row 1", matching this block\'s old, ' +
       'row-1-only behavior before this dropdown existed.',
   },
   {
@@ -299,7 +299,7 @@ Blockly.defineBlocksWithJsonArray([
     'colour': TEXT_COLOR,
     'tooltip': 'Shows or hides the scroll cursor (up/down arrows and "end of message" icon) at ' +
       'runtime. While hidden, neither ever draws, no matter how much of the message is left ' +
-      'to scroll to. Only has an effect if the Text tab\'s own "Show a scroll cursor" switch ' +
+      'to scroll to. Only has an effect if the Text tab\'s "Show a scroll cursor" switch ' +
       'is on - visible by default.',
   },
   // Fades TextColor toward a target - same shared mechanism as Background's
@@ -328,7 +328,7 @@ Blockly.defineBlocksWithJsonArray([
     'previousStatement': null,
     'nextStatement': null,
     'colour': TEXT_COLOR,
-    'tooltip': 'Starts fading the Text Minikernel\'s own message color toward the given color over ' +
+    'tooltip': 'Starts fading the Text Minikernel\'s message color toward the given color over ' +
       'roughly this many frames - same hue as the target, brightness automatically climbing or ' +
       'dropping from wherever it currently is. Only needs to be triggered once - the fade keeps ' +
       'running by itself every frame afterward, even from inside an "if" block that only briefly ' +
@@ -377,8 +377,8 @@ Blockly.defineBlocksWithJsonArray([
     'nextStatement': null,
     'colour': TEXT_COLOR,
     'tooltip': 'Controls the currently shown scrolling text message. Start/Unpause resume it ' +
-      'from wherever it currently is. Pause freezes it in place. Stop resets it back to its ' +
-      'own beginning and freezes it there. Restart resets it back to its own beginning too, ' +
+      'from wherever it currently is. Pause freezes it in place. Stop resets it back to the ' +
+      'beginning and freezes it there. Restart resets it back to the beginning too, ' +
       'but keeps it scrolling. Has no visible effect on a message that never needed to scroll ' +
       'in the first place.',
   },
@@ -471,8 +471,8 @@ Blockly.Blocks['text_minikernel_show_scroll'] = {
     this.setNextStatement(true, null);
     this.setColour(TEXT_COLOR);
     this.setTooltip('Displays a message in place of the score, using the Text Minikernel, ' +
-      'with its own scroll speed/pause. Only takes effect if the message is longer than the ' +
-      'Text tab\'s own max display width - ignored otherwise.');
+      'with a tunable scroll speed/pause. Only takes effect if the message is longer than the ' +
+      'Text tab\'s max display width - ignored otherwise.');
   },
 };
 
@@ -493,11 +493,11 @@ Blockly.Blocks['text_minikernel_show_by_id_scroll'] = {
     this.setPreviousStatement(true, null);
     this.setNextStatement(true, null);
     this.setColour(TEXT_COLOR);
-    this.setTooltip('Displays the message at this position on the Text tab, with its own ' +
+    this.setTooltip('Displays the message at this position on the Text tab, with a tunable ' +
       'scroll speed/pause - the number can be a variable or computed value, so the message ' +
       'shown can be picked at runtime. Only takes effect if that message is longer than the ' +
-      'Text tab\'s own max display width - ignored otherwise. Always scrolls on a single ' +
-      'line, even if that entry\'s own "Wrap to line 2" is on - use "Show text ID" instead ' +
+      'Text tab\'s max display width - ignored otherwise. Always scrolls on a single ' +
+      'line, even if that entry\'s "Wrap to line 2" is on - use "Show text ID" instead ' +
       'for that.');
   },
 };
@@ -517,6 +517,6 @@ Blockly.Blocks['text_minikernel_fade_finished'] = {
     this.setNextStatement(true);
     this.setColour(TEXT_COLOR);
     this.setTooltip('Runs the connected blocks once, the moment a matching "Fade Text color" block ' +
-      'reaches its own target color. Does nothing if no matching fade ever runs anywhere in the project.');
+      'reaches its target color. Does nothing if no matching fade ever runs anywhere in the project.');
   },
 };

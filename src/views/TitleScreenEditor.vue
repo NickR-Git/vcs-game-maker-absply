@@ -8,10 +8,10 @@
           Titlescreen Kernel. 48x1 images are single-color and half-height pixels (the sharpest
           option); 48x2/96x2 images support a different color per row, at normal (roughly
           square) pixel proportions. Add a "Draw title screen" block (Actions tab) to show it -
-          call it in a loop for as long as you want it up. Per the kernel's own documentation, a
+          call it in a loop for as long as you want it up. Per the kernel's documentation, a
           page's total stacked height shouldn't exceed about 85 rows of 48x2/96x2 (double-line)
           images, or about 170 rows of 48x1 (single-line) images - each card also costs a few
-          extra lines of its own to set itself up, so stay comfortably under that limit.
+          extra lines to set itself up, so stay comfortably under that limit.
         </p>
 
         <div class="editor-toolbar-row">
@@ -66,7 +66,7 @@
                     <color-swatch-picker
                       :value="screen.backgroundColor || 0"
                       :allow-clear="false"
-                      title="Click to set this title screen page's own background color"
+                      title="Click to set this title screen page's background color"
                       @input="(byte) => handleSetBackgroundColor(screen, byte)"
                     />
                     <span class="titlescreen-bg-color-label">Background color</span>

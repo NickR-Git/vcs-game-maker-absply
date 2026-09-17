@@ -37,11 +37,11 @@ import {registerKeypadPollSubroutine, generateJoystickDirection8Table,
   reserveJoystickButtonDevVars, reserveJoystickDoubleTapDevVars,
   generateJoystickButtonChecks, generateJoystickDoubleTapChecks} from './bbasic/input';
 import {collisionMoveOldXVar, collisionMoveOldYVar} from './bbasic/collision';
-import {scoreBkColorVarName} from './bbasic/score';
+import {scoreBkColorVarName, generateScanlinesDebugScoreCode} from './bbasic/score';
 import {processPlayerAnimationsStorageDefaults, generateRomNoiseChecks, generateRainbowColorChecks,
   generateRainbowColorGraphics, rainbowColorNeedsPlayerColors, rainbowColorNeedsPlayer1Colors,
   reserveRomNoiseDevVars, reserveRainbowColorDevVars,
-  generateMissileFireChecks, reserveMissileFireDevVars,
+  generateMissileFireChecks, reserveMissileFireDevVars, reserveMissileBounceDevVars,
   generateSeekChecks, reserveSeekDevVars, reserveSeekArrivedDevVars,
   reserveCtrlpfShadowDevVar, generateCtrlpfShadowSetup} from './bbasic/sprites';
 import {resolveSeekArrivedWatches} from '../blocks/sprites';
@@ -465,7 +465,8 @@ Blockly.BBasic.init = function(workspace) {
       .some((block) => block.type === 'text_minikernel_show_by_id' || block.type === 'text_minikernel_show_by_id_scroll');
 
   // Same early block-type pre-scan reasoning as textMinikernelUsed just
-  // above, for sprite_player0_rom_noise/sprite_player1_rom_noise (see
+  // above, for sprite_player_rom_noise (Player 0/1 share this combined
+  // block type - see PLAYER_OPTIONS' own comment in blocks/sprites.js; see
   // reserveRomNoiseDevVars' own comment in generators/bbasic/sprites.js) -
   // has to be known before reserveDevVar hands out user variable letters
   // below, well before either block's own generator would otherwise run.
@@ -484,34 +485,100 @@ Blockly.BBasic.init = function(workspace) {
   // "player1colors"), the pfcolors table, and the blank-lines override on
   // for a feature that was actually inert, a real reported bug ("the
   // rainbow block is being exported even when disabled").
+  // sprite_player_rom_noise/rainbow_colors (and their _stop counterparts)
+  // are single combined block types now (Player 0/Player 1 share them, see
+  // PLAYER_OPTIONS' own comment in blocks/sprites.js), so which player a
+  // given block counts for comes from its own PLAYER field, not the block
+  // type string - same pattern seekUsedFor below already uses for
+  // object_seek_to's own OBJECT dropdown.
   ['player0', 'player1'].forEach((name) => {
+    const player = name === 'player1' ? '1' : '0';
     if (workspace.getAllBlocks(false).some((block) =>
-      (block.type === `sprite_${name}_rom_noise` || block.type === `sprite_${name}_rom_noise_stop`) &&
-      block.isEnabled())) {
+      (block.type === 'sprite_player_rom_noise' || block.type === 'sprite_player_rom_noise_stop') &&
+      block.getFieldValue('PLAYER') === player && block.isEnabled())) {
       this.romNoiseUsedFor.add(name);
     }
     if (workspace.getAllBlocks(false).some((block) =>
-      (block.type === `sprite_${name}_rainbow_colors` || block.type === `sprite_${name}_rainbow_colors_stop`) &&
-      block.isEnabled())) {
+      (block.type === 'sprite_player_rainbow_colors' || block.type === 'sprite_player_rainbow_colors_stop') &&
+      block.getFieldValue('PLAYER') === player && block.isEnabled())) {
       this.rainbowColorUsedFor.add(name);
     }
   });
 
+  // Missile 0/1 share combined sprite_missile_fire/sprite_missile_bounce
+  // block types now (see MISSILE_OPTIONS' own comment in blocks/
+  // sprites.js), so which object a given block counts for comes from its
+  // own MISSILE field for those two names - Ball never had a twin to
+  // combine with, so sprite_ball_fire/sprite_ball_bounce stay matched by
+  // type string alone, same as before.
+  const fireOrBounceBlockMatchesName = (block, name) => {
+    if (name === 'ball') {
+      return block.type === 'sprite_ball_fire' || block.type === 'sprite_ball_bounce';
+    }
+    return (block.type === 'sprite_missile_fire' || block.type === 'sprite_missile_bounce') &&
+      block.getFieldValue('MISSILE') === (name === 'missile1' ? '1' : '0');
+  };
+
   // Same early block-type pre-scan reasoning as romNoiseUsedFor above, for
-  // sprite_missile0_fire/sprite_missile1_fire/sprite_ball_fire (see
-  // reserveMissileFireDevVars' own comment in generators/bbasic/sprites.js)
-  // - has to be known before reserveDevVar hands out user variable letters
-  // below. sprite_${name}_bounce counts too, not just _fire - it reads/
-  // writes the exact same dirVar (see its own generator's comment), so a
-  // project using Bounce without ever placing a matching Fire block still
-  // needs dirVar reserved.
+  // sprite_missile_fire/sprite_ball_fire (see reserveMissileFireDevVars' own
+  // comment in generators/bbasic/sprites.js) - has to be known before
+  // reserveDevVar hands out user variable letters below. The matching
+  // bounce block counts too, not just fire - it reads/writes the exact same
+  // dirVar (see its own generator's comment), so a project using Bounce
+  // without ever placing a matching Fire block still needs dirVar reserved.
   this.missileFireUsedFor = new Set();
   ['missile0', 'missile1', 'ball'].forEach((name) => {
     if (workspace.getAllBlocks(false).some((block) =>
-      (block.type === `sprite_${name}_fire` || block.type === `sprite_${name}_bounce`) && block.isEnabled())) {
+      fireOrBounceBlockMatchesName(block, name) && block.isEnabled())) {
       this.missileFireUsedFor.add(name);
     }
   });
+
+  // Whether ANY Fire block for this object has the "16 directions" checkbox
+  // on (see generateMissileFireChecks' comment in generators/bbasic/
+  // sprites.js for the two dispatch tables this picks between) - a
+  // compile-time, per-OBJECT decision, same reasoning as every other "used
+  // for" pre-scan here: the per-frame movement check is only ever spliced
+  // in once per object, not once per block, so if any one Fire block for a
+  // given missile/ball wants the finer 16-step angle scale, that object's
+  // whole dispatch table has to be built for it - a project mixing an
+  // 8-way Fire and a 16-way Fire on the SAME object would have the second
+  // one silently reinterpreted on the 16-way scale too, since dirVar itself
+  // has no room to record which scale produced it.
+  this.missileFire16UsedFor = new Set();
+  ['missile0', 'missile1', 'ball'].forEach((name) => {
+    const fireType = name === 'ball' ? 'sprite_ball_fire' : 'sprite_missile_fire';
+    if (workspace.getAllBlocks(false).some((block) =>
+      block.type === fireType && block.isEnabled() && block.getFieldValue('DIRECTIONS16') === 'TRUE' &&
+      (name === 'ball' || block.getFieldValue('MISSILE') === (name === 'missile1' ? '1' : '0')))) {
+      this.missileFire16UsedFor.add(name);
+    }
+  });
+
+  // Same early block-type pre-scan reasoning as missileFireUsedFor above,
+  // for the Bounce block's own Combat-style state (see
+  // missileBounceStageVarName's own comment in generators/bbasic/sprites.js)
+  // - narrower than missileFireUsedFor above (Bounce actually placed, not
+  // just dirVar being needed), since this extra state is only ever touched
+  // by Bounce's own generator.
+  this.missileBounceUsedFor = new Set();
+  ['missile0', 'missile1', 'ball'].forEach((name) => {
+    const bounceType = name === 'ball' ? 'sprite_ball_bounce' : 'sprite_missile_bounce';
+    if (workspace.getAllBlocks(false).some((block) =>
+      block.type === bounceType && block.isEnabled() &&
+      (name === 'ball' || block.getFieldValue('MISSILE') === (name === 'missile1' ? '1' : '0')))) {
+      this.missileBounceUsedFor.add(name);
+    }
+  });
+
+  // Same early block-type pre-scan reasoning as missileFireUsedFor above,
+  // for screen_shake's own countdown dev var (see shakeScreenFramesVarName's
+  // own comment in generators/bbasic/background.js) - a single boolean, not
+  // a per-name Set, since there's only ever one screen. Also read directly
+  // by generateConfiguration() further down to gate emitting "const
+  // shakescreen = 1", the standard kernel's own switch for this feature.
+  this.screenShakeUsed = workspace.getAllBlocks(false).some((block) =>
+    block.type === 'screen_shake' && block.isEnabled());
 
   // Same early block-type pre-scan reasoning as missileFireUsedFor above,
   // for object_seek_to (see reserveSeekDevVars' own comment in
@@ -1310,6 +1377,18 @@ Blockly.BBasic.init = function(workspace) {
   // bbasic/sprites.js) - a no-op unless missileFireUsedFor's own early
   // pre-scan (above) found it used.
   reserveMissileFireDevVars(reserveDevVar, this.missileFireUsedFor);
+
+  // Same bucket again, for "Bounce"'s own Combat-style stage/original-
+  // direction/last-frame state (see reserveMissileBounceDevVars' own comment
+  // in generators/bbasic/sprites.js) - a no-op unless missileBounceUsedFor's
+  // own early pre-scan (above) found it used.
+  reserveMissileBounceDevVars(reserveDevVar, this.missileBounceUsedFor);
+
+  // Same bucket again, for "Shake screen"'s own countdown (see
+  // reserveShakeScreenDevVar's own comment in generators/bbasic/
+  // background.js) - a no-op unless screenShakeUsed's own early pre-scan
+  // (above) found it used.
+  reserveShakeScreenDevVar(reserveDevVar, this.screenShakeUsed);
 
   // Same bucket again, for "Seek to"'s own per-sprite target/speed state
   // (see reserveSeekDevVars' own comment in generators/bbasic/sprites.js) -
@@ -2270,6 +2349,17 @@ Blockly.BBasic.finish = function(code) {
     code = code + '\n\n' + gameplayUpdateEventCode;
   }
 
+  // Options tab's "Show NTSC scanlines used as the score (debug)" toggle -
+  // see generateScanlinesDebugScoreCode's comment in
+  // generators/bbasic/score.js for why this is prepended here (same timing/
+  // reasoning as gameplayUpdateEventCode just above) rather than hand-
+  // formatted into one of the template's raw Setup-section splices.
+  const scanlinesDebugScoreCode =
+    generateScanlinesDebugScoreCode((useConfigurationStorage().value || {}));
+  if (scanlinesDebugScoreCode) {
+    code = scanlinesDebugScoreCode + '\n\n' + code;
+  }
+
   // Convert the definitions dictionary into a list.
   const definitions = Blockly.utils.object.values(this.definitions_);
 
@@ -2304,6 +2394,7 @@ Blockly.BBasic.finish = function(code) {
   const generatedRainbowColorChecks = generateRainbowColorChecks(Blockly);
   const generatedMissileFireChecks = generateMissileFireChecks(Blockly);
   const generatedSeekChecks = generateSeekChecks(Blockly);
+  const generatedShakeScreenChecks = generateShakeScreenChecks(Blockly);
   // Bank 1's own copy of the Text Minikernel's "show by id" lookup tables
   // (see generateTextOffsetTables' own comment in bbasic/text-scroll.js) -
   // each relocated bank gets its own copy directly inside
@@ -2416,7 +2507,7 @@ Blockly.BBasic.finish = function(code) {
   return handlebarsTemplate({generatedBody, generatedBackgrounds,
     generatedAnimations, generatedDataTables, generatedRomNoiseChecks,
     generatedRainbowColorGraphics, generatedRainbowColorChecks, generatedMissileFireChecks,
-    generatedSeekChecks,
+    generatedSeekChecks, generatedShakeScreenChecks,
     generatedTextOffsetTables, generatedTextStaticOffsetTables, generatedTextRow2OffsetsTable, generatedJoyDir8Table,
     generatedSubroutines, generatedFunctions, generatedRelocatedEvents, generatedTextMinikernel,
     systemStartEvent, titleStartEvent, titleUpdateEvent, gamePlayStartEvent,
@@ -3164,8 +3255,12 @@ Blockly.BBasic.generateConfiguration = function() {
   // the score row's own physical height (Squish's "fontstyle = SQUISH" const
   // shrinks it in the standard kernel) - left pointed at Squish while hooks/
   // rom.js swaps in the Default, full-height digit graphics would shrink the
-  // row out from under graphics no longer sized to match it.
-  const scoreFont = config.enableCycleScore ? null : config.scoreFont;
+  // row out from under graphics no longer sized to match it. "Show NTSC
+  // scanlines used as the score" (enableScanlinesDebug) forces the same
+  // thing, for the same reason - it also just pokes plain decimal digits
+  // straight into the score, not a real batari Basic value that would
+  // automatically adapt to a shorter Squish digit height.
+  const scoreFont = (config.enableCycleScore || config.enableScanlinesDebug) ? null : config.scoreFont;
 
   // batari Basic honours a single "set kernel_options" line, so every option
   // has to go on it together.
@@ -3892,7 +3987,8 @@ Blockly.BBasic.generateAnimations = function() {
   const player1Code = processAnimations('player1', playerAnimationsStorage);
   return player0Code + '\n\n\n' + player1Code;
 };
-import background, {backgroundGetPixelDevVarsNeeded, registerBackgroundLineSubroutine} from './bbasic/background';
+import background, {backgroundGetPixelDevVarsNeeded, registerBackgroundLineSubroutine,
+  reserveShakeScreenDevVar, generateShakeScreenChecks} from './bbasic/background';
 import bit from './bbasic/bit';
 import collision from './bbasic/collision';
 import color from './bbasic/color';

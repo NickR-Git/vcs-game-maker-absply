@@ -564,9 +564,24 @@ export default {
     // means building a fresh instance in place - rather than the full page
     // reload this used to do, which (via main.js's "start empty" reset on
     // every launch) was wiping the entire project, not just this frame.
+    //
+    // Carries the OLD editor's own History instance into the new one
+    // (PixelEditor's own constructor takes it as an optional 4th arg,
+    // defaulting to a fresh one when omitted) - confirmed as a real reported
+    // bug otherwise: every resize used to build a brand new PixelEditor with
+    // a brand new, empty History, silently discarding every undo entry from
+    // before the resize, on top of the resize itself never being undoable
+    // either. History's own undoStack/redoStack are plain {next, prev}
+    // pixel-coordinate deltas with no canvas-size bounds checking
+    // (PixelCollection.set() is a sparse {x+y*width: color} map, and
+    // getPixels() here already skips any y past the current row count), so
+    // replaying an old delta against a differently-sized editor is safe -
+    // it just won't restore rows beyond whatever height is CURRENT at undo
+    // time, same as any other pixel data that's currently out of view.
     initEditor(rowCount, pixelMatrix) {
       const canvas = this.$refs.editor;
-      this.editor = new PixelEditor(canvas, this.width, rowCount, this.pencil);
+      const history = this.editor ? this.editor.history : undefined;
+      this.editor = new PixelEditor(canvas, this.width, rowCount, this.pencil, history);
       this.setPixels(pixelMatrix);
       this.handleMouse();
       // Row count (this.editor.height) is what the grid overlay actually

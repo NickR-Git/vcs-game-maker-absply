@@ -16,7 +16,7 @@
           <color-swatch-picker
             :value="textBkColor"
             :allow-clear="false"
-            title="Click to set the Text Minikernel's own message background color"
+            title="Click to set the Text Minikernel's message background color"
             @input="(byte) => (textBkColor = byte)"
           />
           <span class="text-bkcolor-label">Text background color</span>

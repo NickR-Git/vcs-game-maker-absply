@@ -25,8 +25,8 @@
         </div>
         <p class="dim-hint v-messages theme--light v-messages__message">
           When DIM is on, every sound effect plays at the volume above, as a
-          percentage of its own set volume. Off: sound effects play at their
-          own set volume.
+          percentage of its set volume. Off: sound effects play at their
+          set volume.
         </p>
         <div class="soundfx-filter-row">
           <v-select
@@ -160,7 +160,7 @@
                       :title="(soundEffect.isInstrument ?
                         'Tagged as an instrument (click to untag) ' :
                         'Not tagged as an instrument (click to tag) ') +
-                        '- purely a tag for this tab\'s own \'Show\' filter above; every sound effect can ' +
+                        '- purely a tag for this tab\'s \'Show\' filter above; every sound effect can ' +
                         'already be used both as a soundfx_play trigger and as a Music tab instrument ' +
                         'regardless of this.'"
                       @click="() => handleToggleInstrument(soundEffect)"
@@ -223,7 +223,7 @@
                       <v-switch
                         v-model="soundEffect.arpeggio"
                         label="Arpeggio"
-                        title="Always on for every note played with this instrument on the Music tab - rapidly flips between the note's own pitch and a second nearby pitch (set below) to fake a chord."
+                        title="Always on for every note played with this instrument on the Music tab - rapidly flips between the note's pitch and a second nearby pitch (set below) to fake a chord."
                         hide-details
                         class="soundfx-arpeggio-switch"
                         @change="handleChildChange"
@@ -231,7 +231,7 @@
                       <template v-if="soundEffect.arpeggio">
                         <v-select
                           label="Speed"
-                          title="How often it flips pitch, relative to the song/pattern's own tempo - speeds up and slows down with the song."
+                          title="How often it flips pitch, relative to the song/pattern's tempo - speeds up and slows down with the song."
                           v-model="soundEffect.arpeggioDivision"
                           :items="arpeggioDivisionOptionItems"
                           hide-details
@@ -240,7 +240,7 @@
                         />
                         <v-text-field
                           label="Interval"
-                          title="Fixed pitch jump between the note's own pitch and the second alternating pitch."
+                          title="Fixed pitch jump between the note's pitch and the second alternating pitch."
                           v-model.number="soundEffect.arpeggioInterval"
                           type="number"
                           :min="MIN_ARPEGGIO_INTERVAL"
@@ -251,7 +251,7 @@
                         />
                         <v-select
                           label="Range"
-                          title="1 OCT: cycles only between the note's own pitch and pitch+interval. 2 OCT: plays that pattern, then repeats it one octave up before looping back."
+                          title="1 OCT: cycles only between the note's pitch and pitch+interval. 2 OCT: plays that pattern, then repeats it one octave up before looping back."
                           v-model="soundEffect.arpeggioRange"
                           :items="arpeggioRangeOptionItems"
                           hide-details
