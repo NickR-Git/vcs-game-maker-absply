@@ -71,9 +71,9 @@ const FADE_TAG_BY_VAR = {
   player0realcolor: 'p0', player1realcolor: 'p1',
 };
 const fadeTag = (rawVar) => FADE_TAG_BY_VAR[rawVar] || rawVar;
-export const backgroundFadeTimerVarName = (rawVar) => `_${fadeTag(rawVar)}FadeTimer`;
-export const backgroundFadePaceVarName = (rawVar) => `_${fadeTag(rawVar)}FadePace`;
-export const backgroundFadeTargetVarName = (rawVar) => `_${fadeTag(rawVar)}FadeTarget`;
+export const backgroundFadeTimerVarName = (rawVar) => `${fadeTag(rawVar)}FadeTimer`;
+export const backgroundFadePaceVarName = (rawVar) => `${fadeTag(rawVar)}FadePace`;
+export const backgroundFadeTargetVarName = (rawVar) => `${fadeTag(rawVar)}FadeTarget`;
 
 // Fixed at 4 (not a user-choosable STEPS dropdown, as an earlier version of
 // this had) specifically because 4 is a power of 2: "frames / 4" always
@@ -120,7 +120,7 @@ const FADE_FLAGS_BYTE_BY_VAR = {
   COLUBK: 1, COLUPF: 1, scorecolor: 1, TextColor: 1,
   player0realcolor: 2, player1realcolor: 2,
 };
-export const fadeFlagsVarName = (rawVar) => FADE_FLAGS_BYTE_BY_VAR[rawVar] === 2 ? '_fadeFlags2' : '_fadeFlags';
+export const fadeFlagsVarName = (rawVar) => FADE_FLAGS_BYTE_BY_VAR[rawVar] === 2 ? 'fadeFlags2' : 'fadeFlags';
 // Which registers share each of fadeFlagsVarName's own two possible bytes -
 // read by bbasic.js's own init() to decide which byte(s) actually need
 // reserving for a given project (a project fading only Player colors never
@@ -145,8 +145,8 @@ export const FADE_FLAGS_REGISTER_GROUPS = [
 // were reused this way). Two dedicated dev vars sidestep that entirely,
 // at the cost of reserving them (see reserveMusicDevVars's own sibling in
 // bbasic.js) only for a project that actually uses this block at all.
-export const backgroundGetPixelXVarName = () => '_bgGetPixelX';
-export const backgroundGetPixelYVarName = () => '_bgGetPixelY';
+export const backgroundGetPixelXVarName = () => 'bgGetPixelX';
+export const backgroundGetPixelYVarName = () => 'bgGetPixelY';
 // Bits 0-3: one "finished" bit per fadeable register (fires on either fade
 // direction's own completion - see fadeFlagsVarName's own
 // comment). Bits 4-7: the matching "active" bit for that same register

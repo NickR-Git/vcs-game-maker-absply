@@ -1198,13 +1198,13 @@ Blockly.BBasic.init = function(workspace) {
   // internally, corrupting them the instant the first pixel was plotted).
   if (this.backgroundLineUsed) {
     this.backgroundLineVarNames = {
-      x1: reserveDevVar('_lineX1', undefined, 'background line: current X position'),
-      y1: reserveDevVar('_lineY1', undefined, 'background line: current Y position'),
-      x2: reserveDevVar('_lineX2', undefined, 'background line: end X position'),
-      y2: reserveDevVar('_lineY2', undefined, 'background line: end Y position'),
-      dx: reserveDevVar('_lineDX', undefined, 'background line: X distance'),
-      dy: reserveDevVar('_lineDY', undefined, 'background line: Y distance'),
-      err: reserveDevVar('_lineErr', undefined, 'background line: Bresenham error term'),
+      x1: reserveDevVar('lineX1', undefined, 'background line: current X position'),
+      y1: reserveDevVar('lineY1', undefined, 'background line: current Y position'),
+      x2: reserveDevVar('lineX2', undefined, 'background line: end X position'),
+      y2: reserveDevVar('lineY2', undefined, 'background line: end Y position'),
+      dx: reserveDevVar('lineDX', undefined, 'background line: X distance'),
+      dy: reserveDevVar('lineDY', undefined, 'background line: Y distance'),
+      err: reserveDevVar('lineErr', undefined, 'background line: Bresenham error term'),
     };
   }
 
@@ -1218,7 +1218,7 @@ Blockly.BBasic.init = function(workspace) {
   // to run AFTER "this.subroutines = {}" resets below.
   if (this.titleScreenDrawUsed) {
     this.titleScreenSelectedIdVarName = reserveDevVar(
-        '_titleScreenSelectedId', undefined, 'Which Title Screen page to draw next');
+        'titleScreenSelectedId', undefined, 'Which Title Screen page to draw next');
   }
 
   // Same bucket again, for "Background get pixel" blocks' own X/Y scratch
@@ -1376,7 +1376,7 @@ Blockly.BBasic.init = function(workspace) {
   // speed state (see reserveMissileFireDevVars' own comment in generators/
   // bbasic/sprites.js) - a no-op unless missileFireUsedFor's own early
   // pre-scan (above) found it used.
-  reserveMissileFireDevVars(reserveDevVar, this.missileFireUsedFor);
+  reserveMissileFireDevVars(reserveDevVar, reserveDevVarRW, this.missileFireUsedFor);
 
   // Same bucket again, for "Bounce"'s own Combat-style stage/original-
   // direction/last-frame state (see reserveMissileBounceDevVars' own comment
@@ -1393,7 +1393,7 @@ Blockly.BBasic.init = function(workspace) {
   // Same bucket again, for "Seek to"'s own per-sprite target/speed state
   // (see reserveSeekDevVars' own comment in generators/bbasic/sprites.js) -
   // a no-op unless seekUsedFor's own early pre-scan (above) found it used.
-  reserveSeekDevVars(reserveDevVar, this.seekUsedFor);
+  reserveSeekDevVars(reserveDevVar, reserveDevVarRW, this.seekUsedFor);
 
   // Same bucket again, for "When ... arrives"'s own shared finished-bit byte
   // (see reserveSeekArrivedDevVars' own comment in generators/bbasic/

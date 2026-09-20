@@ -198,7 +198,7 @@ export const registerBackgroundLineSubroutine = (Blockly, names, operations) => 
 // per-frame use of it) - only reserved when a screen_shake block is
 // actually on the canvas (screenShakeUsed, same early-pre-scan pattern as
 // every other feature's own "*Used"/"*UsedFor" dev var reservation).
-export const shakeScreenFramesVarName = () => '_shakeScreenFrames';
+export const shakeScreenFramesVarName = () => 'shakeScreenFrames';
 
 // Unlike every other feature in this file, this ALSO has to reserve the
 // literal bareword "shakescreen" itself, not just a private canonical dev

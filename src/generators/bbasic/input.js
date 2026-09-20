@@ -440,8 +440,8 @@ export const generateJoystickButtonChecks = (Blockly) => {
 // double-tap blocks on the same joystick can each have their own WINDOW
 // field value, so the countdown itself can't be shared the way a plain
 // comparison-only value (like "Fire held") can.
-export const joyDoubleTapResultVarName = (index) => `_joyDoubleTap${index}`;
-export const joyDoubleTapTimerVarName = (index) => `_joyDoubleTap${index}Timer`;
+export const joyDoubleTapResultVarName = (index) => `joyDoubleTap${index}`;
+export const joyDoubleTapTimerVarName = (index) => `joyDoubleTap${index}Timer`;
 
 // Reserves the two dev vars above for every "Fire double-tapped" block
 // instance bbasic.js's own pre-scan (joyDoubleTapChecks) found - same early

@@ -26,8 +26,8 @@ import {getStaticMessageLayout, staticMessageRegionEnd, splitMessageLines} from 
 // TextRow2Active) - only ever read/written from generated bBasic, never
 // from the raw text12a.asm/text12b.asm kernel files, so they don't need a
 // fixed var slot.
-export const textLinesBaseVarName = () => '_textLinesBase';
-export const textLinesMaxVarName = () => '_textLinesMax';
+export const textLinesBaseVarName = () => 'textLinesBase';
+export const textLinesMaxVarName = () => 'textLinesMax';
 
 // Row 2's own color (settable via the merged "Text: set color" block's own
 // ROW dropdown, text_minikernel_set_color below) and the scroll cursor's own color
@@ -41,15 +41,15 @@ export const textLinesMaxVarName = () => '_textLinesMax';
 // Blockly.BBasic.nameDB_ the same way it already does for
 // textLinesMaxVarName/textLinesBaseVarName, for the same reason (see that
 // function's own doc comment).
-export const textRow2ColorVarName = () => '_textRow2Color';
-export const textScrollCursorColorVarName = () => '_textScrollCursorColor';
+export const textRow2ColorVarName = () => 'textRow2Color';
+export const textScrollCursorColorVarName = () => 'textScrollCursorColor';
 // The "end of message" icon's own color (via "Text: set end icon color",
 // text_minikernel_set_end_icon_color below) - the icon draws on GRP1 (its
 // own separate COLUP1), so it can have a different color than the up/down
 // arrows on GRP0/COLUP0 - see buildTextScrollCursorOverride's own comment
 // in utils/text-font.js for why it moved back to GRP1 (needing its own
 // repositioning HMOVE) after briefly sharing GRP0's own low nibble.
-export const textEndIconColorVarName = () => '_textEndIconColor';
+export const textEndIconColorVarName = () => 'textEndIconColor';
 // The scroll cursor's own runtime show/hide flag (via "Text scroll cursor
 // show or hide", text_minikernel_scroll_cursor_visible below) rides in bit 0
 // of textScrollCursorColorVarName above instead of its own dev var - COLUP0

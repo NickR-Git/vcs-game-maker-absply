@@ -35,7 +35,7 @@ goog.require('Blockly.BBasic');
 // repeat loop: nested repeat blocks (a repeat whose own body contains
 // ANOTHER repeat block with a complex count) aren't safe with a single
 // shared var either way, an existing limitation this doesn't make any worse.
-export const REPEAT_BOUND_VAR_NAME = '_repeatBound';
+export const REPEAT_BOUND_VAR_NAME = 'repeatBound';
 
 // The "repeat X times" block's own "for X = 1 to <bound> : ... : next" loop
 // variable itself - used to be the literal, hardcoded bB identifier
@@ -60,7 +60,7 @@ export const REPEAT_COUNTER_VAR_NAME = 'repeatcounter';
 // many iterations the repeat had left. Reserved the same way
 // REPEAT_BOUND_VAR_NAME is (see its own comment just above) - a real,
 // properly-declared dev var, not nameDB_.getDistinctName.
-export const WAIT_FRAMES_COUNTER_VAR_NAME = '_waitFramesCounter';
+export const WAIT_FRAMES_COUNTER_VAR_NAME = 'waitFramesCounter';
 
 // Whether a given "repeat N times" block's own TIMES input would actually
 // need REPEAT_BOUND_VAR_NAME once controls_repeat_ext's own generator runs
