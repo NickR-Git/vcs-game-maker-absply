@@ -88,6 +88,17 @@ export const DEFAULT_ENVELOPE_RELEASE = 4;
 export const ENVELOPE_SUSTAIN_PERCENT_OPTIONS = [0, 25, 50, 75, 100];
 export const DEFAULT_ENVELOPE_SUSTAIN_PERCENT = 100;
 
+// Only meaningful once a note actually overlaps another note on the same
+// channel - see canPlaceNoteAt in MusicEditor.vue, which lets any
+// instrument, tunable or noise, land on top of another track's note
+// sharing the same channel. Ties (equal priority) still fall back to plain
+// timing - whichever note starts later wins, same as before this existed -
+// so this only needs to matter when a project actually wants one specific
+// instrument (e.g. a kick) to never lose to another (e.g. a hi-hat)
+// regardless of which one lands later in a pattern.
+export const NOISE_PRIORITY_OPTIONS = [1, 2, 3, 4, 5];
+export const DEFAULT_NOISE_PRIORITY = 1;
+
 export const DEFAULT_SOUND_EFFECTS = {
   soundEffects: [
     {
@@ -112,6 +123,8 @@ export const DEFAULT_SOUND_EFFECTS = {
       arpeggioDivision: DEFAULT_ARPEGGIO_DIVISION,
       arpeggioInterval: DEFAULT_ARPEGGIO_INTERVAL,
       arpeggioRange: DEFAULT_ARPEGGIO_RANGE,
+      // See NOISE_PRIORITY_OPTIONS' own comment.
+      priority: DEFAULT_NOISE_PRIORITY,
       // A TIA color byte (utils/palette.js's index<<1 convention), or null
       // for "auto-assigned" - see utils/instrument-colors.js. Used by the
       // Music tab to color this sound's notes in the piano roll.
@@ -197,6 +210,11 @@ export const processSoundEffectsStorageDefaults = (soundEffectsStorage) => {
     // (a plain "sound effect"), matching every preset's own behavior before
     // this tag existed.
     soundEffect.isInstrument = !!soundEffect.isInstrument;
+    // Same Number() coercion as arpeggioRange above, for the same v-select
+    // quirk. A preset saved before Priority existed at all falls back to
+    // the default.
+    const priority = Number(soundEffect.priority);
+    soundEffect.priority = NOISE_PRIORITY_OPTIONS.includes(priority) ? priority : DEFAULT_NOISE_PRIORITY;
   });
   return soundEffects;
 };

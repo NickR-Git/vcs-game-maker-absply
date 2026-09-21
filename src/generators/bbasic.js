@@ -20,6 +20,8 @@ import {getRelocationBanks} from '../hooks/relocation-banks';
 import {DEFAULT_ROW_COLOR, processBackgroundStorageDefaults,
   backgroundFadeTimerVarName, backgroundFadePaceVarName, backgroundFadeTargetVarName,
   fadeFlagsVarName, FADE_FLAGS_REGISTER_GROUPS, backgroundGetPixelXVarName, backgroundGetPixelYVarName,
+  collisionPixelColumnVarName, collisionPixelRowVarName, collisionPixelNudgedColumnVarName,
+  collisionPixelNudgedRowVarName,
   resolveBackgroundFadeFinishedWatches, hasBackgroundFadeActiveChecks} from '../blocks/background';
 import {functionCallDiscardVarName, functionCallArgVarName, functionParamVarName,
   MAX_FUNCTION_ARGS} from '../blocks/function';
@@ -43,7 +45,8 @@ import {processPlayerAnimationsStorageDefaults, generateRomNoiseChecks, generate
   reserveRomNoiseDevVars, reserveRainbowColorDevVars,
   generateMissileFireChecks, reserveMissileFireDevVars, reserveMissileBounceDevVars,
   generateSeekChecks, reserveSeekDevVars, reserveSeekArrivedDevVars,
-  reserveCtrlpfShadowDevVar, generateCtrlpfShadowSetup} from './bbasic/sprites';
+  reserveCtrlpfShadowDevVar, generateCtrlpfShadowSetup, resolveUsedPlayerAnimations,
+  generateInertiaChecks, reserveInertiaDevVars} from './bbasic/sprites';
 import {resolveSeekArrivedWatches} from '../blocks/sprites';
 import {resolveProjectMusic, MUSIC_PLAY_RESET_NAME, MUSIC_PLAY_BY_ID_NAME,
   musicPlayByIdArgVarName, musicPlaySongResetName,
@@ -505,18 +508,23 @@ Blockly.BBasic.init = function(workspace) {
     }
   });
 
-  // Missile 0/1 share combined sprite_missile_fire/sprite_missile_bounce
-  // block types now (see MISSILE_OPTIONS' own comment in blocks/
-  // sprites.js), so which object a given block counts for comes from its
-  // own MISSILE field for those two names - Ball never had a twin to
-  // combine with, so sprite_ball_fire/sprite_ball_bounce stay matched by
-  // type string alone, same as before.
+  // Missile 0/1 share the combined sprite_missile_fire block type (see
+  // MISSILE_OPTIONS' own comment in blocks/sprites.js), so which object a
+  // Fire block counts for comes from its own MISSILE field for those two
+  // names - Ball never had a twin to combine with, so sprite_ball_fire
+  // stays matched by type string alone. object_bounce (one block, OBJECT
+  // dropdown covers all 5 names - see its own comment in blocks/sprites.js)
+  // counts too for missile0/missile1/ball specifically, not just Fire - it
+  // reads/writes the exact same dirVar (see its own generator's comment),
+  // so a project using Bounce without ever placing a matching Fire block
+  // still needs dirVar reserved. Never true for player0/player1 here -
+  // Players have no dirVar/Fire concept at all, regardless of whether they
+  // have their own object_bounce block (that's gated by inertiaUsedFor
+  // instead - see missileBounceUsedFor's own pre-scan below).
   const fireOrBounceBlockMatchesName = (block, name) => {
-    if (name === 'ball') {
-      return block.type === 'sprite_ball_fire' || block.type === 'sprite_ball_bounce';
-    }
-    return (block.type === 'sprite_missile_fire' || block.type === 'sprite_missile_bounce') &&
-      block.getFieldValue('MISSILE') === (name === 'missile1' ? '1' : '0');
+    if (block.type === 'object_bounce') return block.getFieldValue('OBJECT') === name;
+    if (name === 'ball') return block.type === 'sprite_ball_fire';
+    return block.type === 'sprite_missile_fire' && block.getFieldValue('MISSILE') === (name === 'missile1' ? '1' : '0');
   };
 
   // Same early block-type pre-scan reasoning as romNoiseUsedFor above, for
@@ -556,17 +564,17 @@ Blockly.BBasic.init = function(workspace) {
   });
 
   // Same early block-type pre-scan reasoning as missileFireUsedFor above,
-  // for the Bounce block's own Combat-style state (see
+  // for object_bounce's own Combat-style stage/frame state (see
   // missileBounceStageVarName's own comment in generators/bbasic/sprites.js)
   // - narrower than missileFireUsedFor above (Bounce actually placed, not
   // just dirVar being needed), since this extra state is only ever touched
-  // by Bounce's own generator.
+  // by Bounce's own generator. Unlike missileFireUsedFor, this covers all
+  // 5 names (object_bounce works for Player 0/1 too, via Inertia's own
+  // velocity - see its own generator).
   this.missileBounceUsedFor = new Set();
-  ['missile0', 'missile1', 'ball'].forEach((name) => {
-    const bounceType = name === 'ball' ? 'sprite_ball_bounce' : 'sprite_missile_bounce';
+  ['player0', 'player1', 'missile0', 'missile1', 'ball'].forEach((name) => {
     if (workspace.getAllBlocks(false).some((block) =>
-      block.type === bounceType && block.isEnabled() &&
-      (name === 'ball' || block.getFieldValue('MISSILE') === (name === 'missile1' ? '1' : '0')))) {
+      block.type === 'object_bounce' && block.isEnabled() && block.getFieldValue('OBJECT') === name)) {
       this.missileBounceUsedFor.add(name);
     }
   });
@@ -599,6 +607,38 @@ Blockly.BBasic.init = function(workspace) {
   // really exists, same reasoning as backgroundFadeFinishedWatches above.
   this.seekArrivedWatches = resolveSeekArrivedWatches(workspace);
 
+  // Same early block-type pre-scan reasoning as seekUsedFor above, for
+  // sprite_inertia_accelerate/sprite_inertia_decelerate (see
+  // reserveInertiaDevVars' own comment in generators/bbasic/sprites.js).
+  // inertiaUsedFor is the union of both (velocityX/Y are needed whenever
+  // EITHER targets a sprite); inertiaAccelUsedFor/inertiaDecelUsedFor are
+  // narrower, gating only their own feature-specific vars - same
+  // "general + narrower" shape missileFireUsedFor/missileBounceUsedFor
+  // already use.
+  // inertiaAccel16UsedFor - same reasoning as missileFire16UsedFor above,
+  // just read directly off the single sprite_inertia_accelerate block type's
+  // own DIRECTIONS16 field (no per-name block type to match, unlike Fire).
+  this.inertiaUsedFor = new Set();
+  this.inertiaAccelUsedFor = new Set();
+  this.inertiaAccel16UsedFor = new Set();
+  this.inertiaDecelUsedFor = new Set();
+  workspace.getAllBlocks(false).forEach((block) => {
+    if (!block.isEnabled()) return;
+    if (block.type === 'sprite_inertia_accelerate' || block.type === 'sprite_inertia_stop_accelerate') {
+      const name = block.getFieldValue('OBJECT');
+      this.inertiaUsedFor.add(name);
+      if (block.type === 'sprite_inertia_accelerate') {
+        this.inertiaAccelUsedFor.add(name);
+        if (block.getFieldValue('DIRECTIONS16') === 'TRUE') this.inertiaAccel16UsedFor.add(name);
+      }
+    }
+    if (block.type === 'sprite_inertia_decelerate') {
+      const name = block.getFieldValue('OBJECT');
+      this.inertiaUsedFor.add(name);
+      this.inertiaDecelUsedFor.add(name);
+    }
+  });
+
   // Same early block-type pre-scan reasoning as above, for CTRLPF's own RAM
   // shadow (see reserveCtrlpfShadowDevVar's own comment in generators/
   // bbasic/sprites.js) - sprite_priority_set is its own dedicated block
@@ -618,8 +658,21 @@ Blockly.BBasic.init = function(workspace) {
     if (!block.isEnabled()) return false;
     if (block.type === 'sprite_priority_set') return true;
     if (block.type === 'sprite_ball_set') return block.getFieldValue('VAR') === 'ballwidth';
+    // background_collision_pixel reads ball width back off this same shadow
+    // (see spriteCollisionCoords' own comment in generators/bbasic/
+    // background.js - the real CTRLPF register can't be read back safely)
+    // whenever it targets Ball, even if no other block in the project ever
+    // touches ball width/priority itself.
+    if (block.type === 'background_collision_pixel') return block.getFieldValue('SPRITE') === 'ball';
     return false;
   });
+
+  // background_collision_pixel's own result/scratch vars (see generators/
+  // bbasic/background.js) - reserved whenever any enabled instance exists
+  // anywhere in the project, regardless of which SPRITE it targets (unlike
+  // ctrlpfShadowUsed just above, which only cares about the Ball case).
+  this.collisionPixelUsed = workspace.getAllBlocks(false).some((block) =>
+    block.type === 'background_collision_pixel' && block.isEnabled());
 
   // Same early block-type pre-scan reasoning as the ones above - see
   // controls_repeat_ext's own comment in generators/bbasic/loops.js for
@@ -648,19 +701,34 @@ Blockly.BBasic.init = function(workspace) {
   this.waitFramesUsed = workspace.getAllBlocks(false).some((block) =>
     block.type === 'wait_frames' && block.isEnabled());
 
+  // Whether a "Score set background color" block (score_bk_color_set) is
+  // used anywhere - when it is, scorebkcolor can never safely alias onto
+  // backgroundrealcolor (see scoreBkColorNeedsOwnVar's own comment just
+  // below for why that aliasing exists at all), no matter what the Score
+  // tab's own picker says: writing through the alias would overwrite
+  // backgroundrealcolor itself, visibly recoloring the WHOLE screen instead
+  // of just the score row. Confirmed as a real reported bug - a project
+  // using this block, with the picker left at its own default ("Use
+  // background color"), had every "Score set background color" call
+  // silently repaint the entire background instead.
+  this.usesScoreBkColorSetter = workspace.getAllBlocks(false)
+      .some((block) => block.type === 'score_bk_color_set' && block.isEnabled());
+
   // Whether scorebkcolor (the Score tab's own background color picker - see
   // views/ScoreFontEditor.vue and generators/bbasic/score.js's
-  // generateScoreBkColorRuntimeDims) needs its own dedicated dev var - only
-  // when the Text Minikernel is active AND the picker isn't set to "Use
-  // background color", which instead aliases scorebkcolor directly onto the
-  // existing backgroundrealcolor system variable, needing nothing reserved
-  // here. Same early-pre-scan reasoning as textMinikernelUsed itself:
-  // needed before variable letters are handed out below.
+  // generateScoreBkColorRuntimeDims) needs its own dedicated dev var -
+  // whenever the Text Minikernel is active AND either the picker isn't set
+  // to "Use background color", or a "Score set background color" block is
+  // used (see usesScoreBkColorSetter just above) - either one means
+  // scorebkcolor can't just alias onto the existing backgroundrealcolor
+  // system variable, needing nothing reserved here. Same early-pre-scan
+  // reasoning as textMinikernelUsed itself: needed before variable letters
+  // are handed out below.
   {
     const configurationStorage = useConfigurationStorage();
     const config = (configurationStorage && configurationStorage.value) || {};
-    this.scoreBkColorNeedsOwnVar =
-      this.isTextMinikernelActive() && !this.scoreBkColorIsBackground(config.scoreBkColor);
+    this.scoreBkColorNeedsOwnVar = this.isTextMinikernelActive() &&
+      (this.usesScoreBkColorSetter || !this.scoreBkColorIsBackground(config.scoreBkColor));
   }
 
   // Collects every distinct (axis, object pair) a "Distance" getter block
@@ -890,6 +958,12 @@ Blockly.BBasic.init = function(workspace) {
   // music.js). Pure workspace scan, no dependency on this.projectMusic the
   // way resolveMusicEventFlags below has.
   this.notePlayedInstruments = resolveNotePlayedInstruments(workspace);
+
+  // Which animation indices each player's own blocks can actually reach at
+  // runtime (see resolveUsedPlayerAnimations' own comment) - read by
+  // generateAnimations below to skip compiling an animation nothing in the
+  // project ever selects.
+  this.usedPlayerAnimations = resolveUsedPlayerAnimations(workspace);
 
   // Resolves every song the project references and builds their combined
   // per-channel data ahead of time (see generators/bbasic/music.js) - needed
@@ -1236,6 +1310,17 @@ Blockly.BBasic.init = function(workspace) {
     reserveDevVarRW(backgroundGetPixelYVarName(), '"get pixel" Y arg, when used inside a Function');
   }
 
+  // Same bucket again, for "Find playfield pixel collided with" blocks'
+  // own result (column/row) and scratch (nudged-candidate) vars (see the
+  // collisionPixelUsed pre-scan above and generators/bbasic/background.js's
+  // own background_collision_pixel).
+  if (this.collisionPixelUsed) {
+    reserveDevVarRW(collisionPixelColumnVarName(), 'playfield collision column result');
+    reserveDevVarRW(collisionPixelRowVarName(), 'playfield collision row result');
+    reserveDevVarRW(collisionPixelNudgedColumnVarName(), 'playfield collision: nudged column candidate');
+    reserveDevVarRW(collisionPixelNudgedRowVarName(), 'playfield collision: nudged row candidate');
+  }
+
   // Same bucket again, for function_call_statement's own discarded-return-
   // value scratch var (see the functionCallStatementUsed pre-scan above and
   // generators/bbasic/function.js's own function_call_statement) - also
@@ -1311,7 +1396,7 @@ Blockly.BBasic.init = function(workspace) {
   // the rest of that file's music-generation logic, rather than duplicated
   // here. A no-op when this.projectMusic is null (nothing here is worth
   // reserving without real music to play).
-  reserveMusicDevVars(reserveDevVar, this.projectMusic, this.musicEventFlags);
+  reserveMusicDevVars(reserveDevVar, reserveDevVarRW, this.projectMusic, this.musicEventFlags);
 
   // Same bucket again, for scorebkcolor's own dev var (see the
   // scoreBkColorNeedsOwnVar pre-scan above and generators/bbasic/score.js's
@@ -1376,13 +1461,15 @@ Blockly.BBasic.init = function(workspace) {
   // speed state (see reserveMissileFireDevVars' own comment in generators/
   // bbasic/sprites.js) - a no-op unless missileFireUsedFor's own early
   // pre-scan (above) found it used.
-  reserveMissileFireDevVars(reserveDevVar, reserveDevVarRW, this.missileFireUsedFor);
+  reserveMissileFireDevVars(reserveDevVar, reserveDevVarRW, this.missileFireUsedFor, this.missileFire16UsedFor);
 
   // Same bucket again, for "Bounce"'s own Combat-style stage/original-
   // direction/last-frame state (see reserveMissileBounceDevVars' own comment
   // in generators/bbasic/sprites.js) - a no-op unless missileBounceUsedFor's
-  // own early pre-scan (above) found it used.
-  reserveMissileBounceDevVars(reserveDevVar, this.missileBounceUsedFor);
+  // own early pre-scan (above) found it used. inertiaUsedFor is passed
+  // alongside so the velocity-reflection snapshot vars are only reserved
+  // for a sprite that has BOTH Bounce and Inertia in use.
+  reserveMissileBounceDevVars(reserveDevVar, this.missileBounceUsedFor, this.inertiaUsedFor);
 
   // Same bucket again, for "Shake screen"'s own countdown (see
   // reserveShakeScreenDevVar's own comment in generators/bbasic/
@@ -1400,6 +1487,13 @@ Blockly.BBasic.init = function(workspace) {
   // sprites.js) - a no-op unless seekArrivedWatches' own early pre-scan
   // (above) found a real watch.
   reserveSeekArrivedDevVars(reserveDevVar, this.seekArrivedWatches);
+
+  // Same bucket again, for "Accelerate"/"Decelerate"'s own per-sprite
+  // velocity/rate/max-speed state (see reserveInertiaDevVars' own comment in
+  // generators/bbasic/sprites.js) - a no-op unless inertiaUsedFor's own
+  // early pre-scan (above) found it used.
+  reserveInertiaDevVars(reserveDevVar, this.inertiaUsedFor, this.inertiaAccelUsedFor, this.inertiaDecelUsedFor,
+      this.inertiaAccel16UsedFor);
 
   // Same bucket again, for CTRLPF's own RAM shadow (see
   // reserveCtrlpfShadowDevVar's own comment in generators/bbasic/sprites.js)
@@ -2394,6 +2488,7 @@ Blockly.BBasic.finish = function(code) {
   const generatedRainbowColorChecks = generateRainbowColorChecks(Blockly);
   const generatedMissileFireChecks = generateMissileFireChecks(Blockly);
   const generatedSeekChecks = generateSeekChecks(Blockly);
+  const generatedInertiaChecks = generateInertiaChecks(Blockly);
   const generatedShakeScreenChecks = generateShakeScreenChecks(Blockly);
   // Bank 1's own copy of the Text Minikernel's "show by id" lookup tables
   // (see generateTextOffsetTables' own comment in bbasic/text-scroll.js) -
@@ -2507,7 +2602,7 @@ Blockly.BBasic.finish = function(code) {
   return handlebarsTemplate({generatedBody, generatedBackgrounds,
     generatedAnimations, generatedDataTables, generatedRomNoiseChecks,
     generatedRainbowColorGraphics, generatedRainbowColorChecks, generatedMissileFireChecks,
-    generatedSeekChecks, generatedShakeScreenChecks,
+    generatedSeekChecks, generatedInertiaChecks, generatedShakeScreenChecks,
     generatedTextOffsetTables, generatedTextStaticOffsetTables, generatedTextRow2OffsetsTable, generatedJoyDir8Table,
     generatedSubroutines, generatedFunctions, generatedRelocatedEvents, generatedTextMinikernel,
     systemStartEvent, titleStartEvent, titleUpdateEvent, gamePlayStartEvent,
@@ -3313,7 +3408,36 @@ Blockly.BBasic.generateConfiguration = function() {
   }
   const usePfColorsOption = this.needsPlayfieldColorTable();
   if (usePfColorsOption) kernelOptions.push('pfcolors');
-  if (!this.effectiveShowBlankLines()) kernelOptions.push('no_blank_lines');
+  // ball_blank_lines is NOT a real batari Basic kernel_options value -
+  // 2600basic.wasm validates "set kernel_options" against an embedded
+  // combination table (see the big comment above) and rejects anything
+  // not on it outright ("Options unknown or invalid"), confirmed by a
+  // real failed build. Defined as a plain "const" instead (same mechanism
+  // pfresConfigurationCode/pfRowHeightConfigurationCode below already use
+  // for their std_kernel.asm-only ifconst symbols that also aren't real
+  // kernel_options entries) - DASM's "ifconst" in std_kernel.asm sees any
+  // assigned symbol, not just ones that came from a "set kernel_options"
+  // line.
+  //
+  // Unlike an earlier version of this feature, ball_blank_lines does NOT
+  // try to reimplement no_blank_lines' gap-elimination mechanism (a
+  // hand-duplicated copy of std_kernel.asm's altkernel2/lastkernelline
+  // under a separate symbol did not actually work when tested against a
+  // real build) - it reuses the REAL, proven no_blank_lines path by
+  // emitting a genuine "no_blank_lines" on the kernel_options line
+  // alongside its const, going through 2600basic.wasm's full handling
+  // rather than a hand-rolled substitute. std_kernel.asm's "ifconst
+  // ball_blank_lines" only swaps out the ONE per-scanline filler slot
+  // stock no_blank_lines sacrifices to missile0, retargeting it at the
+  // ball instead - see the comment in that file right where it's
+  // consumed. Only emitted with pfcolors off (the Configuration.vue
+  // switch is disabled/forced off otherwise, but this is checked again
+  // here in case an old saved project has both set).
+  const ballBlankLinesConfigurationCode = (config.enableBallBlankLines && !usePfColorsOption) ?
+    'const ball_blank_lines = 1' : '';
+  if (ballBlankLinesConfigurationCode || !this.effectiveShowBlankLines()) {
+    kernelOptions.push('no_blank_lines');
+  }
   const kernelOptionsConfigurationCode = kernelOptions.length ?
     `set kernel_options ${kernelOptions.join(' ')}` : '';
   // "noscore" is a compile-time ifconst gate in the standard kernel - it
@@ -3499,6 +3623,7 @@ Blockly.BBasic.generateConfiguration = function() {
     textRow2ConfigurationCode,
     pfresConfigurationCode,
     pfRowHeightConfigurationCode,
+    ballBlankLinesConfigurationCode,
     optimizationConfigurationCode,
     debugConfigurationCode,
   ].join('\n ');
@@ -3935,6 +4060,12 @@ Blockly.BBasic.generateAnimations = function() {
       return '';
     }
 
+    // null (see resolveUsedPlayerAnimations' own comment) means every index
+    // has to be kept - the safe fallback whenever this player's own
+    // animation selection couldn't be proven statically.
+    const usedIndices = Blockly.BBasic.usedPlayerAnimations && Blockly.BBasic.usedPlayerAnimations[name];
+    const isUsed = (animationIndex) => !usedIndices || usedIndices.has(animationIndex);
+
     const animationsLabel = `${name}animations`;
     const animationsStartLabel = `${animationsLabel}Start`;
     const animationsEndLabel = `${animationsLabel}End`;
@@ -3956,11 +4087,12 @@ Blockly.BBasic.generateAnimations = function() {
     return `  rem Animations for ${name}:\n\n` +
       hiddenplayerHandler +
       playerData.animations.map((animation, animationIndex) => {
-        if (!animationIndex) return '';
+        if (!animationIndex || !isUsed(animationIndex)) return '';
         return `  if ${name}animation = ${animationIndex} then goto ${getAnimationStartLabel(animationIndex)}`;
       }).join('\n') +
       '\n\n' +
       playerData.animations.map((animation, animationIndex) => {
+        if (!isUsed(animationIndex)) return '';
         const unitKey = `${name}animation${animationIndex}`;
         const payload = processAnimation(name, animation, animationIndex);
         // Same rationale as hiddenplayerHandler above: this label stays

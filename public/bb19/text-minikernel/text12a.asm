@@ -68,9 +68,7 @@ minikernel
     lda scorecolor          
 
     sta WSYNC               ; 3     (0)
-    ifnconst noscoretxt
-        sleep 3             ; 3     (3)
-    endif
+    sleep 3             ; 3     (3)
     sta COLUP0              ; 3     (6)
     sta COLUP1              ; 3     (9)
     ifconst scorefade

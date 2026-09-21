@@ -443,11 +443,23 @@ export default {
       const fontSize = Math.min(cellHeight * 0.6, cellWidth * 0.35, 12);
       if (fontSize < 5) return;
       ctx.font = `${fontSize}px sans-serif`;
-      ctx.fillStyle = 'rgba(140, 140, 140, 0.85)';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
+      // A label over an "on" pixel needs a darker color than the default
+      // gray to stay readable against a bright fill color (e.g. this
+      // editor's own default orange) - built once as a lookup rather than
+      // searching this.editor.pixels per cell. editor.pixels holds EVERY
+      // cell, on or off (setPixels above always writes a real color either
+      // way - this.onColorForRow(y) when on, this.bgColor when off - see
+      // its own comment), so "on" means the color differs from bgColor, the
+      // same test pixelMatrix() above already uses - not just presence in
+      // the list.
+      const filledCells = new Set(
+          this.editor.pixels.filter((px) => px.color !== this.bgColor).map((px) => `${px.x},${px.y}`));
       for (let row = 0; row < rows; row++) {
         for (let col = 0; col < cols; col++) {
+          ctx.fillStyle = filledCells.has(`${col},${row}`) ?
+            'rgba(0, 0, 0, 0.85)' : 'rgba(140, 140, 140, 0.85)';
           ctx.fillText(`${col},${row}`, (col + 0.5) * cellWidth, (row + 0.5) * cellHeight);
         }
       }

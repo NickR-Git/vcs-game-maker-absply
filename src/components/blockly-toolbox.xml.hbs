@@ -45,14 +45,6 @@
         </block>
         <block type="controls_whileUntil"></block>
 
-        <block type="wait_frames">
-            <value name="FRAMES">
-                <shadow type="math_number">
-                    <field name="NUM">30</field>
-                </shadow>
-            </value>
-        </block>
-
         <block type="controls_repeat_ext">
             <value name="TIMES">
                 <block type="math_number">
@@ -322,7 +314,6 @@
                 </shadow>
             </value>
         </block>
-        <block type="sprite_missile_bounce"></block>
 
         <block type="sprite_missile_get">
             <field name="MISSILE">1</field>
@@ -373,9 +364,6 @@
                 </shadow>
             </value>
         </block>
-        <block type="sprite_missile_bounce">
-            <field name="MISSILE">1</field>
-        </block>
 
         <block type="sprite_ball_get"></block>
         <block type="sprite_ball_set">
@@ -409,7 +397,6 @@
                 </shadow>
             </value>
         </block>
-        <block type="sprite_ball_bounce"></block>
 
         <block type="object_seek_to">
             <value name="X">
@@ -430,6 +417,33 @@
         </block>
 
         <block type="object_seek_arrived"></block>
+
+        <block type="sprite_inertia_accelerate">
+            <value name="DIRECTION">
+                <shadow type="math_number">
+                    <field name="NUM">0</field>
+                </shadow>
+            </value>
+            <value name="RATE">
+                <shadow type="math_number">
+                    <field name="NUM">1</field>
+                </shadow>
+            </value>
+            <value name="MAXSPEED">
+                <shadow type="math_number">
+                    <field name="NUM">10</field>
+                </shadow>
+            </value>
+        </block>
+        <block type="sprite_inertia_stop_accelerate"></block>
+        <block type="sprite_inertia_decelerate">
+            <value name="RATE">
+                <shadow type="math_number">
+                    <field name="NUM">1</field>
+                </shadow>
+            </value>
+        </block>
+        <block type="object_bounce"></block>
 
     </category>
     <category name="Background" colour="#ffa500">
@@ -554,6 +568,9 @@
                 </shadow>
             </value>
         </block>
+        <block type="background_collision_pixel"></block>
+        <block type="background_collision_pixel_column"></block>
+        <block type="background_collision_pixel_row"></block>
         <block type="background_clear"></block>
         <block type="draw_screen"></block>
         <block type="screen_shake">
@@ -600,6 +617,8 @@
         <block type="music_sequence_chip_finished"></block>
         <block type="music_sequence_chip_finished_by_id"></block>
         <block type="music_sequence_chip_finished_current_song"></block>
+        <block type="music_sequence_chip_playing_by_id"></block>
+        <block type="music_sequence_chip_playing_current_song"></block>
         <block type="music_note_played"></block>
         <block type="music_note_played_by_id"></block>
     </category>
@@ -886,6 +905,13 @@
         <block type="event_frame_even_odd"></block>
         <block type="event_frame_every_n"></block>
         <block type="event_run_once"></block>
+        <block type="wait_frames">
+            <value name="FRAMES">
+                <shadow type="math_number">
+                    <field name="NUM">30</field>
+                </shadow>
+            </value>
+        </block>
 
         <block type="subroutine_define"></block>
         <block type="subroutine_call"></block>
@@ -914,6 +940,8 @@
             </value>
         </block>
 
+    </category>
+    <category name="Comment" colour="#BDBDBD">
         <block type="event_comment"></block>
         <block type="event_comment_wrapper"></block>
     </category>

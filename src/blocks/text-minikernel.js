@@ -27,6 +27,9 @@ const appendScrollInputs = (block) => {
       .setCheck('Number')
       .appendField('wait');
   block.appendDummyInput().appendField('at limits');
+  block.appendDummyInput()
+      .appendField(new Blockly.FieldCheckbox('FALSE'), 'START_AT_END')
+      .appendField('start at end');
   block.setInputsInline(true);
 };
 

@@ -102,14 +102,28 @@
           class="option-switch"
         />
         <v-switch
-          v-model="configurationState.showBlankLines"
+          v-model="enableMissile0BlankLines"
           @change="handleChangeConfiguration"
           :disabled="player0RainbowColorsActive"
           :color="player0RainbowColorsActive ? 'amber darken-2' : undefined"
-          label="Show blank lines between background rows (no_blank_lines)"
+          label="Fill blank lines between background rows with missile0 (no_blank_lines)"
           :hint="player0RainbowColorsActive ?
-            'Forced on: the player0 rainbow colors block requires this to stay on - batari Basic never allows player-colors and no_blank_lines together.' :
-            'Turning this off packs playfield rows tighter together, but uses missile0\'s graphics circuitry, so missile0 can no longer be used as a sprite.'"
+            'Forced off: the player0 rainbow colors block requires blank lines shown normally - batari Basic never allows player-colors and no_blank_lines together.' :
+            'Turning this on packs playfield rows tighter together, but uses missile0\'s graphics circuitry, so missile0 can no longer be used as a sprite.'"
+          persistent-hint
+          class="option-switch"
+        />
+        <v-switch
+          v-model="configurationState.enableBallBlankLines"
+          @change="handleChangeConfiguration"
+          :disabled="configurationState.enablePfColors || player0RainbowColorsActive"
+          :color="(configurationState.enablePfColors || player0RainbowColorsActive) ? 'amber darken-2' : undefined"
+          label="Fill blank lines with the ball instead of missile0 (ball_blank_lines)"
+          :hint="configurationState.enablePfColors ?
+            'Forced off: this only works with per-row playfield colors (pfcolors, below) turned off.' :
+            (player0RainbowColorsActive ?
+              'Forced off: the player0 rainbow colors block requires blank lines shown normally.' :
+              'An alternative to turning \'Show blank lines\' off above: removes the gaps between playfield rows using the ball\'s graphics circuitry instead of missile0\'s, so missile0 stays free to use as a normal sprite (unlike turning \'Show blank lines\' off, which costs missile0 entirely). Works automatically, no Ball blocks needed. On a solid playfield color (pfcolors off), the ball\'s fill pixels - if you also use it as a sprite - already match the background for free, since the ball always draws in the playfield color.')"
           persistent-hint
           class="option-switch"
         />
@@ -329,6 +343,7 @@ const DEFAULT_CONFIGURATION = {
   showScore: true,
   enableScoreFade: false,
   showBlankLines: true,
+  enableBallBlankLines: false,
   enablePlayer0SpriteColors: false,
   enablePlayer1SpriteColors: false,
   enablePfColors: false,
@@ -434,6 +449,23 @@ export default defineComponent({
     // combination that's guaranteed to fail to build.
     const player0RainbowColorsActive = computed(() => usesPlayer0RainbowColors());
 
+    // Display-only inverted proxy for the "Show blank lines" toggle -
+    // configurationState.showBlankLines itself keeps its original polarity
+    // everywhere else in this file and in generators/bbasic.js
+    // (effectiveShowBlankLines etc. all still read TRUE = blank lines
+    // shown), since flipping that stored meaning would require touching
+    // every other reader of it. Only the switch's v-model/label are
+    // inverted here, so the toggle reads naturally: OFF = blank lines
+    // shown (the default), ON = no blank lines (missile0 fills them in).
+    const enableMissile0BlankLines = computed({
+      get: () => !configurationState.value.showBlankLines,
+      set: (value) => {
+        const state = configurationState.value;
+        state.showBlankLines = !value;
+        configurationState.value = state;
+      },
+    });
+
     // Catches the block being added (or the workspace loading a project that
     // already has it) even when the user never touches this switch directly
     // themselves - not just the handleChangeConfiguration path below, which
@@ -449,9 +481,10 @@ export default defineComponent({
     watch(player0RainbowColorsActive, (active) => {
       if (!active) return;
       const state = configurationState.value;
-      if (state.showBlankLines && state.enablePlayer1SpriteColors) return;
+      if (state.showBlankLines && state.enablePlayer1SpriteColors && !state.enableBallBlankLines) return;
       state.showBlankLines = true;
       state.enablePlayer1SpriteColors = true;
+      state.enableBallBlankLines = false;
       configurationState.value = state;
     }, {immediate: true});
 
@@ -481,6 +514,12 @@ export default defineComponent({
     const handleChangeConfiguration = () => {
       const state = configurationState.value;
       if (player0RainbowColorsActive.value) state.showBlankLines = true;
+      // ball_blank_lines only makes sense with pfcolors off (see its
+      // hint text) and can't coexist with the player0 rainbow colors
+      // requirement above (blank lines shown normally) - forced off rather
+      // than left in a combination guaranteed to be ignored/fail to build,
+      // same "force off and disable" pattern showBlankLines itself uses.
+      if (state.enablePfColors || player0RainbowColorsActive.value) state.enableBallBlankLines = false;
       configurationState.value = enforceInlineRandExclusivity(state);
     };
 
@@ -548,6 +587,7 @@ export default defineComponent({
       state.showScore = DEFAULT_CONFIGURATION.showScore;
       state.enableScoreFade = DEFAULT_CONFIGURATION.enableScoreFade;
       state.showBlankLines = DEFAULT_CONFIGURATION.showBlankLines;
+      state.enableBallBlankLines = DEFAULT_CONFIGURATION.enableBallBlankLines;
       state.enablePlayer0SpriteColors = DEFAULT_CONFIGURATION.enablePlayer0SpriteColors;
       state.enablePlayer1SpriteColors = DEFAULT_CONFIGURATION.enablePlayer1SpriteColors;
       state.enablePfColors = DEFAULT_CONFIGURATION.enablePfColors;
@@ -578,6 +618,7 @@ export default defineComponent({
       romSizeOptions,
       romSizeIsBankswitched,
       player0RainbowColorsActive,
+      enableMissile0BlankLines,
       loadLastProject,
       muteBlocklySounds, hideSidebar, blocklyControlsHorizontal, desaturateBlocklyColors,
       hideDescriptionText, projectAutoIncrementVersion,

@@ -46,13 +46,19 @@ const OLD_TYPE_TO_NEW = {
   sprite_missile0_change: {type: 'sprite_missile_change', field: 'MISSILE', value: '0'},
   sprite_missile0_size: {type: 'sprite_missile_size', field: 'MISSILE', value: '0'},
   sprite_missile0_fire: {type: 'sprite_missile_fire', field: 'MISSILE', value: '0'},
-  sprite_missile0_bounce: {type: 'sprite_missile_bounce', field: 'MISSILE', value: '0'},
+  // Bounce itself was later unified further, into object_bounce (one block
+  // covering all 5 sprite names via an OBJECT field, not just Missile 0/1 -
+  // see hooks/migrate-bounce-blocks.js) - these two map straight to THAT
+  // type/field now, skipping the since-removed intermediate
+  // sprite_missile_bounce entirely, so a project this old still lands on a
+  // real, currently-registered block type.
+  sprite_missile0_bounce: {type: 'object_bounce', field: 'OBJECT', value: 'missile0'},
   sprite_missile1_get: {type: 'sprite_missile_get', field: 'MISSILE', value: '1'},
   sprite_missile1_set: {type: 'sprite_missile_set', field: 'MISSILE', value: '1'},
   sprite_missile1_change: {type: 'sprite_missile_change', field: 'MISSILE', value: '1'},
   sprite_missile1_size: {type: 'sprite_missile_size', field: 'MISSILE', value: '1'},
   sprite_missile1_fire: {type: 'sprite_missile_fire', field: 'MISSILE', value: '1'},
-  sprite_missile1_bounce: {type: 'sprite_missile_bounce', field: 'MISSILE', value: '1'},
+  sprite_missile1_bounce: {type: 'object_bounce', field: 'OBJECT', value: 'missile1'},
 };
 
 // Exported separately from the localStorage-string wrapper below so

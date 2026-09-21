@@ -266,7 +266,7 @@ export const registerFreeTypedScrollMessage = (Blockly, text) => {
 // in the whole program to be unique, so reusing one fixed skip-label name
 // across more than one call site would collide.
 export const buildTextScrollSetupLines = (
-    resolveVar, offsetExpr, maxOffsetExpr, speedCode, pauseCode, uniqueId, scrollActive) => {
+    resolveVar, offsetExpr, maxOffsetExpr, speedCode, pauseCode, uniqueId, scrollActive, startAtEnd) => {
   // resolveVar (Blockly.BBasic.nameDB_.getName under the hood - see
   // emitScrollSetup's own comment in text-minikernel.js) is what actually
   // ASSIGNS a real letter/RAM slot to a dev var name the FIRST time it's
@@ -335,27 +335,34 @@ export const buildTextScrollSetupLines = (
     `if (${state()} & ${TEXT_SCROLL_STATE_MASK}) = 2 then goto ${resetLabel}`,
     `if ${base()} = ${offsetExpr} then goto ${skipLabel}`,
     `@${resetLabel}`,
-    `TextIndex = ${offsetExpr}`,
+    // startAtEnd puts TextIndex at the message's own far end (base +
+    // maxOffset, computed directly here rather than via farEnd() below -
+    // farEnd isn't written until after skipLabel, and offsetExpr IS what
+    // base is about to become anyway) instead of its near end, so a message
+    // shown this way opens already scrolled to its last character.
+    `TextIndex = ${startAtEnd ? `${offsetExpr} + ${maxOffsetExpr}` : offsetExpr}`,
     `${base()} = ${offsetExpr}`,
-    // A genuinely new message always starts unpaused AND scrolling forward,
-    // even if the PREVIOUS message was left paused/reversed (see
-    // text_minikernel_scroll_control's own "Pause" action) - neither is a
-    // property that should silently carry over onto whatever gets shown
-    // next. A bare overwrite (rather than the bit-preserving form the
-    // "Pause"/"Unpause" actions themselves need - see that generator's own
-    // comment) is correct here specifically BECAUSE this is the one place
-    // direction is meant to reset too - see TEXT_SCROLL_DIR_BIT's own
-    // comment.
-    `${state()} = 0`,
-    // Starts the message at its own near end (TextIndex = base), which is
-    // itself the SAME "limit" the per-frame advance (generateTextScrollAdvance
-    // below) already pauses at for "pause" frames every time it's reached
-    // mid-scroll (TextIndex = base or TextIndex = farEnd, both wait "pause"
-    // before reversing) - a brand new message waits that same "pause at
-    // limits" duration before its first scroll step too, instead of the
-    // shorter per-character "speed" duration, which used to make it start
-    // scrolling away almost immediately.
-    `${timer()} = ${pauseCode}`,
+    // A genuinely new message always starts unpaused, and scrolling in
+    // whichever direction moves it AWAY from wherever TextIndex was just set
+    // above - forward (bit clear) from the near end normally, backward (bit
+    // set, TEXT_SCROLL_DIR_MASK) from the far end when startAtEnd - even if
+    // the PREVIOUS message was left paused/reversed (see
+    // text_minikernel_scroll_control's own "Pause" action), which shouldn't
+    // silently carry over onto whatever gets shown next. A bare overwrite
+    // (rather than the bit-preserving form the "Pause"/"Unpause" actions
+    // themselves need - see that generator's own comment) is correct here
+    // specifically BECAUSE this is the one place direction is meant to reset
+    // too - see TEXT_SCROLL_DIR_BIT's own comment.
+    `${state()} = ${startAtEnd ? TEXT_SCROLL_DIR_MASK : '0'}`,
+    // 1, not pauseCode/speedCode - generateTextScrollAdvance's own "dec
+    // timer; bne done" only falls through to the actual advance once timer
+    // hits 0, so starting it at 1 makes that happen on the very next frame
+    // this runs, i.e. no wait at all before a brand new message's first
+    // character shift. (This used to start at pauseCode, mirroring the
+    // "pause at limits" delay a mid-scroll reversal waits out at each end -
+    // deliberately dropped: a first run isn't a reversal, and the user
+    // reported it shouldn't wait like one.)
+    `${timer()} = 1`,
     `@${skipLabel}`,
     // Absolute, not relative (see textScrollFarEndVarName's own comment) -
     // "base" here (not offsetExpr again) deliberately reuses whatever

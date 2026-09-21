@@ -147,6 +147,7 @@ import YAML from 'yaml';
 import {appendCompileLog, useBackgroundsStorage, useConfigurationStorage, useDataTablesStorage, usePlayerAnimationsStorage, useProjectAutoIncrementVersionStorage, useScoreFontStorage, useSongsStorage, useSoundEffectsStorage, useSquishCustomScoreFontStorage, useTextFontStorage, useTextStringsStorage, useWorkspaceStorage} from '../hooks/project';
 import {combineLegacyPlayerAnimations, remapPlayer1AnimationIndexesInWorkspaceXml} from '../hooks/migrate-player-animations';
 import {migrateLegacyPlayerBlocksInWorkspaceXml} from '../hooks/migrate-player-blocks';
+import {migrateLegacyBounceBlocksInWorkspaceXml} from '../hooks/migrate-bounce-blocks';
 import {getDateInfix} from '../utils/date';
 import {resetMusicEditorActiveState} from '../hooks/music-editor-state';
 import {matrixToPlayfield, playfieldToMatrix} from '../utils/pixels';
@@ -723,6 +724,12 @@ export default defineComponent({
       // "sprite_player1_animation_select" type string, which this migration
       // renames away.
       this.workspaceStorage = migrateLegacyPlayerBlocksInWorkspaceXml(this.workspaceStorage);
+
+      // Rewrites any old sprite_missile_bounce/sprite_ball_bounce blocks
+      // a project saved before Bounce became one unified object_bounce
+      // block still has - see that function's own comment in
+      // hooks/migrate-bounce-blocks.js.
+      this.workspaceStorage = migrateLegacyBounceBlocksInWorkspaceXml(this.workspaceStorage);
 
       if (project['score-font']) {
         this.scoreFontStorage = {

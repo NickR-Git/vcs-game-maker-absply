@@ -212,13 +212,23 @@ firstbreak
     lda left_text,x         ; 4     (29)
     ldx scorepointers+11    ; 3     (32)
     ora right_text,x        ; 4     (36)
-    
+
     ldx B                   ; 3     (39) 4 in X
-    ifnconst noscoretxt
-        sleep 5             ; 7     (46)
-    else
-        sleep 2
-    endif
+    ; vcs-game-maker: was "ifnconst noscoretxt: sleep 5 else: sleep 2" -
+    ; that asymmetry left this build 3 cycles short here relative to the
+    ; score-shown build, with nothing anywhere else in this file compensating
+    ; for it (unlike text12a.asm's own minikernel entry, which DOES need a
+    ; matching correction - see its own "sleep 3" comment) - this shifted
+    ; THIS scanline's own GRP0/GRP1 writes 9 color clocks earlier than
+    ; intended, confirmed as the real cause of a reported "text looks
+    ; garbled only when scrolling with the score hidden" bug (spacing was
+    ; already correct - this corrupts the glyph BITS within an otherwise
+    ; correctly positioned character cell, not its position, so it only
+    ; became obvious once scrolling swept through enough different
+    ; characters to make it visible). Unconditional now - both builds use
+    ; the same cycle count here, same as every other non-noscoretxt-gated
+    ; instruction in this file already does.
+    sleep 5                 ; 7     (46)
     sty GRP1                ; 3     (49) 3 -> [GRP1] ; 2 -> GRP0
     stx GRP0                ; 3     (52) 4 -> [GRP0] ; 3 -> GRP1
     sta GRP1                ; 3     (55) 5 -> [GRP1] ; 4 -> GRP0
@@ -275,13 +285,11 @@ endl1
     lda left_text+1,x         ; 4     (29)
     ldx scorepointers+11    ; 3     (32)
     ora right_text+1,x        ; 4     (36)
-    
+
     ldx B                   ; 3     (39) 4 in X
-    ifnconst noscoretxt
-        sleep 5             ; 7     (46)
-    else
-        sleep 2
-    endif
+    ; vcs-game-maker: see the identical comment on this file's first
+    ; occurrence of this pattern (right after "ora right_text,x").
+    sleep 5                 ; 7     (46)
     sty GRP1                ; 3     (49) 3 -> [GRP1] ; 2 -> GRP0
     stx GRP0                ; 3     (52) 4 -> [GRP0] ; 3 -> GRP1
     sta GRP1                ; 3     (55) 5 -> [GRP1] ; 4 -> GRP0
@@ -338,13 +346,11 @@ endl2
     lda left_text+2,x         ; 4     (29)
     ldx scorepointers+11    ; 3     (32)
     ora right_text+2,x        ; 4     (36)
-    
+
     ldx B                   ; 3     (39) 4 in X
-     ifnconst noscoretxt
-        sleep 5             ; 7     (46)
-    else
-        sleep 2
-    endif
+    ; vcs-game-maker: see the identical comment on this file's first
+    ; occurrence of this pattern (right after "ora right_text,x").
+    sleep 5                 ; 7     (46)
     sty GRP1                ; 3     (45) 3 -> [GRP1] ; 2 -> GRP0
     stx GRP0                ; 3     (48) 4 -> [GRP0] ; 3 -> GRP1
     sta GRP1                ; 3     (51) 5 -> [GRP1] ; 4 -> GRP0
@@ -401,13 +407,11 @@ endl2
     lda left_text+3,x         ; 4     (29)
     ldx scorepointers+11    ; 3     (32)
     ora right_text+3,x        ; 4     (36)
-    
+
     ldx B                   ; 3     (39) 4 in X
-    ifnconst noscoretxt
-        sleep 5             ; 7     (46)
-    else
-        sleep 2
-    endif
+    ; vcs-game-maker: see the identical comment on this file's first
+    ; occurrence of this pattern (right after "ora right_text,x").
+    sleep 5                 ; 7     (46)
     sty GRP1                ; 3     (45) 3 -> [GRP1] ; 2 -> GRP0
     stx GRP0                ; 3     (48) 4 -> [GRP0] ; 3 -> GRP1
     sta GRP1                ; 3     (51) 5 -> [GRP1] ; 4 -> GRP0
@@ -464,13 +468,11 @@ endl2
     lda left_text+4,x         ; 4     (29)
     ldx scorepointers+11    ; 3     (32)
     ora right_text+4,x        ; 4     (36)
-    
+
     ldx B                   ; 3     (39) 4 in X
-    ifnconst noscoretxt
-        sleep 5             ; 7     (46)
-    else
-        sleep 2
-    endif
+    ; vcs-game-maker: see the identical comment on this file's first
+    ; occurrence of this pattern (right after "ora right_text,x").
+    sleep 5                 ; 7     (46)
     sty GRP1                ; 3     (45) 3 -> [GRP1] ; 2 -> GRP0
     stx GRP0                ; 3     (48) 4 -> [GRP0] ; 3 -> GRP1
     sta GRP1                ; 3     (51) 5 -> [GRP1] ; 4 -> GRP0

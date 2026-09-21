@@ -450,14 +450,30 @@ export default (Blockly) => {
       if (!this.envelopeStage0Used) return [];
       const remaining0 = buildRemainingVar('0', channel0);
       return [
-        '       lda envelopeConfig',
-        '       and #$0F',
-        '       cmp #' + NO_ENVELOPE_SENTINEL,
-        '       beq _envelope0_done',
-        ...remaining0.lines,
+        // X holds the unpacked nibble from here through buildChannelDispatch
+        // below - tax'd immediately (instead of re-reading/re-masking
+        // envelopeConfig a second time right before the dispatch, as this
+        // used to) since nothing between here and there touches X:
+        // remaining0.lines (buildRemainingVar) only ever loads A and stores
+        // temp3, confirmed directly against its own body.
         '       lda envelopeConfig',
         '       and #$0F',
         '       tax',
+        '       cpx #' + NO_ENVELOPE_SENTINEL,
+        // A plain "beq _envelope0_done" here used to reach clean across
+        // however much of buildChannelDispatch's own output follows -
+        // fine with a couple of configs, but a real reported build failure
+        // once a project registered enough of them (5, in the reported
+        // case) to push _envelope0_done's own address past a BEQ's plain
+        // ±127-byte range ("Branch out of range"). Standard 6502 long-
+        // branch idiom instead: invert the condition (BNE, not BEQ) over a
+        // JMP, which has no such range limit - functionally identical,
+        // just two extra bytes regardless of how far away the target
+        // actually ends up being.
+        '       bne _envelope0_hasconfig',
+        '       jmp _envelope0_done',
+        '_envelope0_hasconfig',
+        ...remaining0.lines,
         ...buildChannelDispatch('0', '0', remaining0.remainingVar, stage0()),
       ];
     })();
@@ -465,20 +481,20 @@ export default (Blockly) => {
       if (!this.envelopeStage1Used) return [];
       const remaining1 = buildRemainingVar('1', channel1);
       return [
-        '       lda envelopeConfig',
-        '       lsr',
-        '       lsr',
-        '       lsr',
-        '       lsr',
-        '       cmp #' + NO_ENVELOPE_SENTINEL,
-        '       beq _envelope1_done',
-        ...remaining1.lines,
+        // See channel0Section's own identical "X held from here through
+        // buildChannelDispatch" comment just above.
         '       lda envelopeConfig',
         '       lsr',
         '       lsr',
         '       lsr',
         '       lsr',
         '       tax',
+        '       cpx #' + NO_ENVELOPE_SENTINEL,
+        // See channel0Section's own identical comment just above.
+        '       bne _envelope1_hasconfig',
+        '       jmp _envelope1_done',
+        '_envelope1_hasconfig',
+        ...remaining1.lines,
         ...buildChannelDispatch('1', '1', remaining1.remainingVar, stage1()),
       ];
     })();

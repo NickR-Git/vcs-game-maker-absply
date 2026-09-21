@@ -152,6 +152,15 @@
                       v-model="soundEffect.name"
                       @change="handleChildChange"
                     />
+                    <v-select
+                      label="Priority"
+                      title="When this sound would overlap another sound on the same Music tab channel, the higher priority number always wins and keeps playing - the lower one is cut short instead. Equal priority: whichever note starts later still wins, same as before this existed."
+                      v-model="soundEffect.priority"
+                      :items="priorityOptionItems"
+                      hide-details
+                      @change="handleChildChange"
+                      class="soundfx-priority"
+                    />
                     <v-btn
                       icon
                       small
@@ -432,7 +441,7 @@ import {DEFAULT_SOUND_EFFECTS, processSoundEffectsStorageDefaults, ARPEGGIO_DIVI
   MAX_ARPEGGIO_INTERVAL, DEFAULT_ARPEGGIO_RANGE, ARPEGGIO_RANGE_OPTIONS,
   ENVELOPE_STAGE_FRAME_OPTIONS, ENVELOPE_ATTACK_RELEASE_FRAME_OPTIONS, ENVELOPE_SUSTAIN_PERCENT_OPTIONS,
   DEFAULT_ENVELOPE_ATTACK, DEFAULT_ENVELOPE_DECAY, DEFAULT_ENVELOPE_SUSTAIN_PERCENT,
-  DEFAULT_ENVELOPE_RELEASE} from '../blocks/soundfx';
+  DEFAULT_ENVELOPE_RELEASE, NOISE_PRIORITY_OPTIONS, DEFAULT_NOISE_PRIORITY} from '../blocks/soundfx';
 import {DEFAULT_DIM_PERCENT, dimVolume} from '../generators/bbasic/soundfx';
 import {getDateInfix} from '../utils/date';
 import {openFileDialog} from '../utils/file';
@@ -646,6 +655,7 @@ export default defineComponent({
         envelopeDecay: DEFAULT_ENVELOPE_DECAY,
         envelopeSustain: DEFAULT_ENVELOPE_SUSTAIN_PERCENT,
         envelopeRelease: DEFAULT_ENVELOPE_RELEASE,
+        priority: DEFAULT_NOISE_PRIORITY,
         arpeggio: false,
         arpeggioDivision: DEFAULT_ARPEGGIO_DIVISION,
         arpeggioInterval: DEFAULT_ARPEGGIO_INTERVAL,
@@ -844,6 +854,7 @@ export default defineComponent({
       envelopeAttackReleaseFrameOptionItems:
         ENVELOPE_ATTACK_RELEASE_FRAME_OPTIONS.map((value) => ({text: `${value} frames`, value})),
       envelopeSustainPercentOptionItems: ENVELOPE_SUSTAIN_PERCENT_OPTIONS.map((value) => ({text: `${value}%`, value})),
+      priorityOptionItems: NOISE_PRIORITY_OPTIONS.map((value) => ({text: `${value}`, value})),
       handleEnvelopeGraphChange,
       MIN_ARPEGGIO_INTERVAL, MAX_ARPEGGIO_INTERVAL,
       dragAttrs, dragCardClass, dragHandleListeners, dragTargetListeners,
@@ -1144,6 +1155,18 @@ export default defineComponent({
 .soundfx-name-field {
   margin-top: 20px;
   flex: 1 1 auto;
+}
+
+/* Same 20px top nudge as .soundfx-name-field right before it - a v-select
+   floats its own label the same way a v-text-field does, so it needs the
+   same alignment fix to sit level with the name field and the instrument
+   button (see that button's own comment) rather than sitting higher than
+   both. Fixed, narrow width (unlike the name field's own flex-grow) - just
+   a single small 1-5 number, no need to compete for the row's spare
+   width. */
+.soundfx-priority {
+  flex: 0 0 80px;
+  margin-top: 20px;
 }
 
 /* Same flat-icon, fade-in-on-hover treatment as .soundfx-stop-btn/

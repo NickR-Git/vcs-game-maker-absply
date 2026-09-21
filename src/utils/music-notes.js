@@ -19,6 +19,18 @@ const NOTE_SEMITONE = {
   'C': 0, 'C#': 1, 'D': 2, 'D#': 3, 'E': 4, 'F': 5, 'F#': 6, 'G': 7, 'G#': 8, 'A': 9, 'A#': 10, 'B': 11,
 };
 
+// Both standard spellings for each of the 5 "black key" semitones (a
+// natural has only one name, same as a real piano's own key labels) - one
+// name alone is arbitrary (C# and Db are the exact same pitch; which one a
+// piece "should" use depends on its own key signature, not on anything this
+// app knows), so every displayed note name shows both rather than silently
+// picking just the sharp spelling the way this used to work.
+const NOTE_NAME_PAIRS = [
+  ['C'], ['C#', 'Db'], ['D'], ['D#', 'Eb'], ['E'], ['F'], ['F#', 'Gb'], ['G'], ['G#', 'Ab'], ['A'], ['A#', 'Bb'],
+  ['B'],
+];
+const noteLabel = (semitone, octave) => NOTE_NAME_PAIRS[semitone].map((name) => `${name}${octave}`).join('/');
+
 // By-ear note chart for the buzzy/distortion AUDC values that don't have a
 // simple shift-clock formula, transcribed from Glenn Saunders' 1997 "PRECISE
 // 2600 sound chart" (comp.sys.atari.2600 / Stella mailing list). Each entry
@@ -76,7 +88,7 @@ const inferOctaves = (audc) => {
       octave -= 1;
     }
     prevSemitone = semitone;
-    return {midi: (octave + 1) * 12 + semitone, name: `${note}${octave}`, cents};
+    return {midi: (octave + 1) * 12 + semitone, name: noteLabel(semitone, octave), cents};
   });
 };
 
@@ -104,7 +116,6 @@ const shiftClockFor = (audf, slowClock) =>
 const frequencyForAudf = (audf, slowClock) => shiftClockFor(audf, slowClock) / 2;
 
 const A4_FREQUENCY = 440;
-const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
 // How far (in cents - 100ths of a semitone) an AUDF's actual frequency is
 // allowed to drift from the nearest equal-tempered note before it's excluded
@@ -116,15 +127,16 @@ const nearestNote = (frequencyHz) => {
   const midi = 69 + 12 * Math.log2(frequencyHz / A4_FREQUENCY);
   const roundedMidi = Math.round(midi);
   const cents = Math.round((midi - roundedMidi) * 100);
-  const name = NOTE_NAMES[((roundedMidi % 12) + 12) % 12];
+  const semitone = ((roundedMidi % 12) + 12) % 12;
   const octave = Math.floor(roundedMidi / 12) - 1;
-  return {name: `${name}${octave}`, midi: roundedMidi, cents};
+  return {name: noteLabel(semitone, octave), midi: roundedMidi, cents};
 };
 
 /**
  * Lists the notes a given AUDC value can play back in tune, as
  * {value, label, midi} options ready for a dropdown - value is the AUDF
- * (0-31) to store/generate, label is a note name like "C#4". Empty for AUDC
+ * (0-31) to store/generate, label is a note name like "C4", or both standard
+ * spellings for a black key like "C#4/Db4" (see noteLabel). Empty for AUDC
  * values with no clean, tunable pitch (buzz/noise/div31 types).
  * @param {string|number} audc The AUDC value to look up.
  * @return {Array<{value: number, label: string, midi: number}>} In-tune notes.
@@ -151,6 +163,14 @@ export const notesForAudc = (audc) => {
   const seen = new Set();
   const notes = [];
   for (let audf = 0; audf <= 31; audf++) {
+    // AUDF 0 is a documented real-hardware exception for AUDC 4/5
+    // specifically (Saunders' chart marks it "SILENT", unlike every other
+    // AUDF/AUDC combination here, which always produces some tone) - the
+    // shift-clock formula below has no way to know that on its own, so it'd
+    // otherwise surface this as a normal (if very high-pitched) selectable
+    // note. AUDC 12/13 (the slow-clock pair) don't share this quirk - their
+    // own AUDF 0 row is a real, in-tune note in the same chart.
+    if (audf === 0 && (key === '4' || key === '5')) continue;
     const frequencyHz = frequencyForAudf(audf, slowClock);
     const {name, midi, cents} = nearestNote(frequencyHz);
     if (Math.abs(cents) > IN_TUNE_CENTS_TOLERANCE || seen.has(midi)) {

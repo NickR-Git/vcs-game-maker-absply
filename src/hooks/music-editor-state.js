@@ -43,6 +43,35 @@ export const useMusicEditorActiveState = () => {
   return {activePatternIdsRef, activeTrackIdsRef, setActivePatternId, setActiveTrackId};
 };
 
+// Which song/pattern is currently playing, if any - a plain in-memory
+// module-level pair (NOT localStorage-backed, unlike activePatternIdsRef/
+// activeTrackIdsRef above), same "survives remount, resets on a real page
+// reload" shape as hooks/collapse.js's own collapseAllRanForName. Needed
+// for the exact same "Vue Router destroys and recreates this component"
+// reason those already document - WITHOUT this, playback itself kept
+// going (utils/music-playback.js's own scheduling is independent of this
+// component's lifecycle entirely), but leaving the Music tab and coming
+// back reset these to null since they used to be plain refs created fresh
+// by setup() on every mount, so the "Playing..." button state, the moving
+// playhead, and the Sequence list's own chip highlight all silently went
+// stale/blank - a real reported bug. Deliberately NOT persisted to
+// localStorage - a genuine page reload really does stop all audio, so
+// showing "still playing" after one would be actively wrong, unlike a
+// same-session tab revisit.
+let playingPatternIdRef = null;
+let playingSongIdRef = null;
+
+/**
+ * Persisted-across-remount (but not across a real reload) refs for which
+ * song/pattern is currently playing, for the Music tab.
+ * @return {{playingPatternIdRef: Object, playingSongIdRef: Object}}
+ */
+export const usePlaybackStatusState = () => {
+  if (!playingPatternIdRef) playingPatternIdRef = ref(null);
+  if (!playingSongIdRef) playingSongIdRef = ref(null);
+  return {playingPatternIdRef, playingSongIdRef};
+};
+
 // Clears both the in-memory refs (if the Music tab happens to already be
 // mounted) and their localStorage backing, so a fresh/loaded project starts
 // with no leftover pattern/track selection from whatever project was open

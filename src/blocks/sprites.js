@@ -2,7 +2,7 @@ import * as Blockly from 'blockly/core';
 
 import {processPlayerAnimationsStorageDefaults} from '../generators/bbasic/sprites';
 import {usePlayerAnimationsStorage} from '../hooks/project';
-import {PLAYER_ICON, MISSILE_ICON, BALL_ICON, COLOR_ICON, HEIGHT_ICON, ANIMATION_ICON, VISIBILITY_ICON, HORIZONTAL_ICON, VERTICAL_ICON, MIRROR_ICON, FRAME_ICON, PLAY_ICON, PAUSE_ICON, PRIORITY_ICON, DATA_ICON, SEEK_ICON} from './icon';
+import {PLAYER_ICON, MISSILE_ICON, BALL_ICON, COLOR_ICON, HEIGHT_ICON, ANIMATION_ICON, VISIBILITY_ICON, HORIZONTAL_ICON, VERTICAL_ICON, MIRROR_ICON, FRAME_ICON, PLAY_ICON, PAUSE_ICON, PRIORITY_ICON, DATA_ICON, SEEK_ICON, INERTIA_ICON} from './icon';
 
 const PRIORITY_COLOUR = '#009688';
 
@@ -101,7 +101,7 @@ const MISSILE_FIRE_SPEED_OPTIONS = [
 // when the Angle input evaluates to 255 ("no clear direction" - e.g. the
 // joystick is centered), rather than a single hardcoded fallback, so any of
 // the 8 directions can be the default, not just Up.
-const MISSILE_FIRE_DEFAULT_ANGLE_OPTIONS = [
+const MISSILE_FIRE_DEFAULT_ANGLE_OPTIONS_8 = [
   ['⬆ Up', '0'],
   ['↗ Up-Right', '1'],
   ['➡ Right', '2'],
@@ -111,6 +111,79 @@ const MISSILE_FIRE_DEFAULT_ANGLE_OPTIONS = [
   ['⬅ Left', '6'],
   ['↖ Up-Left', '7'],
 ];
+// Same 0-15 scale DIRECTION16_STEPS (generators/bbasic/sprites.js) uses at
+// runtime - even indices are the original 8 compass points above (doubled),
+// odd indices are the new halfway points "16 directions" inserts between
+// each pair.
+const MISSILE_FIRE_DEFAULT_ANGLE_OPTIONS_16 = [
+  ['⬆ Up', '0'],
+  ['⬆ Up (leaning right)', '1'],
+  ['↗ Up-Right', '2'],
+  ['➡ Right (leaning up)', '3'],
+  ['➡ Right', '4'],
+  ['➡ Right (leaning down)', '5'],
+  ['↘ Down-Right', '6'],
+  ['⬇ Down (leaning right)', '7'],
+  ['⬇ Down', '8'],
+  ['⬇ Down (leaning left)', '9'],
+  ['↙ Down-Left', '10'],
+  ['⬅ Left (leaning down)', '11'],
+  ['⬅ Left', '12'],
+  ['⬅ Left (leaning up)', '13'],
+  ['↖ Up-Left', '14'],
+  ['⬆ Up (leaning left)', '15'],
+];
+// Dynamic dropdown generator (Blockly's own FieldDropdown constructor
+// accepts a function as well as a plain array) - "this" is the FIELD
+// instance when Blockly calls this, per the standard dynamic-options
+// convention already used elsewhere in this codebase (e.g. blocks/
+// text-strings.js's own buildTextStringOptions). Reads the SIBLING
+// DIRECTIONS16 checkbox off the same block to decide which of the two
+// static lists above to show - falls back to the 8-way list if the block
+// isn't attached yet (the very first call, made by the FieldDropdown
+// constructor itself before this field has even been appended to a block).
+const buildMissileFireDefaultAngleOptions = function() {
+  // eslint-disable-next-line no-invalid-this
+  const block = this.getSourceBlock && this.getSourceBlock();
+  const is16 = block && block.getFieldValue('DIRECTIONS16') === 'TRUE';
+  return is16 ? MISSILE_FIRE_DEFAULT_ANGLE_OPTIONS_16 : MISSILE_FIRE_DEFAULT_ANGLE_OPTIONS_8;
+};
+// Wires the DIRECTIONS16 checkbox so toggling it both refreshes
+// DEFAULT_ANGLE's own dynamic option list (FieldDropdown caches its
+// generated menu - see registerDropdownFieldSyncExtension's own identical
+// "getOptions() before setValue()" gotcha above) AND translates whatever
+// value was already selected onto the new scale, the same doubling this
+// block's own generator already does at compile time for a 255 ("no clear
+// direction") fallback - so a project that already had e.g. "Right" (2)
+// picked before checking "16 directions" lands on the equivalent "Right"
+// (4) on the finer scale instead of silently becoming "Right (leaning up)".
+// Halving on the way back down floors to the nearest original compass
+// point, since a halfway direction has no exact 8-way equivalent. Also
+// busts DEFAULT_ANGLE's own option cache once unconditionally right after
+// setup, so a block loaded from a saved project with "16 directions"
+// already checked shows the right list immediately - a field's validator
+// never fires for a value that arrives via XML load with events suppressed
+// (see registerDropdownFieldSyncExtension's own comment on that exact
+// mechanism), so waiting for a live toggle to do this wouldn't cover that
+// case.
+const setupFireDefaultAngleSync = (block) => {
+  const directions16Field = block.getField('DIRECTIONS16');
+  const defaultAngleField = block.getField('DEFAULT_ANGLE');
+  if (!directions16Field || !defaultAngleField) return;
+  directions16Field.setValidator(function(newValue) {
+    // eslint-disable-next-line no-invalid-this
+    const wasOn = this.getValue() === 'TRUE';
+    const isOn = newValue === 'TRUE';
+    if (wasOn !== isOn) {
+      const current = parseInt(defaultAngleField.getValue(), 10) || 0;
+      const translated = isOn ? current * 2 : Math.floor(current / 2);
+      defaultAngleField.getOptions();
+      defaultAngleField.setValue(String(translated));
+    }
+    return newValue;
+  });
+  defaultAngleField.getOptions();
+};
 
 // Player 0 and Player 1 are otherwise-identical hardware players (same
 // register SHAPE, just player0* vs player1* real bB variable names - see
@@ -823,6 +896,153 @@ Blockly.defineBlocksWithJsonArray([
       'target X/Y, and stays true until that object is given a new Seek target. Always false ' +
       'if no matching Seek block ever runs anywhere in the project.',
   },
+  // Same "one block, OBJECT dropdown covers all 5 names" shape as
+  // object_seek_to above, and the same per-choice colour extension
+  // (object_seek_colour_sync is already OBJECT-dropdown-generic, so it's
+  // reused directly rather than duplicated). Continuous, not a one-shot
+  // push - toggled on/off, same as sprite_player_animation_playback's own
+  // Play/Pause shape - "accelerate" here means "start applying this rate
+  // every frame," not "add this amount once." DIRECTION is a plain 0-7
+  // number input (not a fixed dropdown), matching sprite_*_fire's own
+  // ANGLE field - lets it be wired straight from a "Joystick direction
+  // (8-way)" block for continuous joystick-driven thrust, not just typed
+  // in as a literal.
+  {
+    'type': 'sprite_inertia_accelerate',
+    'message0': `${INERTIA_ICON} Accelerate %1 toward direction %2 by %3, max speed %4`,
+    'args0': [
+      {
+        'type': 'field_dropdown',
+        'name': 'OBJECT',
+        'options': SEEK_OBJECT_OPTIONS,
+      },
+      {
+        'type': 'input_value',
+        'name': 'DIRECTION',
+        'check': 'Number',
+      },
+      {
+        'type': 'input_value',
+        'name': 'RATE',
+        'check': 'Number',
+      },
+      {
+        'type': 'input_value',
+        'name': 'MAXSPEED',
+        'check': 'Number',
+      },
+    ],
+    'message1': '16 directions %1',
+    'args1': [
+      {
+        'type': 'field_checkbox',
+        'name': 'DIRECTIONS16',
+        'checked': false,
+      },
+    ],
+    'inputsInline': true,
+    'previousStatement': null,
+    'nextStatement': null,
+    'colour': 'purple',
+    'extensions': ['object_seek_colour_sync'],
+    'tooltip': 'Starts accelerating the chosen player/missile/ball toward the given direction - ' +
+      'every frame from now on, its velocity moves "rate" closer to that direction\'s own X/Y, up ' +
+      'to "max speed" per axis, until "Stop accelerating" runs. Direction is 0-7 (0=Up, 1=Up-Right, ' +
+      '2=Right, 3=Down-Right, 4=Down, 5=Down-Left, 6=Left, 7=Up-Left, clockwise from Up, same scale ' +
+      'as "Fire") - or 0-15 on the same clockwise-from-Up scale, if "16 directions" below is checked, ' +
+      'same coarse approximation "Fire"\'s own 16-direction mode uses (the 8 extra directions each ' +
+      'push their dominant axis at the full rate and the other axis at half rate). Plug in a ' +
+      '"Joystick direction (8-way)" block for player-controlled thrust, or a plain number for a ' +
+      'fixed direction. Running this again while already accelerating just updates the direction/' +
+      'rate/max speed in place, without resetting velocity. Velocity keeps moving the object every ' +
+      'frame on its own once accelerated at all, even after "Stop accelerating" - use "Decelerate" ' +
+      'to actually slow it back down.',
+  },
+  {
+    'type': 'sprite_inertia_stop_accelerate',
+    'message0': `${INERTIA_ICON} Stop accelerating %1`,
+    'args0': [
+      {
+        'type': 'field_dropdown',
+        'name': 'OBJECT',
+        'options': SEEK_OBJECT_OPTIONS,
+      },
+    ],
+    'previousStatement': null,
+    'nextStatement': null,
+    'colour': 'purple',
+    'extensions': ['object_seek_colour_sync'],
+    'tooltip': 'Stops accelerating the chosen player/missile/ball - its velocity is left exactly ' +
+      'where it is (still moving the object every frame) unless "Decelerate" is also turned on for ' +
+      'it, same as taking your foot off the gas rather than braking.',
+  },
+  {
+    'type': 'sprite_inertia_decelerate',
+    'message0': `${INERTIA_ICON} Decelerate %1 by %2: %3`,
+    'args0': [
+      {
+        'type': 'field_dropdown',
+        'name': 'OBJECT',
+        'options': SEEK_OBJECT_OPTIONS,
+      },
+      {
+        'type': 'input_value',
+        'name': 'RATE',
+        'check': 'Number',
+      },
+      {
+        'type': 'field_dropdown',
+        'name': 'ACTION',
+        'options': [['Start', 'start'], ['Stop', 'stop']],
+      },
+    ],
+    'inputsInline': true,
+    'previousStatement': null,
+    'nextStatement': null,
+    'colour': 'purple',
+    'extensions': ['object_seek_colour_sync'],
+    'tooltip': 'Start: every frame from now on, the chosen player/missile/ball\'s own velocity ' +
+      'moves "rate" closer to 0 per axis (real friction/drag), clamped at exactly 0 so it never ' +
+      'overshoots into moving the opposite way - until Stop turns it back off. Independent of ' +
+      'Accelerate - an object can accelerate and decelerate at the same time (net effect: whichever ' +
+      'rate wins that frame), or decelerate on its own to coast to a stop after "Stop accelerating".',
+  },
+  // One block, OBJECT dropdown covers all 5 names (same shape as
+  // object_seek_to/the Inertia blocks above) - replaces the old, separate
+  // sprite_missile_bounce/sprite_ball_bounce (Player never had a Bounce
+  // block at all, since Players never had Fire) per an explicit request
+  // not to have separate blocks for the same functionality. Old projects
+  // using the previous block types are auto-migrated on load - see
+  // hooks/migrate-bounce-blocks.js. Reflects whichever movement system(s)
+  // the chosen object actually uses: Fire's own angle (missile/ball only,
+  // unchanged Combat-style guessing), Inertia's own velocity (any of the
+  // 5), or both at once if both are in play on the same object - see this
+  // block's own generator for exactly how.
+  {
+    'type': 'object_bounce',
+    'message0': `${INERTIA_ICON} Bounce %1`,
+    'args0': [
+      {
+        'type': 'field_dropdown',
+        'name': 'OBJECT',
+        'options': SEEK_OBJECT_OPTIONS,
+      },
+    ],
+    'previousStatement': null,
+    'nextStatement': null,
+    'colour': 'purple',
+    'extensions': ['object_seek_colour_sync'],
+    'tooltip': 'Reflects the chosen player/missile/ball off of whatever it just collided with, ' +
+      'guessing which kind of surface was hit the same way Combat (1977) does: the first frame ' +
+      'it\'s stuck, mirrors as if a vertical wall was hit; if still stuck the next frame, tries a ' +
+      'horizontal wall instead; if still stuck after that, gives up guessing and just reverses ' +
+      'outright (assume a corner). Reflects Fire\'s own fired direction (missile/ball only) AND/OR ' +
+      'Inertia\'s own velocity (any of the 5 - see "Accelerate"/"Decelerate"), whichever the chosen ' +
+      'object actually has in use - has no effect at all on an object using neither. Call this ' +
+      'EVERY frame the collision persists (place it behind whatever check decides it should bounce ' +
+      '- a collision block, a screen-edge X/Y comparison, etc. - it doesn\'t detect anything by ' +
+      'itself) so it can tell consecutive stuck frames apart from a brand new hit.',
+  },
 ]);
 
 // Every object_seek_arrived block resolved to the OBJECT name(s) it actually
@@ -878,65 +1098,46 @@ const buildMissileSizeBlock = ({icon, colour}) => {
 
 // Shared by missile0/missile1/ball - see createGeneratorForFireBall in
 // generators/bbasic/sprites.js for the fully name-generic trigger/per-frame
-// movement this drives; nothing here is missile-specific.
+// movement this drives; nothing here is missile-specific. Defined in JS
+// rather than the JSON array shape every other block in this file uses, so
+// DEFAULT_ANGLE's own dropdown can be backed by a function (see
+// buildMissileFireDefaultAngleOptions' own comment) - same reasoning
+// text_minikernel_show_named's own comment in blocks/text-minikernel.js
+// gives for the identical choice there.
 const buildFireBlock = ({name, description, icon, colour}) => {
-  Blockly.defineBlocksWithJsonArray([
-    // Fires this missile from the given starting X/Y, moving at the given
-    // angle/speed until it goes off-screen, where it just stops (see
-    // generateMissileFireChecks) - its own Height/visibility is left
-    // entirely to the existing "sprite_<name>_set" block, never touched
-    // here, so it doesn't change size or disappear on its own.
-    {
-      'type': `sprite_${name}_fire`,
-      'message0': `${icon} Fire ${description} from X %1 Y %2 at angle %3 default %4 speed %5`,
-      'args0': [
-        {
-          'type': 'input_value',
-          'name': 'X',
-          'check': 'Number',
-        },
-        {
-          'type': 'input_value',
-          'name': 'Y',
-          'check': 'Number',
-        },
-        {
-          'type': 'input_value',
-          'name': 'ANGLE',
-          'check': 'Number',
-        },
-        {
-          'type': 'field_dropdown',
-          'name': 'DEFAULT_ANGLE',
-          'options': MISSILE_FIRE_DEFAULT_ANGLE_OPTIONS,
-        },
-        {
-          'type': 'field_dropdown',
-          'name': 'SPEED',
-          'options': MISSILE_FIRE_SPEED_OPTIONS,
-        },
-      ],
-      'message1': 'throttle movement %1',
-      'args1': [
-        {
-          'type': 'field_checkbox',
-          'name': 'THROTTLE',
-          'checked': false,
-        },
-      ],
-      'message2': '16 directions %1',
-      'args2': [
-        {
-          'type': 'field_checkbox',
-          'name': 'DIRECTIONS16',
-          'checked': false,
-        },
-      ],
-      'inputsInline': true,
-      'previousStatement': null,
-      'nextStatement': null,
-      colour,
-      'tooltip': `Launches ${description} from the given starting X/Y position (e.g. a paired ` +
+  // Fires this missile from the given starting X/Y, moving at the given
+  // angle/speed until it goes off-screen, where it just stops (see
+  // generateMissileFireChecks) - its own Height/visibility is left
+  // entirely to the existing "sprite_<name>_set" block, never touched
+  // here, so it doesn't change size or disappear on its own.
+  Blockly.Blocks[`sprite_${name}_fire`] = {
+    init: function() {
+      this.appendValueInput('X')
+          .setCheck('Number')
+          .appendField(`${icon} Fire ${description} from X`);
+      this.appendValueInput('Y')
+          .setCheck('Number')
+          .appendField('Y');
+      this.appendValueInput('ANGLE')
+          .setCheck('Number')
+          .appendField('at angle');
+      this.appendDummyInput()
+          .appendField('default')
+          .appendField(new Blockly.FieldDropdown(buildMissileFireDefaultAngleOptions), 'DEFAULT_ANGLE')
+          .appendField('speed')
+          .appendField(new Blockly.FieldDropdown(MISSILE_FIRE_SPEED_OPTIONS), 'SPEED');
+      this.appendDummyInput()
+          .appendField('throttle movement')
+          .appendField(new Blockly.FieldCheckbox('FALSE'), 'THROTTLE');
+      this.appendDummyInput()
+          .appendField('16 directions')
+          .appendField(new Blockly.FieldCheckbox('FALSE'), 'DIRECTIONS16');
+      this.setInputsInline(true);
+      this.setPreviousStatement(true, null);
+      this.setNextStatement(true, null);
+      this.setColour(colour);
+      setupFireDefaultAngleSync(this);
+      this.setTooltip(`Launches ${description} from the given starting X/Y position (e.g. a paired ` +
         'player\'s X/Y position blocks, for a traditional "fire from the player" missile), ' +
         'moving it automatically (a few pixels every frame) until it goes off-screen, where it ' +
         `simply stops moving - ${description}'s Height/visibility is never touched by this ` +
@@ -962,11 +1163,12 @@ const buildFireBlock = ({name, description, icon, colour}) => {
         '8 compass points, plus one halfway between each pair) instead of 0-7 - the two extra ' +
         'directions between each compass point move at full speed on their dominant axis and half ' +
         'speed on the other, the same coarse approximation classic 2600 games (e.g. Combat\'s ' +
-        'ricocheting shells) used instead of real trigonometry. "default" above still only offers ' +
-        'the original 8 compass points either way - picked to match whichever mode this checkbox is ' +
-        'in, so it always lines up with the angle scale currently in use.',
+        'ricocheting shells) used instead of real trigonometry. "default" above offers all 16 of ' +
+        'those directions once this is checked (just the original 8 otherwise) - already-picked ' +
+        'values are translated onto the new scale automatically when this is toggled, so it always ' +
+        'lines up with the angle scale currently in use.');
     },
-  ]);
+  };
 };
 
 // Shared by missile0/missile1/ball, same as buildFireBlock above - reflects
@@ -990,92 +1192,44 @@ const buildFireBlock = ({name, description, icon, colour}) => {
 // the collision persists, not just once - unlike a plain one-shot flip, this
 // only makes its intended guess/guess/give-up progression if it keeps being
 // called each frame the object is still stuck.
-const buildBounceBlock = ({name, description, icon, colour}) => {
-  Blockly.defineBlocksWithJsonArray([
-    {
-      'type': `sprite_${name}_bounce`,
-      'message0': `${icon} Bounce ${description}`,
-      'previousStatement': null,
-      'nextStatement': null,
-      colour,
-      'tooltip': `Reflects ${description}'s currently fired direction (see "Fire ${description}") ` +
-        'off of whatever it just collided with, guessing which kind of surface was hit the same ' +
-        'way Combat (1977) does: the first frame it\'s stuck, mirrors the direction as if a ' +
-        'vertical wall was hit; if still stuck the next frame, tries a horizontal wall instead; ' +
-        'if still stuck after that, gives up guessing and just reverses the original direction by ' +
-        '180 degrees (assume a corner). Call this EVERY frame the collision persists (place it ' +
-        `behind whatever check decides ${description} should bounce - a collision block, a ` +
-        'screen-edge X/Y comparison, etc. - it doesn\'t detect anything by itself) so it can tell ' +
-        `consecutive stuck frames apart from a brand new hit. Has no effect if ${description} ` +
-        'hasn\'t been fired (or has already gone off-screen and stopped) - reversing a "no ' +
-        'direction" state is harmless, but does nothing useful.',
-    },
-  ]);
-};
-
 // Missile 0/1's own combined Fire block - same shape as buildFireBlock
 // above (which stays as-is, still used for Ball's own separate, never-
 // combined sprite_ball_fire), just with a MISSILE dropdown prepended and
-// missile-generic tooltip text instead of a fixed ${description}.
+// missile-generic tooltip text instead of a fixed ${description}. Defined
+// in JS for the same reason buildFireBlock above is - see its own comment.
 const buildCombinedMissileFireBlock = ({icon, colour}) => {
-  Blockly.defineBlocksWithJsonArray([
-    {
-      'type': 'sprite_missile_fire',
-      'message0': `${icon} Fire Missile %1 from X %2 Y %3 at angle %4 default %5 speed %6`,
-      'args0': [
-        {
-          'type': 'field_dropdown',
-          'name': 'MISSILE',
-          'options': MISSILE_OPTIONS,
-        },
-        {
-          'type': 'input_value',
-          'name': 'X',
-          'check': 'Number',
-        },
-        {
-          'type': 'input_value',
-          'name': 'Y',
-          'check': 'Number',
-        },
-        {
-          'type': 'input_value',
-          'name': 'ANGLE',
-          'check': 'Number',
-        },
-        {
-          'type': 'field_dropdown',
-          'name': 'DEFAULT_ANGLE',
-          'options': MISSILE_FIRE_DEFAULT_ANGLE_OPTIONS,
-        },
-        {
-          'type': 'field_dropdown',
-          'name': 'SPEED',
-          'options': MISSILE_FIRE_SPEED_OPTIONS,
-        },
-      ],
-      'message1': 'throttle movement %1',
-      'args1': [
-        {
-          'type': 'field_checkbox',
-          'name': 'THROTTLE',
-          'checked': false,
-        },
-      ],
-      'message2': '16 directions %1',
-      'args2': [
-        {
-          'type': 'field_checkbox',
-          'name': 'DIRECTIONS16',
-          'checked': false,
-        },
-      ],
-      'inputsInline': true,
-      'previousStatement': null,
-      'nextStatement': null,
-      colour,
-      'extensions': ['sprite_missile_field_sync'],
-      'tooltip': 'Launches the chosen missile from the given starting X/Y position (e.g. a ' +
+  Blockly.Blocks['sprite_missile_fire'] = {
+    init: function() {
+      this.appendDummyInput()
+          .appendField(`${icon} Fire Missile`)
+          .appendField(new Blockly.FieldDropdown(MISSILE_OPTIONS), 'MISSILE');
+      this.appendValueInput('X')
+          .setCheck('Number')
+          .appendField('from X');
+      this.appendValueInput('Y')
+          .setCheck('Number')
+          .appendField('Y');
+      this.appendValueInput('ANGLE')
+          .setCheck('Number')
+          .appendField('at angle');
+      this.appendDummyInput()
+          .appendField('default')
+          .appendField(new Blockly.FieldDropdown(buildMissileFireDefaultAngleOptions), 'DEFAULT_ANGLE')
+          .appendField('speed')
+          .appendField(new Blockly.FieldDropdown(MISSILE_FIRE_SPEED_OPTIONS), 'SPEED');
+      this.appendDummyInput()
+          .appendField('throttle movement')
+          .appendField(new Blockly.FieldCheckbox('FALSE'), 'THROTTLE');
+      this.appendDummyInput()
+          .appendField('16 directions')
+          .appendField(new Blockly.FieldCheckbox('FALSE'), 'DIRECTIONS16');
+      this.setInputsInline(true);
+      this.setPreviousStatement(true, null);
+      this.setNextStatement(true, null);
+      this.setColour(colour);
+      Blockly.Extensions.apply('sprite_missile_field_sync', this, false);
+      setupFireDefaultAngleSync(this);
+      this.setTooltip('Launches the chosen missile from the given starting X/Y position (e.g. a ' +
         'paired player\'s X/Y position blocks, for a traditional "fire from the player" missile), ' +
         'moving it automatically (a few pixels every frame) until it goes off-screen, where it ' +
         'simply stops moving - the missile\'s Height/visibility is never touched by this ' +
@@ -1101,45 +1255,12 @@ const buildCombinedMissileFireBlock = ({icon, colour}) => {
         '8 compass points, plus one halfway between each pair) instead of 0-7 - the two extra ' +
         'directions between each compass point move at full speed on their dominant axis and half ' +
         'speed on the other, the same coarse approximation classic 2600 games (e.g. Combat\'s ' +
-        'ricocheting shells) used instead of real trigonometry. "default" above still only offers ' +
-        'the original 8 compass points either way - picked to match whichever mode this checkbox is ' +
-        'in, so it always lines up with the angle scale currently in use.',
+        'ricocheting shells) used instead of real trigonometry. "default" above offers all 16 of ' +
+        'those directions once this is checked (just the original 8 otherwise) - already-picked ' +
+        'values are translated onto the new scale automatically when this is toggled, so it always ' +
+        'lines up with the angle scale currently in use.');
     },
-  ]);
-};
-
-// Missile 0/1's own combined Bounce block - same shape/behavior as
-// buildBounceBlock above (which stays as-is, still used for Ball's own
-// separate sprite_ball_bounce), just with a MISSILE dropdown prepended.
-const buildCombinedMissileBounceBlock = ({icon, colour}) => {
-  Blockly.defineBlocksWithJsonArray([
-    {
-      'type': 'sprite_missile_bounce',
-      'message0': `${icon} Bounce Missile %1`,
-      'args0': [
-        {
-          'type': 'field_dropdown',
-          'name': 'MISSILE',
-          'options': MISSILE_OPTIONS,
-        },
-      ],
-      'previousStatement': null,
-      'nextStatement': null,
-      colour,
-      'extensions': ['sprite_missile_field_sync'],
-      'tooltip': 'Reflects the chosen missile\'s currently fired direction (see "Fire Missile") ' +
-        'off of whatever it just collided with, guessing which kind of surface was hit the same ' +
-        'way Combat (1977) does: the first frame it\'s stuck, mirrors the direction as if a ' +
-        'vertical wall was hit; if still stuck the next frame, tries a horizontal wall instead; ' +
-        'if still stuck after that, gives up guessing and just reverses the original direction by ' +
-        '180 degrees (assume a corner). Call this EVERY frame the collision persists (place it ' +
-        'behind whatever check decides the missile should bounce - a collision block, a ' +
-        'screen-edge X/Y comparison, etc. - it doesn\'t detect anything by itself) so it can tell ' +
-        'consecutive stuck frames apart from a brand new hit. Has no effect if the missile ' +
-        'hasn\'t been fired (or has already gone off-screen and stopped) - reversing a "no ' +
-        'direction" state is harmless, but does nothing useful.',
-    },
-  ]);
+  };
 };
 
 // Player 0 and Player 1 share these three combined block families now (see
@@ -1187,11 +1308,6 @@ buildCombinedMissileFireBlock({
   colour: 'red',
 });
 
-buildCombinedMissileBounceBlock({
-  icon: MISSILE_ICON,
-  colour: 'red',
-});
-
 buildSpriteBlocks({
   name: 'ball',
   description: 'Ball',
@@ -1204,13 +1320,6 @@ buildSpriteBlocks({
 });
 
 buildFireBlock({
-  name: 'ball',
-  description: 'Ball',
-  icon: BALL_ICON,
-  colour: '#ff8800',
-});
-
-buildBounceBlock({
   name: 'ball',
   description: 'Ball',
   icon: BALL_ICON,

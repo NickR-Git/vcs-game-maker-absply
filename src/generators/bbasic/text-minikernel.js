@@ -390,12 +390,13 @@ export default (Blockly) => {
   // buildTextScrollSetupLines' own comment in text-scroll.js for exactly
   // what gets reconfigured unconditionally vs. only when the message
   // actually changes.
-  const emitScrollSetup = (offsetExpr, maxOffsetExpr, speed, pause) => {
+  const emitScrollSetup = (offsetExpr, maxOffsetExpr, speed, pause, startAtEnd) => {
     const resolveVar = (canonicalName) =>
       Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
     const uniqueId = Blockly.BBasic.blockNumbers.next('textScroll');
     const lines = buildTextScrollSetupLines(
-        resolveVar, offsetExpr, maxOffsetExpr, speed, pause, uniqueId, Blockly.BBasic.isTextScrollActive());
+        resolveVar, offsetExpr, maxOffsetExpr, speed, pause, uniqueId, Blockly.BBasic.isTextScrollActive(),
+        !!startAtEnd);
     return lines.join('\n') + '\n';
   };
 
@@ -410,6 +411,7 @@ export default (Blockly) => {
     Blockly.BBasic.valueToCode(block, 'SCROLL_SPEED', Blockly.BBasic.ORDER_ASSIGNMENT) || DEFAULT_SCROLL_SPEED,
     Blockly.BBasic.valueToCode(block, 'SCROLL_PAUSE', Blockly.BBasic.ORDER_ASSIGNMENT) || DEFAULT_SCROLL_PAUSE,
   ];
+  const startAtEndCode = (block) => block.getFieldValue('START_AT_END') === 'TRUE';
 
   // Plain named block: always the ordinary static row(s) (namedMessageOffset -
   // one row, or as many as splitMessageLines needed - always, regardless of
@@ -471,7 +473,7 @@ export default (Blockly) => {
     const position = namedMessagePosition(block.getFieldValue('TEXT_ID'));
     const layout = getNamedScrollLayout();
     const entry = layout[position] || layout[0];
-    return emitScrollSetup(entry.offset, entry.maxOffset, ...scrollFieldCodes(block)) +
+    return emitScrollSetup(entry.offset, entry.maxOffset, ...scrollFieldCodes(block), startAtEndCode(block)) +
       setTextRow2ActiveCode(false) +
       setTextLinesRangeCode(entry.offset, entry.offset);
   };
@@ -500,7 +502,7 @@ export default (Blockly) => {
   Blockly.BBasic['text_minikernel_show_scroll'] = function(block) {
     markTextMinikernelUsed();
     const entry = registerFreeTypedScrollMessage(Blockly, block.getFieldValue('TEXT'));
-    return emitScrollSetup(entry.offset, entry.maxOffset, ...scrollFieldCodes(block)) +
+    return emitScrollSetup(entry.offset, entry.maxOffset, ...scrollFieldCodes(block), startAtEndCode(block)) +
       setTextRow2ActiveCode(false) +
       setTextLinesRangeCode(entry.offset, entry.offset);
   };
@@ -661,7 +663,7 @@ export default (Blockly) => {
       // skips that table read, the same way the plain named blocks above
       // never touch text_offsets at all.
       const entry = layout[literalId] || layout[0];
-      return emitScrollSetup(entry.offset, entry.maxOffset, ...scrollFieldCodes(block)) +
+      return emitScrollSetup(entry.offset, entry.maxOffset, ...scrollFieldCodes(block), startAtEndCode(block)) +
         setTextRow2ActiveCode(false) +
         setTextLinesRangeCode(entry.offset, entry.offset);
     }
@@ -706,14 +708,14 @@ export default (Blockly) => {
     const bank = Blockly.BBasic.getCurrentBank();
     const offsets = `${bankSuffixedTableName('text_offsets', bank)}[${argPair.read}]`;
     if (!layout.some((entry) => entry.maxOffset > 0)) {
-      return captureArg + emitScrollSetup(offsets, 0, ...scrollFieldCodes(block)) +
+      return captureArg + emitScrollSetup(offsets, 0, ...scrollFieldCodes(block), startAtEndCode(block)) +
         setTextRow2ActiveCode(false) +
         setTextLinesRangeCode(offsets, offsets);
     }
 
     trackTextByIdScrollUsage(Blockly, bank);
     const scrollMax = `${bankSuffixedTableName('text_scroll_max', bank)}[${argPair.read}]`;
-    return captureArg + emitScrollSetup(offsets, scrollMax, ...scrollFieldCodes(block)) +
+    return captureArg + emitScrollSetup(offsets, scrollMax, ...scrollFieldCodes(block), startAtEndCode(block)) +
       setTextRow2ActiveCode(false) +
       setTextLinesRangeCode(offsets, offsets);
   };
@@ -1200,7 +1202,25 @@ export default (Blockly) => {
         .flatMap(({glyphs}) => glyphRows(glyphs));
     const freeTypedScrollRows = (this.freeTypedScrollMessages || [])
         .flatMap(({glyphs}) => glyphRows(glyphs));
-    const dataTable = ` data text_strings\n${
+    // Page-aligned (DASM's "align 256", same directive text12a.asm's own
+    // score_loop_height guard uses right above textscoreloop) - text12b.asm's
+    // own showtextrow reads this table via "(TextDataPtr),y" with y =
+    // TextIndex..TextIndex+11 (see its own comment), a 12-value UNROLLED run
+    // with no branch to absorb the 6502's well-known extra cycle whenever an
+    // indexed-indirect read crosses a page boundary. Without this, whether
+    // any given TextIndex value happens to cross one depends entirely on
+    // wherever DASM happens to place this table in ROM - invisible for a
+    // message that only ever sits at one fixed, by-luck-safe offset (a
+    // static "Show text"), but scrolling sweeps TextIndex through every
+    // offset in the message, so it was only ever a matter of time before one
+    // of them landed on the wrong side of a page boundary and shifted every
+    // cycle-exact instruction after it in showtextrow/drawtextrow for that
+    // frame - confirmed as the real cause of a reported "text looks garbled
+    // only while scrolling, not when static" bug. Forcing the whole table
+    // onto one page removes the possibility entirely, for every TextIndex
+    // value it can ever hold, regardless of table size (small enough here
+    // that alignment padding is the only cost, never a second page).
+    const dataTable = ` asm\n       align 256\nend\n data text_strings\n${
       [...namedRows, ...freeTypedRows, ...namedScrollRows, ...freeTypedScrollRows].join('\n')
     }\nend`;
 

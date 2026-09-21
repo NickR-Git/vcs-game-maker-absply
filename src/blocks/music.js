@@ -8,15 +8,27 @@ import {MUSIC_ICON, STOP_ICON} from './icon';
 
 const MUSIC_COLOR = 'rgb(255, 87, 34)';
 
-// A pattern's length is adjustable (see PATTERN_STEP_OPTIONS below), but
+// A pattern's length is adjustable (see clampPatternSteps below), but
 // defaults to 16 steps (one bar at 2 steps/beat) and 140 BPM below - the same
 // defaults FL Studio uses for a new project's step sequencer/tempo.
 export const DEFAULT_PATTERN_STEPS = 16;
 
-// Selectable pattern lengths - 2 as a shortest option (e.g. a quick
-// two-note stinger/blip pattern), then in increments of 8 steps up to 64.
-export const PATTERN_STEP_OPTIONS = [2, 4, 8, 16, 24, 32, 40, 48, 56, 64];
-export const MAX_PATTERN_STEPS = PATTERN_STEP_OPTIONS[PATTERN_STEP_OPTIONS.length - 1];
+// Free-entry pattern length range (see MusicEditor.vue's own Length (steps)
+// field) - 1 as the shortest possible pattern, 64 as the longest, matching
+// LENGTH_UNITS_PER_STEP's own headroom and the piano roll's fixed-width grid
+// (see maxPatternSteps in MusicEditor.vue).
+export const MIN_PATTERN_STEPS = 1;
+export const MAX_PATTERN_STEPS = 64;
+
+// Applies to every Length (steps) field (see MusicEditor.vue's own
+// handleStepCountChange, and the load-time clamp below for values from an
+// older save/an imported file whose stepCount predates this range or came
+// from the old fixed dropdown). Anything above MAX_PATTERN_STEPS rounds down
+// to it rather than being rejected, matching the field's own tooltip.
+export const clampPatternSteps = (value) => {
+  const steps = Math.round(Number(value));
+  return Number.isFinite(steps) ? Math.min(MAX_PATTERN_STEPS, Math.max(MIN_PATTERN_STEPS, steps)) : DEFAULT_PATTERN_STEPS;
+};
 
 // How many equal slices a single piano-roll step can be divided into for
 // note duration (set via the dropdown under the Music tab's own header) -
@@ -237,9 +249,7 @@ export const processSongsStorageDefaults = (songsStorage) => {
       if (pattern.useOwnTempo == null) {
         pattern.useOwnTempo = true;
       }
-      if (!PATTERN_STEP_OPTIONS.includes(pattern.stepCount)) {
-        pattern.stepCount = DEFAULT_PATTERN_STEPS;
-      }
+      pattern.stepCount = clampPatternSteps(pattern.stepCount ?? DEFAULT_PATTERN_STEPS);
       (pattern.tracks || []).forEach((track) => {
         if (track.channel == null) {
           track.channel = 0;
@@ -500,7 +510,7 @@ Blockly.Blocks['music_song_stopped_by_number'] = {
 Blockly.Blocks['music_sequence_chip_finished'] = {
   init: function() {
     this.appendDummyInput()
-        .appendField(`${MUSIC_ICON} When a sequence chip has finished playing`);
+        .appendField(`${MUSIC_ICON} When any sequence chip has finished playing`);
     this.appendStatementInput('DO');
     this.setPreviousStatement(true);
     this.setNextStatement(true);
@@ -572,6 +582,54 @@ Blockly.Blocks['music_sequence_chip_finished_current_song'] = {
       'every song that has a chip in this position, not just one fixed song. Read the position off the ' +
       'small "ID: N" badge next to that chip in the Sequence list (1 = first chip; changes if you reorder, ' +
       'insert, or delete chips before it). Does nothing if no song has that many chips.');
+  },
+};
+
+// Live "is it happening right now" check, unlike music_sequence_chip_
+// finished_by_id's one-shot watch above - true for the entire time the
+// chosen song is the one currently playing AND its own Sequence position
+// is at this chip, not just once at the moment it's reached. Mirrors
+// music_song_playing's own "still counts as playing while paused"
+// convention. See music_sequence_chip_playing_current_song below for the
+// "whichever song is playing" version, and generators/bbasic/music.js for
+// how CHIP_ID/SONG resolve to a compile-time sequence position (same
+// primaryChannelFor/chipIdToSeqIndex resolveMusicEventFlags already uses
+// for the "finished" watch, now shared rather than needing a flag bit of
+// its own - a live check has nothing to watch-and-clear).
+Blockly.Blocks['music_sequence_chip_playing_by_id'] = {
+  init: function() {
+    this.appendDummyInput()
+        .appendField(`${MUSIC_ICON} Sequence chip`)
+        .appendField(new Blockly.FieldDropdown(buildSongOptions), 'SONG')
+        .appendField('ID')
+        .appendField(new Blockly.FieldNumber(1, 1), 'CHIP_ID')
+        .appendField('is playing');
+    this.setOutput(true, 'Boolean');
+    this.setColour(MUSIC_COLOR);
+    this.setTooltip('True for as long as the chosen song is the one currently playing (including while ' +
+      'paused) AND its own Sequence position is at this chip - read the position off the small "ID: N" ' +
+      'badge next to that chip in the Sequence list (1 = first chip; changes if you reorder, insert, or ' +
+      'delete chips before it). False if that song doesn\'t have that many chips.');
+  },
+};
+
+// Same live check as music_sequence_chip_playing_by_id above, but without
+// its SONG dropdown - checks whichever song is CURRENTLY PLAYING, the same
+// relationship music_sequence_chip_finished_current_song already has to
+// music_sequence_chip_finished_by_id.
+Blockly.Blocks['music_sequence_chip_playing_current_song'] = {
+  init: function() {
+    this.appendDummyInput()
+        .appendField(`${MUSIC_ICON} Sequence chip ID`)
+        .appendField(new Blockly.FieldNumber(1, 1), 'CHIP_ID')
+        .appendField('is playing (current song)');
+    this.setOutput(true, 'Boolean');
+    this.setColour(MUSIC_COLOR);
+    this.setTooltip('True for as long as whichever song is CURRENTLY playing has its own Sequence ' +
+      'position at a chip in this position - checks every song that has a chip in this position, not just ' +
+      'one fixed song. Read the position off the small "ID: N" badge next to that chip in the Sequence ' +
+      'list (1 = first chip; changes if you reorder, insert, or delete chips before it). False if no song ' +
+      'has that many chips, or nothing is playing.');
   },
 };
 

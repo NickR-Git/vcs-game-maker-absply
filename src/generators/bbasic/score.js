@@ -357,7 +357,11 @@ export default (Blockly) => {
     if (!this.isTextMinikernelActive()) return '';
     const configurationStorage = useConfigurationStorage();
     const config = (configurationStorage && configurationStorage.value) || {};
-    if (!this.scoreBkColorIsBackground(config.scoreBkColor)) return '';
+    // Never aliases when a "Score set background color" block is in use
+    // (see usesScoreBkColorSetter's own comment in generators/bbasic.js) -
+    // that block needs a real, independent byte of its own to write to,
+    // not backgroundrealcolor's own raw target.
+    if (this.usesScoreBkColorSetter || !this.scoreBkColorIsBackground(config.scoreBkColor)) return '';
     const comment = (config.showVariableComments ?? true) ?
       '  ; score row\'s own background color, aliased onto the live background color' : '';
     return `\n dim scorebkcolor = ${this.backgroundRealColorRawTarget()}${comment}`;
@@ -367,15 +371,23 @@ export default (Blockly) => {
   // generateScoreBkColorRuntimeDims above) once at Setup time, the same
   // spot TextColor's own default gets written (see
   // generateTextMinikernelDefaults in generators/bbasic/text-minikernel.js,
-  // spliced right alongside this in generators/bbasic.js). Only needed for
-  // the literal/default case - "Use background color" aliases directly onto
-  // backgroundrealcolor instead, which is already initialized elsewhere, so
-  // there's nothing of its own to set here.
+  // spliced right alongside this in generators/bbasic.js). Needed for the
+  // literal/default case, and also (see usesScoreBkColorSetter's own
+  // comment in generators/bbasic.js) whenever a "Score set background
+  // color" block is in use, even with the picker left at its own "Use
+  // background color" default - that block writes to a real, independent
+  // byte now, not an alias, so it needs a real starting value the same way
+  // any other independent color var does (resolveScoreBkColorByte's own
+  // "unset falls back to black" default, same as every other case that
+  // reaches it). "Use background color" with NO setter block in use is the
+  // only remaining case that still aliases directly onto backgroundrealcolor
+  // instead, which is already initialized elsewhere, so there's nothing of
+  // its own to set here.
   Blockly.BBasic.generateScoreBkColorDefaults = function() {
     if (!this.isTextMinikernelActive()) return '';
     const configurationStorage = useConfigurationStorage();
     const config = (configurationStorage && configurationStorage.value) || {};
-    if (this.scoreBkColorIsBackground(config.scoreBkColor)) return '';
+    if (!this.usesScoreBkColorSetter && this.scoreBkColorIsBackground(config.scoreBkColor)) return '';
     return ` scorebkcolor = ${colorByteToBBasic(this.resolveScoreBkColorByte(config.scoreBkColor))}\n`;
   };
 

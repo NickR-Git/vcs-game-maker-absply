@@ -9,6 +9,7 @@ import router from './router';
 import {clearProjectStorage, useLoadLastProjectStorage} from './hooks/project';
 import {migrateLegacyPlayerAnimationsInLocalStorage} from './hooks/migrate-player-animations';
 import {migrateLegacyPlayerBlocksInLocalStorage} from './hooks/migrate-player-blocks';
+import {migrateLegacyBounceBlocksInLocalStorage} from './hooks/migrate-bounce-blocks';
 import './registerServiceWorker';
 
 // Combines an existing project's own separate legacy Player 0/Player 1
@@ -22,6 +23,12 @@ migrateLegacyPlayerAnimationsInLocalStorage();
 // own comment for the full reasoning, same "run before anything else reads
 // the workspace" timing as the animation migration just above.
 migrateLegacyPlayerBlocksInLocalStorage();
+
+// Rewrites any old sprite_missile_bounce/sprite_ball_bounce blocks left
+// over from before Bounce became one unified object_bounce block covering
+// all 5 sprite names - see that function's own comment, same "run before
+// anything else reads the workspace" timing as the migrations above.
+migrateLegacyBounceBlocksInLocalStorage();
 
 // Whether to restore the last saved project on startup is a user preference
 // (see the Options tab) rather than always-on - when disabled, every launch

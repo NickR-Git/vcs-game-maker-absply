@@ -53,6 +53,55 @@ export const processPlayerAnimationsStorageDefaults = (playerAnimationsStorage) 
   return player;
 };
 
+// Which animation indices each player's own dispatch chain can actually be
+// sent to at runtime - read by generateAnimations (generators/bbasic.js) to
+// skip compiling (and paying the ROM bytes for) an animation nothing in the
+// project ever selects. Per player, either a Set of reachable indices, or
+// null meaning "couldn't prove which indices are reachable here, keep every
+// animation" - the conservative fallback whenever playerNanimation is set
+// from anything other than a literal sprite_player_animation_select block
+// (an arbitrary expression, a plain number, a Data table lookup...) or
+// changed by a runtime delta (sprite_player_change on Animation) - either
+// way, the actual index reached at runtime isn't known until the game
+// itself runs, so nothing can safely be excluded.
+//
+// Index 0 is always included for both players - it's processAnimations' own
+// dispatch-chain fallthrough default (see its own "if (!animationIndex)
+// return ''" - no explicit check is ever emitted for it, so it's reachable
+// the instant player0animation/player1animation holds anything unmatched,
+// not just a literal 0), not something a project's own blocks need to
+// reference by name to reach. Player 0's index 1 is always included too -
+// bbasic.bb.hbs's own boot-time "player0animation = 1" runs unconditionally,
+// regardless of what the project's own blocks do afterward.
+export const resolveUsedPlayerAnimations = (workspace) => {
+  const used = {player0: new Set([0, 1]), player1: new Set([0])};
+  const unsafe = {player0: false, player1: false};
+  const animationVarName = (block) => block.getFieldValue('VAR');
+  workspace.getAllBlocks(false).forEach((block) => {
+    if (block.type === 'sprite_player_set') {
+      const varField = animationVarName(block);
+      const name = varField === 'player0animation' ? 'player0' : varField === 'player1animation' ? 'player1' : null;
+      if (!name) return;
+      const valueBlock = block.getInputTargetBlock('VALUE');
+      const index = valueBlock && valueBlock.type === 'sprite_player_animation_select' ?
+        Number(valueBlock.getFieldValue('VAR')) : NaN;
+      if (Number.isInteger(index)) {
+        used[name].add(index);
+      } else {
+        unsafe[name] = true;
+      }
+    } else if (block.type === 'sprite_player_change') {
+      const varField = animationVarName(block);
+      if (varField === 'player0animation') unsafe.player0 = true;
+      if (varField === 'player1animation') unsafe.player1 = true;
+    }
+  });
+  return {
+    player0: unsafe.player0 ? null : used.player0,
+    player1: unsafe.player1 ? null : used.player1,
+  };
+};
+
 // sprite_*_rom_noise (below) points a sprite's pointer/height straight at raw
 // ROM bytes instead of a drawn graphic - the classic Yars' Revenge "neutral
 // zone" trick, reading real CODE bytes, not a dedicated data table.
@@ -165,6 +214,15 @@ export const missileFireFlagsVarName = () => 'missileFireFlags';
 export const missileFireActiveBit = (name) => ({missile0: 0, missile1: 1, ball: 2})[name];
 export const missileFireDirVarName = (name) => `${name}FireDir`;
 export const missileFireSpeedVarName = (name) => `${name}FireSpeed`;
+// Only reserved for a sprite using 16-way Fire (missileFire16UsedFor) - see
+// generateMissileFireChecks' own comment on why the 16-way dispatch can't
+// just inline "(speedVar/2)" the way the plain half-speed math would
+// suggest: bB's integer division rounds 1/2 down to 0, which would make
+// every "halfway" direction's slower axis vanish entirely at speed 1,
+// collapsing 16-way movement to look identical to 8-way. This holds
+// speedVar/2 clamped to a minimum of 1, computed once per frame instead of
+// per dispatch line.
+export const missileFireHalfSpeedVarName = (name) => `${name}FireHalfSpeed`;
 
 // sprite_*_seek_to's own dev vars (see its own trigger generator and
 // generateSeekChecks below) - same shape as sprite_*_fire's own above: one
@@ -212,19 +270,88 @@ export const seekThrottleResetVarName = (name) => `${name}SeekThrottleReset`;
 export const missileFireThrottleVarName = (name) => `${name}FireThrottle`;
 export const missileFireThrottleResetVarName = (name) => `${name}FireThrottleReset`;
 
+// sprite_inertia_accelerate/sprite_inertia_decelerate's own dev vars (see
+// their own trigger generators and generateInertiaChecks below) - same
+// "one shared flags byte, one bit per sprite name" convention as
+// seekFlagsVarName above, just TWO such bytes (accel-active and decel-
+// active can't share one byte - 5 names each means 10 bits, over a single
+// byte's 8, same reasoning seekArrivedFlagsVarName's own comment gives for
+// why IT isn't packed into seekFlagsVarName either).
+//
+// velocityX/Y are the one genuinely new kind of state this codebase's
+// movement blocks have needed: every existing one (Seek's target X/Y,
+// Fire's angle/speed) stores direction+magnitude, always unsigned - never
+// a persisted signed delta. Inertia's own velocity has to be signed (an
+// object accelerating opposite to its current motion needs to slow down
+// and reverse, which a direction+magnitude model can't do without real
+// vector math) - stored as an ordinary byte holding a two's-complement
+// signed value (0-127 = 0..+127, 128-255 = -128..-1, the standard 6502
+// convention). Plain bB addition (name x = name x + velocityX) works
+// correctly on this with NO special handling (6502 ADC is identical for
+// signed and unsigned) - only the max-speed clamp and the decelerate-
+// toward-zero step need to treat it as signed, which bB's own unsigned-only
+// "if" comparisons can't safely do (see generateInertiaChecks' own comment
+// on the hand-asm clamp this requires).
+export const inertiaAccelFlagsVarName = () => 'inertiaAccelFlags';
+export const inertiaDecelFlagsVarName = () => 'inertiaDecelFlags';
+// Same bit-per-name layout as seekActiveBit's own map - a separate function
+// (not a direct reuse) since these are two entirely separate flag bytes,
+// not a shared one, even though the layout happens to match.
+export const inertiaActiveBit = (name) => {
+  const bits = {player0: 0, player1: 1, missile0: 2, missile1: 3, ball: 4};
+  return bits[name];
+};
+export const inertiaVelocityXVarName = (name) => `${name}VelocityX`;
+export const inertiaVelocityYVarName = (name) => `${name}VelocityY`;
+// Only reserved for a sprite with an actual "Accelerate" block targeting
+// it (see inertiaAccelUsedFor's own pre-scan in bbasic.js) - a sprite only
+// ever decelerated (never accelerated) has nothing for these to hold: with
+// nothing ever pushing velocity away from 0 in the first place, decelerate
+// alone can never move it.
+export const inertiaAccelRateVarName = (name) => `${name}AccelRate`;
+export const inertiaMaxSpeedVarName = (name) => `${name}MaxSpeed`;
+// Persists which of the 8 directions is currently being accelerated toward
+// while the accel-active bit stays set (same reason missileFireDirVarName
+// persists across frames rather than being re-read from the trigger block
+// every check) - same 0-7 clockwise-from-Up scale generateMissileFireChecks'
+// own 8-way dispatch already uses, reused directly rather than inventing a
+// second angle convention.
+export const inertiaAccelDirVarName = (name) => `${name}AccelDir`;
+// Only reserved for a sprite using 16-way Accelerate (inertiaAccel16UsedFor) -
+// same reasoning and same fix as missileFireHalfSpeedVarName above: holds
+// rateVar/2 clamped to a minimum of 1, computed once per frame, instead of
+// inlining "(rateVar/2)" which rounds down to 0 at rate 1 and collapses
+// 16-way to look like 8-way.
+export const inertiaAccelHalfRateVarName = (name) => `${name}AccelHalfRate`;
+// Only reserved for a sprite with an actual "Decelerate" block targeting it
+// (see inertiaDecelUsedFor's own pre-scan in bbasic.js).
+export const inertiaDecelRateVarName = (name) => `${name}DecelRate`;
+
 // sprite_*_bounce's own Combat-style state (see its own generator further
-// down for the stage sequence this backs) - stageVar tracks how many
-// consecutive stuck frames have been seen so far (0 = not currently stuck),
-// origDirVar freezes the heading the FIRST stuck frame started from (every
-// later stage keeps reflecting/reversing that same original heading, not
-// whatever the previous stage just computed), and frameVar is the
-// framecounter value the last time this object's Bounce block ran, the only
-// way to tell "still the same collision, one frame later" apart from "a
-// brand new collision" apart with no dedicated event to hook a reset into
-// (see generateMissileFireChecks' own comment on why).
+// down for the stage sequence this backs, matched against the real 1977
+// Combat disassembly's own missile-bounce routine at $F4A6-$F4CD in
+// atariage.com's "Definitive Combat Disassembly") - stageVar tracks how many
+// consecutive stuck frames have been seen so far (0 = not currently stuck,
+// 1-3 = that many consecutive stuck frames, capped at 3 - Combat's own
+// MxPFcount keeps counting past 3 forever, but every value >= 3 behaves
+// identically here, so this caps instead of growing unbounded), origDirVar
+// freezes the heading the FIRST stuck frame started from (stage 3's "corner,
+// give up" reflection always reflects THIS, never whatever an earlier stage
+// left behind), and frameVar is the framecounter value the last time this
+// object's Bounce block ran, the only way to tell "still the same collision,
+// one frame later" apart from "a brand new collision" with no dedicated
+// event to hook a reset into (see generateMissileFireChecks' own comment on
+// why).
 export const missileBounceStageVarName = (name) => `${name}BounceStage`;
 export const missileBounceOrigDirVarName = (name) => `${name}BounceOrigDir`;
 export const missileBounceFrameVarName = (name) => `${name}BounceFrame`;
+// object_bounce's own velocity-reflection snapshot (see its own generator's
+// comment) - the same role as missileBounceOrigDirVarName above, just for
+// Inertia's velocity vector instead of Fire's angle. Only reserved for a
+// sprite with BOTH object_bounce AND Inertia used on it (a sprite using
+// only Fire+Bounce, unchanged from before, never touches these).
+export const missileBounceOrigVelocityXVarName = (name) => `${name}BounceOrigVelocityX`;
+export const missileBounceOrigVelocityYVarName = (name) => `${name}BounceOrigVelocityY`;
 
 // Compile-time lookup, not a runtime one: walks up from the trigger block
 // through its own enclosing STATEMENT blocks (getSurroundParent, not the
@@ -322,7 +449,7 @@ export const reserveRainbowColorDevVars = (reserveDevVar, usedFor) => {
 // automatically whenever Superchip is off, pfres is too high, or the r/w
 // pool is already full, so this is free real-var savings on Superchip
 // builds with no fallback risk.
-export const reserveMissileFireDevVars = (reserveDevVar, reserveDevVarRW, usedFor) => {
+export const reserveMissileFireDevVars = (reserveDevVar, reserveDevVarRW, usedFor, used16) => {
   if (!usedFor || !usedFor.size) return;
   reserveDevVar(missileFireFlagsVarName(), undefined, 'shared active-bit byte for fired missiles');
   usedFor.forEach((name) => {
@@ -331,6 +458,10 @@ export const reserveMissileFireDevVars = (reserveDevVar, reserveDevVarRW, usedFo
     reserveDevVarRW(missileFireThrottleVarName(name), 'this missile\'s "throttle movement" countdown');
     reserveDevVarRW(missileFireThrottleResetVarName(name),
         'this missile\'s "throttle movement" countdown reset value');
+    if (used16 && used16.has(name)) {
+      reserveDevVar(missileFireHalfSpeedVarName(name), undefined,
+          'this missile\'s fired speed / 2, clamped to a minimum of 1, for 16-way\'s halfway directions');
+    }
   });
 };
 
@@ -343,15 +474,28 @@ export const reserveMissileFireDevVars = (reserveDevVar, reserveDevVarRW, usedFo
 // without a matching Fire block), but this extra state is only ever touched
 // by Bounce's own generator, so a project using Fire without Bounce
 // shouldn't pay for three unused dev vars per missile.
-export const reserveMissileBounceDevVars = (reserveDevVar, usedFor) => {
+export const reserveMissileBounceDevVars = (reserveDevVar, usedFor, inertiaUsedFor) => {
   if (!usedFor || !usedFor.size) return;
+  const inertiaSet = inertiaUsedFor || new Set();
   usedFor.forEach((name) => {
     reserveDevVar(missileBounceStageVarName(name), undefined,
-        'this missile\'s Combat-style bounce: consecutive stuck frames so far (0-3)');
-    reserveDevVar(missileBounceOrigDirVarName(name), undefined,
-        'this missile\'s Combat-style bounce: heading when the current collision started');
+        'this sprite\'s Combat-style bounce: consecutive stuck frames so far (0-3)');
     reserveDevVar(missileBounceFrameVarName(name), undefined,
-        'this missile\'s Combat-style bounce: framecounter value at the last bounce');
+        'this sprite\'s Combat-style bounce: framecounter value at the last bounce');
+    // origDirVar only means anything for a sprite with Fire's own dirVar
+    // (missile0/1/ball) - reserved unconditionally alongside stageVar/
+    // frameVar anyway, same as before this session's Inertia work, since
+    // missileFireUsedFor already gates whether dirVar itself exists and
+    // object_bounce's own generator only reads/writes origDirVar when
+    // hasFire is true.
+    reserveDevVar(missileBounceOrigDirVarName(name), undefined,
+        'this sprite\'s Combat-style bounce: heading when the current collision started');
+    if (inertiaSet.has(name)) {
+      reserveDevVar(missileBounceOrigVelocityXVarName(name), undefined,
+          'this sprite\'s Combat-style bounce: velocity X when the current collision started');
+      reserveDevVar(missileBounceOrigVelocityYVarName(name), undefined,
+          'this sprite\'s Combat-style bounce: velocity Y when the current collision started');
+    }
   });
 };
 
@@ -381,6 +525,40 @@ export const reserveSeekDevVars = (reserveDevVar, reserveDevVarRW, usedFor) => {
 export const reserveSeekArrivedDevVars = (reserveDevVar, watches) => {
   if (!watches || !watches.size) return;
   reserveDevVar(seekArrivedFlagsVarName(), undefined, 'shared "seek arrived" finished-bit byte');
+};
+
+// velocityX/Y are reserved for every sprite in usedFor (either Accelerate or
+// Decelerate targets it) - accelRate/maxSpeed/accelDir only for names in
+// accelUsedFor (a sprite only ever Decelerated has nothing to hold, see
+// inertiaAccelRateVarName's own comment), decelRate only for names in
+// decelUsedFor. The two flag bytes are reserved whenever their own Set is
+// non-empty, regardless of usedFor (mirrors reserveSeekArrivedDevVars'
+// own "only when actually watched" gate).
+export const reserveInertiaDevVars = (reserveDevVar, usedFor, accelUsedFor, decelUsedFor, accel16UsedFor) => {
+  if (usedFor && usedFor.size) {
+    usedFor.forEach((name) => {
+      reserveDevVar(inertiaVelocityXVarName(name), undefined, 'this sprite\'s inertia velocity X (signed)');
+      reserveDevVar(inertiaVelocityYVarName(name), undefined, 'this sprite\'s inertia velocity Y (signed)');
+    });
+  }
+  if (accelUsedFor && accelUsedFor.size) {
+    reserveDevVar(inertiaAccelFlagsVarName(), undefined, 'shared active-bit byte for accelerating sprites');
+    accelUsedFor.forEach((name) => {
+      reserveDevVar(inertiaAccelRateVarName(name), undefined, 'this sprite\'s inertia acceleration rate');
+      reserveDevVar(inertiaMaxSpeedVarName(name), undefined, 'this sprite\'s inertia max speed (per axis)');
+      reserveDevVar(inertiaAccelDirVarName(name), undefined, 'this sprite\'s inertia acceleration direction (0-7)');
+      if (accel16UsedFor && accel16UsedFor.has(name)) {
+        reserveDevVar(inertiaAccelHalfRateVarName(name), undefined,
+            'this sprite\'s inertia acceleration rate / 2, clamped to a minimum of 1, for 16-way\'s halfway directions');
+      }
+    });
+  }
+  if (decelUsedFor && decelUsedFor.size) {
+    reserveDevVar(inertiaDecelFlagsVarName(), undefined, 'shared active-bit byte for decelerating sprites');
+    decelUsedFor.forEach((name) => {
+      reserveDevVar(inertiaDecelRateVarName(name), undefined, 'this sprite\'s inertia deceleration rate');
+    });
+  }
 };
 
 // Ball width and playfield priority both need to read-modify-write CTRLPF -
@@ -596,18 +774,25 @@ export const generateMissileFireChecks = (Blockly) => {
     const activeBit = missileFireActiveBit(name);
     const throttlePair = resolveRW(missileFireThrottleVarName(name));
     const throttleResetPair = resolveRW(missileFireThrottleResetVarName(name));
+    const is16 = used16 && used16.has(name);
+    const halfSpeedVar = is16 ? resolveVar(missileFireHalfSpeedVarName(name)) : null;
     // Every "if dirVar = N then ..." line only ever conditions the ONE
     // statement right after "then" (see this function's long-standing
     // comment further down) - a step whose (x, y) pair has BOTH a nonzero x
     // and y (every 16-way entry except the 4 pure compass points) needs two
     // separate lines, one per axis, both guarded by the same dirVar check,
-    // rather than one combined statement.
-    const dispatch = used16 && used16.has(name) ?
+    // rather than one combined statement. Half-speed steps use halfSpeedVar
+    // (speedVar/2, clamped to a minimum of 1 below) instead of inlining
+    // "(speedVar/2)" - bB's integer division rounds 1/2 down to 0, which at
+    // speed 1 would make every halfway direction's slower axis vanish,
+    // making 16-way look identical to 8-way (see missileFireHalfSpeedVarName's
+    // own comment).
+    const dispatch = is16 ?
       DIRECTION16_STEPS.flatMap(([xStep, yStep], dir) => [
         ...(xStep ? [` if ${dirVar} = ${dir} then ${name}x = ${name}x ${xStep > 0 ? '+' : '-'} ` +
-          `${Math.abs(xStep) === 1 ? speedVar : `(${speedVar}/2)`}`] : []),
+          `${Math.abs(xStep) === 1 ? speedVar : halfSpeedVar}`] : []),
         ...(yStep ? [` if ${dirVar} = ${dir} then ${name}y = ${name}y ${yStep > 0 ? '+' : '-'} ` +
-          `${Math.abs(yStep) === 1 ? speedVar : `(${speedVar}/2)`}`] : []),
+          `${Math.abs(yStep) === 1 ? speedVar : halfSpeedVar}`] : []),
       ]) :
       [
         // X dispatch: Up-Right/Right/Down-Right (1,2,3) step +speed,
@@ -627,11 +812,37 @@ export const generateMissileFireChecks = (Blockly) => {
         ` if ${dirVar} = 0 then ${name}y = ${name}y - ${speedVar}`,
         ` if ${dirVar} = 1 then ${name}y = ${name}y - ${speedVar}`,
       ];
+    const throttleContinueLabel = `_missilefire_${name}_throttlecontinue`;
     lines.push(
         ` if !${flagsVar}{${activeBit}} then goto ${doneLabel}`,
-        ` ${throttlePair.write} = ${throttlePair.read} - 1`,
-        ` if ${throttlePair.read} then goto ${doneLabel}`,
+        // Was "throttlePair.write = throttlePair.read - 1" followed by a
+        // separately bB-compiled "if throttlePair.read then goto doneLabel" -
+        // that second line re-loaded the very same byte from RAM purely to
+        // re-derive the zero flag the subtraction just above already left
+        // set (STA doesn't touch flags, nothing else runs in between). Raw
+        // asm instead, branching straight off that flag - read/write pool
+        // addresses differ physically (see reserveDevVarRW's own comment),
+        // so this still can't be a single in-place "dec", just the same
+        // lda/sec/sbc/sta bB itself already compiles to, with the reload
+        // removed. doneLabel is a bB-generated label defined OUTSIDE this
+        // asm block, so the jump to it needs the same dot-prefixed local
+        // name DASM itself expects (see generators/bbasic/music.js's own
+        // extensive comment on this) - throttleContinueLabel is purely
+        // local to this block, so it doesn't need one.
+        ' asm',
+        '       lda ' + throttlePair.read,
+        '       sec',
+        '       sbc #1',
+        '       sta ' + throttlePair.write,
+        '       beq ' + throttleContinueLabel,
+        '       jmp .' + doneLabel,
+        throttleContinueLabel,
+        'end',
         ` ${throttlePair.write} = ${throttleResetPair.read}`,
+        ...(is16 ? [
+          ` ${halfSpeedVar} = ${speedVar} / 2`,
+          ` if ${halfSpeedVar} = 0 then ${halfSpeedVar} = 1`,
+        ] : []),
         ...dispatch,
         // Off-screen (standard NTSC playfield bounds) stops the movement -
         // clears the active bit so this missile's own dispatch above is
@@ -721,6 +932,174 @@ export const generateSeekChecks = (Blockly) => {
         ` ${flagsVar}{${activeBit}} = 0`,
         ...(isArrivedWatched ? [` ${arrivedFlagBit} = 1`] : []),
         `${doneLabel}`,
+    );
+  });
+  return lines.join('\n') + '\n';
+};
+
+// Clamps velocityVar (a two's-complement signed byte) to +/-maxSpeedVar
+// (an ordinary unsigned magnitude, realistically well under 128) - bB's own
+// "if" comparisons are unsigned-only (see inertiaVelocityXVarName's own
+// comment), so this branches on the sign bit first (BPL/BMI, a single cheap
+// check) and does a plain UNSIGNED compare within whichever half of the
+// byte range applies from there - valid specifically because both operands
+// stay within 0-127 (positive branch) or 128-255 (negative branch) after
+// that split, where unsigned and signed comparison agree. negMaxVar is
+// computed fresh each call (0 - maxSpeedVar) rather than kept as its own
+// dev var - two extra instructions, cheaper than a whole extra byte of
+// state kept in sync with every "set max speed" write.
+const buildSignedClampAsm = (velocityVar, maxSpeedVar, uid) => {
+  const posLabel = `_inertiaclamp${uid}_pos`;
+  const doneLabel = `_inertiaclamp${uid}_done`;
+  return [
+    '       lda ' + velocityVar,
+    '       bpl ' + posLabel,
+    '       lda #0',
+    '       sec',
+    '       sbc ' + maxSpeedVar,
+    '       sta temp7',
+    '       lda ' + velocityVar,
+    '       cmp temp7',
+    '       bcs ' + doneLabel,
+    '       lda temp7',
+    '       jmp ' + doneLabel,
+    posLabel,
+    '       cmp ' + maxSpeedVar,
+    '       bcc ' + doneLabel,
+    '       lda ' + maxSpeedVar,
+    doneLabel,
+    '       sta ' + velocityVar,
+  ];
+};
+
+// Steps velocityVar one decelRateVar closer to 0, clamping AT (not past)
+// zero - the classic "friction overshoot" bug this guards against directly:
+// subtracting decelRateVar from a small positive velocity (or adding it to
+// a small negative one) can otherwise cross zero and start moving the
+// OPPOSITE direction, which real friction never does. Same sign-bit-first
+// split as buildSignedClampAsm above; the positive branch's "cmp
+// decelRateVar / bcc" is a plain unsigned compare, valid for the same
+// reason (both operands 0-127 here).
+const buildDecelerateAsm = (velocityVar, decelRateVar, uid) => {
+  const negLabel = `_inertiadecel${uid}_neg`;
+  const zeroLabel = `_inertiadecel${uid}_zero`;
+  const doneLabel = `_inertiadecel${uid}_done`;
+  return [
+    '       lda ' + velocityVar,
+    '       bmi ' + negLabel,
+    '       cmp ' + decelRateVar,
+    '       bcc ' + zeroLabel,
+    '       sec',
+    '       sbc ' + decelRateVar,
+    '       jmp ' + doneLabel,
+    negLabel,
+    '       clc',
+    '       adc ' + decelRateVar,
+    '       bmi ' + doneLabel,
+    zeroLabel,
+    '       lda #0',
+    doneLabel,
+    '       sta ' + velocityVar,
+  ];
+};
+
+// Spliced into commongamelogic right alongside generateSeekChecks/
+// generateMissileFireChecks (same region, same "nothing else touches this
+// sprite's position there" reasoning) - one block per sprite name that
+// actually has Accelerate and/or Decelerate used anywhere in the project.
+// Accelerate's own direction dispatch (which axis/sign accelRateVar adds
+// to) is plain bB if/goto, the exact same 12-line 8-way shape
+// generateMissileFireChecks' own dispatch already uses (just adding into
+// velocityX/Y instead of stepping name x/y directly) - only the max-speed
+// clamp and the decelerate-toward-zero step need hand asm (see
+// buildSignedClampAsm/buildDecelerateAsm's own comments on why). Position
+// integration itself is a single plain bB add per axis, unconditional,
+// after both accel/decel have had their turn - works correctly on the
+// two's-complement byte with no special handling at all.
+export const generateInertiaChecks = (Blockly) => {
+  const usedFor = Blockly.BBasic.inertiaUsedFor;
+  if (!usedFor || !usedFor.size) return '';
+  const accelUsedFor = Blockly.BBasic.inertiaAccelUsedFor || new Set();
+  const accel16UsedFor = Blockly.BBasic.inertiaAccel16UsedFor || new Set();
+  const decelUsedFor = Blockly.BBasic.inertiaDecelUsedFor || new Set();
+  const resolveVar = (canonicalName) =>
+    Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+  const accelFlagsVar = accelUsedFor.size ? resolveVar(inertiaAccelFlagsVarName()) : null;
+  const decelFlagsVar = decelUsedFor.size ? resolveVar(inertiaDecelFlagsVarName()) : null;
+  const lines = [];
+  ['player0', 'player1', 'missile0', 'missile1', 'ball'].forEach((name) => {
+    if (!usedFor.has(name)) return;
+    const velocityXVar = resolveVar(inertiaVelocityXVarName(name));
+    const velocityYVar = resolveVar(inertiaVelocityYVarName(name));
+    const activeBit = inertiaActiveBit(name);
+    const uid = Blockly.BBasic.blockNumbers.next(`inertia_${name}`);
+
+    if (accelUsedFor.has(name)) {
+      const dirVar = resolveVar(inertiaAccelDirVarName(name));
+      const rateVar = resolveVar(inertiaAccelRateVarName(name));
+      const maxSpeedVar = resolveVar(inertiaMaxSpeedVarName(name));
+      const skipLabel = `_inertiaaccel_${name}_skip`;
+      const is16 = accel16UsedFor.has(name);
+      const halfRateVar = is16 ? resolveVar(inertiaAccelHalfRateVarName(name)) : null;
+      // Same 8-way/16-way dispatch generateMissileFireChecks' own Fire
+      // dispatch uses (see its own comments, including DIRECTION16_STEPS'
+      // own "no trig, dominant axis full rate / other axis half rate"
+      // approximation, and missileFireHalfSpeedVarName's own comment on why
+      // the half-rate step needs a clamped-to-minimum-1 var instead of
+      // inlining "(rateVar/2)") - just adding into velocityX/Y here instead
+      // of stepping name x/y directly.
+      const dispatch = is16 ?
+        DIRECTION16_STEPS.flatMap(([xStep, yStep], dir) => [
+          ...(xStep ? [` if ${dirVar} = ${dir} then ${velocityXVar} = ${velocityXVar} ${xStep > 0 ? '+' : '-'} ` +
+            `${Math.abs(xStep) === 1 ? rateVar : halfRateVar}`] : []),
+          ...(yStep ? [` if ${dirVar} = ${dir} then ${velocityYVar} = ${velocityYVar} ${yStep > 0 ? '+' : '-'} ` +
+            `${Math.abs(yStep) === 1 ? rateVar : halfRateVar}`] : []),
+        ]) :
+        [
+          ` if ${dirVar} = 1 then ${velocityXVar} = ${velocityXVar} + ${rateVar}`,
+          ` if ${dirVar} = 2 then ${velocityXVar} = ${velocityXVar} + ${rateVar}`,
+          ` if ${dirVar} = 3 then ${velocityXVar} = ${velocityXVar} + ${rateVar}`,
+          ` if ${dirVar} = 5 then ${velocityXVar} = ${velocityXVar} - ${rateVar}`,
+          ` if ${dirVar} = 6 then ${velocityXVar} = ${velocityXVar} - ${rateVar}`,
+          ` if ${dirVar} = 7 then ${velocityXVar} = ${velocityXVar} - ${rateVar}`,
+          ` if ${dirVar} = 3 then ${velocityYVar} = ${velocityYVar} + ${rateVar}`,
+          ` if ${dirVar} = 4 then ${velocityYVar} = ${velocityYVar} + ${rateVar}`,
+          ` if ${dirVar} = 5 then ${velocityYVar} = ${velocityYVar} + ${rateVar}`,
+          ` if ${dirVar} = 7 then ${velocityYVar} = ${velocityYVar} - ${rateVar}`,
+          ` if ${dirVar} = 0 then ${velocityYVar} = ${velocityYVar} - ${rateVar}`,
+          ` if ${dirVar} = 1 then ${velocityYVar} = ${velocityYVar} - ${rateVar}`,
+        ];
+      lines.push(
+          ` if !${accelFlagsVar}{${activeBit}} then goto ${skipLabel}`,
+          ...(is16 ? [
+            ` ${halfRateVar} = ${rateVar} / 2`,
+            ` if ${halfRateVar} = 0 then ${halfRateVar} = 1`,
+          ] : []),
+          ...dispatch,
+          ' asm',
+          ...buildSignedClampAsm(velocityXVar, maxSpeedVar, `${uid}x`),
+          ...buildSignedClampAsm(velocityYVar, maxSpeedVar, `${uid}y`),
+          'end',
+          skipLabel,
+      );
+    }
+
+    if (decelUsedFor.has(name)) {
+      const rateVar = resolveVar(inertiaDecelRateVarName(name));
+      const skipLabel = `_inertiadecel_${name}_skip`;
+      lines.push(
+          ` if !${decelFlagsVar}{${activeBit}} then goto ${skipLabel}`,
+          ' asm',
+          ...buildDecelerateAsm(velocityXVar, rateVar, `${uid}x`),
+          ...buildDecelerateAsm(velocityYVar, rateVar, `${uid}y`),
+          'end',
+          skipLabel,
+      );
+    }
+
+    lines.push(
+        ` ${name}x = ${name}x + ${velocityXVar}`,
+        ` ${name}y = ${name}y + ${velocityYVar}`,
     );
   });
   return lines.join('\n') + '\n';
@@ -1042,115 +1421,13 @@ export default (Blockly) => {
         `${name}y = ${y}\n` +
         `${speedVar} = ${speed}\n` +
         `${throttleResetPair.write} = ${interval}\n` +
-        `${throttlePair.write} = 1\n` +
+        // Was "= 1", forcing the very FIRST step to fire after just 1
+        // frame regardless of interval, before falling into the correct
+        // every-${interval}-frames cadence from the second step onward -
+        // seeded from the same interval instead, so the first step waits
+        // the full interval too, same as every step after it.
+        `${throttlePair.write} = ${interval}\n` +
         `${flagsVar}{${activeBit}} = 1\n`;
-    };
-
-    // Reflects whatever direction this object is CURRENTLY fired at
-    // (dirVar - see sprite_${name}_fire's own tooltip), using the same
-    // adaptive multi-frame guessing Combat (1977) uses for its own tank
-    // shells (see buildBounceBlock's own top comment in blocks/sprites.js
-    // for the plain-English version) - no screen-edge or collision
-    // detection of its own, just the direction math (confirmed with the
-    // user: no "gravity"/physics here), so it's meant to be placed behind
-    // whatever check the user's own project already has for deciding a
-    // bounce should happen, called every frame that check stays true.
-    //
-    // dirVar is on a 0 to (N-1) clockwise-from-Up scale, N=8 or N=16
-    // depending on missileFire16UsedFor (same object-wide 8-way/16-way
-    // decision sprite_${name}_fire's own trigger already makes - see that
-    // generator's own comment; a project firing this object in 16-direction
-    // mode needs its Bounce reflections computed on that same finer scale,
-    // and dirVar itself has no room to record which scale is in use).
-    // Reflecting across an axis is "a constant minus dirVar" on this scale
-    // (not a rotation): mirroring across a VERTICAL wall (flip the X
-    // component, keep Y) is (N - dir) mod N, and mirroring across a
-    // HORIZONTAL wall (flip Y, keep X) is (N/2 - dir) mod N - both derived
-    // by checking a few concrete compass directions by hand against
-    // DIRECTION16_STEPS' own X/Y signs. Reversing BOTH axes (the pre-
-    // existing, pre-Combat "corner" fallback this block used to always do
-    // unconditionally) is a rotation instead - "dir + N/2" - which is why
-    // it can't share the other two stages' "constant - dir" shape.
-    //
-    // Combat's own three stages, replayed here as three labelled blocks of
-    // code (bB's "if ... then" only conditions a single statement, so a
-    // multi-line stage needs "if condition then goto label" + a fallthrough
-    // guard instead of one compound if): stage 1 (this is the FIRST frame
-    // this object has been stuck) mirrors the ORIGINAL heading across a
-    // vertical wall; stage 2 (STILL stuck the very next frame) mirrors that
-    // same original heading across a horizontal wall instead (not stage
-    // 1's result - Combat's own "+180 to the previous guess" description
-    // and "reflect the original across a horizontal wall" both land on the
-    // identical angle by construction, see the comment above; starting
-    // fresh from origDirVar every stage avoids ever compounding rounding/
-    // wrap quirks across stages); stage 3+ (still stuck after that) gives
-    // up guessing which wall and just reverses the ORIGINAL heading by 180
-    // degrees outright (assume a corner), and stays there for as long as
-    // the collision keeps being reported, rather than cycling back through
-    // stage 1 again - Combat's own eventual steady-state once genuinely
-    // wedged against a corner.
-    //
-    // "Still stuck the very next frame" vs. "a brand new collision" is told
-    // apart the only way available with no dedicated "collision ended"
-    // event to hook a reset into: frameVar remembers the framecounter value
-    // from this object's last Bounce call, and any gap other than exactly 1
-    // frame (including the very first call ever, when frameVar is still its
-    // undim'd 0) resets stageVar back to 0, restarting the guess sequence
-    // fresh - matching a real new collision, not a continuation.
-    // reserveMissileBounceDevVars (see bbasic.js's own init()) guarantees
-    // stageVar/origDirVar/frameVar already exist here whenever this
-    // generator runs, same pre-scan pattern as every other "*UsedFor" dev
-    // var reservation in this file.
-    Blockly.BBasic[`sprite_${registrationName}_bounce`] = function(block) {
-      const name = resolveName(block);
-      const resolveVar = (canonicalName) =>
-        Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
-      const dirVar = resolveVar(missileFireDirVarName(name));
-      const stageVar = resolveVar(missileBounceStageVarName(name));
-      const origDirVar = resolveVar(missileBounceOrigDirVarName(name));
-      const frameVar = resolveVar(missileBounceFrameVarName(name));
-      const steps = (Blockly.BBasic.missileFire16UsedFor || new Set()).has(name) ? 16 : 8;
-      const half = steps / 2;
-      const blockNumber = Blockly.BBasic.blockNumbers.next(`bounce_${name}`);
-      const stage1Label = `_bounce_${name}_${blockNumber}_s1`;
-      const stage2Label = `_bounce_${name}_${blockNumber}_s2`;
-      const stage3Label = `_bounce_${name}_${blockNumber}_s3`;
-      const doneLabel = `_bounce_${name}_${blockNumber}_done`;
-      return (
-        // "Still the same collision, one frame later" check - done via a
-        // plain equality comparison, not "framecounter - 1" inline in the
-        // condition, matching every other generator in this file (arithmetic
-        // always lands in an assignment of its own, never inline inside an
-        // "if"). frameVar is advanced to what it'd need to equal for a
-        // genuine one-frame gap FIRST, compared, THEN overwritten with the
-        // real framecounter value for next time - byte-wrapping (0/255
-        // rollover) falls out of this correctly for free, no special case
-        // needed, since frameVar and framecounter are both plain bytes.
-        ` ${frameVar} = ${frameVar} + 1\n` +
-        ` if ${frameVar} <> framecounter then ${stageVar} = 0\n` +
-        ` ${frameVar} = framecounter\n` +
-        ` if ${stageVar} = 0 then goto ${stage1Label}\n` +
-        ` if ${stageVar} = 1 then goto ${stage2Label}\n` +
-        ` goto ${stage3Label}\n` +
-        `${stage1Label}\n` +
-        ` ${origDirVar} = ${dirVar}\n` +
-        ` ${dirVar} = ${steps} - ${origDirVar}\n` +
-        ` if ${dirVar} = ${steps} then ${dirVar} = 0\n` +
-        ` ${stageVar} = 1\n` +
-        ` goto ${doneLabel}\n` +
-        `${stage2Label}\n` +
-        ` ${dirVar} = ${steps} - ${origDirVar}\n` +
-        ` if ${dirVar} = ${steps} then ${dirVar} = 0\n` +
-        ` ${dirVar} = ${dirVar} + ${half}\n` +
-        ` if ${dirVar} >= ${steps} then ${dirVar} = ${dirVar} - ${steps}\n` +
-        ` ${stageVar} = 2\n` +
-        ` goto ${doneLabel}\n` +
-        `${stage3Label}\n` +
-        ` ${dirVar} = ${origDirVar} + ${half}\n` +
-        ` if ${dirVar} >= ${steps} then ${dirVar} = ${dirVar} - ${steps}\n` +
-        ` ${stageVar} = 3\n` +
-        `${doneLabel}\n`
-      );
     };
   };
 
@@ -1219,7 +1496,10 @@ export default (Blockly) => {
       `${targetYVar} = ${y}\n` +
       `${speedVar} = ${speed}\n` +
       `${throttleResetPair.write} = ${interval}\n` +
-      `${throttlePair.write} = 1\n` +
+      // Same fix as sprite_*_fire's own trigger above - was "= 1", making
+      // the first step happen after just 1 frame instead of the full
+      // interval.
+      `${throttlePair.write} = ${interval}\n` +
       `${flagsVar}{${activeBit}} = 1\n` +
       clearArrived;
   };
@@ -1239,6 +1519,241 @@ export default (Blockly) => {
       Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
     const flagBit = `${resolveVar(seekArrivedFlagsVarName())}{${seekArrivedBit(name)}}`;
     return [flagBit, Blockly.BBasic.ORDER_ATOMIC];
+  };
+
+  // Captures direction/rate/max speed and sets the accel-active bit for
+  // whichever object OBJECT picks - the actual per-frame velocity update
+  // happens in generateInertiaChecks (spliced into commongamelogic), same
+  // "trigger block sets dev vars + flag bit" shape as object_seek_to above.
+  // Direction is a plain 0-7 number input (not a fixed dropdown), same as
+  // sprite_*_fire's own ANGLE - lets it be wired directly from a "Joystick
+  // direction (8-way)" block for continuous joystick-driven thrust, not
+  // just a literal.
+  Blockly.BBasic['sprite_inertia_accelerate'] = function(block) {
+    const name = block.getFieldValue('OBJECT');
+    const resolveVar = (canonicalName) =>
+      Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+    const dirVar = resolveVar(inertiaAccelDirVarName(name));
+    const rateVar = resolveVar(inertiaAccelRateVarName(name));
+    const maxSpeedVar = resolveVar(inertiaMaxSpeedVarName(name));
+    const flagsVar = resolveVar(inertiaAccelFlagsVarName());
+    const direction = Blockly.BBasic.valueToCode(block, 'DIRECTION', Blockly.BBasic.ORDER_ASSIGNMENT) || '0';
+    const rate = Blockly.BBasic.valueToCode(block, 'RATE', Blockly.BBasic.ORDER_ASSIGNMENT) || '1';
+    const maxSpeed = Blockly.BBasic.valueToCode(block, 'MAXSPEED', Blockly.BBasic.ORDER_ASSIGNMENT) || '127';
+    const activeBit = inertiaActiveBit(name);
+    return `${dirVar} = ${direction}\n` +
+      `${rateVar} = ${rate}\n` +
+      `${maxSpeedVar} = ${maxSpeed}\n` +
+      `${flagsVar}{${activeBit}} = 1\n`;
+  };
+
+  // Clears the accel-active bit only - velocity is left exactly where it
+  // is (holds at its current value unless Decelerate is also on for this
+  // object), matching this feature's own "engine off, still coasting"
+  // framing rather than an instant stop.
+  Blockly.BBasic['sprite_inertia_stop_accelerate'] = function(block) {
+    const name = block.getFieldValue('OBJECT');
+    const resolveVar = (canonicalName) =>
+      Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+    const flagsVar = resolveVar(inertiaAccelFlagsVarName());
+    const activeBit = inertiaActiveBit(name);
+    return `${flagsVar}{${activeBit}} = 0\n`;
+  };
+
+  // ACTION dropdown (Start/Stop) - same shape as
+  // text_minikernel_scroll_control's own single-block-multiple-actions
+  // convention. RATE is only meaningful (and only read) on Start - Stop
+  // just clears the bit, leaving whatever rate was last set untouched for
+  // the next Start (same "don't disturb state Stop has no reason to
+  // touch" reasoning collision_check_position/scroll_control already use
+  // elsewhere in this codebase).
+  Blockly.BBasic['sprite_inertia_decelerate'] = function(block) {
+    const name = block.getFieldValue('OBJECT');
+    const resolveVar = (canonicalName) =>
+      Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+    const flagsVar = resolveVar(inertiaDecelFlagsVarName());
+    const activeBit = inertiaActiveBit(name);
+    const action = block.getFieldValue('ACTION');
+    if (action === 'stop') return `${flagsVar}{${activeBit}} = 0\n`;
+    const rateVar = resolveVar(inertiaDecelRateVarName(name));
+    const rate = Blockly.BBasic.valueToCode(block, 'RATE', Blockly.BBasic.ORDER_ASSIGNMENT) || '1';
+    return `${rateVar} = ${rate}\n` +
+      `${flagsVar}{${activeBit}} = 1\n`;
+  };
+
+  // Reflects whichever movement system(s) the chosen object actually uses
+  // off of whatever it just collided with - Fire's own fired direction
+  // (missile0/1/ball only) AND/OR Inertia's own velocity (any of the 5
+  // names), sharing ONE stage/frame progression between them (see
+  // missileBounceStageVarName's own comment - "how many consecutive stuck
+  // frames" isn't specific to either representation). Neither true (an
+  // object using neither Fire nor Inertia) still emits the frame/stage
+  // bookkeeping but reflects nothing - harmless no-op, same as this
+  // block's own tooltip documents.
+  //
+  // Matches the real 1977 Combat cartridge's own missile-bounce routine
+  // (COLMPF/COLMPFX/Rev180/Bump180 in atariage.com's "Definitive Combat
+  // Disassembly", $F4A6-$F4CD) stage-for-stage, not just "3 guesses then
+  // give up" in spirit - Stella genuinely has no idea which wall/edge was
+  // actually hit, so it can't compute a correct reflection on the first
+  // try, and neither can this:
+  //
+  //   Stage 1 (dirVar/frameVar just went from "not stuck" to "stuck this
+  //   frame", stageVar 0 -> 1): mirror the CURRENT heading across a
+  //   vertical wall (dirVar = N - dirVar), the routine's own first guess.
+  //   Combat then nudges the result off any exact compass point (N/E/S/W)
+  //   by one step - a mirror of a purely-vertical heading (dirVar 0 or
+  //   N/2) is a no-op (0 and N/2 are their own negation on this scale),
+  //   which would make this stage look like nothing happened; the original
+  //   game avoids that dead-looking case (and any other exact-axis result)
+  //   by always nudging 22.5 degrees off it. dirVar is on a 0 to (N-1)
+  //   clockwise-from-Up scale, N=8 or N=16 depending on
+  //   missileFire16UsedFor - "exact compass point" is a multiple of N/4 on
+  //   that scale.
+  //
+  //   Stage 2 (still stuck one frame later, stageVar 1 -> 2): add 180
+  //   degrees (N/2) to WHATEVER stage 1 just left in dirVar (not a fresh
+  //   mirror of the original heading) - Combat's own Rev180/Bump180 reads
+  //   DIRECTN directly, already holding stage 1's result. Composing "mirror
+  //   vertical" with "+180" is algebraically a horizontal-wall mirror of
+  //   the original, so this still reads as "try the other wall orientation
+  //   next" - it's just computed as a delta from stage 1, matching Combat
+  //   exactly (and inheriting stage 1's off-axis nudge for free).
+  //
+  //   Stage 3 (still stuck a SECOND frame later, stageVar 2 -> 3): do
+  //   nothing at all - Combat's own MxPFcount=$02 case, a deliberate grace
+  //   frame giving the object one more chance to clear the wall pixel on
+  //   its current (stage 2) heading before giving up.
+  //
+  //   Stage 4+ (still stuck a THIRD frame later, stageVar 3 and up): give
+  //   up guessing and reverse the ORIGINAL pre-collision heading outright
+  //   (dirVar = origDirVar + N/2), assuming a corner - and keep reapplying
+  //   that same reversed heading every frame for as long as the collision
+  //   keeps being reported, exactly like Combat's own "or higher" case.
+  //
+  // velocityX/Y need no angle math at all - two's-complement negation is
+  // just "0 - x" (6502 SBC produces the identical bit pattern whether the
+  // byte is read as signed or unsigned, not a special case) - so this
+  // mirrors the same 4-stage timing (vertical mirror / +180 from stage 1's
+  // result / grace frame / corner-reverses-the-original) using plain X/Y
+  // negation instead of dirVar arithmetic. There's no equivalent to
+  // Combat's off-axis nudge for a raw velocity component (an angle scale
+  // has a natural "smallest step" to nudge by; a signed pixel/frame value
+  // doesn't), so a sprite using ONLY Inertia (no Fire) can still see a
+  // stage-1 mirror that looks like a no-op if the axis being flipped was
+  // already 0 - stage 2 (the other axis) still fires normally the frame
+  // after, same fallback Combat itself effectively relies on.
+  //
+  // "Still stuck" vs. "a brand new collision" is told apart by frameVar
+  // (the framecounter value at the last Bounce call) - any gap other than
+  // exactly 1 frame resets stageVar back to 0. reserveMissileBounceDevVars
+  // (bbasic.js's own init()) guarantees stageVar/frameVar/origDirVar (if
+  // hasFire)/origVelocityX/Y (if hasInertia) already exist here.
+  Blockly.BBasic['object_bounce'] = function(block) {
+    const name = block.getFieldValue('OBJECT');
+    const resolveVar = (canonicalName) =>
+      Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+    const hasFire = (Blockly.BBasic.missileFireUsedFor || new Set()).has(name);
+    const hasInertia = (Blockly.BBasic.inertiaUsedFor || new Set()).has(name);
+    const stageVar = resolveVar(missileBounceStageVarName(name));
+    const frameVar = resolveVar(missileBounceFrameVarName(name));
+    const blockNumber = Blockly.BBasic.blockNumbers.next(`bounce_${name}`);
+    const stage1Label = `_bounce_${name}_${blockNumber}_s1`;
+    const stage2Label = `_bounce_${name}_${blockNumber}_s2`;
+    const stage3Label = `_bounce_${name}_${blockNumber}_s3`;
+    const stage4Label = `_bounce_${name}_${blockNumber}_s4`;
+    const doneLabel = `_bounce_${name}_${blockNumber}_done`;
+
+    const fireLines = {stage1: [], stage2: [], stage4: []};
+    if (hasFire) {
+      const dirVar = resolveVar(missileFireDirVarName(name));
+      const origDirVar = resolveVar(missileBounceOrigDirVarName(name));
+      const steps = (Blockly.BBasic.missileFire16UsedFor || new Set()).has(name) ? 16 : 8;
+      const half = steps / 2;
+      // "Exact compass point" (N/E/S/W) is a multiple of steps/4 on this
+      // 0..steps-1 scale - equivalently, its low log2(steps/4) bits are all
+      // 0. Tested bit-by-bit (var{n} && var{n} ...) instead of a single
+      // masked comparison (var & mask = 0) since this codebase has no
+      // existing precedent for bitwise "&" mixed with a comparison inside
+      // one bB expression, and bit-index reads are already this codebase's
+      // own established way to test individual bits (see e.g.
+      // background.js's fade-flag checks).
+      const quarterBits = Math.log2(steps / 4);
+      const offAxisTest = Array.from({length: quarterBits}, (_, i) => `!${dirVar}{${i}}`).join(' && ');
+      fireLines.stage1 = [
+        ` ${origDirVar} = ${dirVar}`,
+        ` ${dirVar} = ${steps} - ${dirVar}`,
+        ` if ${dirVar} = ${steps} then ${dirVar} = 0`,
+        // Nudge off any exact compass point (N/E/S/W), matching Combat's
+        // own "AND #$03 / BNE / INC" jigger.
+        ` if ${offAxisTest} then ${dirVar} = ${dirVar} + 1`,
+      ];
+      fireLines.stage2 = [
+        ` ${dirVar} = ${dirVar} + ${half}`,
+        ` if ${dirVar} >= ${steps} then ${dirVar} = ${dirVar} - ${steps}`,
+      ];
+      fireLines.stage4 = [
+        ` ${dirVar} = ${origDirVar} + ${half}`,
+        ` if ${dirVar} >= ${steps} then ${dirVar} = ${dirVar} - ${steps}`,
+      ];
+    }
+
+    const inertiaLines = {stage1: [], stage2: [], stage4: []};
+    if (hasInertia) {
+      const velocityXVar = resolveVar(inertiaVelocityXVarName(name));
+      const velocityYVar = resolveVar(inertiaVelocityYVarName(name));
+      const origVelocityXVar = resolveVar(missileBounceOrigVelocityXVarName(name));
+      const origVelocityYVar = resolveVar(missileBounceOrigVelocityYVarName(name));
+      inertiaLines.stage1 = [
+        ` ${origVelocityXVar} = ${velocityXVar}`,
+        ` ${origVelocityYVar} = ${velocityYVar}`,
+        ` ${velocityXVar} = 0 - ${velocityXVar}`,
+      ];
+      inertiaLines.stage2 = [
+        ` ${velocityXVar} = ${origVelocityXVar}`,
+        ` ${velocityYVar} = 0 - ${origVelocityYVar}`,
+      ];
+      inertiaLines.stage4 = [
+        ` ${velocityXVar} = 0 - ${origVelocityXVar}`,
+        ` ${velocityYVar} = 0 - ${origVelocityYVar}`,
+      ];
+    }
+
+    return [
+      // "Still the same collision, one frame later" check - frameVar is
+      // advanced to what it'd need to equal for a genuine one-frame gap
+      // FIRST, compared, THEN overwritten with the real framecounter value
+      // for next time - byte-wrapping (0/255 rollover) falls out of this
+      // correctly for free, no special case needed.
+      ` ${frameVar} = ${frameVar} + 1`,
+      ` if ${frameVar} <> framecounter then ${stageVar} = 0`,
+      ` ${frameVar} = framecounter`,
+      ` if ${stageVar} = 0 then goto ${stage1Label}`,
+      ` if ${stageVar} = 1 then goto ${stage2Label}`,
+      ` if ${stageVar} = 2 then goto ${stage3Label}`,
+      ` goto ${stage4Label}`,
+      `@ ${stage1Label}`,
+      ...fireLines.stage1,
+      ...inertiaLines.stage1,
+      ` ${stageVar} = 1`,
+      ` goto ${doneLabel}`,
+      `@ ${stage2Label}`,
+      ...fireLines.stage2,
+      ...inertiaLines.stage2,
+      ` ${stageVar} = 2`,
+      ` goto ${doneLabel}`,
+      // Combat's own deliberate "do nothing" grace frame (MxPFcount=$02) -
+      // gives the object one more frame to clear the wall on stage 2's
+      // heading before stage 4 gives up on it.
+      `@ ${stage3Label}`,
+      ` ${stageVar} = 3`,
+      ` goto ${doneLabel}`,
+      `@ ${stage4Label}`,
+      ...fireLines.stage4,
+      ...inertiaLines.stage4,
+      ` ${stageVar} = 3`,
+      `@ ${doneLabel}`,
+    ].join('\n') + '\n';
   };
 
   // Bit 2 of CTRLPF. Set through the bit-index syntax on the CTRLPF RAM

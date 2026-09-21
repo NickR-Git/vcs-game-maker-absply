@@ -4,7 +4,7 @@ import * as Blockly from 'blockly/core';
 
 import {useBackgroundsStorage} from '../hooks/project';
 import {playfieldToMatrix} from '../utils/pixels';
-import {BACKGROUND_ICON, COLOR_ICON, CHECKBOX_CHECKED_ICON, CHECKBOX_CLEAR_ICON, FLIP_ICON, BACKGROUND_PFSCROLL_LEFT_ICON, BACKGROUND_PFSCROLL_RIGHT_ICON, BACKGROUND_PFSCROLL_UP_ICON, BACKGROUND_PFSCROLL_DOWN_ICON, BACKGROUND_PFSCROLL_DOWN2X_ICON, BACKGROUND_PFSCROLL_UP2X_ICON} from './icon';
+import {BACKGROUND_ICON, COLOR_ICON, CHECKBOX_CHECKED_ICON, CHECKBOX_CLEAR_ICON, FLIP_ICON, BACKGROUND_PFSCROLL_LEFT_ICON, BACKGROUND_PFSCROLL_RIGHT_ICON, BACKGROUND_PFSCROLL_UP_ICON, BACKGROUND_PFSCROLL_DOWN_ICON, BACKGROUND_PFSCROLL_DOWN2X_ICON, BACKGROUND_PFSCROLL_UP2X_ICON, PLAYER_ICON, MISSILE_ICON, BALL_ICON} from './icon';
 
 const BACKGROUND_COLOR = '#ffa500';
 
@@ -147,6 +147,20 @@ export const FADE_FLAGS_REGISTER_GROUPS = [
 // bbasic.js) only for a project that actually uses this block at all.
 export const backgroundGetPixelXVarName = () => 'bgGetPixelX';
 export const backgroundGetPixelYVarName = () => 'bgGetPixelY';
+// background_collision_pixel's own result vars (see generators/bbasic/
+// background.js) - same reserveDevVarRW/pfread()-argument-safety reasoning
+// as backgroundGetPixelXVarName/YVarName above, just always used (this
+// block never has a cheaper temp1-temp6 fallback path to begin with, so
+// there's no "only when nested in a function" condition to gate on).
+export const collisionPixelColumnVarName = () => 'collisionPixelColumn';
+export const collisionPixelRowVarName = () => 'collisionPixelRow';
+// Pure internal scratch for the "nudged by one cell" candidates the
+// generator checks alongside the exact column/row before committing a
+// final result into the two vars above - never read back by any getter
+// block, but still needs a real reserved var (not temp1-temp6, same
+// reasoning as the pair above) since it's a bare pfread() argument too.
+export const collisionPixelNudgedColumnVarName = () => 'collisionPixelColumn2';
+export const collisionPixelNudgedRowVarName = () => 'collisionPixelRow2';
 // Bits 0-3: one "finished" bit per fadeable register (fires on either fade
 // direction's own completion - see fadeFlagsVarName's own
 // comment). Bits 4-7: the matching "active" bit for that same register
@@ -681,6 +695,74 @@ Blockly.defineBlocksWithJsonArray([
     'tooltip': `Converts a Player/Missile/Ball X or Y coordinate to the matching playfield pixel column ` +
       `(0-31) or row.`,
   },
+  // Given a sprite that just registered a hardware collision with the
+  // Playfield (see collision_get/collision_check_position in blocks/
+  // collision.js), works out exactly which playfield column/row it hit -
+  // width is read back automatically (no WIDTH field here, unlike
+  // background_sprite_to_pixel above), and the two Boolean inputs are the
+  // sprite's own current direction of travel, supplied by whatever
+  // movement logic already tracks it (see this block's own generator in
+  // generators/bbasic/background.js for why direction isn't auto-tracked
+  // here instead). Results are read back via background_collision_pixel_
+  // column/_row below, right after this runs.
+  {
+    'type': `background_collision_pixel`,
+    'message0': `${BACKGROUND_ICON} Find playfield pixel %1 collided with`,
+    'message1': `moving right %1 moving down %2`,
+    'args0': [
+      {
+        'type': 'field_dropdown',
+        'name': 'SPRITE',
+        'options': [
+          [PLAYER_ICON + ' Player 0', 'player0'],
+          [PLAYER_ICON + ' Player 1', 'player1'],
+          [MISSILE_ICON + ' Missile 0', 'missile0'],
+          [MISSILE_ICON + ' Missile 1', 'missile1'],
+          [BALL_ICON + ' Ball', 'ball'],
+        ],
+      },
+    ],
+    'args1': [
+      {
+        'type': 'input_value',
+        'name': 'MOVING_RIGHT',
+        'check': 'Boolean',
+      },
+      {
+        'type': 'input_value',
+        'name': 'MOVING_DOWN',
+        'check': 'Boolean',
+      },
+    ],
+    'inputsInline': true,
+    'previousStatement': null,
+    'nextStatement': null,
+    'colour': BACKGROUND_COLOR,
+    'tooltip': `Works out which exact playfield column/row the chosen sprite is touching right now ` +
+      `- place this right after a "Collided <sprite> and Playfield" check. "Moving right"/"moving ` +
+      `down" should reflect the sprite's own CURRENT direction of travel (wire in whatever variable ` +
+      `already tracks that) - used to pick the right neighboring pixel if the sprite's exact position ` +
+      `doesn't land precisely on a playfield pixel. Read the result with "Playfield collision column" ` +
+      `/ "Playfield collision row" right after this runs.`,
+  },
+  {
+    'type': `background_collision_pixel_column`,
+    'message0': `${BACKGROUND_ICON} Playfield collision column`,
+    'args0': [],
+    'output': 'Number',
+    'colour': BACKGROUND_COLOR,
+    'tooltip': `The playfield column (0-31) found by the last "Find playfield pixel collided with" ` +
+      `block that ran - meaningless if read before that block has run this frame.`,
+  },
+  {
+    'type': `background_collision_pixel_row`,
+    'message0': `${BACKGROUND_ICON} Playfield collision row`,
+    'args0': [],
+    'output': 'Number',
+    'colour': BACKGROUND_COLOR,
+    'tooltip': `The playfield row found by the last "Find playfield pixel collided with" block that ` +
+      `ran - meaningless if read before that block has run this frame.`,
+  },
   // Block for clearing every playfield pixel at once
   {
     'type': `background_clear`,
@@ -767,8 +849,13 @@ Blockly.defineBlocksWithJsonArray([
 // auto-detects which way to go from the current color), so there was no
 // direction-aware trigger to actually pair a direction-specific watch
 // against in the first place. A fade that starts already AT its target
-// (nothing to actually step) never fires this - there's no real completion
-// event to report if it was already done before the first check.
+// (nothing to actually step) still fires this, on that same first active
+// frame - confirmed as a real reported bug: a project fading the playfield
+// to a color that happened to share its starting color's luminance nibble
+// (hue commits instantly regardless, only luminance ramps - see
+// generators/bbasic/background.js's own buildFadeCheckAsm) took the
+// "already" shortcut on frame one and silently never reported completion,
+// even though the register visibly was at its target the whole time.
 Blockly.Blocks['background_fade_finished'] = {
   init: function() {
     this.appendDummyInput()

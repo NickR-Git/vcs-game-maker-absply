@@ -358,11 +358,13 @@
                         </v-btn>
                       </div>
                       <div class="pattern-length-tempo-group">
-                        <v-select
+                        <v-text-field
                           class="steps-field"
                           label="Length (steps)"
-                          :items="patternStepOptionItems"
-                          v-model="activePattern(song).stepCount"
+                          type="number"
+                          :min="minPatternSteps"
+                          :max="maxPatternSteps"
+                          v-model.number="activePattern(song).stepCount"
                           @change="() => handleStepCountChange(song, activePattern(song))"
                         />
                         <v-checkbox
@@ -685,7 +687,11 @@
                             v-bind:key="row.midi"
                             class="piano-roll-row"
                           >
-                            <div class="piano-roll-label">{{ row.label }}</div>
+                            <div
+                              class="piano-roll-label"
+                              :class="{'piano-roll-label-black-key': isBlackKeyRow(row),
+                                'piano-roll-label-row-unavailable': labelRowUnavailable(activePattern(song), row)}"
+                            >{{ row.label }}</div>
                             <div
                               v-for="stepIndex in maxPatternSteps"
                               v-bind:key="stepIndex"
@@ -721,7 +727,7 @@
                             class="piano-roll-volume-cell"
                             :class="{'piano-roll-volume-cell-continuation':
                               volumeCellIsContinuation(activePattern(song), stepIndex - 1)}"
-                            :style="{flex: `0 0 ${cellWidthPx()}px`}"
+                            :style="{flex: `0 0 ${cellWidthPx()}px`, height: `${volumeRowHeight}px`}"
                           >
                             <div
                               v-for="ghost in otherTrackVolumeBars(activePattern(song), stepIndex - 1)"
@@ -742,13 +748,25 @@
                                 class="piano-roll-volume-handle"
                                 @mousedown="(event) => handleVolumeBarPointerDown(note, activePattern(song), event)"
                               />
-                              <span
+                              <input
                                 v-if="noteStartStep(note) === stepIndex - 1"
+                                type="number"
                                 class="piano-roll-volume-value"
-                              >{{ noteVolumePercent(note, activePattern(song)) }}</span>
+                                :value="noteVolumePercent(note, activePattern(song))"
+                                title="This note's own volume, as a percentage of the instrument's own base volume"
+                                min="0"
+                                @click.stop
+                                @mousedown.stop
+                                @change="(event) => handleVolumePercentChange(note, activePattern(song), event)"
+                              />
                             </div>
                           </div>
                         </div>
+                        <div
+                          class="piano-roll-volume-resize-handle"
+                          title="Drag to resize the volume row"
+                          @mousedown.prevent="startVolumeRowResize"
+                        />
                       </div>
                       </div>
                     </v-card-text>
@@ -784,13 +802,13 @@ import {max} from 'lodash';
 
 import {useCollapsedIds} from '../hooks/collapse';
 import {useDragReorder} from '../hooks/drag-reorder';
-import {useMusicEditorActiveState} from '../hooks/music-editor-state';
+import {useMusicEditorActiveState, usePlaybackStatusState} from '../hooks/music-editor-state';
 import {useDimSoundFxPercentStorage, useDimSoundFxStorage, useSongsStorage,
   useSoundEffectsStorage, loadMutedMusicTrackIds, loadSoloedMusicTrackIds, MUTED_MUSIC_TRACKS_KEY,
   SOLOED_MUSIC_TRACKS_KEY, isMusicTrackMuted} from '../hooks/project';
 import {
-  clampTempo, DEFAULT_PATTERN_STEPS, DEFAULT_SONGS, DEFAULT_TEMPO, DURATION_SUBDIVISION_OPTIONS,
-  LENGTH_UNITS_PER_STEP, MAX_PATTERN_STEPS, MAX_TEMPO, MIN_TEMPO, normalizeSequenceGroups, PATTERN_STEP_OPTIONS,
+  clampPatternSteps, clampTempo, DEFAULT_PATTERN_STEPS, DEFAULT_SONGS, DEFAULT_TEMPO, DURATION_SUBDIVISION_OPTIONS,
+  LENGTH_UNITS_PER_STEP, MAX_PATTERN_STEPS, MAX_TEMPO, MIN_PATTERN_STEPS, MIN_TEMPO, normalizeSequenceGroups,
   processSongsStorageDefaults,
 } from '../blocks/music';
 import {processSoundEffectsStorageDefaults} from '../blocks/soundfx';
@@ -810,6 +828,24 @@ import {autoInstrumentColor, instrumentColorFor, isLightColor,
 // stored separately so it doesn't disturb those editors' own zoom levels.
 const PIANO_ROLL_ZOOM_KEY = 'vcs-game-maker.zoom.music-piano-roll';
 const clampPianoRollZoom = (value) => (Number.isFinite(value) ? Math.min(16, Math.max(0.25, value)) : 1);
+
+// The volume row's own height (see .piano-roll-volume-cell) - draggable via
+// its own resize handle (handleVolumeRowResizeMove below), same idea as the
+// piano roll's own horizontal zoom just above, just for this row's vertical
+// size instead. Stored separately (own key, own shared-across-every-song
+// scope) rather than folded into pianoRollZoom - zooming the pitch grid and
+// resizing this row are independent adjustments, a project with a lot of
+// fine per-note volume automation wants this tall regardless of whatever
+// horizontal zoom the pitch grid above it happens to be at right now.
+// 64 (the old fixed CSS height) is the default floor; the max is generous
+// enough for fine per-note volume work without letting one drag make the
+// row absurdly, unusably tall.
+const VOLUME_ROW_HEIGHT_KEY = 'vcs-game-maker.music-piano-roll.volume-row-height';
+const VOLUME_ROW_HEIGHT_MIN = 64;
+const VOLUME_ROW_HEIGHT_MAX = 320;
+const clampVolumeRowHeight = (value) =>
+  (Number.isFinite(value) ? Math.min(VOLUME_ROW_HEIGHT_MAX, Math.max(VOLUME_ROW_HEIGHT_MIN, value)) :
+    VOLUME_ROW_HEIGHT_MIN);
 
 // Which instrument rows are muted/soloed for pattern/song preview playback -
 // a view preference (see mutedTrackIds/soloedTrackIds below), but one that
@@ -831,8 +867,16 @@ const PIANO_ROLL_CELL_WIDTH_BASE = 28;
 // Matches .piano-roll-label-spacer/.piano-roll-label's own flex-basis -
 // the row-label column's width doesn't scale with zoom, so it has to be
 // subtracted before dividing the remaining space among this pattern's own
-// steps (see handleFitZoom).
-const PIANO_ROLL_LABEL_WIDTH = 44;
+// steps (see handleFitZoom). Wide enough for a black-key row's own combined
+// "C#4/Db4"-style label (see noteLabel in utils/music-notes.js) - a natural
+// note's own shorter single-name label ("C4") fits with room to spare.
+// Sized generously past the widest real label (measured ~50px) rather than
+// exactly to it - flex-shrink:0 on both rules means actual content wider
+// than this basis would grow the column anyway (each .piano-roll-row is its
+// own independent flex container, so a mix of over- and under-width rows
+// breaks the grid's own column alignment down the page - a real, visible
+// bug this fixes).
+const PIANO_ROLL_LABEL_WIDTH = 58;
 
 // Every new instrument row defaults to channel 0 - TIA only has 2 real
 // hardware sound channels, and a row plays fine on its own without the user
@@ -890,6 +934,40 @@ export default defineComponent({
         localStorage.setItem(PIANO_ROLL_ZOOM_KEY, String(zoom));
       },
     });
+
+    const volumeRowHeightStored = ref(
+        clampVolumeRowHeight(parseFloat(localStorage.getItem(VOLUME_ROW_HEIGHT_KEY))));
+    const volumeRowHeight = computed({
+      get: () => volumeRowHeightStored.value,
+      set(value) {
+        const height = clampVolumeRowHeight(value);
+        volumeRowHeightStored.value = height;
+        localStorage.setItem(VOLUME_ROW_HEIGHT_KEY, String(height));
+      },
+    });
+
+    // Drag-to-resize for the volume row's own handle (see
+    // .piano-roll-volume-resize-handle in the template) - same
+    // mousedown/mousemove/mouseup-on-window shape as startResize/
+    // handleResizeMove below (a note's own length handle), just tracking
+    // one ref instead of mutating a note, and with no "own overlapping note"
+    // concerns to speak of.
+    const volumeRowResizing = ref(null);
+    const handleVolumeRowResizeMove = (event) => {
+      if (!volumeRowResizing.value) return;
+      const {startClientY, startHeight} = volumeRowResizing.value;
+      volumeRowHeight.value = startHeight + (event.clientY - startClientY);
+    };
+    const stopVolumeRowResize = () => {
+      volumeRowResizing.value = null;
+      window.removeEventListener('mousemove', handleVolumeRowResizeMove);
+      window.removeEventListener('mouseup', stopVolumeRowResize);
+    };
+    const startVolumeRowResize = (event) => {
+      volumeRowResizing.value = {startClientY: event.clientY, startHeight: volumeRowHeight.value};
+      window.addEventListener('mousemove', handleVolumeRowResizeMove);
+      window.addEventListener('mouseup', stopVolumeRowResize);
+    };
 
     // A fixed multiplicative step (not a fixed percentage-point step, the
     // way hooks/zoom.js's own discrete ZOOM_LEVELS effectively are) - this
@@ -1632,6 +1710,13 @@ export default defineComponent({
       };
       song.patterns.push(newPattern);
       setActivePattern(song, newPattern.id);
+      // setActivePattern already recalculates the fit base width for
+      // whichever pattern becomes active, but doesn't reset pianoRollZoom
+      // itself back to 1 (switching between two EXISTING patterns should
+      // keep whatever zoom you were already at) - a brand new pattern
+      // should always start at a real fit instead of inheriting whatever
+      // zoom was left over from the pattern viewed just before it.
+      handleFitZoom(song, newPattern);
       handleChildChange();
       forceUpdate();
     };
@@ -1661,13 +1746,19 @@ export default defineComponent({
     };
 
     const handleStepCountChange = (song, pattern) => {
+      pattern.stepCount = clampPatternSteps(pattern.stepCount);
       const maxUnits = pattern.stepCount * LENGTH_UNITS_PER_STEP;
       pattern.tracks.forEach((track) => {
         track.notes = track.notes
             .filter((note) => note.step < maxUnits)
             .map((note) => ({...note, length: Math.min(note.length, maxUnits - note.step)}));
       });
-      recalculateFitBaseWidth(song, pattern);
+      // Full handleFitZoom (recalculate AND reset zoom to 1), not just
+      // recalculateFitBaseWidth alone - a Length edit should always
+      // re-fit the view to the new step count, not just recalibrate what
+      // "100%" means while leaving whatever zoom level was already set
+      // (which would read as "100%" but not actually look like a fit).
+      handleFitZoom(song, pattern);
       handleChildChange();
       forceUpdate();
     };
@@ -2063,8 +2154,11 @@ export default defineComponent({
     // Only one of a pattern or a song's full sequence can be playing at a
     // time (they share the same underlying audio engine - see
     // utils/music-playback.js), so starting either one clears the other.
-    const playingPatternId = ref(null);
-    const playingSongId = ref(null);
+    // Backed by usePlaybackStatusState's own module-level refs (not plain
+    // local ones) for the same "survives Vue Router destroying/recreating
+    // this component" reason activePatternIdsRef/activeTrackIdsRef above
+    // already need it - see that hook's own comment.
+    const {playingPatternIdRef: playingPatternId, playingSongIdRef: playingSongId} = usePlaybackStatusState();
 
     // {patternId, elapsedUnits} of whatever's currently playing (either a
     // single pattern or one step of a song's sequence), or null - drives the
@@ -2091,6 +2185,18 @@ export default defineComponent({
       if (playbackHeadFrame == null) tick();
     };
     onBeforeUnmount(stopPlaybackHeadPolling);
+    // Resumes polling immediately if playback was already active when this
+    // component mounts - true the first time the Music tab is ever opened
+    // during something playing, but far more commonly true on a REMOUNT
+    // (navigating away and back mid-playback, see playingPatternId/
+    // playingSongId's own comment): the actual audio engine kept going the
+    // whole time regardless, but the PREVIOUS mount's own polling loop was
+    // torn down by its own onBeforeUnmount above, so nothing was left
+    // updating playbackHead - without this, the moving playhead and
+    // Sequence list highlight stayed frozen/blank until the next Play
+    // click, even though playingPatternId/playingSongId themselves (now
+    // module-level) correctly still showed something playing.
+    if (playingPatternId.value != null || playingSongId.value != null) startPlaybackHeadPolling();
 
     // Toggle for the auto-follow watcher just below - a page-local UI
     // preference (not persisted project data, same reasoning/mechanism as
@@ -2270,6 +2376,15 @@ export default defineComponent({
 
     const stepsFor = (pattern) => pattern.stepCount || DEFAULT_PATTERN_STEPS;
 
+    // Whether a piano-roll row is a "black key" on a real piano - shown via
+    // its own label styling (see .piano-roll-label-black-key) so the row
+    // list reads at a glance the same way a real keyboard's key colors do.
+    // A row's own label already carries this: only a black key ever gets
+    // BOTH standard spellings (see noteLabel in utils/music-notes.js, e.g.
+    // "C#4/Db4"), a natural always has just the one name - cheaper than
+    // re-deriving it from row.midi % 12 separately.
+    const isBlackKeyRow = (row) => row.label.includes('/');
+
     // Only pure-tone AUDC values (see utils/music-notes.js) have a clean,
     // tunable pitch - anything else can only be triggered on/off per step,
     // via the shared "Hit" row instead of a real pitch.
@@ -2297,6 +2412,16 @@ export default defineComponent({
       if (row.midi === 'hit') return !audcHasTunableNotes(soundEffect.audc);
       return audfByMidiForAudc(soundEffect.audc).has(row.midi);
     };
+    // Same "not available to the currently active track" check
+    // patternCellClasses' own piano-roll-cell-row-unavailable already
+    // applies across a row's own cells - mirrored here so the row's own
+    // label (see .piano-roll-label-row-unavailable) reads as unavailable
+    // too, instead of looking like any other normal, playable row while
+    // every cell beside it is greyed out.
+    const labelRowUnavailable = (pattern, row) => {
+      const activeTrack = activeTrackFor(pattern);
+      return !!activeTrack && !rowIsAvailable(activeTrack, row);
+    };
     const rowAudf = (track, row) => {
       if (row.midi === 'hit') return null;
       const soundEffect = trackSoundEffect(track);
@@ -2309,6 +2434,25 @@ export default defineComponent({
     // a resize drag snaps to multiples of it.
     const subdivisionUnitLength = () =>
       Math.max(1, Math.round(LENGTH_UNITS_PER_STEP / effectiveSubdivision()));
+
+    // Length (LENGTH_UNITS_PER_STEP units) of the last note placed or
+    // resized (see handlePatternCellClick/stopResize) - a newly placed note
+    // reuses this instead of always snapping to the current subdivision, so
+    // laying down a run of same-length notes (or matching a length you just
+    // dragged out) doesn't need re-picking the subdivision each time. Null
+    // until the first note is actually placed/resized this session, at
+    // which point newNoteLength below falls back to the plain subdivision
+    // length exactly like every new note already worked before this.
+    const lastNoteLength = ref(null);
+    const newNoteLength = () => lastNoteLength.value || subdivisionUnitLength();
+
+    // Volume override (an absolute AUDV, or null for "this instrument's own
+    // plain default") of the last note placed or resized/volume-edited (see
+    // handlePatternCellClick, stopResize, handleVolumeBarMove/
+    // handleVolumePercentChange) - a newly placed note reuses this the same
+    // way newNoteLength reuses the last length, instead of always falling
+    // back to the instrument's own default volume.
+    const lastNoteAudv = ref(null);
 
     // Both a note's step (start) and length are in LENGTH_UNITS_PER_STEP
     // units now (not whole steps) - a note can start at any sub-step slice,
@@ -2363,11 +2507,15 @@ export default defineComponent({
     // the instrument's own volume), and dragging the bar scales down from
     // there, rather than making users think in raw hardware AUDV units.
     // 0% for a silent (audv 0) instrument, since there's no base volume to
-    // express a fraction of.
+    // express a fraction of. Clamped to 100 - a note can no longer be set
+    // louder than the instrument's base volume at all (see
+    // handleVolumePercentChange's matching clamp), but legacy data from
+    // before that cap existed could still store an audv above base, so this
+    // keeps the displayed number capped too, not just the bar's height.
     const notePercentOf = (note, soundEffect) => {
       const base = Number(soundEffect.audv) || 0;
       if (base <= 0) return 0;
-      return Math.round((noteAudv(note, soundEffect) / base) * 100);
+      return Math.min(100, Math.round((noteAudv(note, soundEffect) / base) * 100));
     };
 
     const noteVolumePercent = (note, pattern) => {
@@ -2460,10 +2608,6 @@ export default defineComponent({
     const noteAt = (track, step) =>
       ((track && track.notes) || [])
           .find((note) => step >= noteStartStep(note) && step < noteEndStepExclusive(note)) || null;
-
-    const trackNoteOverlappingUnits = (track, startUnits, endUnits) =>
-      ((track && track.notes) || [])
-          .find((note) => note.step < endUnits && note.step + note.length > startUnits) || null;
 
     // TIA has 2 real hardware channels - two tracks on DIFFERENT channels can
     // genuinely sound at once, so only a track sharing the active track's own
@@ -2812,13 +2956,21 @@ export default defineComponent({
     // placing a new note where this instrument already has one just
     // replaces it (see handlePatternCellClick) - only a DIFFERENT track
     // sharing the channel is a real hardware conflict.
-    const canPlaceNoteAt = (pattern, activeTrack, row, startUnits, endUnits) => {
-      const conflictingTrack = pattern.tracks.find((track) =>
-        track !== activeTrack && track.channel === activeTrack.channel &&
-        trackNoteOverlappingUnits(track, startUnits, endUnits));
-      if (conflictingTrack) return false;
-      return rowIsAvailable(activeTrack, row);
-    };
+    //
+    // Any instrument (tunable or noise) is allowed to overlap whatever
+    // another track sharing its channel is already playing - real hardware
+    // has only one waveform generator per channel, so this doesn't truly mix
+    // two sounds, it briefly "steals" the channel for the new note's own
+    // duration, then hands the interrupted note back for whatever's left of
+    // its own length (see flattenPatternEvents in generators/bbasic/
+    // music.js, which splits the interrupted note around it and resumes it
+    // afterward - the same "briefly steal the channel, no dev var, no
+    // runtime resume check" technique a real tracker's auto hi-hat uses).
+    // Which note actually wins the overlap is decided by Priority (see the
+    // Sound tab's own field, and flattenPatternEvents' matching resolution
+    // pass), not by which one is being placed here.
+    const canPlaceNoteAt = (pattern, activeTrack, row, startUnits, endUnits) =>
+      rowIsAvailable(activeTrack, row);
 
     // A faint preview of exactly where/how long a note would land if clicked
     // right now - without this, hovering could only show the whole cell
@@ -2833,7 +2985,7 @@ export default defineComponent({
         return;
       }
       const startUnits = step * LENGTH_UNITS_PER_STEP + clickedSliceOffsetUnits(event);
-      const endUnits = startUnits + subdivisionUnitLength();
+      const endUnits = startUnits + newNoteLength();
       const ownNoteHere = (activeTrack.notes || [])
           .find((note) => startUnits >= note.step && startUnits < note.step + note.length);
       if (ownNoteHere && ownNoteHere.midi === row.midi) {
@@ -2876,7 +3028,7 @@ export default defineComponent({
       if (!activeTrack) return;
 
       const noteStartUnits = step * LENGTH_UNITS_PER_STEP + clickedSliceOffsetUnits(event);
-      const noteEndUnits = noteStartUnits + subdivisionUnitLength();
+      const noteEndUnits = noteStartUnits + newNoteLength();
 
       // Clicking on top of the active track's own note (at the clicked
       // slice, not just anywhere in the step) removes it, with nothing
@@ -2902,17 +3054,43 @@ export default defineComponent({
       const audf = rowAudf(activeTrack, row);
       const ownOverlapping = (activeTrack.notes || []).filter((note) =>
         note.step < noteEndUnits && note.step + note.length > noteStartUnits);
+      // Carries the replaced note's own volume-row override (see
+      // handleVolumeBarPointerDown) forward onto the new note, rather than
+      // silently dropping back to the instrument's default volume just
+      // because the step got re-clicked (e.g. to change pitch) - a real
+      // reported annoyance re-adjusting the volume bar after every pitch
+      // tweak. The first overlapping note with an override wins; in
+      // practice there's only ever one note under a clicked slice anyway.
+      const preservedAudv = ownOverlapping.find((note) => Number.isInteger(note.audv));
       if (ownOverlapping.length) {
         activeTrack.notes = activeTrack.notes.filter((note) => !ownOverlapping.includes(note));
       }
-      activeTrack.notes.push({step: noteStartUnits, midi: row.midi, audf, length: subdivisionUnitLength()});
+      const newNote = {step: noteStartUnits, midi: row.midi, audf, length: newNoteLength()};
+      // Replacing an existing note (ownOverlapping.length) always keeps
+      // exactly what WAS there - an explicit override if any overlapping
+      // note had one (preservedAudv), else deliberately left unset (that
+      // note was already playing at its instrument's own plain default,
+      // and should stay there) - lastNoteAudv never applies here, only to
+      // a genuinely empty slot with nothing of its own to preserve. Without
+      // this distinction, replacing a plain-default note while some
+      // UNRELATED note elsewhere was more recently set to a custom volume
+      // silently pulled that unrelated volume in instead of keeping this
+      // note's own (a real reported bug).
+      if (ownOverlapping.length) {
+        if (preservedAudv) newNote.audv = preservedAudv.audv;
+      } else if (lastNoteAudv.value != null) {
+        newNote.audv = lastNoteAudv.value;
+      }
+      activeTrack.notes.push(newNote);
+      lastNoteLength.value = newNote.length;
+      lastNoteAudv.value = newNote.audv === undefined ? null : newNote.audv;
       hoverPreview.value = null;
       handleChildChange();
       if (!isTrackMuted(song, pattern, activeTrack)) {
         previewPatternNote({
           audc: soundEffect.audc,
           audf: audf == null ? soundEffect.audf : audf,
-          audv: soundEffect.audv,
+          audv: noteAudv(newNote, soundEffect),
           arpeggio: soundEffect.arpeggio,
           arpeggioDivision: soundEffect.arpeggioDivision,
           arpeggioInterval: soundEffect.arpeggioInterval,
@@ -2941,6 +3119,15 @@ export default defineComponent({
     };
     const stopResize = () => {
       if (!resizing.value) return;
+      // See newNoteLength's own comment - grabbing a note's resize handle
+      // counts as "interacting with" that note, same as placing one fresh,
+      // EVEN if the mouse never actually moves (mouseup still fires stopResize
+      // regardless of whether handleResizeMove ever ran) - both this note's
+      // own length AND its own volume (whatever it already was, override or
+      // not) carry forward, not just whichever one this particular gesture
+      // happens to edit.
+      lastNoteLength.value = resizing.value.note.length;
+      lastNoteAudv.value = resizing.value.note.audv === undefined ? null : resizing.value.note.audv;
       resizing.value = null;
       handleChildChange();
       window.removeEventListener('mousemove', handleResizeMove);
@@ -3003,6 +3190,9 @@ export default defineComponent({
     };
     const stopVolumeDrag = () => {
       if (!volumeDragging.value) return;
+      // See lastNoteAudv's own comment - dragging a note's volume counts as
+      // "editing" it too, same as placing one fresh.
+      lastNoteAudv.value = volumeDragging.value.note.audv;
       volumeDragging.value = null;
       handleChildChange();
       window.removeEventListener('mousemove', handleVolumeBarMove);
@@ -3029,6 +3219,28 @@ export default defineComponent({
       handleVolumeBarMove(event);
       window.addEventListener('mousemove', handleVolumeBarMove);
       window.addEventListener('mouseup', stopVolumeDrag);
+    };
+
+    // Typing an exact value into the volume row's own number field (see the
+    // template - only rendered on a note's own start step, same as the
+    // label it replaces) - same target field (note.audv, an absolute 0-15
+    // AUDV value) as dragging the bar, just entered as a percentage of the
+    // instrument's own base volume instead of derived from cursor position.
+    // Clamped to 100, same as dragging already was - a note can never be
+    // set louder than the instrument's base volume this way, matching
+    // notePercentOf's display clamp (a project with older data already
+    // stored above that ceiling still reads as capped, not just new edits).
+    const handleVolumePercentChange = (note, pattern, event) => {
+      const activeTrack = activeTrackFor(pattern);
+      const soundEffect = activeTrack && trackSoundEffect(activeTrack);
+      const baseAudv = soundEffect ? (Number(soundEffect.audv) || 0) : 0;
+      const percent = Math.max(0, Math.min(100, Number(event.target.value) || 0));
+      note.audv = Math.max(0, Math.min(15, Math.round((percent / 100) * baseAudv)));
+      // See lastNoteAudv's own comment - typing a note's volume counts as
+      // "editing" it too, same as dragging or placing one fresh.
+      lastNoteAudv.value = note.audv;
+      handleChildChange();
+      forceUpdate();
     };
     onBeforeUnmount(() => {
       window.removeEventListener('mousemove', handleResizeMove);
@@ -3079,7 +3291,7 @@ export default defineComponent({
       patternCellClasses, patternCellStyle, patternCellTitle, activeTrackNoteTips, noteEndFraction, noteAt,
       volumeBarNotesAt, volumeCellIsContinuation, noteVolumePercent, volumeBarStyleFor, otherTrackVolumeBars,
       noteStartStep,
-      handleVolumeBarPointerDown, handlePianoRollScroll,
+      handleVolumeBarPointerDown, handleVolumePercentChange, handlePianoRollScroll,
       rulerCellStyle, handleSeekHover, handleSeekHoverLeave,
       instrumentColor, instrumentTextColor,
       soundEffectOptions,
@@ -3095,12 +3307,14 @@ export default defineComponent({
       // Sound tab's own Frequency field before its own fix). Number(value)
       // converts back to match what's actually stored.
       channelOptionItems: CHANNEL_OPTIONS.map(([text, value]) => ({text, value: Number(value)})),
-      patternStepOptionItems: PATTERN_STEP_OPTIONS.map((steps) => ({text: `${steps}`, value: steps})),
       subdivisionOptionItems: DURATION_SUBDIVISION_OPTIONS.map((n) => ({text: `${n}`, value: n})),
+      minPatternSteps: MIN_PATTERN_STEPS,
       maxPatternSteps: MAX_PATTERN_STEPS,
       pianoRollZoom, stepPianoRollZoom, cellWidthPx, handleFitZoom,
+      volumeRowHeight, startVolumeRowResize,
       selectedCardId, selectCard, deselectCard,
       sharedNoteRows: [...CANONICAL_NOTE_ROWS, ...HIT_ROW],
+      isBlackKeyRow, labelRowUnavailable,
       isSongCollapsed, toggleSongCollapsed,
       isPatternCollapsed, togglePatternCollapsed, isInstrumentsCollapsed, toggleInstrumentsCollapsed,
       isSequenceCollapsed, toggleSequenceCollapsed,
@@ -4106,7 +4320,7 @@ export default defineComponent({
 }
 
 .piano-roll-label-spacer {
-  flex: 0 0 44px;
+  flex: 0 0 58px;
   position: sticky;
   left: 0;
   z-index: 3;
@@ -4149,7 +4363,7 @@ export default defineComponent({
 }
 
 .piano-roll-label {
-  flex: 0 0 44px;
+  flex: 0 0 58px;
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -4160,6 +4374,31 @@ export default defineComponent({
   background-color: rgba(0, 0, 0, 0.04);
   position: sticky;
   left: 0;
+}
+
+/* A black key on a real piano (see isBlackKeyRow) - dark background/light
+   text, like an actual black key with its own note name printed on it,
+   instead of the plain light .piano-roll-label above (a white key's own
+   look). opacity reset to 1 (not the plain label's own 0.7) - dimming a
+   light color reads as "muted", but dimming this dark one just makes the
+   light text harder to read against it for no benefit. */
+.piano-roll-label-black-key {
+  opacity: 1;
+  background-color: #6b6b6b;
+  color: #fff;
+}
+
+/* Same "not available to the currently active track" treatment as
+   .piano-roll-cell-row-unavailable, extended to the row's own label too
+   (see labelRowUnavailable) - the exact same literal background color
+   (not a filter over whatever was already there) so an unavailable row's
+   label actually matches its own cells' grey instead of landing on some
+   other shade - !important to win over .piano-roll-label-black-key's own
+   dark background when a black-key row is also unavailable. */
+.piano-roll-label-row-unavailable {
+  background-color: rgba(0, 0, 0, 0.18) !important;
+  color: initial;
+  cursor: not-allowed;
 }
 
 /* flex-basis is set inline (see cellWidthPx) - it scales with the piano
@@ -4286,19 +4525,38 @@ export default defineComponent({
   padding-top: 4px;
 }
 
-/* Taller than a plain 20px .piano-roll-cell (64px) - a bar spanning a
-   0-100% range needs real vertical room to drag precisely; at 20px tall
-   each percentage point would be little more than a fraction of a
-   pixel. */
+/* Taller than a plain 20px .piano-roll-cell (64px, the floor
+   VOLUME_ROW_HEIGHT_MIN also uses) - a bar spanning a 0-100% range needs
+   real vertical room to drag precisely; at 20px tall each percentage point
+   would be little more than a fraction of a pixel. height is set inline
+   now (see volumeRowHeight), draggable via .piano-roll-volume-resize-handle
+   below - this is just the floor/starting point every song shares until
+   dragged. */
 .piano-roll-volume-cell {
   position: relative;
-  height: 64px;
   border-left: 1px solid rgba(0, 0, 0, 0.22);
   border-bottom: 1px solid rgba(0, 0, 0, 0.06);
 }
 
 .piano-roll-volume-cell:nth-child(even) {
   background-color: rgba(0, 0, 0, 0.025);
+}
+
+/* Drag this to resize the volume row (see startVolumeRowResize) - a plain
+   horizontal strip along the row's own bottom edge, same "semi-transparent
+   white grab strip" language as .piano-roll-resize-handle/
+   .piano-roll-volume-handle use for their own (differently-oriented) drag
+   handles, just full-width and a little taller so it's comfortable to grab
+   without needing to land on a single note's own handle first. */
+.piano-roll-volume-resize-handle {
+  height: 8px;
+  cursor: ns-resize;
+  background-color: rgba(0, 0, 0, 0.06);
+  border-top: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+.piano-roll-volume-resize-handle:hover {
+  background-color: rgba(0, 0, 0, 0.12);
 }
 
 /* A step covered by a note that started in an earlier column (not this
@@ -4353,12 +4611,20 @@ export default defineComponent({
    short/quiet bar rather than being clipped inside it (this whole element
    is taller than a short bar's own height, via overflow: visible below,
    the default) - reads fine as a small label near the bar's own top, the
-   same way a bar chart's own value labels usually work. */
+   same way a bar chart's own value labels usually work.
+   A real <input type="number"> now (see handleVolumePercentChange), not a
+   plain <span> - typing an exact value here sets the note's own volume
+   directly instead of only being settable by dragging the bar. Reset back
+   to looking like the plain label it replaced: no border/background/
+   padding of its own, and the browser's own up/down spinner arrows hidden
+   (they'd otherwise eat into this already-narrow column and don't fit the
+   rest of the piano roll's own flat styling). */
 .piano-roll-volume-value {
   position: absolute;
   top: 10px;
   left: 0;
   right: 0;
+  width: 100%;
   text-align: center;
   /* Matches .piano-roll-label's own note-name text size, so the volume
      number reads as the same "size class" of text as the rest of the
@@ -4366,6 +4632,20 @@ export default defineComponent({
   font-size: 0.7rem;
   line-height: 1;
   color: white;
+  border: none;
+  background: transparent;
+  padding: 0;
+  -moz-appearance: textfield;
+}
+
+.piano-roll-volume-value::-webkit-outer-spin-button,
+.piano-roll-volume-value::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.piano-roll-volume-value:focus {
+  outline: 1px solid rgba(255, 255, 255, 0.8);
 }
 
 .add-song-button {

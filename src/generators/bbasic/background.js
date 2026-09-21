@@ -4,8 +4,11 @@ import {useConfigurationStorage} from '../../hooks/project';
 import {effectiveBackgroundRows, backgroundFadeTimerVarName, backgroundFadePaceVarName,
   backgroundFadeTargetVarName, fadeFlagsVarName, FADE_STEPS,
   backgroundFadeFinishedBit, fadeActiveBit, backgroundFadeWatchKey,
-  backgroundGetPixelXVarName, backgroundGetPixelYVarName} from '../../blocks/background';
+  backgroundGetPixelXVarName, backgroundGetPixelYVarName,
+  collisionPixelColumnVarName, collisionPixelRowVarName,
+  collisionPixelNudgedColumnVarName, collisionPixelNudgedRowVarName} from '../../blocks/background';
 import {pfRowDivisorFor} from '../../utils/playfield-coords';
+import {ctrlpfShadowVarName} from './sprites';
 
 // FADE_STEPS (4) is fixed rather than user-choosable - see its own comment
 // in blocks/background.js. floor(14 / 4) = 3, rounded down to the nearest
@@ -344,6 +347,136 @@ export default (Blockly) => {
     return [`(${x} - ${xOffset}) / 4`, Blockly.BBasic.ORDER_DIVISION];
   };
 
+  // background_collision_pixel's own per-sprite X/Y system vars, plus each
+  // one's "is this sprite currently stretched to double/quad width" runtime
+  // test - see blocks/background.js's own comment on this block for why
+  // width has to be auto-detected rather than asked for. Player 0/Missile 0
+  // and Player 1/Missile 1 each share ONE real bB variable
+  // (player0size/player1size - confirmed readable, see generators/bbasic/
+  // sprites.js's own sprite_player_size generator, which reads it as a
+  // source operand) covering both that player's own stretch (bits 0/2, mask
+  // $05) and that missile's own width (bits 4-5, mask $30 - see sprites.js's
+  // own sprite_..._set generator, which writes missile width into THIS same
+  // var, never a separate one). Ball width lives in the SAME bit positions
+  // ($30) of sprites.js's own CTRLPF RAM shadow instead of the real
+  // (unsafe-to-read-back) CTRLPF register - see ctrlpfShadowVarName's own
+  // comment there. Not a static map - ball's own entry needs nameDB_ to
+  // resolve the shadow var's real letter, so this has to be a function.
+  const spriteCollisionCoords = (sprite) => {
+    if (sprite === 'ball') {
+      const shadowVar = Blockly.BBasic.nameDB_.getName(
+          ctrlpfShadowVarName(), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+      return {x: 'ballx', y: 'bally', stretched: `${shadowVar} & $30 <> 0`};
+    }
+    const byName = {
+      player0: {x: 'player0x', y: 'player0y', stretched: 'player0size & $05 = $05'},
+      player1: {x: 'player1x', y: 'player1y', stretched: 'player1size & $05 = $05'},
+      missile0: {x: 'missile0x', y: 'missile0y', stretched: 'player0size & $30 <> 0'},
+      missile1: {x: 'missile1x', y: 'missile1y', stretched: 'player1size & $30 <> 0'},
+    };
+    return byName[sprite];
+  };
+
+  // Given a sprite that just registered a hardware Playfield collision,
+  // works out which exact playfield column/row it's touching - see this
+  // block's own tooltip in blocks/background.js, and the top-of-file safety
+  // reasoning in generators/bbasic/collision.js (this exact "software
+  // pfread()-based pixel-precise collision" territory has caused real bugs
+  // here before: a ROM lockup from an out-of-range playfield index, and a
+  // separate hard crash on contact). Every value handed to pfread() below is
+  // first clamped into its valid range (0-31 for column, 0-maxRow for row) -
+  // bB bytes are unsigned, so a division that would otherwise go negative
+  // just wraps to a large positive value instead, which these clamps catch
+  // exactly the same way as a genuinely too-large one.
+  //
+  // A single division doesn't always land exactly on the pixel that was
+  // actually touched (see ChipOff's own account, quoted directly to the
+  // user, of why it re-checks with pfread and nudges by one column) - this
+  // generalizes that to both axes with a small, bounded (at most 4 pfread
+  // calls, no loops) escalating check: exact cell, then nudged column alone,
+  // then nudged row alone, then - only if neither single-axis nudge found a
+  // lit pixel - the diagonal (both nudged) combination, trusted without a
+  // further re-check (matching ChipOff's own "trust the final nudge, don't
+  // re-verify" behavior for its own last fallback step). "Moving right"/
+  // "moving down" pick which way each axis nudges - see blocks/background.js's
+  // own comment on why direction is a plain user-supplied input here, not
+  // auto-tracked previous-frame position.
+  Blockly.BBasic['background_collision_pixel'] = function(block) {
+    const sprite = block.getFieldValue('SPRITE');
+    const coords = spriteCollisionCoords(sprite);
+    const movingRight = Blockly.BBasic.valueToCode(block, 'MOVING_RIGHT', Blockly.BBasic.ORDER_LOGICAL_AND) || '0';
+    const movingDown = Blockly.BBasic.valueToCode(block, 'MOVING_DOWN', Blockly.BBasic.ORDER_LOGICAL_AND) || '0';
+    const configurationStorage = useConfigurationStorage();
+    const config = (configurationStorage && configurationStorage.value) || {};
+    const maxRow = effectiveBackgroundRows(config) - 1;
+    const rowDivisor = pfRowDivisorFor(config);
+    Blockly.BBasic.usesDivMul = true;
+
+    const col = Blockly.BBasic.superchipRwPairs[collisionPixelColumnVarName()];
+    const row = Blockly.BBasic.superchipRwPairs[collisionPixelRowVarName()];
+    const col2 = Blockly.BBasic.superchipRwPairs[collisionPixelNudgedColumnVarName()];
+    const row2 = Blockly.BBasic.superchipRwPairs[collisionPixelNudgedRowVarName()];
+
+    const id = Blockly.BBasic.blockNumbers.next('collisionPixel');
+    const useCol2Label = `_collision_pixel_${id}_usecol2`;
+    const useRow2Label = `_collision_pixel_${id}_userow2`;
+    const colRightLabel = `_collision_pixel_${id}_colright`;
+    const afterColLabel = `_collision_pixel_${id}_aftercol`;
+    const rowDownLabel = `_collision_pixel_${id}_rowdown`;
+    const afterRowLabel = `_collision_pixel_${id}_afterrow`;
+    const doneLabel = `_collision_pixel_${id}_done`;
+
+    return [
+      // Exact column/row, clamped before anything ever reads them.
+      `${col.write} = (${coords.x} - 17) / 4`,
+      `if ${coords.stretched} then ${col.write} = (${coords.x} - 16) / 4`,
+      `if ${col.read} > 31 then ${col.write} = 31`,
+      `${row.write} = (${coords.y} - 1) / ${rowDivisor}`,
+      `if ${row.read} > ${maxRow} then ${row.write} = ${maxRow}`,
+      // Exact cell.
+      `if pfread(${col.read}, ${row.read}) then goto ${doneLabel}`,
+      // Nudged column alone.
+      `${col2.write} = ${col.read}`,
+      `if ${movingRight} then goto ${colRightLabel}`,
+      `if ${col2.read} > 0 then ${col2.write} = ${col2.read} - 1`,
+      `goto ${afterColLabel}`,
+      `@ ${colRightLabel}`,
+      `if ${col2.read} < 31 then ${col2.write} = ${col2.read} + 1`,
+      `@ ${afterColLabel}`,
+      `if pfread(${col2.read}, ${row.read}) then goto ${useCol2Label}`,
+      // Nudged row alone.
+      `${row2.write} = ${row.read}`,
+      `if ${movingDown} then goto ${rowDownLabel}`,
+      `if ${row2.read} > 0 then ${row2.write} = ${row2.read} - 1`,
+      `goto ${afterRowLabel}`,
+      `@ ${rowDownLabel}`,
+      `if ${row2.read} < ${maxRow} then ${row2.write} = ${row2.read} + 1`,
+      `@ ${afterRowLabel}`,
+      `if pfread(${col.read}, ${row2.read}) then goto ${useRow2Label}`,
+      // Neither single-axis nudge found it - diagonal fallback, trusted
+      // without a further re-check.
+      `${col.write} = ${col2.read}`,
+      `${row.write} = ${row2.read}`,
+      `goto ${doneLabel}`,
+      `@ ${useCol2Label}`,
+      `${col.write} = ${col2.read}`,
+      `goto ${doneLabel}`,
+      `@ ${useRow2Label}`,
+      `${row.write} = ${row2.read}`,
+      `@ ${doneLabel}`,
+    ].join('\n') + '\n';
+  };
+
+  Blockly.BBasic['background_collision_pixel_column'] = function(block) {
+    const pair = Blockly.BBasic.superchipRwPairs[collisionPixelColumnVarName()];
+    return [pair.read, Blockly.BBasic.ORDER_ATOMIC];
+  };
+
+  Blockly.BBasic['background_collision_pixel_row'] = function(block) {
+    const pair = Blockly.BBasic.superchipRwPairs[collisionPixelRowVarName()];
+    return [pair.read, Blockly.BBasic.ORDER_ATOMIC];
+  };
+
   Blockly.BBasic[`background_select`] = function(block) {
     const code = block.getFieldValue('VAR') || 0;
     return [code, Blockly.BBasic.ORDER_ATOMIC];
@@ -396,6 +529,35 @@ export default (Blockly) => {
   const resolveVar = (canonicalName) =>
     Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
 
+  // The real color variable a fade register's rawVar actually writes to -
+  // shared by emitColorFadeTrigger and generateBackgroundFadeChecks' own
+  // checksForVar below, which used to duplicate this same resolution.
+  // COLUBK/COLUPF need a separate shadow variable (see background_set_color's
+  // own comment above) since the score/text drawing routines overwrite the
+  // real register every frame - scorecolor/TextColor have no such override,
+  // so the real variable doubles as its own shadow. player0realcolor/
+  // player1realcolor have no separate shadow alias either (nothing renames
+  // them the way COLUBK/COLUPF rename to backgroundrealcolor/
+  // playfieldrealcolor), but - unlike scorecolor/TextColor - they're still
+  // app-internal dev vars needing nameDB_ resolution (sprite_${name}_get/set
+  // already resolve this same VAR through nameDB_/VARIABLE_CATEGORY_NAME -
+  // see generators/bbasic/sprites.js), so they're grouped with COLUBK/COLUPF
+  // here, not scorecolor/TextColor.
+  const resolveFadeColorVar = (rawVar) => {
+    const needsNameDbResolution = rawVar === 'COLUPF' || rawVar === 'COLUBK' ||
+      rawVar === 'player0realcolor' || rawVar === 'player1realcolor';
+    const targetShadowVar = rawVar === 'COLUPF' ? 'playfieldrealcolor' :
+      rawVar === 'COLUBK' ? 'backgroundrealcolor' : rawVar;
+    // scorecolor/TextColor are real batari Basic identifiers already
+    // (score.js's own score_color_get/set and text-minikernel.js's own
+    // TextColor blocks both reference them as plain literals, never through
+    // nameDB_) - only COLUBK/COLUPF's shadow vars and player0realcolor/
+    // player1realcolor are app-internal dev vars that actually need letter
+    // resolution.
+    return needsNameDbResolution ?
+      Blockly.BBasic.nameDB_.getName(targetShadowVar, Blockly.VARIABLE_CATEGORY_NAME) : targetShadowVar;
+  };
+
   // Fires a fade trigger once - stores the target color and this fade's own
   // pace (this fade's total requested duration, divided across FADE_STEPS
   // installments - "over roughly this many frames" is the OVERALL fade
@@ -406,36 +568,49 @@ export default (Blockly) => {
   // rather than a "call every frame yourself" block).
   //
   // The actual RESET (timer/pace/active all snapping back to a fresh fade)
-  // only happens when color differs from the target this fade was last
-  // triggered for - guarded by a real "if targetVar = color then skip"
-  // rather than unconditional, because a "Fade to color" block placed in a
-  // per-frame event (title_update, say) calls this every single frame for
-  // the SAME target color: unconditionally re-priming the timer every time
-  // that happens meant the per-frame step (generateBackgroundFadeChecks,
-  // which runs earlier in commongamelogic, so its own progress got
-  // immediately overwritten right after) could never actually count down to
-  // 0 - a real reported bug ("fade finished never seems to trigger"; the
-  // fade itself never finishes, since it's perpetually reset before it can),
-  // same class of bug (and same fix) as buildTextScrollSetupLines' own
-  // "same message, don't re-reset" guard in text-scroll.js. Retriggering
-  // with a genuinely DIFFERENT target color still restarts the fade toward
-  // that new target from wherever the color currently sits, same as a fresh
-  // trigger would - this only skips the reset when the request is a no-op
-  // repeat of whatever's already in flight (or already reached).
+  // is skipped only when this exact request is already fully accounted for -
+  // either a fade toward this target is actively in progress right now
+  // (activeBit), or the real color already sits at the target (nothing left
+  // to do) - rather than unconditional, because a "Fade to color" block
+  // placed in a per-frame event (title_update, say) calls this every single
+  // frame for the SAME target color: unconditionally re-priming the timer
+  // every time that happens meant the per-frame step
+  // (generateBackgroundFadeChecks, which runs earlier in commongamelogic, so
+  // its own progress got immediately overwritten right after) could never
+  // actually count down to 0 - a real reported bug ("fade finished never
+  // seems to trigger"; the fade itself never finishes, since it's
+  // perpetually reset before it can), same class of bug (and same fix) as
+  // buildTextScrollSetupLines' own "same message, don't re-reset" guard in
+  // text-scroll.js.
   //
-  // color is captured into temp1 exactly once, before the comparison,
-  // rather than embedded directly into both the "if" and the assignment -
-  // it can be an arbitrary expression (not necessarily side-effect-free,
-  // e.g. a Random block), and evaluating it twice could disagree with
-  // itself between the guard check and the actual reset (same reasoning
+  // Checking only targetVar (not the real color too, as this now does) was
+  // confirmed as a real, separate reported bug: a "Fade to color" placed in
+  // a one-shot event (Title screen start) that re-runs every time that
+  // screen is re-entered, preceded by its own "Set color" block resetting
+  // the real color back to its starting value each time - targetVar still
+  // held the PREVIOUS visit's already-reached target, so the guard kept
+  // treating the fresh request as a no-op repeat and never restarted the
+  // fade, even though the real color had genuinely just been reset away
+  // from it. Comparing the real color too fixes this without needing to
+  // know which kind of event the block was placed in: once a fade truly
+  // settles (or was never running), the real color equals the target, so a
+  // later request for that SAME target only re-arms when something has
+  // since moved the real color away from it again.
+  //
+  // color is captured into temp1 exactly once, before either comparison,
+  // rather than embedded directly into each "if" and the assignment - it
+  // can be an arbitrary expression (not necessarily side-effect-free, e.g.
+  // a Random block), and evaluating it more than once could disagree with
+  // itself between the guard checks and the actual reset (same reasoning
   // random_between_set's own "rand" capture uses in generators/bbasic/
   // random.js).
   //
   // Shared by background_fade_to below and score.js's own score_fade_to /
   // text-minikernel.js's own text_minikernel_fade_to - the trigger body is
   // identical regardless of which register it targets, only rawVar (and so
-  // which dev vars/bit it resolves to) differs.
+  // which dev vars/bit/color variable it resolves to) differs.
   Blockly.BBasic.emitColorFadeTrigger = function(rawVar, color, frames) {
+    const colorVar = resolveFadeColorVar(rawVar);
     const timerVar = resolveVar(backgroundFadeTimerVarName(rawVar));
     const paceVar = resolveVar(backgroundFadePaceVarName(rawVar));
     const targetVar = resolveVar(backgroundFadeTargetVarName(rawVar));
@@ -454,6 +629,7 @@ export default (Blockly) => {
     Blockly.BBasic.usesDivMul = true;
 
     const blockNumber = Blockly.BBasic.blockNumbers.next();
+    const resetLabel = `_bgfade_${blockNumber}_reset`;
     const paceReadyLabel = `_bgfade_${blockNumber}_paceready`;
     const skipLabel = `_bgfade_${blockNumber}_skip`;
 
@@ -463,7 +639,10 @@ export default (Blockly) => {
     // byte instead of counting down from 0 the way a signed timer would.
     return [
       `temp1 = ${color}`,
-      `if ${targetVar} = temp1 then goto ${skipLabel}`,
+      `if ${targetVar} <> temp1 then goto ${resetLabel}`,
+      `if ${activeBit} then goto ${skipLabel}`,
+      `if ${colorVar} = temp1 then goto ${skipLabel}`,
+      `@ ${resetLabel}`,
       `${targetVar} = temp1`,
       `${paceVar} = (${frames}) / ${FADE_STEPS}`,
       `if ${paceVar} <> 0 then goto ${paceReadyLabel}`,
@@ -604,8 +783,10 @@ export default (Blockly) => {
       '       lda ' + flagsVar,
       '       and #' + (255 - activeMask),
       '       sta ' + flagsVar,
+      // "sta" never touches A - still holds the masked value from the line
+      // just above, so isWatched's own "ora finishedMask" can build on it
+      // directly instead of a redundant "lda flagsVar" reload.
       ...(isWatched ? [
-        '       lda ' + flagsVar,
         '       ora #' + finishedMask,
         '       sta ' + flagsVar,
       ] : []),
@@ -614,13 +795,21 @@ export default (Blockly) => {
 
     return [
       ' asm',
+      // Same "sta never touches A" reuse as landedLines/already below -
+      // isWatched's own clear leaves A already holding flagsVar (post-mask),
+      // so the activeMask test right after builds on it directly instead of
+      // a redundant reload. finishedMask/activeMask are disjoint bits, so
+      // "(flags & ~finishedMask) & activeMask" is exactly "flags &
+      // activeMask" either way.
       ...(isWatched ? [
         '       lda ' + flagsVar,
         '       and #' + (255 - finishedMask),
         '       sta ' + flagsVar,
-      ] : []),
-      '       lda ' + flagsVar,
-      '       and #' + activeMask,
+        '       and #' + activeMask,
+      ] : [
+        '       lda ' + flagsVar,
+        '       and #' + activeMask,
+      ]),
       ...farBeq(skip),
       '       lda ' + targetVar,
       '       and #$0E',
@@ -690,6 +879,11 @@ export default (Blockly) => {
       '       lda ' + flagsVar,
       '       and #' + (255 - activeMask),
       '       sta ' + flagsVar,
+      // Same "sta never touches A" reuse as landedLines above.
+      ...(isWatched ? [
+        '       ora #' + finishedMask,
+        '       sta ' + flagsVar,
+      ] : []),
       done,
       skip,
       'end',
@@ -702,30 +896,7 @@ export default (Blockly) => {
     const watches = this.backgroundFadeFinishedWatches || new Set();
 
     const checksForVar = (rawVar) => {
-      // COLUBK/COLUPF need a separate shadow variable (see background_set_
-      // color's own comment above) since the score/text drawing routines
-      // overwrite the real register every frame - scorecolor/TextColor have
-      // no such override, so the real variable doubles as its own shadow.
-      // player0realcolor/player1realcolor have no separate shadow ALIAS
-      // either (nothing renames them the way COLUBK/COLUPF rename to
-      // backgroundrealcolor/playfieldrealcolor), but - unlike scorecolor/
-      // TextColor - they're still app-internal dev vars needing nameDB_
-      // resolution (sprite_${name}_get/set already resolve this same VAR
-      // through nameDB_/VARIABLE_CATEGORY_NAME - see generators/bbasic/
-      // sprites.js), so they're grouped with COLUBK/COLUPF below, not
-      // scorecolor/TextColor.
-      const needsNameDbResolution = rawVar === 'COLUPF' || rawVar === 'COLUBK' ||
-        rawVar === 'player0realcolor' || rawVar === 'player1realcolor';
-      const targetShadowVar = rawVar === 'COLUPF' ? 'playfieldrealcolor' :
-        rawVar === 'COLUBK' ? 'backgroundrealcolor' : rawVar;
-      // scorecolor/TextColor are real batari Basic identifiers already
-      // (score.js's own score_color_get/set and text-minikernel.js's own
-      // TextColor blocks both reference them as plain literals, never
-      // through nameDB_) - only COLUBK/COLUPF's own shadow vars and
-      // player0realcolor/player1realcolor are app-internal dev vars that
-      // actually need letter resolution.
-      const colorVarName = needsNameDbResolution ?
-        Blockly.BBasic.nameDB_.getName(targetShadowVar, Blockly.VARIABLE_CATEGORY_NAME) : targetShadowVar;
+      const colorVarName = resolveFadeColorVar(rawVar);
       const timerVar = resolveVar(backgroundFadeTimerVarName(rawVar));
       const paceVar = resolveVar(backgroundFadePaceVarName(rawVar));
       const targetVar = resolveVar(backgroundFadeTargetVarName(rawVar));

@@ -4,7 +4,7 @@ import {chunk} from 'lodash';
 
 import {findSongById, processSongsStorageDefaults, DEFAULT_PATTERN_STEPS, LENGTH_UNITS_PER_STEP} from '../../blocks/music';
 import {functionCallDiscardVarName} from '../../blocks/function';
-import {processSoundEffectsStorageDefaults, DEFAULT_ARPEGGIO_DIVISION} from '../../blocks/soundfx';
+import {processSoundEffectsStorageDefaults, DEFAULT_ARPEGGIO_DIVISION, DEFAULT_NOISE_PRIORITY} from '../../blocks/soundfx';
 import {MAX_DATA_TABLE_VALUES} from '../../blocks/data';
 import {useConfigurationStorage, useDimSoundFxPercentStorage, useDimSoundFxStorage,
   useSoundEffectsStorage, useSongsStorage, loadMutedMusicTrackIds, loadSoloedMusicTrackIds,
@@ -251,6 +251,34 @@ const MUSIC_FLAGS_SPARE_BITS = [6, 7];
 // instrument id for note-played) share one bit (deduped by key/id), same
 // "don't reserve twice for the same thing" reasoning as
 // collisionMovePlayers' own Set.
+// Lowest-numbered channel a song actually uses is treated as the sole
+// source of truth for any watch/check tied to that song - a song's two
+// channels can advance past the same sequence position on different FRAMES
+// (confirmed elsewhere this file - note-duration sums differ per channel),
+// so reading/setting a flag from every channel would risk a mismatch a few
+// frames wide. One well-defined channel avoids that entirely, at the cost
+// of following that one channel's own note data specifically. Shared by
+// resolveMusicEventFlags below (the one-shot "finished" watches) and the
+// live "is playing" checks (music_sequence_chip_playing_by_id/
+// _current_song), which need the exact same {songIndex, seqIndex,
+// primaryChannel} resolution but without claiming a watch flag bit at all.
+export const primaryChannelFor = (resolvedSong) => String(Math.min(...[...resolvedSong.channelsUsed]));
+
+// "Chip ID" (both here and on the block's own field/tooltip) is the chip's
+// own CURRENT POSITION in the Sequence list (1 = first), matching the
+// "ID: N" badge MusicEditor.vue now shows on each chip - deliberately NOT a
+// permanent identity: reordering, inserting, or deleting chips changes
+// which chip a given number refers to, at the user's own explicit request
+// (an earlier version of this used each chip's own separate, permanent id
+// field instead, which stayed pointed at the same chip regardless of
+// reordering - reverted in favor of this simpler "number = current
+// position" mental model). Out-of-range (chip deleted, or the number was
+// never valid) resolves to -1, same as a not-found lookup always has.
+export const chipIdToSeqIndex = (rawSong, chipId) => {
+  const sequence = (rawSong && rawSong.sequence) || [];
+  return chipId >= 1 && chipId <= sequence.length ? chipId - 1 : -1;
+};
+
 export const resolveMusicEventFlags = (workspace, music, notePlayedIndexById = new Map()) => {
   // !!music gates this exactly like every other watch below already is
   // (each pairs/byChipId entry only resolves once resolvedSong is truthy) -
@@ -263,33 +291,6 @@ export const resolveMusicEventFlags = (workspace, music, notePlayedIndexById = n
   // "musicFlags" name leaking straight into the assembly).
   const usesGeneral = !!music && workspace.getAllBlocks(false)
       .some((block) => block.type === 'music_sequence_chip_finished');
-
-  // Lowest-numbered channel a song actually uses is treated as the sole
-  // source of truth for any watch tied to that song - a song's two channels
-  // can advance past the same sequence position on different FRAMES
-  // (confirmed elsewhere this file - note-duration sums differ per channel),
-  // so setting a watch's flag from every channel the way the general
-  // (unselective) flag above does would risk firing a specific watch twice,
-  // a few frames apart, for one logical "chip finished" moment. One
-  // well-defined channel avoids that entirely, at the cost of that watch's
-  // own timing following that one channel's own note data specifically.
-  const primaryChannelFor = (resolvedSong) => String(Math.min(...[...resolvedSong.channelsUsed]));
-
-  // "Chip ID" (both here and on the block's own field/tooltip) is the
-  // chip's own CURRENT POSITION in the Sequence list (1 = first), matching
-  // the "ID: N" badge MusicEditor.vue now shows on each chip - deliberately
-  // NOT a permanent identity: reordering, inserting, or deleting chips
-  // changes which chip a given number refers to, at the user's own explicit
-  // request (an earlier version of this used each chip's own separate,
-  // permanent id field instead, which stayed pointed at the same chip
-  // regardless of reordering - reverted in favor of this simpler
-  // "number = current position" mental model). Out-of-range (chip deleted,
-  // or the number was never valid) resolves to -1, same as a not-found
-  // lookup always has.
-  const chipIdToSeqIndex = (rawSong, chipId) => {
-    const sequence = (rawSong && rawSong.sequence) || [];
-    return chipId >= 1 && chipId <= sequence.length ? chipId - 1 : -1;
-  };
 
   const seenPairKeys = [];
   const resolvedPairs = new Map();
@@ -620,6 +621,7 @@ export const musicSeqLenVarName = () => 'musicSeqLen';
 const buildMusicPlayResetBody = (Blockly, song, music) => {
   const resolveVar = (canonicalName) =>
     Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+  const resolveRW = (canonicalName) => Blockly.BBasic.superchipRwPairs[canonicalName];
   const flagsVar = resolveVar(musicFlagsVarName());
   // song.totalSteps (real repeats included) is what actually determines
   // whether any position-tracking is needed at all - song.sequenceLength
@@ -627,7 +629,7 @@ const buildMusicPlayResetBody = (Blockly, song, music) => {
   // it for a song with only one group that still repeats several times.
   const multiSeq = song.totalSteps > 1;
   return Object.entries(music.channelPages).map(([channel, pages]) => {
-    const pageReset = pages.length > 1 ? `${resolveVar(musicPageVarName(channel))} = 0\n` : '';
+    const pageReset = pages.length > 1 ? `${resolveRW(musicPageVarName(channel)).write} = 0\n` : '';
     const seqReset = multiSeq ? `${resolveVar(musicSeqPosVarName(channel))} = 0\n` : '';
     // The first group's own repeat count, already packed for both channels
     // (see resolveProjectMusic's own sequenceRepeatPacked) - a plain full
@@ -643,7 +645,7 @@ const buildMusicPlayResetBody = (Blockly, song, music) => {
     const arpReset = music.channelHasArpeggio[channel] ?
       `${resolveVar(musicArpCounterPhaseVarName(channel))} = 1\n` :
       '';
-    return `${resolveVar(musicIndexVarName(channel))} = 0\n${pageReset}${seqReset}${seqRepeatReset}${arpReset}` +
+    return `${resolveRW(musicIndexVarName(channel)).write} = 0\n${pageReset}${seqReset}${seqRepeatReset}${arpReset}` +
       `${resolveVar(musicTimerVarName(channel))} = 1\n` +
       `${flagsVar}{${musicChannelActiveBit(channel)}} = 1\n`;
   }).join('');
@@ -659,6 +661,7 @@ const buildMusicPlayResetBody = (Blockly, song, music) => {
 const buildMusicPlaySongResetBody = (Blockly, song, music) => {
   const resolveVar = (canonicalName) =>
     Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+  const resolveRW = (canonicalName) => Blockly.BBasic.superchipRwPairs[canonicalName];
   const flagsVar = resolveVar(musicFlagsVarName());
   const lines = music.channels.map((channel) => {
     if (!song.channelsUsed.has(Number(channel))) {
@@ -680,8 +683,8 @@ const buildMusicPlaySongResetBody = (Blockly, song, music) => {
     // writing to it otherwise would reference a dev var that was never
     // reserved at all.
     const pageReset = music.channelPages[channel].length > 1 ?
-      `${resolveVar(musicPageVarName(channel))} = ${song.channelStartPage[channel]}\n` : '';
-    return `${resolveVar(musicIndexVarName(channel))} = 0\n` +
+      `${resolveRW(musicPageVarName(channel)).write} = ${song.channelStartPage[channel]}\n` : '';
+    return `${resolveRW(musicIndexVarName(channel)).write} = 0\n` +
       pageReset +
       `${resolveVar(musicSeqPosVarName(channel))} = 0\n` +
       seqRepeatReset +
@@ -918,6 +921,12 @@ const flattenPatternEvents = (song, pattern, channels, soundEffects, config = {}
         arpeggioInterval,
         arpeggioRange,
         notePlayedIndex,
+        // Only meaningful for a note that actually ends up overlapping
+        // another one (see the overlap-resolution pass below) - canPlaceNoteAt
+        // in MusicEditor.vue lets any instrument, tunable or noise, land on
+        // top of another track's note sharing the same channel, so this is
+        // harmless dead weight only on a note that never overlaps anything.
+        priority: Number(soundEffect.priority) || DEFAULT_NOISE_PRIORITY,
       });
     });
   });
@@ -925,13 +934,75 @@ const flattenPatternEvents = (song, pattern, channels, soundEffects, config = {}
   channels.forEach((channel) => {
     const notes = notesByChannel[channel].slice().sort((a, b) => a.startUnits - b.startUnits);
     let cursorFrames = 0;
+    // The audible note (if any) still sounding past cursorFrames -
+    // {event, note, startFrames, endFrames}, null once nothing is open.
+    // Only ever read by the overlap branch just below - the piano roll (see
+    // canPlaceNoteAt in MusicEditor.vue) lets any instrument, tunable or
+    // noise, land inside another track's already-placed note on the same
+    // channel, so this branch can be reached by either kind.
+    let openNote = null;
 
     notes.forEach((note) => {
       const startFrames = Math.round(note.startUnits * framesPerUnit);
       const lengthFrames = Math.max(1, Math.round(note.lengthUnits * framesPerUnit));
+      const overlapsOpenNote = openNote && startFrames < openNote.endFrames;
+
+      // Lower Priority (see the Sound tab's own field, only shown for a
+      // noise instrument) than whatever's already sounding - dropped
+      // entirely, openNote keeps playing straight through uninterrupted.
+      // Equal priority still falls through to the "wins" branch below,
+      // same plain "whichever note starts later wins" rule this had before
+      // Priority existed - only a genuinely LOWER priority changes the
+      // outcome.
+      if (overlapsOpenNote && note.priority < openNote.note.priority) {
+        return;
+      }
+
+      // Fire-and-forget channel steal, same technique a real tracker's own
+      // auto hi-hat uses (see canPlaceNoteAt's own comment): the still-
+      // sounding background note is cut short right where this noise hit
+      // starts, the noise hit plays as its own ordinary event, and (only if
+      // the background note had time left over) a third event resumes it
+      // for whatever's left of its own original duration - three plain
+      // consecutive events on this channel's one linear timeline, no dev
+      // var or runtime resume check needed at all.
+      if (overlapsOpenNote) {
+        const hasTail = openNote.endFrames > startFrames + lengthFrames;
+        openNote.event.frames = startFrames - openNote.startFrames;
+        if (openNote.event.frames <= 0) {
+          // Cut down to nothing (the noise hit landed exactly on its own
+          // start) - it never actually sounded, so drop it rather than
+          // spend bytes on a zero-length record.
+          perChannel[channel].splice(perChannel[channel].indexOf(openNote.event), 1);
+        } else if (hasTail) {
+          // Only the chronologically LAST piece of a split note keeps the
+          // envelope - same rule the long-note chunking pass below already
+          // follows (an envelope fires once, right before the note actually
+          // ends, never at an arbitrary cut point) - the head is never the
+          // last piece once a tail follows.
+          openNote.event.envelope = false;
+        }
+        pushEvent(channel, note.audv, note.audc, note.audf, lengthFrames, note.envelope, note.arpeggioSpeed,
+            note.arpeggioInterval, note.arpeggioRange, note.notePlayedIndex, note.envelopeAttack,
+            note.envelopeDecay, note.envelopeSustain, note.envelopeRelease);
+        if (hasTail) {
+          const bg = openNote.note;
+          pushEvent(channel, bg.audv, bg.audc, bg.audf, openNote.endFrames - (startFrames + lengthFrames),
+              bg.envelope, bg.arpeggioSpeed, bg.arpeggioInterval, bg.arpeggioRange, bg.notePlayedIndex,
+              bg.envelopeAttack, bg.envelopeDecay, bg.envelopeSustain, bg.envelopeRelease);
+          openNote = {
+            event: perChannel[channel][perChannel[channel].length - 1], note: bg,
+            startFrames: startFrames + lengthFrames, endFrames: openNote.endFrames,
+          };
+        } else {
+          cursorFrames = Math.max(cursorFrames, startFrames + lengthFrames);
+          openNote = null;
+        }
+        return;
+      }
+
       if (startFrames > cursorFrames) {
         pushEvent(channel, 0, 0, 0, startFrames - cursorFrames);
-        cursorFrames = startFrames;
       }
       // The envelope's own numeric shape (attack/decay/sustain/release)
       // travels through as plain compile-time fields here - never written
@@ -943,7 +1014,10 @@ const flattenPatternEvents = (song, pattern, channels, soundEffects, config = {}
       pushEvent(channel, note.audv, note.audc, note.audf, lengthFrames, note.envelope, note.arpeggioSpeed,
           note.arpeggioInterval, note.arpeggioRange, note.notePlayedIndex, note.envelopeAttack, note.envelopeDecay,
           note.envelopeSustain, note.envelopeRelease);
-      cursorFrames += lengthFrames;
+      cursorFrames = startFrames + lengthFrames;
+      openNote = note.audv > 0 ?
+        {event: perChannel[channel][perChannel[channel].length - 1], note, startFrames, endFrames: cursorFrames} :
+        null;
     });
 
     // Fill any remaining silence to the end of THIS pattern, even a channel
@@ -1587,11 +1661,21 @@ export const resolveProjectMusic = (workspace, notePlayedIndexById = new Map()) 
 // bbasic.js's own nameDB_/routeDevVar state, which this file has no access
 // to and shouldn't need to.
 // @param {function(string): string} reserveDevVar
+// @param {function(string, string=): {read: string, write: string}} reserveDevVarRW
+//     Superchip's read/write pool (see generators/bbasic.js's comment on
+//     it), used here for musicIndexVarName/musicPageVarName/
+//     musicLastAudcVarName - each is a plain scalar read/write/if-compare/
+//     table-index everywhere it's touched (checked by hand against every
+//     call site in generateMusicChecks below), never a raw-asm "dec"/"inc"
+//     target the way musicTimerVarName is (see its "dec timerVar" in
+//     channelBody), which the RW pool's split read/write physical addresses
+//     can't support - so musicTimerVarName stays on the ordinary reserveDevVar
+//     pool.
 // @param {?Object} music this.projectMusic - a no-op if null (nothing here
 //     is worth reserving without real music to play).
 // @param {{general: ?Object, pairs: Map, byChipId: Map, notePlayed: Map}} musicEventFlags
 //     this.musicEventFlags (see resolveMusicEventFlags).
-export const reserveMusicDevVars = (reserveDevVar, music, musicEventFlags) => {
+export const reserveMusicDevVars = (reserveDevVar, reserveDevVarRW, music, musicEventFlags) => {
   if (!music) return;
   const multiSong = music.songs.length > 1;
   // totalSteps (real repeats included), not sequenceLength (now a GROUP
@@ -1599,14 +1683,14 @@ export const reserveMusicDevVars = (reserveDevVar, music, musicEventFlags) => {
   // own comment for why those two differ.
   const multiSeq = multiSong || music.songs[0].totalSteps > 1;
   for (const channel of Object.keys(music.channelPages)) {
-    reserveDevVar(musicIndexVarName(channel), undefined, 'this channel\'s own position within its current pattern');
+    reserveDevVarRW(musicIndexVarName(channel), 'this channel\'s own position within its current pattern');
     reserveDevVar(musicTimerVarName(channel), undefined, 'this channel\'s own frames-left-on-current-note countdown');
     // Only reserved once this channel actually plays some real (audible)
     // note - a channel with nothing but rests, or no data at all, never
     // hits an INSTRUMENT_CHANGE_SENTINEL marker and so never needs this
     // (see musicLastAudcVarName's own comment).
     if (music.instrumentBytes.length) {
-      reserveDevVar(musicLastAudcVarName(channel), undefined, 'this channel\'s own last-played AUDC value');
+      reserveDevVarRW(musicLastAudcVarName(channel), 'this channel\'s own last-played AUDC value');
     }
     // Only reserved for a channel with at least one arpeggiating note (see
     // musicChannelHasArpeggio/channelHasArpeggio) - per-channel gated so a
@@ -1626,7 +1710,7 @@ export const reserveMusicDevVars = (reserveDevVar, music, musicEventFlags) => {
     // written to on every pattern transition for a value nothing
     // downstream ever read back).
     if (music.channelPages[channel].length > 1) {
-      reserveDevVar(musicPageVarName(channel), undefined, 'this channel\'s own current data-table page');
+      reserveDevVarRW(musicPageVarName(channel), 'this channel\'s own current data-table page');
     }
     if (multiSeq) {
       reserveDevVar(musicSeqPosVarName(channel), undefined, 'this channel\'s own position within the song sequence');
@@ -1684,6 +1768,13 @@ export default (Blockly) => {
   // call site, exactly like collisionMoveOldXVar/canonicalDistanceVarName.
   const resolveVar = (canonicalName) =>
     Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+
+  // musicIndexVarName/musicPageVarName/musicLastAudcVarName route through
+  // Superchip's read/write pool instead (see reserveMusicDevVars' comment
+  // on why) - already reserved by the time any generator here runs
+  // (bbasic.js's init() always runs first), so this is a plain lookup, same
+  // convention as generators/bbasic/function.js's resolveRW.
+  const resolveRW = (canonicalName) => Blockly.BBasic.superchipRwPairs[canonicalName];
 
   // Shared by both music_play_song and music_play_song_by_id below.
   const generatePlaySong = (block) => {
@@ -2023,6 +2114,75 @@ export default (Blockly) => {
     const entry = flags && flags.byChipId.get(chipId);
     return generateMusicEventCheck(block, entry, 'chipfin');
   };
+  // Whether seqPosVar exists for ANY channel at all - reserveMusicDevVars'
+  // own gate (see its "multiSeq" local there), duplicated here rather than
+  // read back off it, since these two live "is playing" checks are the only
+  // other place that needs to know before ever resolving a seqPosVar name -
+  // referencing an unreserved dev var name would leak the raw canonical
+  // string straight into the assembly (the exact "Unknown Mnemonic" failure
+  // resolveMusicEventFlags' own comment on "!!music" already documents for
+  // a different var).
+  const musicSeqPosVarExists = (music) => music.songs.length > 1 || music.songs[0].totalSteps > 1;
+  Blockly.BBasic['music_sequence_chip_playing_by_id'] = function(block) {
+    const music = Blockly.BBasic.projectMusic;
+    if (!music) return ['0', Blockly.BBasic.ORDER_ATOMIC];
+    const songId = Number(block.getFieldValue('SONG'));
+    const chipId = Number(block.getFieldValue('CHIP_ID'));
+    const rawSong = findSongById(songId);
+    const seqIndex = chipIdToSeqIndex(rawSong, chipId);
+    // music.songs[].songId is a string (see resolveProjectMusic's own "id"
+    // source, always string-converted) - coerced comparison, same
+    // convention findSongById itself already uses, rather than a strict
+    // === that would never match against Number(songId).
+    const resolvedSong = seqIndex !== -1 && music.songs.find((s) => `${s.songId}` === `${songId}`);
+    if (!resolvedSong) return ['0', Blockly.BBasic.ORDER_ATOMIC];
+    const playingBit = `${resolveVar(musicFlagsVarName())}{${musicPlayingBit}}`;
+    const songCheck = music.songs.length > 1 ?
+      `${playingBit} && ${resolveVar(musicSongIndexVarName())} = ${resolvedSong.songIndex}` : playingBit;
+    // A song with only one sequence position ever (totalSteps <= 1) has no
+    // seqPosVar reserved for it at all (see reserveMusicDevVars) - its own
+    // single chip (already confirmed to exist above, or seqIndex would be
+    // -1) is "playing" for the song's entire runtime, so the song-level
+    // check alone is already the whole answer.
+    if (!musicSeqPosVarExists(music)) return [songCheck, Blockly.BBasic.ORDER_LOGICAL_AND];
+    const seqPosVar = resolveVar(musicSeqPosVarName(primaryChannelFor(resolvedSong)));
+    return [`${songCheck} && ${seqPosVar} = ${seqIndex}`, Blockly.BBasic.ORDER_LOGICAL_AND];
+  };
+  Blockly.BBasic['music_sequence_chip_playing_current_song'] = function(block) {
+    const music = Blockly.BBasic.projectMusic;
+    if (!music) return ['0', Blockly.BBasic.ORDER_ATOMIC];
+    const chipId = Number(block.getFieldValue('CHIP_ID'));
+    const occurrences = music.songs
+        .map((resolvedSong) => ({resolvedSong, seqIndex: chipIdToSeqIndex(findSongById(resolvedSong.songId), chipId)}))
+        .filter(({seqIndex}) => seqIndex !== -1);
+    if (!occurrences.length) return ['0', Blockly.BBasic.ORDER_ATOMIC];
+    const playingBit = `${resolveVar(musicFlagsVarName())}{${musicPlayingBit}}`;
+    if (!musicSeqPosVarExists(music)) {
+      // Only reachable with a single song whose own only sequence position
+      // is this chip (already confirmed above) - same reasoning as
+      // music_sequence_chip_playing_by_id's own identical early-out.
+      return [playingBit, Blockly.BBasic.ORDER_ATOMIC];
+    }
+    // Same "build into a scratch var across several plain ifs" shape
+    // music_song_playing_by_number already uses - a value block can't
+    // inject a preceding "goto" of its own to dispatch across several
+    // songs the way an event-watch STATEMENT (music_sequence_chip_finished_
+    // current_song) can.
+    const songIndexVar = music.songs.length > 1 ? resolveVar(musicSongIndexVarName()) : null;
+    const resultPair = Blockly.BBasic.superchipRwPairs[functionCallDiscardVarName()];
+    const dispatch = occurrences.map(({resolvedSong, seqIndex}) => {
+      const seqPosVar = resolveVar(musicSeqPosVarName(primaryChannelFor(resolvedSong)));
+      const songGuard = songIndexVar ? `if ${songIndexVar} = ${resolvedSong.songIndex} then ` : '';
+      return `${songGuard}if ${seqPosVar} = ${seqIndex} then ${resultPair.write} = 1`;
+    });
+    const lines = [
+      `${resultPair.write} = 0`,
+      ...dispatch,
+      `if !${playingBit} then ${resultPair.write} = 0`,
+      resultPair.read,
+    ];
+    return [lines.join('\n'), Blockly.BBasic.ORDER_ATOMIC];
+  };
   Blockly.BBasic['music_note_played'] = function(block) {
     const flags = Blockly.BBasic.musicEventFlags;
     const target = flags && flags.notePlayed.get(`${block.getFieldValue('INSTRUMENT')}`);
@@ -2257,6 +2417,16 @@ export default (Blockly) => {
   // lightweight (and inline) as it always was, since there's no dispatch to
   // share in the first place.
   const pageDispatchLabel = (channel) => `_musicpr${channel}_dispatch`;
+  // Also leaves temp2 holding the NEXT byte after temp1's own index (table[
+  // index+1]) - a cheap, bounded addition (2 lines per page, not a
+  // duplicated chain) that lets a caller reading two always-consecutive
+  // bytes (see audfAndDurationReadPlain below - AUDF immediately followed by
+  // duration in every note record) skip a second full gosub/page-compare
+  // chain walk entirely, just reading temp2 instead. Harmless for every
+  // other caller, which already ignores temp2 - the extra read is discarded,
+  // never a page/table boundary hazard (ROM continues sequentially past any
+  // table's own last byte either way, so index+1 always resolves to SOME
+  // real byte, just an unused one on a single-byte peek).
   const buildPageDispatchSubroutine = (channel, tables, pageVar) => {
     if (tables.length <= 1) return null;
     const doneLabel = `_musicpr${channel}_done`;
@@ -2266,10 +2436,14 @@ export default (Blockly) => {
       if (!isLast) {
         const nextLabel = `_musicpr${channel}_p${page + 1}`;
         lines.push(` if ${pageVar} <> ${page} then goto ${nextLabel}`);
+        lines.push(` temp3 = temp1 + 1`);
+        lines.push(` temp2 = ${table}[temp3]`);
         lines.push(` temp1 = ${table}[temp1]`);
         lines.push(` goto ${doneLabel}`);
         lines.push(nextLabel);
       } else {
+        lines.push(` temp3 = temp1 + 1`);
+        lines.push(` temp2 = ${table}[temp3]`);
         lines.push(` temp1 = ${table}[temp1]`);
       }
     });
@@ -2283,9 +2457,17 @@ export default (Blockly) => {
   // always has exactly one calling convention (read temp1, page-select off
   // pageVar, leave the result in temp1) regardless of which named dev var
   // (or temp1 itself) a given call site's own index actually lives in.
+  // Single-page channels mirror buildPageDispatchSubroutine's own temp2
+  // convention here too (see its comment) - table[indexExpr+1], read into
+  // temp2 alongside temp1, so audfAndDurationReadPlain doesn't need a
+  // separate code path for single- vs multi-page channels.
   const pagedReadLines = (tables, pageVar, indexExpr, channel) => {
     if (tables.length === 1) {
-      return [` temp1 = ${tables[0]}[${indexExpr}]`];
+      return [
+        ` temp3 = ${indexExpr} + 1`,
+        ` temp2 = ${tables[0]}[temp3]`,
+        ` temp1 = ${tables[0]}[${indexExpr}]`,
+      ];
     }
     return [
       ...(indexExpr === 'temp1' ? [] : [` temp1 = ${indexExpr}`]),
@@ -2356,14 +2538,25 @@ export default (Blockly) => {
     const notePlayedInstruments = Blockly.BBasic.notePlayedInstruments || new Map();
     const notePlayedFlags = (Blockly.BBasic.musicEventFlags && Blockly.BBasic.musicEventFlags.notePlayed) ||
       new Map();
-    const notePlayedSetLinesForChannel = (channel) => [...notePlayedInstruments.entries()]
-        .filter(([id]) => (music.notePlayedChannelsById.get(id) || new Set()).has(Number(channel)))
-        .map(([id, index]) => {
-          const target = notePlayedFlags.get(id);
-          if (!target) return null;
-          return ` if (temp1 & $F0) = ${index * 16} then ${resolveVar(target.varName)}{${target.bit}} = 1`;
-        })
-        .filter(Boolean);
+    const notePlayedSetLinesForChannel = (channel) => {
+      const checks = [...notePlayedInstruments.entries()]
+          .filter(([id]) => (music.notePlayedChannelsById.get(id) || new Set()).has(Number(channel)))
+          .map(([id, index]) => {
+            const target = notePlayedFlags.get(id);
+            if (!target) return null;
+            return ` if temp2 = ${index * 16} then ${resolveVar(target.varName)}{${target.bit}} = 1`;
+          })
+          .filter(Boolean);
+      // temp2 = temp1 & $F0 masked ONCE here rather than as part of each
+      // check's own comparison (a real, if modest, waste with 2+ watched
+      // instruments sharing a channel - each extra check used to re-load
+      // temp1 and re-AND $F0 from scratch just to immediately CMP it) - temp1
+      // itself has to stay untouched either way (see this array's own call
+      // site's comment: audfRead reuses it right after), and temp2 is free
+      // here (whatever it held before is about to be overwritten by the very
+      // next real table read regardless).
+      return checks.length ? [' temp2 = temp1 & $F0', ...checks] : [];
+    };
     const perChannelChecks = allChannels.map((channel) => {
       const notePlayedSetLines = notePlayedSetLinesForChannel(channel);
       const pages = music.channelPages[channel];
@@ -2382,7 +2575,14 @@ export default (Blockly) => {
       // 25-of-them, project-wide resource, so this alone is worth a whole
       // var for any single-page-per-channel song with more than one
       // sequence position (a common case).
-      const pageVar = multiPage ? resolveVar(musicPageVarName(channel)) : null;
+      // pageVar/indexVar/lastAudcVar hold the READ-side symbol (used
+      // everywhere below except the handful of assignment-target sites,
+      // which use the matching ...Write variable instead) - routed through
+      // Superchip's read/write pool (see reserveMusicDevVars' comment on
+      // why these three specifically are safe for it).
+      const pagePair = multiPage ? resolveRW(musicPageVarName(channel)) : null;
+      const pageVar = pagePair ? pagePair.read : null;
+      const pageVarWrite = pagePair ? pagePair.write : null;
       const seqPosVar = multiSeq ? resolveVar(musicSeqPosVarName(channel)) : null;
       // Emitted right before seqPosVar's own advance below (the exact point
       // where seqPosVar still holds the position that just exhausted its
@@ -2480,7 +2680,7 @@ export default (Blockly) => {
       const buildPageResetLines = (tag) => !pageVar ? [] : music.combinedSeqTables ? [
         ` temp1 = ${musicSongSeqOffsetTableName()}[${songIndexVar}]`,
         ` temp1 = temp1 + ${seqPosVar}`,
-        ` ${pageVar} = ${musicCombinedSeqTableName(channel)}[temp1]`,
+        ` ${pageVarWrite} = ${musicCombinedSeqTableName(channel)}[temp1]`,
       ] : multiSong ? [
         ...music.songs.map((song, i) => {
           const isLast = i === music.songs.length - 1;
@@ -2495,8 +2695,8 @@ export default (Blockly) => {
           // single already-known byte - a plain literal assignment costs
           // fewer bytes AND no indexed table read at runtime.
           const lookup = song.totalSteps > 1 ?
-            ` ${pageVar} = ${musicSeqTableName(channel, song.songIndex)}[${seqPosVar}]` :
-            ` ${pageVar} = ${song.channelStartPage[channel]}`;
+            ` ${pageVarWrite} = ${musicSeqTableName(channel, song.songIndex)}[${seqPosVar}]` :
+            ` ${pageVarWrite} = ${song.channelStartPage[channel]}`;
           return isLast ? lookup : [
             ` if ${songIndexVar} <> ${song.songIndex} then goto ${nextLabel}`,
             lookup,
@@ -2505,14 +2705,18 @@ export default (Blockly) => {
           ].join('\n');
         }),
         `_music${channel}_seqpage${tag}_done`,
-      ] : [` ${pageVar} = ${musicSeqTableName(channel)}[${seqPosVar}]`];
-      const indexVar = resolveVar(musicIndexVarName(channel));
+      ] : [` ${pageVarWrite} = ${musicSeqTableName(channel)}[${seqPosVar}]`];
+      const indexPair = resolveRW(musicIndexVarName(channel));
+      const indexVar = indexPair.read;
+      const indexVarWrite = indexPair.write;
       const timerVar = resolveVar(musicTimerVarName(channel));
       const activeBit = activeBitByChannel[channel];
       // Only meaningful once the project actually has some instrument to
       // track at all - see musicLastAudcVarName/reserveMusicDevVars' own
       // matching gate.
-      const lastAudcVar = music.instrumentBytes.length ? resolveVar(musicLastAudcVarName(channel)) : null;
+      const lastAudcPair = music.instrumentBytes.length ? resolveRW(musicLastAudcVarName(channel)) : null;
+      const lastAudcVar = lastAudcPair ? lastAudcPair.read : null;
+      const lastAudcVarWrite = lastAudcPair ? lastAudcPair.write : null;
 
       // Only reserved/used for a channel with at least one arpeggiating note
       // (see musicChannelHasArpeggio) - all of these describe the CURRENTLY
@@ -2627,7 +2831,7 @@ export default (Blockly) => {
       // don't need the bit at all.
       const durationReadPlain = [
         ...pagedReadLines(tables, pageVar, indexVar, channel),
-        ` ${indexVar} = ${indexVar} + 1`,
+        ` ${indexVarWrite} = ${indexVar} + 1`,
         hasEnvelope ? ` ${timerVar} = temp1 & 127` : ` ${timerVar} = temp1`,
       ];
       // arpSpeedRangeVar's speed nibble was already set (if this channel's
@@ -2644,8 +2848,11 @@ export default (Blockly) => {
       // actual instrument change), not whether THIS SPECIFIC event was
       // itself packed with range bits.
       const durationRead = hasArpeggio ? [
-        ...pagedReadLines(tables, pageVar, indexVar, channel),
-        ` ${indexVar} = ${indexVar} + 1`,
+        // temp4 already holds this byte - see audfRead's own comment on why
+        // a second pagedReadLines dispatch isn't needed here. Still has to
+        // advance past this byte's own position, same as before.
+        ` temp1 = temp4`,
+        ` ${indexVarWrite} = ${indexVar} + 1`,
         ` if ${arpSpeedRangeVar} = 0 then goto _music${channel}_dur_noarp`,
         ` ${timerVar} = temp1 & 15`,
         ` temp2 = temp1 & 112`,
@@ -2679,11 +2886,11 @@ export default (Blockly) => {
       const buildInstrumentMarkerSubroutine = () => !lastAudcVar ? null : [
         instrumentMarkerLabel,
         ` if temp1 <> ${INSTRUMENT_CHANGE_SENTINEL} then goto ${instrumentMarkerLabel}_done`,
-        ` ${indexVar} = ${indexVar} + 1`,
+        ` ${indexVarWrite} = ${indexVar} + 1`,
         ...pagedReadLines(tables, pageVar, indexVar, channel),
-        ` ${indexVar} = ${indexVar} + 1`,
+        ` ${indexVarWrite} = ${indexVar} + 1`,
         ` temp1 = ${musicInstrumentTableName()}[temp1]`,
-        ` ${lastAudcVar} = temp1`,
+        ` ${lastAudcVarWrite} = temp1`,
         // This instrument's own arpeggio speed lives in the SAME shared byte
         // (see instrumentBytes' own comment: AUDC | (arpeggioSpeed << 4)) -
         // extracted into arpSpeedRangeVar's low nibble here, the one place
@@ -2740,9 +2947,9 @@ export default (Blockly) => {
       const buildEnvelopeMarkerSubroutine = () => !hasEnvelope ? null : [
         envelopeMarkerLabel,
         ` if temp1 <> ${ENVELOPE_CHANGE_SENTINEL} then goto ${envelopeMarkerLabel}_done`,
-        ` ${indexVar} = ${indexVar} + 1`,
+        ` ${indexVarWrite} = ${indexVar} + 1`,
         ...pagedReadLines(tables, pageVar, indexVar, channel),
-        ` ${indexVar} = ${indexVar} + 1`,
+        ` ${indexVarWrite} = ${indexVar} + 1`,
         ` if temp1 <> ${NO_ENVELOPE_SENTINEL} then goto ${envelopeMarkerLabel}_on`,
         // "Off": both the sentinel value packed in and 0 are compile-time
         // constants here, so no runtime multiply is needed even on channel
@@ -2798,12 +3005,36 @@ export default (Blockly) => {
       // would emit that same label twice and fail to assemble.
       const audfReadPlain = [
         ...pagedReadLines(tables, pageVar, indexVar, channel),
-        ` ${indexVar} = ${indexVar} + 1`,
+        ` ${indexVarWrite} = ${indexVar} + 1`,
         ...suppressibleWrite('audfplain', ` AUDF${channel} = temp1`),
+      ];
+      // Combines audfReadPlain + durationReadPlain into a single dispatch -
+      // AUDF and duration are always the next two consecutive bytes in a
+      // note record (see eventsToPages), so pagedReadLines' own temp2 (see
+      // its comment) already holds duration's byte by the time temp1 holds
+      // AUDF's, with no second page-compare-chain walk needed. Used
+      // wherever those two used to run back to back (channelBody's own
+      // !hasArpeggio case, and the rest branch inside hasArpeggio) - never
+      // for audfRead's own arpeggio-aware variant below, which has its own
+      // branching between the AUDF write and the duration read that a
+      // single combined dispatch can't shortcut.
+      const audfAndDurationReadPlain = [
+        ...pagedReadLines(tables, pageVar, indexVar, channel),
+        ` ${indexVarWrite} = ${indexVar} + 2`,
+        ...suppressibleWrite('audfplain', ` AUDF${channel} = temp1`),
+        hasEnvelope ? ` ${timerVar} = temp2 & 127` : ` ${timerVar} = temp2`,
       ];
       const audfRead = hasArpeggio ? [
         ...pagedReadLines(tables, pageVar, indexVar, channel),
-        ` ${indexVar} = ${indexVar} + 1`,
+        ` ${indexVarWrite} = ${indexVar} + 1`,
+        // pagedReadLines' own temp2 (see its comment) already holds the
+        // duration byte that immediately follows this AUDF byte in the note
+        // record - stashed into temp4 (otherwise unused anywhere in this
+        // file) before the "same note" check below overwrites temp2, so
+        // durationRead's own arpeggio branch can reuse it instead of running
+        // a second full pagedReadLines dispatch to re-fetch the identical
+        // byte from scratch.
+        ` temp4 = temp2`,
         // A long held note gets split into several data-table chunks purely
         // because of arpeggio's own duration cap (see
         // MAX_EVENT_FRAMES_WITH_ARPEGGIO) - each chunk re-fetches as if it
@@ -2937,7 +3168,15 @@ export default (Blockly) => {
           // stale AUDF moments before the fetch's own write reaches it too -
           // an audible, out-of-place pitch blip right at the note boundary.
           ` if ${timerVar} = 0 then goto _music${channel}_arp_skip`,
-          ` if ${arpSpeedRangeVar} = 0 then goto _music${channel}_arp_skip`,
+          // Stashed into temp3 (free for the whole rest of this block - see
+          // below) instead of reading arpSpeedRangeVar 3 separate times
+          // (this gate, plus the speed/range nibble extractions further
+          // down) - this gate alone runs every single frame this channel's
+          // arpeggio ticks, not just on the rare flip frame the other two
+          // reads are gated behind, so caching it here removes 2 real RAM
+          // reads from the common case, not just the rare one.
+          ` temp3 = ${arpSpeedRangeVar}`,
+          ` if temp3 = 0 then goto _music${channel}_arp_skip`,
           // Counter lives in the low nibble (see musicArpCounterPhaseVarName's
           // own comment) - a plain "-1" on the whole packed byte only ever
           // touches that nibble here, since counter is never 0 going into
@@ -2951,7 +3190,7 @@ export default (Blockly) => {
           // identical reasoning) - computed before phase, so temp2 (the new
           // counter) survives untouched while temp1 works out the new
           // (shifted) phase byte just below.
-          ` temp2 = ${arpSpeedRangeVar} & 15`,
+          ` temp2 = temp3 & 15`,
           ` temp1 = ${arpCounterPhaseVar} / 16`,
           ` temp1 = temp1 + 1`,
           ` temp1 = temp1 * 16`,
@@ -2960,7 +3199,7 @@ export default (Blockly) => {
           // phaseChecks below, which compare it directly against each
           // sequence's own 0-based phase index.
           ` temp1 = ${arpCounterPhaseVar} / 16`,
-          ` temp2 = ${arpSpeedRangeVar} / 16`,
+          ` temp2 = temp3 / 16`,
           ...rangeDispatch,
           ...rangeBlocks,
           `_music${channel}_arp_skip`,
@@ -2974,8 +3213,8 @@ export default (Blockly) => {
       // through to the usual loop-sentinel check below.
       const pageBreakCheck = multiPage ? [
         ` if temp1 <> ${PAGE_BREAK_SENTINEL} then goto _music${channel}_notpagebreak`,
-        ` ${pageVar} = ${pageVar} + 1`,
-        ` ${indexVar} = 0`,
+        ` ${pageVarWrite} = ${pageVar} + 1`,
+        ` ${indexVarWrite} = 0`,
         ...pagedReadLines(tables, pageVar, indexVar, channel),
         ...skipInstrumentMarkers,
         ...skipEnvelopeMarkers,
@@ -3121,19 +3360,38 @@ export default (Blockly) => {
         ...resumeCheck,
         ' asm',
         '       lda ' + flagsVar,
+        '       tax',
         '       and #' + pausedMask,
         '       beq _music' + channel + '_hp_notpaused',
         '       jmp ._music' + channel + '_skip',
         '_music' + channel + '_hp_notpaused',
-        '       lda ' + flagsVar,
+        '       txa',
         '       and #' + activeMask,
         '       bne _music' + channel + '_hp_active',
         '       jmp ._music' + channel + '_skip',
         '_music' + channel + '_hp_active',
         '       dec ' + timerVar,
-        'end',
+        // "dec" already sets Z exactly the way the very next check needs -
+        // on a channel with no arpeggio, nothing runs between here and that
+        // check (arpApply is a no-op array whenever !hasArpeggio - see its
+        // own definition), so those flags are still live and this can
+        // branch straight off them instead of falling out to a separately
+        // bB-compiled "if timerVar <> 0 then goto skip", which would
+        // otherwise re-load timerVar from RAM a moment after this same
+        // "dec" already read it. Only safe here specifically because
+        // arpApply (a real run of bB-compiled comparisons when arpeggio IS
+        // in use) would clobber Z before that separate check ever ran -
+        // left as the original two-step form in that case, unchanged.
+        ...(hasArpeggio ? [
+          'end',
+        ] : [
+          '       beq _music' + channel + '_hp_fetch',
+          '       jmp ._music' + channel + '_skip',
+          '_music' + channel + '_hp_fetch',
+          'end',
+        ]),
         ...arpApply,
-        ` if ${timerVar} <> 0 then goto _music${channel}_skip`,
+        ...(hasArpeggio ? [` if ${timerVar} <> 0 then goto _music${channel}_skip`] : []),
         ...pagedReadLines(tables, pageVar, indexVar, channel),
         ...skipInstrumentMarkers,
         ...skipEnvelopeMarkers,
@@ -3291,14 +3549,14 @@ export default (Blockly) => {
           ...finishCheck,
           ` goto _music${channel}_skip`,
           `_music${channel}_loopreset`,
-          ...(multiPage ? [` ${pageVar} = 0`] : []),
+          ...(multiPage ? [` ${pageVarWrite} = 0`] : []),
         ]),
-        ` ${indexVar} = 0`,
+        ` ${indexVarWrite} = 0`,
         ...pagedReadLines(tables, pageVar, indexVar, channel),
         ...skipInstrumentMarkers,
         ...skipEnvelopeMarkers,
         `_music${channel}_read`,
-        ` ${indexVar} = ${indexVar} + 1`,
+        ` ${indexVarWrite} = ${indexVar} + 1`,
         ...suppressibleWrite('audvfetch', ` AUDV${channel} = temp1`),
         // Every watched "note played" instrument's own set-flag check (see
         // notePlayedSetLines above, including why this is a masked compare
@@ -3322,16 +3580,14 @@ export default (Blockly) => {
         // byte per fetch either way.
         ...(hasArpeggio ? [
           ` if temp1 <> 0 then goto _music${channel}_notrest`,
-          ...audfReadPlain,
-          ...durationReadPlain,
+          ...audfAndDurationReadPlain,
           ` goto _music${channel}_read_done`,
           `_music${channel}_notrest`,
           ...audfRead,
           ...durationRead,
           `_music${channel}_read_done`,
         ] : [
-          ...audfRead,
-          ...durationRead,
+          ...audfAndDurationReadPlain,
         ]),
         `_music${channel}_skip`,
       ].join('\n');

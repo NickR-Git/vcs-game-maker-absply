@@ -13,7 +13,7 @@ import {
 } from './sound-preview';
 import {DEFAULT_PATTERN_STEPS, DEFAULT_TEMPO, LENGTH_UNITS_PER_STEP} from '../blocks/music';
 import {DEFAULT_DIM_PERCENT, dimVolume} from '../generators/bbasic/soundfx';
-import {DEFAULT_ARPEGGIO_DIVISION} from '../blocks/soundfx';
+import {DEFAULT_ARPEGGIO_DIVISION, DEFAULT_NOISE_PRIORITY} from '../blocks/soundfx';
 import {useDimSoundFxPercentStorage, useDimSoundFxStorage} from '../hooks/project';
 import {audcHasTunableNotes, noteAudv} from './music-notes';
 import {buildEnvelopeCurve} from './envelope';
@@ -419,6 +419,17 @@ const schedulePattern = (context, pattern, soundEffects, startTime, tempo, isTra
   const dimSoundFxPercent = useDimSoundFxPercentStorage(DEFAULT_DIM_PERCENT);
 
   let maxEndUnits = stepCount * LENGTH_UNITS_PER_STEP;
+
+  // Every track's notes, grouped by channel - mirrors flattenPatternEvents'
+  // notesByChannel in generators/bbasic/music.js, so a note overlapping
+  // another note on the same channel previews with the exact same
+  // Priority-based win/lose outcome the compiled ROM actually plays,
+  // instead of both tracks' audio just layering on top of each other the
+  // way independent Web Audio destinations otherwise would. canPlaceNoteAt
+  // in MusicEditor.vue lets any instrument, tunable or noise, land on top
+  // of another track's note sharing the same channel, so any note here can
+  // reach the overlap branch below.
+  const notesByChannel = {};
   pattern.tracks.forEach((track) => {
     const soundEffect = soundEffects.find(({id}) => id == track.soundEffectId);
     if (!soundEffect) return;
@@ -467,19 +478,17 @@ const schedulePattern = (context, pattern, soundEffects, startTime, tempo, isTra
     ))) : 0;
     const arpeggioInterval = soundEffect.arpeggio ? Number(soundEffect.arpeggioInterval) || 0 : 0;
     const arpeggioRange = soundEffect.arpeggio ? Number(soundEffect.arpeggioRange) || 0 : 0;
+    const channel = Number(track.channel) || 0;
+    if (!notesByChannel[channel]) notesByChannel[channel] = [];
 
     (track.notes || []).forEach((note) => {
       // Notes that have already fully finished by startUnits (see
       // handleSeekToStep in MusicEditor.vue - clicking the piano roll's
-      // step ruler seeks playback there) are skipped entirely; one that's
-      // already PARTWAY through at startUnits starts audibly right away
-      // (clipped to whatever's left of it), rather than either replaying
-      // its already-passed beginning or waiting for its original start time
-      // that's now in the past.
+      // step ruler seeks playback there) are skipped entirely - a still-
+      // scheduled note that's only PARTWAY through at startUnits is instead
+      // clipped by schedule() below.
       if (note.step + note.length <= startUnits) return;
-      const audibleStartUnits = Math.max(note.step, startUnits);
-      const noteStart = startTime + (audibleStartUnits - startUnits) * unitSeconds;
-      const heldSeconds = (note.step + note.length - audibleStartUnits) * unitSeconds;
+      maxEndUnits = Math.max(maxEndUnits, note.step + note.length);
       const audf = isTunable && note.midi !== 'hit' ? note.audf : soundEffect.audf;
       // Per-note override (see the Music tab's own piano-roll volume row),
       // falling back to the instrument's own preset - same DIM-scaling
@@ -487,25 +496,63 @@ const schedulePattern = (context, pattern, soundEffects, startTime, tempo, isTra
       const audv = dimSoundFx.value ?
         dimVolume(noteAudv(note, soundEffect), dimSoundFxPercent.value) :
         noteAudv(note, soundEffect);
-
-      activeSources.push(...playInstrumentHit(context, {
-        audc: soundEffect.audc,
-        audf,
-        audv,
-        arpeggioSpeed,
-        arpeggioInterval,
-        arpeggioRange,
-        startTime: noteStart,
-        seconds: heldSeconds,
+      notesByChannel[channel].push({
+        startUnits: note.step, endUnits: note.step + note.length,
+        priority: Number(soundEffect.priority) || DEFAULT_NOISE_PRIORITY,
+        trackGain, audc: soundEffect.audc, audf, audv, arpeggioSpeed, arpeggioInterval, arpeggioRange,
         envelope: !!soundEffect.envelope,
         envelopeAttack: soundEffect.envelopeAttack,
         envelopeDecay: soundEffect.envelopeDecay,
         envelopeSustain: soundEffect.envelopeSustain,
         envelopeRelease: soundEffect.envelopeRelease,
-        destination: trackGain,
-      }));
-      maxEndUnits = Math.max(maxEndUnits, note.step + note.length);
+      });
     });
+  });
+
+  // Actually schedules one surviving [segStartUnits, segEndUnits) slice of
+  // a note - a note that's never interrupted schedules its own one full
+  // span; one that gets cut short by a higher (or equal, later-starting)
+  // Priority note schedules only the piece before the interruption, plus a
+  // second call for whatever's left over once the interruption ends (see
+  // the overlap resolution below).
+  const schedule = (note, segStartUnits, segEndUnits) => {
+    const audibleStartUnits = Math.max(segStartUnits, startUnits);
+    if (audibleStartUnits >= segEndUnits) return;
+    activeSources.push(...playInstrumentHit(context, {
+      audc: note.audc, audf: note.audf, audv: note.audv,
+      arpeggioSpeed: note.arpeggioSpeed, arpeggioInterval: note.arpeggioInterval, arpeggioRange: note.arpeggioRange,
+      startTime: startTime + (audibleStartUnits - startUnits) * unitSeconds,
+      seconds: (segEndUnits - audibleStartUnits) * unitSeconds,
+      envelope: note.envelope, envelopeAttack: note.envelopeAttack, envelopeDecay: note.envelopeDecay,
+      envelopeSustain: note.envelopeSustain, envelopeRelease: note.envelopeRelease,
+      destination: note.trackGain,
+    }));
+  };
+
+  Object.values(notesByChannel).forEach((notes) => {
+    notes.sort((a, b) => a.startUnits - b.startUnits);
+    // The note (if any) still sounding, not yet fully scheduled - same
+    // "cut short, schedule the interrupter, then resume whatever's left"
+    // idea as flattenPatternEvents' own openNote, just scheduling real
+    // audio segments here instead of building byte-stream events.
+    let open = null;
+    notes.forEach((note) => {
+      const overlapsOpen = open && note.startUnits < open.endUnits;
+      if (overlapsOpen && note.priority < open.priority) {
+        // Lower Priority than what's already sounding - dropped entirely,
+        // the open note keeps playing straight through unchanged.
+        return;
+      }
+      if (overlapsOpen) {
+        schedule(open, open.startUnits, note.startUnits);
+        schedule(note, note.startUnits, note.endUnits);
+        open = open.endUnits > note.endUnits ? {...open, startUnits: note.endUnits} : null;
+        return;
+      }
+      if (open) schedule(open, open.startUnits, open.endUnits);
+      open = note;
+    });
+    if (open) schedule(open, open.startUnits, open.endUnits);
   });
 
   return Math.max(0, maxEndUnits - startUnits) * unitSeconds;
