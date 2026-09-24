@@ -52,36 +52,36 @@ import {useWorkspaceStorage, useErrorStorage, useConfigurationStorage, useMuteBl
 import {useGeneratedBasic} from '../hooks/generated';
 import {markRomOutdated} from '../hooks/rom';
 
-// Keep in sync with --blockly-font-family in App.vue's own global <style>
+// Keep in sync with --blockly-font-family in App.vue's  global <style>
 // (deliberately its OWN variable, not --app-font-family - this app's Inter
 // font everywhere else is unaffected, only Blockly's block/flyout text uses
 // this one) - there's no build-time bridge between a CSS custom property
 // and this JS theme config, so the two have to be updated together by hand.
 // Blockly
-// measures every block's own text width at layout time using ITS OWN
+// measures every block's  text width at layout time using ITS OWN
 // font-metrics call (a hidden canvas context, not the DOM/CSS engine), so
 // switching the app's font via CSS alone (see App.vue's own .blocklyText
 // override) left Blockly still measuring block width as if the text were
-// still in its own default (11pt sans-serif) - text rendered in the new,
+// still in its  default (11pt sans-serif) - text rendered in the new,
 // often-wider font then visibly overran the space Blockly had reserved for
 // it, overlapping whatever field/input came right after (confirmed
-// directly: "plus" on the "every X frames" block overlapping its own value
+// directly: "plus" on the "every X frames" block overlapping its  value
 // field, "to" on "change state to" overlapping its dropdown). Registering
-// the real font here instead means Blockly's own measurement uses it from
+// the real font here instead means Blockly's  measurement uses it from
 // the start, so block width is computed correctly to begin with - the CSS
 // override above is then mostly redundant for block text specifically) but
 // still needed for the toolbox/flyout labels here, which use this same
 // theme's fontStyle too.
 const APP_BLOCKLY_THEME = Blockly.Theme.defineTheme('app', {
   name: 'app',
-  // Colours stay on Classic (the app's own original palette, per-category
+  // Colours stay on Classic (the app's  original palette, per-category
   // block colours this app has always used) - the block SHAPE is back to
-  // Blockly's default renderer too (see options.renderer's own comment in
+  // Blockly's default renderer too (see options.renderer's  comment in
   // this file), so this app is visually back to its original look overall.
   // Briefly tried Blockly.Themes.Zelos as the base here (paired with the
-  // Zelos renderer) - that made every stock block relying on its own 3-tone
+  // Zelos renderer) - that made every stock block relying on its  3-tone
   // colourPrimary/Secondary/Tertiary style (e.g. controls_if's own
-  // "logic_blocks" style) render solid black, since Zelos's own blockStyles
+  // "logic_blocks" style) render solid black, since Zelos's  blockStyles
   // weren't resolving correctly layered under this app's custom theme;
   // Classic's simpler single-colour block styles never hit that.
   base: Blockly.Themes.Classic,
@@ -148,13 +148,13 @@ export default {
         theme: APP_BLOCKLY_THEME,
         // 'thrasos' keeps the original puzzle-piece block SHAPES (same tab/
         // notch geometry as 'geras', the default, and unlike 'zelos'' own
-        // rounded look) but drops Geras' own light/dark bevel highlight
+        // rounded look) but drops Geras'  light/dark bevel highlight
         // overlay - it shares the same flat "common" drawer Zelos itself is
         // built on, just without Zelos' rounded corners. What's left is a
         // single flat fill plus a solid stroke outline (auto-derived, a
-        // darker shade of each block's own colour) - a plain border, no 3D
-        // effect. APP_BLOCKLY_THEME's own colours are unaffected either way
-        // (still Classic's - see that theme's own comment).
+        // darker shade of each block's  colour) - a plain border, no 3D
+        // effect. APP_BLOCKLY_THEME's  colours are unaffected either way
+        // (still Classic's - see that theme's  comment).
         renderer: 'thrasos',
         grid: {
           spacing: 25,
@@ -165,16 +165,16 @@ export default {
           // enough contrast against '#e8e8e8' to be hard to see.
           colour: desaturateBlocklyColors ? '#bbb' : '#ccc',
           // Blockly.inject() only ever reads this once, at injection time
-          // (see toggleGridSnap's own comment on Grid.prototype.shouldSnap
+          // (see toggleGridSnap's  comment on Grid.prototype.shouldSnap
           // having no supported setter) - seeding it from the persisted
           // setting here is what makes a remembered "on" actually snap
           // blocks from the very first drag, not just show the icon as on.
           snap: gridSnapStorage.value,
         },
         // move.wheel enables wheel-scrolling at all - unset (this app never
-        // set a "move" option before), Blockly's own default only turns
+        // set a "move" option before), Blockly's  default only turns
         // wheel-scroll on when moveOptions.scrollbars is passed as a plain
-        // per-axis OBJECT, not the plain "true" its own hasCategories-based
+        // per-axis OBJECT, not the plain "true" its  hasCategories-based
         // default resolves to (see node_modules/blockly/core/options.js'
         // parseMoveOptions_) - so plain wheel silently did nothing but zoom
         // before this, regardless of BlocklyComponent.vue's own
@@ -200,7 +200,7 @@ export default {
       workspaceStorage: useWorkspaceStorage(),
       errorStorage: useErrorStorage(),
       configurationStorage,
-      // Mirrors options.grid.snap's own initial value (see just above) -
+      // Mirrors options.grid.snap's  initial value (see just above) -
       // seeded from the persisted setting (same storage, gridSnapStorage)
       // so the toggle icon and the actual live grid stay in sync with
       // whatever the user last left it as, across navigating away and back.
@@ -210,14 +210,14 @@ export default {
   methods: {
     // Two prior approaches (a Vuetify v-btn positioned with a hand-measured
     // "bottom" pixel value, then the same button repositioned via a live
-    // getBoundingClientRect() measurement against Blockly's own rendered
+    // getBoundingClientRect() measurement against Blockly's  rendered
     // zoom-controls group) both drifted away from Blockly's actual zoom
     // cluster under layouts other than the one they were tested against -
     // confirmed repeatedly, not just once. Rather than keep chasing a
     // measurement-based fix, this button is now a genuine 4th child of
     // Blockly's OWN zoom-controls SVG group (workspace.zoomControls_.
     // svgGroup_, the same private field zoom_controls.js itself stores its
-    // reset/in/out button groups in - see its own createDom/position
+    // reset/in/out button groups in - see its  createDom/position
     // methods) - positioned with a plain SVG transform in the exact same
     // coordinate system those three buttons already use, so it's pinned to
     // them by construction instead of by a separately-computed guess that
@@ -233,7 +233,7 @@ export default {
       const group = document.createElementNS(NS, 'g');
       // -43 = -(HEIGHT_ [32] + LARGE_SPACING_ [11]) from zoom_controls.js,
       // one slot past the reset button (nearest workspace center) - the
-      // DEFAULT (vertical) layout's own final position, set once here since
+      // DEFAULT (vertical) layout's  final position, set once here since
       // nothing else ever repositions it in that mode. The horizontal
       // layout option overrides this via BlocklyComponent.vue's own
       // ZoomControls.position patch instead (see zoomControls.gridSnapGroup_
@@ -245,7 +245,7 @@ export default {
 
       // Plain transparent rect gives this the same 32x32 (WIDTH_/HEIGHT_)
       // clickable footprint the other three buttons get for free from
-      // their own <image> element's own bounds.
+      // their own <image> element's  bounds.
       const hitArea = document.createElementNS(NS, 'rect');
       hitArea.setAttribute('width', '32');
       hitArea.setAttribute('height', '32');
@@ -253,8 +253,8 @@ export default {
       group.appendChild(hitArea);
 
       // A plain 2x2 grid glyph, drawn directly rather than referencing
-      // Blockly's own sprite sheet (media/sprites.png - see zoom_
-      // controls.js's own createDom - has no grid icon in it to clip out).
+      // Blockly's  sprite sheet (media/sprites.png - see zoom_
+      // controls.js's  createDom - has no grid icon in it to clip out).
       const icon = document.createElementNS(NS, 'g');
       icon.style.pointerEvents = 'none';
       [[8, 8], [18, 8], [8, 18], [18, 18]].forEach(([x, y]) => {
@@ -277,7 +277,7 @@ export default {
       // solid active state, brightening the same way those icons do as the
       // mouse gets closer to actually clicking it. Fill starts from the same
       // near-black those icons are actually drawn at (confirmed directly:
-      // sampling the zoom-out icon's own pixels averaged to ~rgb(45,45,45) -
+      // sampling the zoom-out icon's  pixels averaged to ~rgb(45,45,45) -
       // a flat mid-grey like '#757575' BEFORE opacity is applied came out
       // visibly lighter/washed-out next to them).
       const render = () => {
@@ -303,9 +303,9 @@ export default {
 
       zoomControls.svgGroup_.appendChild(group);
       this.gridSnapSvgGroup_ = group;
-      // Read directly by BlocklyComponent.vue's own ZoomControls.position
+      // Read directly by BlocklyComponent.vue's  ZoomControls.position
       // override (horizontal layout only) - a direct reference rather than
-      // making that code go hunting through svgGroup_'s own children by
+      // making that code go hunting through svgGroup_'s  children by
       // index, which broke outright once actually tried (fragile: relies on
       // this being exactly the Nth child, with no error if that assumption
       // ever stops holding).
@@ -313,10 +313,10 @@ export default {
 
       // Appending a new child here doesn't itself trigger Blockly to
       // reposition anything - the very first layout pass (triggered by
-      // Blockly.inject itself, in BlocklyComponent's own mounted(), which
+      // Blockly.inject itself, in BlocklyComponent's  mounted(), which
       // runs before this one) already finished before this 4th child even
       // existed. In the default (vertical) layout that's fine, since this
-      // group's own initial transform above is already its final position -
+      // group's  initial transform above is already its final position -
       // but the horizontal layout (see BlocklyComponent.vue's own
       // ZoomControls.position override) recomputes THIS group's own
       // position dynamically every time position() runs, so without a fresh
@@ -331,7 +331,7 @@ export default {
     // snapToGrid_ field, set once from options.grid.snap at injection time,
     // with no supported way to change it afterward. shouldSnap() IS read
     // fresh on every block drag-end (see node_modules/blockly/core/
-    // block_svg.js's own snapToGrid_ call), not cached anywhere else, so
+    // block_svg.js's  snapToGrid_ call), not cached anywhere else, so
     // writing straight to that private field still takes effect immediately
     // for every future placement - the only lever this Blockly version
     // actually offers for a live toggle.
@@ -391,9 +391,9 @@ export default {
       this.options.sounds = newVal;
     },
     // Live-rebuilds the toolbox XML and pushes it into the already-running
-    // Blockly workspace via its own updateToolbox() - options.toolbox
+    // Blockly workspace via its  updateToolbox() - options.toolbox
     // itself is only ever read once, at Blockly.inject() time (see
-    // BlocklyComponent.vue's own mounted()), so just reassigning it
+    // BlocklyComponent.vue's  mounted()), so just reassigning it
     // wouldn't do anything after the fact.
     player0SpriteColorsEnabled() {
       const workspace = this.$refs['foo'] && this.$refs['foo'].workspace;
@@ -407,7 +407,7 @@ export default {
     },
   },
   mounted() {
-    // BlocklyComponent's own mounted() (a child, so it runs first) has
+    // BlocklyComponent's  mounted() (a child, so it runs first) has
     // already called Blockly.inject by the time this runs, so
     // workspace.zoomControls_ already exists - no rAF/ResizeObserver needed
     // here unlike the two prior approaches, since this only ever appends a

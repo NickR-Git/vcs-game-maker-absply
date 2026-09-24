@@ -12,36 +12,36 @@ export const DEFAULT_DIM_PERCENT = 25;
 // AUDV is write-only hardware (the TIA has no way to read it back), so
 // dimming can't be a per-frame runtime override the way muteAllAudio is
 // (see generateMuteAudio in generators/bbasic.js) - it has to be baked into
-// each sound effect's own AUDV value at compile time instead, here.
+// each sound effect's  AUDV value at compile time instead, here.
 export const dimVolume = (audv, percent) =>
   Math.round(Number(audv) * (Number(percent) / 100));
 
 // 15 is never a meaningful envelope-config INDEX (a project realistically
 // only ever generates a handful of distinct envelope shapes - see
-// registerEnvelopeConfig below - and a nibble's own range, 0-15, comfortably
+// registerEnvelopeConfig below - and a nibble's  range, 0-15, comfortably
 // covers however many it grows to), so it doubles as the "this channel's
 // current sound has no envelope" sentinel - seeing it lets the per-frame
 // check (generateEnvelopeChecks) skip leaving AUDV alone for ordinary,
 // non-enveloped sounds sharing the same channel. Exported so
-// generators/bbasic/music.js's own envelope-change marker can use the exact
+// generators/bbasic/music.js's  envelope-change marker can use the exact
 // same sentinel value for "envelope off" on a music channel.
 export const NO_ENVELOPE_SENTINEL = 15;
 
 // Whether ANY sound effect preset on the SoundFX tab has its envelope
-// enabled - checked directly against the tab's own stored data, rather than
+// enabled - checked directly against the tab's  stored data, rather than
 // a flag set as a side effect of visiting some block during code
 // generation, since block visitation order can't be relied on to see an
-// envelope-enabled preset's own block before a plain one that happens to
+// envelope-enabled preset's  block before a plain one that happens to
 // share its channel (see the per-sound-effect call site below, which needs
 // this same answer for EVERY soundfx_play block, envelope-enabled or not,
 // regardless of which one Blockly happens to generate first). Exported so
-// generators/bbasic.js's own init() can gate the per-channel envelope-stage
+// generators/bbasic.js's  init() can gate the per-channel envelope-stage
 // dev vars on the exact same condition.
 export const anySoundEffectHasEnvelope = () => {
   try {
     // Muted soundfx_play calls never write a nonzero AUDV in the first
     // place (see the early return below), so there's nothing left for the
-    // envelope system to ever act on - false here removes its own dev vars
+    // envelope system to ever act on - false here removes its  dev vars
     // and per-frame check from the compiled ROM too, not just the sounds
     // themselves.
     const configurationStorage = useConfigurationStorage();
@@ -61,7 +61,7 @@ export const anySoundEffectHasEnvelope = () => {
 // whether it's actually needed. CHANNEL is a fixed dropdown field on
 // soundfx_play (not a runtime expression - see blocks/soundfx.js), so which
 // channel each trigger targets is fully known at compile time, the same way
-// resolveProjectMusic's own per-channel channelHasEnvelope already is for
+// resolveProjectMusic's  per-channel channelHasEnvelope already is for
 // Music tracks - this only differs by also requiring the block to actually
 // reference a preset with Envelope on, not just exist.
 export const soundEffectChannelHasEnvelope = (workspace, channel) => {
@@ -81,7 +81,7 @@ export const soundEffectChannelHasEnvelope = (workspace, channel) => {
 
 // Whether any Music-tab channel actually plays an envelope-enabled
 // instrument note - reads this.projectMusic (set once in
-// generators/bbasic.js's own init(), before any of the functions below ever
+// generators/bbasic.js's  init(), before any of the functions below ever
 // run) rather than importing anything from generators/bbasic/music.js
 // directly, specifically to avoid a circular module dependency between the
 // two files (music.js already imports from this file).
@@ -93,14 +93,14 @@ const anyMusicChannelHasEnvelope = (generatorThis) => {
 // Every DISTINCT (attack, decay, release, sustainPercent, peakVolume)
 // envelope shape actually used anywhere in the project - one-shot sound
 // effects (soundfx_play below) AND Music-tab notes (see
-// generators/bbasic/music.js's own call site) both register into this same
+// generators/bbasic/music.js's  call site) both register into this same
 // pool, so two different presets/notes that happen to resolve to the exact
 // same clamped shape only ever cost ONE pair of data tables. Module-level
-// (not Blockly.BBasic state) specifically so music.js's own note-flattening
+// (not Blockly.BBasic state) specifically so music.js's  note-flattening
 // functions - which don't have Blockly in scope, several call layers away
 // from anything that does - can register configs without threading it
 // through every intermediate function signature. Reset per compile by
-// resetEnvelopeConfigs, called from generators/bbasic.js's own init().
+// resetEnvelopeConfigs, called from generators/bbasic.js's  init().
 let envelopeConfigs = new Map();
 export const resetEnvelopeConfigs = () => {
   envelopeConfigs = new Map();
@@ -109,11 +109,11 @@ export const resetEnvelopeConfigs = () => {
 // Builds (and registers, deduped - see registerEnvelopeConfig below) the
 // small per-stage data tables one distinct envelope SHAPE needs.
 // attack/decay/release here are already
-// CLAMPED to fit within this specific play's own duration (see the caller),
+// CLAMPED to fit within this specific play's  duration (see the caller),
 // so the dedup key doesn't need duration in it at all: attack ramps
 // 0->peakVolume and decay ramps peakVolume->sustainVolume regardless of how
-// long the sustain stretch between them and the sound's own end turns out
-// to be, and release ramps sustainVolume->0 over its own last `release`
+// long the sustain stretch between them and the sound's  end turns out
+// to be, and release ramps sustainVolume->0 over its  last `release`
 // frames regardless of when release actually starts - none of the three
 // stage SHAPES depend on the sound's total duration once attack+decay+
 // release already fits inside it.
@@ -159,7 +159,7 @@ const buildEnvelopeConfigTables = ({attack, decay, release, sustainPercent, peak
 // mixing enough distinct (attack, decay, release, sustain, peakVolume)
 // shapes across every Sound Effect AND Music instrument combined (Music
 // notes register one PER DISTINCT VOLUME they're played at on a given
-// instrument - see music.js's own eventsToPages - so this is far easier to
+// instrument - see music.js's  eventsToPages - so this is far easier to
 // hit than it ever was with Sound Effects alone) would otherwise silently
 // wrap/collide in that shared nibble, corrupting playback for whichever
 // sound loses the collision. Caught here instead, at compile time.
@@ -179,17 +179,17 @@ export const registerEnvelopeConfig = ({attack, decay, release, sustainPercent, 
 };
 
 // Every registered config's own {index, attackDecayLength, releaseLength}
-// (plus its tables, unused by this accessor's own callers) - exported so
-// generators/bbasic/music.js's own buildEnvelopeMarkerSubroutine can build a
-// compile-time compare chain mapping a marker's own runtime INDEX to its
+// (plus its tables, unused by this accessor's  callers) - exported so
+// generators/bbasic/music.js's  buildEnvelopeMarkerSubroutine can build a
+// compile-time compare chain mapping a marker's  runtime INDEX to its
 // attackDecayLength, entirely inline in the RELOCATABLE musicEngine bank.
 // Deliberately NOT a ROM data table read (an earlier version of this tried
 // a shared `_envelopeAdLen[index]` table instead): _envelopeAd{n}/
 // _envelopeRel{n} are only ever read from generateEnvelopeChecks, which -
 // like the tables themselves - is always pinned to bank 1, so that
-// cross-reference is safe; musicEngine's own per-channel code, in
+// cross-reference is safe; musicEngine's  per-channel code, in
 // contrast, can get RELOCATED to a different bank entirely (see
-// generateMusicChecks' own comment on this), and a ROM data table is
+// generateMusicChecks'  comment on this), and a ROM data table is
 // bank-specific - reading one from a bank it doesn't live in fails to
 // assemble. A compile-time if-chain has no such restriction, since it
 // costs no cross-bank data reference at all.
@@ -205,28 +205,28 @@ export default (Blockly) => {
 
     const configurationStorage = useConfigurationStorage();
     const config = (configurationStorage && configurationStorage.value) || {};
-    // Omitted outright, same reasoning as simple_sound_set's own identical
+    // Omitted outright, same reasoning as simple_sound_set's  identical
     // guard in generators/bbasic/sound.js - AUDV is real, unbuffered TIA
     // hardware, so still generating this code and relying on
     // generateMuteAudio's later, per-frame "AUDV = 0" override alone would
-    // let this sound's own nonzero write briefly, audibly reach the speaker
+    // let this sound's  nonzero write briefly, audibly reach the speaker
     // first. Never generating it at all has no such gap, and costs nothing
     // in the compiled ROM.
     if (config.muteAllAudio) return 'rem Sound muted\n';
 
     const {audc, audf, audv, duration, envelope, envelopeAttack, envelopeDecay, envelopeSustain,
       envelopeRelease} = soundEffect;
-    // App-wide preference (see useDimSoundFxStorage's own comment), not part
-    // of this project's own saved configuration.
+    // App-wide preference (see useDimSoundFxStorage's  comment), not part
+    // of this project's  saved configuration.
     const effectiveAudv = useDimSoundFxStorage().value ?
       dimVolume(audv, useDimSoundFxPercentStorage(DEFAULT_DIM_PERCENT).value) : audv;
 
     // Every soundfx_play - envelope-enabled or not - has to (re)set its
-    // channel's own envelope-config nibble (and its own attack/decay
+    // channel's  envelope-config nibble (and its  attack/decay
     // countdown, right below) as long as an envelope is used ANYWHERE in
     // the project: this sound's channel might previously have been playing
     // an enveloped sound, and without this, this plain sound would inherit
-    // that stale envelope config once its own duration counts down far
+    // that stale envelope config once its  duration counts down far
     // enough to match it.
     let envelopeLines = '';
     if (anySoundEffectHasEnvelope()) {
@@ -263,7 +263,7 @@ export default (Blockly) => {
     }
 
     // channnel0duration/channnel1duration are only conditionally reserved
-    // now (see this.channelDurationUsed's own pre-scan in
+    // now (see this.channelDurationUsed's  pre-scan in
     // generators/bbasic.js's init()) - resolved through nameDB_ here rather
     // than left as a literal identifier, same as every other conditionally-
     // reserved dev var, so this always agrees with whatever letter/var that
@@ -296,16 +296,16 @@ export default (Blockly) => {
     return `\n dim envelopeConfig = var47${comment}`;
   };
 
-  // Every distinct envelope config's own attack+decay/release data tables
+  // Every distinct envelope config's  attack+decay/release data tables
   // (see registerEnvelopeConfig) - folded directly into generateEnvelopeChecks'
-  // own relocatable payload below (see that function's own comment on why),
+  // own relocatable payload below (see that function's  comment on why),
   // not spliced separately into bbasic.bb.hbs's fixed data-tables section
   // the way Data-tab tables are - these are read via absolute addressing
   // ("lda _envelopeAd0,y") from the check code itself, so they have to
   // physically travel wherever that code ends up, exactly the same
-  // "own data table follows its own relocatable code" reasoning
-  // generateMusicChecks' own _envelopeAdLen table already establishes (see
-  // its own comment in generators/bbasic/music.js).
+  // "own data table follows its  relocatable code" reasoning
+  // generateMusicChecks'  _envelopeAdLen table already establishes (see
+  // its  comment in generators/bbasic/music.js).
   const buildEnvelopeDataTables = () => {
     const configs = [...envelopeConfigs.values()];
     if (!configs.length) return '';
@@ -328,10 +328,10 @@ export default (Blockly) => {
   // index lives in the low nibble, channel 1's in the high nibble (see
   // soundfx_play above). The per-frame TRIGGER here has to stay bank-1-fixed
   // (commongamelogic runs every frame via plain fallthrough, not goto/gosub,
-  // so it can't itself move) - but the asm BODY below (plus its own data
+  // so it can't itself move) - but the asm BODY below (plus its  data
   // tables, see buildEnvelopeDataTables above) is wrapped via
   // wrapRelocatableGraphics at the very end of this function, the exact same
-  // "code + its own data table, one combined payload" pattern
+  // "code + its  data table, one combined payload" pattern
   // generateMusicChecks/wrapRelocatableMusic already use for the music
   // engine - a goto-entry/return-bank1 trampoline replaces this whole block
   // in commongamelogic once it's actually relocated, same as any other
@@ -341,14 +341,14 @@ export default (Blockly) => {
   // whole thing as one contiguous unit is safe - only cross-unit jumps ever
   // needed the far-branch/trampoline treatment to begin with.
   //
-  // Hand-written 6502, following generateSoundFadeChecks' own retired
+  // Hand-written 6502, following generateSoundFadeChecks'  retired
   // dispatch shape (X register holds the unpacked index; a compare-chain
   // falls through to whichever config actually matches, same
   // "no compare needed for the last option" trick), generalized from "look
-  // up one frame count" to "look up one config's own pair of tables, plus
-  // its own attack+decay length and release length" per index. Each
-  // channel's own attack/decay countdown (envelopeStage{N}) is read/
-  // decremented directly - see buildEnvelopeConfigTables' own comment for
+  // up one frame count" to "look up one config's  pair of tables, plus
+  // its  attack+decay length and release length" per index. Each
+  // channel's  attack/decay countdown (envelopeStage{N}) is read/
+  // decremented directly - see buildEnvelopeConfigTables'  comment for
   // why this needs no runtime subtraction; release instead compares
   // channnel{N}duration (already exists) against each config's own
   // compile-time-constant releaseLength.
@@ -359,16 +359,16 @@ export default (Blockly) => {
     const channel1 = this.nameDB_.getName('channnel1duration', Blockly.Names.DEVELOPER_VARIABLE_TYPE);
     // Lazy (not resolved up front) - resolveVar/nameDB_.getName allocates a
     // real letter the first time it's called, independent of whether
-    // generators/bbasic.js's own reservation gate (envelopeStage0Used/
+    // generators/bbasic.js's  reservation gate (envelopeStage0Used/
     // envelopeStage1Used) actually reserved it, so these can only be called
-    // from inside each channel's own section below, guarded by that exact
+    // from inside each channel's  section below, guarded by that exact
     // same flag - same hazard/fix shape as buildTextScrollSetupLines' own
     // comment in text-scroll.js.
     const stage0 = () => this.nameDB_.getName('envelopeStage0', Blockly.Names.DEVELOPER_VARIABLE_TYPE);
     const stage1 = () => this.nameDB_.getName('envelopeStage1', Blockly.Names.DEVELOPER_VARIABLE_TYPE);
     const channelHasMusicEnvelope = (this.projectMusic || {}).channelHasEnvelope || {};
 
-    // A channel's own remaining-frames-until-the-note-ends source is
+    // A channel's  remaining-frames-until-the-note-ends source is
     // channnel{N}duration while a Sound Effect owns it, but a Music note
     // (not a Sound Effect) playing on the same physical channel never
     // touches that var at all - it counts down its OWN timer instead (see
@@ -396,11 +396,11 @@ export default (Blockly) => {
       };
     };
 
-    // One channel's own full dispatch: for every registered config, try it
-    // against X (the unpacked index); the matching config's own block reads
-    // its own attack/decay table (if this channel's own countdown is still
-    // nonzero) and its own release table (if this channel's own remaining
-    // duration/timer still falls within that config's own release window).
+    // One channel's  full dispatch: for every registered config, try it
+    // against X (the unpacked index); the matching config's  block reads
+    // its  attack/decay table (if this channel's  countdown is still
+    // nonzero) and its  release table (if this channel's  remaining
+    // duration/timer still falls within that config's  release window).
     const buildChannelDispatch = (tag, audvReg, remainingVar, stageVar) => {
       const lines = [];
       configs.forEach(({index, attackDecayLength, releaseLength}, i) => {
@@ -439,13 +439,13 @@ export default (Blockly) => {
       return lines;
     };
 
-    // Each channel's own section (the runtime "is this channel's own nibble
+    // Each channel's  section (the runtime "is this channel's  nibble
     // actually a real config, or NO_ENVELOPE_SENTINEL" guard, plus its own
     // dispatch) is only built at all - and so only ever resolves that
-    // channel's own stage var - when generators/bbasic.js's own pre-scan
+    // channel's  stage var - when generators/bbasic.js's  pre-scan
     // (envelopeStage0Used/envelopeStage1Used) found it genuinely needed;
     // omitted entirely otherwise, so a project using envelope on only one
-    // channel never references (or reserves) the other channel's own var.
+    // channel never references (or reserves) the other channel's  var.
     const channel0Section = (() => {
       if (!this.envelopeStage0Used) return [];
       const remaining0 = buildRemainingVar('0', channel0);
@@ -455,16 +455,16 @@ export default (Blockly) => {
         // envelopeConfig a second time right before the dispatch, as this
         // used to) since nothing between here and there touches X:
         // remaining0.lines (buildRemainingVar) only ever loads A and stores
-        // temp3, confirmed directly against its own body.
+        // temp3, confirmed directly against its  body.
         '       lda envelopeConfig',
         '       and #$0F',
         '       tax',
         '       cpx #' + NO_ENVELOPE_SENTINEL,
         // A plain "beq _envelope0_done" here used to reach clean across
-        // however much of buildChannelDispatch's own output follows -
+        // however much of buildChannelDispatch's  output follows -
         // fine with a couple of configs, but a real reported build failure
         // once a project registered enough of them (5, in the reported
-        // case) to push _envelope0_done's own address past a BEQ's plain
+        // case) to push _envelope0_done's  address past a BEQ's plain
         // ±127-byte range ("Branch out of range"). Standard 6502 long-
         // branch idiom instead: invert the condition (BNE, not BEQ) over a
         // JMP, which has no such range limit - functionally identical,
@@ -481,7 +481,7 @@ export default (Blockly) => {
       if (!this.envelopeStage1Used) return [];
       const remaining1 = buildRemainingVar('1', channel1);
       return [
-        // See channel0Section's own identical "X held from here through
+        // See channel0Section's  identical "X held from here through
         // buildChannelDispatch" comment just above.
         '       lda envelopeConfig',
         '       lsr',
@@ -490,7 +490,7 @@ export default (Blockly) => {
         '       lsr',
         '       tax',
         '       cpx #' + NO_ENVELOPE_SENTINEL,
-        // See channel0Section's own identical comment just above.
+        // See channel0Section's  identical comment just above.
         '       bne _envelope1_hasconfig',
         '       jmp _envelope1_done',
         '_envelope1_hasconfig',
@@ -505,11 +505,11 @@ export default (Blockly) => {
       ...channel1Section,
       'end',
     ].join('\n');
-    // One combined payload (code + its own data tables) wrapped as a single
-    // relocatable unit - see this function's own top comment for why. Reuses
-    // the graphics pool (not a new one, and not music's own separate pool -
+    // One combined payload (code + its  data tables) wrapped as a single
+    // relocatable unit - see this function's  top comment for why. Reuses
+    // the graphics pool (not a new one, and not music's  separate pool -
     // this is a single small unit, not something that needs its own
-    // reserved bank the way music's own per-project engine does).
+    // reserved bank the way music's  per-project engine does).
     const payload = [asmBlock, buildEnvelopeDataTables()].filter(Boolean).join('\n\n');
     return Blockly.BBasic.wrapRelocatableGraphics('soundfxEnvelopeChecks', payload);
   };

@@ -395,7 +395,7 @@
                           </v-list-item-icon>
                           <v-list-item-title>Yes, delete</v-list-item-title>
                         </v-list-item>
-                        <v-list-item>
+                        <v-list-item link>
                           <v-list-item-icon>
                             <v-icon>mdi-cancel</v-icon>
                           </v-list-item-icon>
@@ -455,13 +455,13 @@ export default defineComponent({
   components: {ColorSwatchPicker, EnvelopeGraph},
   setup() {
     const soundEffectsStorage = useSoundEffectsStorage();
-    // App-wide preference, not part of this project's own saved
-    // configuration - see useDimSoundFxStorage's own comment in
+    // App-wide preference, not part of this project's  saved
+    // configuration - see useDimSoundFxStorage's  comment in
     // hooks/project.js.
     const dimSoundFx = useDimSoundFxStorage();
     const dimSoundFxPercent = useDimSoundFxPercentStorage(DEFAULT_DIM_PERCENT);
-    // Same reasoning as MusicEditor.vue's own identical dimSoundFxPercentDisplay -
-    // dimSoundFxPercent's own setter still does a synchronous localStorage
+    // Same reasoning as MusicEditor.vue's  identical dimSoundFxPercentDisplay -
+    // dimSoundFxPercent's  setter still does a synchronous localStorage
     // write on every call, which v-slider's v-model would otherwise trigger
     // on every "input" tick while dragging - the exact repeated-main-thread-
     // work pattern that caused the visible thumb to lag behind the mouse and
@@ -477,10 +477,10 @@ export default defineComponent({
 
     // Purely a visual "which card am I looking at" marker - same
     // selectCard/selectedCardId/deselectCard pattern as MusicEditor.vue's
-    // own song cards (see its own comment for the full reasoning): plain
+    // own song cards (see its  comment for the full reasoning): plain
     // local component state, not persisted, not wired into anything else.
-    // Clicking anywhere in a sound effect's own card selects it; clicking
-    // outside any card (this tab's own outer editor-container, see its own
+    // Clicking anywhere in a sound effect's  card selects it; clicking
+    // outside any card (this tab's  outer editor-container, see its own
     // @click) clears the selection.
     const selectedCardId = ref(null);
     const selectCard = (id) => {
@@ -596,12 +596,12 @@ export default defineComponent({
 
     const {isCollapsed, toggleCollapsed, collapseAll} = useCollapsedIds('soundfx', true);
     // Every sound card starts collapsed on every visit to this tab, not just
-    // ones never expanded before (see collapseAll's own comment) - a
+    // ones never expanded before (see collapseAll's  comment) - a
     // deliberate request, unlike every other card list in the app, which
     // remembers whichever ones a previous visit left expanded.
     collapseAll();
 
-    // Purely a display filter for this tab's own card list (see the
+    // Purely a display filter for this tab's  card list (see the
     // Instrument checkbox in the name row) - not persisted, and doesn't
     // touch soundEffect.isInstrument itself or anything else that reads it.
     // Cards not matching stay in the underlying array/v-for at their own
@@ -627,7 +627,7 @@ export default defineComponent({
 
     // Card reordering (see hooks/drag-reorder.js and TextEditor.vue's own
     // first use of this same hook) - sound effects are already referenced
-    // everywhere by their own permanent id (see findSoundEffectById/
+    // everywhere by their  permanent id (see findSoundEffectById/
     // buildSoundEffectOptions in blocks/soundfx.js), never by array
     // position, so unlike the Text tab this needed no separate
     // display-order/ROM-order decoupling work - reordering is already safe.
@@ -678,10 +678,10 @@ export default defineComponent({
 
     // Sound effect data as a standalone .json file, for sharing an
     // instrument between projects or keeping an external backup - same
-    // pattern as MusicEditor.vue's own handleExportSong/handleImportSong
-    // (including leaving the card's own id out of the export, kept as the
+    // pattern as MusicEditor.vue's  handleExportSong/handleImportSong
+    // (including leaving the card's  id out of the export, kept as the
     // IMPORTING card's id on import instead, since ids only mean anything
-    // within a single project's own storage).
+    // within a single project's  storage).
     const handleExportSoundEffect = (soundEffect) => {
       // eslint-disable-next-line no-unused-vars
       const {id, ...soundEffectData} = soundEffect;
@@ -690,8 +690,8 @@ export default defineComponent({
       saveAs(blob, `Sound_${filename}-${getDateInfix()}.json`);
     };
 
-    // Overwrites this sound effect card's own data with a previously
-    // exported .json file's contents - keeps this card's own id (see
+    // Overwrites this sound effect card's  data with a previously
+    // exported .json file's contents - keeps this card's  id (see
     // handleExportSoundEffect) untouched so every soundfx_play block and
     // Music tab track already pointing at this card keeps working.
     const handleImportSoundEffect = (soundEffect) => {
@@ -703,10 +703,10 @@ export default defineComponent({
               throw new Error('File does not contain valid sound effect data');
             }
             Object.assign(soundEffect, soundEffectData, {id: soundEffect.id});
-            // Not just handleChildChange() - an imported file's own audf
+            // Not just handleChildChange() - an imported file's  audf
             // (especially one hand-edited, or exported from a build before
             // the curated "in tune" Frequency list existed) can be a raw
-            // byte that isn't one of the current AUDC type's own valid
+            // byte that isn't one of the current AUDC type's  valid
             // options, which left the Frequency select showing blank
             // forever (a value with no matching item never displays one)
             // even though the data underneath was actually imported fine.
@@ -723,9 +723,9 @@ export default defineComponent({
     // Every sound effect/instrument in this project as one standalone .json
     // "sound bank" file - same per-card export shape as handleExportSoundEffect
     // above (id stripped, since it only ever meant anything within this one
-    // project's own storage), just the whole array at once instead of a
+    // project's  storage), just the whole array at once instead of a
     // single card. "type" is a lightweight self-description (not read back
-    // on import, matching Project.vue's own convention of tagging a saved
+    // on import, matching Project.vue's  convention of tagging a saved
     // file's kind) purely so a stray .json opened outside this app is
     // recognizable at a glance.
     const handleExportSoundBank = () => {
@@ -737,14 +737,14 @@ export default defineComponent({
     };
 
     // Imports a previously exported sound bank - unlike a single sound
-    // effect's own import (handleImportSoundEffect, which always overwrites
+    // effect's  import (handleImportSoundEffect, which always overwrites
     // ONE already-selected card), this has no single target card to
     // overwrite, so it matches by NAME instead: a bank entry whose name
-    // matches an existing card here replaces that card's own parameters
+    // matches an existing card here replaces that card's  parameters
     // (keeping its id, same reasoning as handleImportSoundEffect - every
     // soundfx_play block/Music tab track already pointing at that id keeps
     // working), and a bank entry with no name match becomes a brand new
-    // card instead. Matches MusicEditor.vue's own importSoundEffects in
+    // card instead. Matches MusicEditor.vue's  importSoundEffects in
     // shape (name-keyed, id remapped), but that function keeps the
     // EXISTING card untouched on a name match (it's importing songs, which
     // reference sound effects by id and just need SOME matching id to point
@@ -801,7 +801,7 @@ export default defineComponent({
       handleChildChange();
     };
 
-    // Same "in tune" AUDF set the piano roll limits its own rows to for a
+    // Same "in tune" AUDF set the piano roll limits its  rows to for a
     // given instrument (see utils/music-notes.js's notesForAudc) - the
     // Frequency field only offers a value picked from here instead of any
     // 0-31 byte, so it can't land on an AUDF this sound type can't actually
@@ -871,7 +871,7 @@ export default defineComponent({
   width: 100%;
 }
 
-/* v-list-item's own default left/right padding (16px each side) stacks on
+/* v-list-item's  default left/right padding (16px each side) stacks on
    top of v-card-text's, pushing the sound effect card in from both edges
    instead of it actually filling the full available width - confirmed as
    the source of a visible gap past the card's own right edge, same fix as
@@ -887,7 +887,7 @@ export default defineComponent({
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
   gap: 8px;
-  /* No margin-top - v-list's own default padding-top (8px, unlike e.g.
+  /* No margin-top - v-list's  default padding-top (8px, unlike e.g.
      TitleScreenEditor.vue's own .titlescreen-card-list, which zeroes it
      out) already supplies the gap here, stacking an 8px margin-top on top
      of that made the gap under the import/export buttons visibly bigger
@@ -938,11 +938,11 @@ export default defineComponent({
 
 .dim-slider {
   flex: 0 1 200px;
-  /* Pulls the "%" label below in closer than the row's own 16px gap - the
+  /* Pulls the "%" label below in closer than the row's  16px gap - the
      slider's own internal thumb padding already leaves visual space after
      it, so the label doesn't need the full gap on top of that. */
   margin-right: -12px;
-  /* The slider's track sits a few px higher within its own box than the
+  /* The slider's track sits a few px higher within its  box than the
      switch's toggle does within its box, even once both boxes are centered
      against each other - nudge it down to actually line up. */
   margin-top: 3px;
@@ -1049,7 +1049,7 @@ export default defineComponent({
   flex-direction: column;
 }
 
-/* Grid's own default stretch (align-items: start on .soundfx-list overrides
+/* Grid's  default stretch (align-items: start on .soundfx-list overrides
    that for the grid case, but each item still fills its own column width)
    isn't automatic here - .entry-list-item (Vuetify's own v-list-item, the
    actual flex child) doesn't stretch to the container's full width on its
@@ -1087,7 +1087,7 @@ export default defineComponent({
   cursor: grab;
 }
 
-/* Same two classes/reasoning as hooks/drag-reorder.js's own comment and
+/* Same two classes/reasoning as hooks/drag-reorder.js's  comment and
    TextEditor.vue's identical rules (its own first use of this hook). */
 .drag-reorder-dragging {
   opacity: 0.4;
@@ -1229,7 +1229,7 @@ export default defineComponent({
   box-shadow: none !important;
 }
 
-/* Vuetify paints its own grey hover/focus overlay here - removed in favor of
+/* Vuetify paints its  grey hover/focus overlay here - removed in favor of
    the icon colour transition below. */
 .soundfx-stop-btn::before,
 .soundfx-play-btn::before {
@@ -1247,7 +1247,7 @@ export default defineComponent({
   color: rgba(0, 0, 0, 0.87) !important;
 }
 
-/* Same icon/button sizing as the Player Sprite tab's own toolbar icons
+/* Same icon/button sizing as the Player Sprite tab's  toolbar icons
    (PixelEditor.vue's .pixel-editor-tools rules) - size only, no colour
    changes, so .delete-icon-btn's red-on-hover convention is untouched. */
 .soundfx-icon-btn-size {
@@ -1344,7 +1344,7 @@ export default defineComponent({
   flex: 0 0 90px;
 }
 
-/* Unlike Arpeggio's own row (2 fixed-width fields plus one growing Range
+/* Unlike Arpeggio's  row (2 fixed-width fields plus one growing Range
    field to soak up the rest), Envelope's 4 fields are all the same kind of
    control (a small option dropdown) with no natural single field to grow -
    so all 4 grow evenly together instead, filling the same full row width
@@ -1354,7 +1354,7 @@ export default defineComponent({
   flex: 1 1 90px;
 }
 
-/* Wider than .soundfx-number's fixed 90px (Frequency's own options - a
+/* Wider than .soundfx-number's fixed 90px (Frequency's  options - a
    v-select of note names, or a plain 0-31 number field - read better with
    more room than Volume/Duration's plain 2-digit numbers need), but still
    sized to fit alongside both of them on the same row within the card's own
@@ -1365,7 +1365,7 @@ export default defineComponent({
   min-width: 110px;
 }
 
-/* Each switch and its own conditional field(s) sit in one row (wrapping onto
+/* Each switch and its  conditional field(s) sit in one row (wrapping onto
    a second line if the card isn't wide enough), rather than the fields
    stacking in their own row underneath the switch. */
 .soundfx-arpeggio-block, .soundfx-envelope-block {
@@ -1387,7 +1387,7 @@ export default defineComponent({
   width: 100%;
 }
 
-/* .soundfx-fields' own row-gap is 0 (see its own comment), so with
+/* .soundfx-fields'  row-gap is 0 (see its  comment), so with
    Arpeggio's controls collapsed (just its own switch row) there'd otherwise
    be no visible separation at all between the Arpeggio and Envelope
    switches - they'd read as one run-on row. Only needed when Arpeggio's
@@ -1401,7 +1401,7 @@ export default defineComponent({
   margin-top: 14px;
 }
 
-/* Arpeggio's own expanded fields already add their own visual separation
+/* Arpeggio's  expanded fields already add their  visual separation
    above Envelope (see the un-scoped rule above's own comment, written for
    the collapsed case) - the same margin-top on top of THAT read as too
    much. */
@@ -1413,7 +1413,7 @@ export default defineComponent({
   margin-top: 14px;
 }
 
-/* Full width so it forces its own line above the graph, same "100%-width
+/* Full width so it forces its  line above the graph, same "100%-width
    flex child forces a line break" mechanism .envelope-graph itself relies
    on within this same wrapping row. */
 .soundfx-envelope-graph-toolbar {
@@ -1424,10 +1424,10 @@ export default defineComponent({
      (.soundfx-envelope-block's own row-gap is 0, so without this the
      fields' bottom edge and this row's own divider line sit flush). */
   margin-top: 8px;
-  /* Right-aligned, under the graph's own right edge (where Release ends),
+  /* Right-aligned, under the graph's  right edge (where Release ends),
      rather than the left edge (where Attack starts). */
   justify-content: flex-end;
-  /* Separates the graph's own reset/undo/redo controls from the Attack/
+  /* Separates the graph's  reset/undo/redo controls from the Attack/
      Decay/Sustain/Release dropdowns above them - same border colour
      EnvelopeGraph.vue's own .envelope-graph frame uses, so this reads as
      the same "framed panel" visual language rather than an unrelated line. */
@@ -1461,7 +1461,7 @@ export default defineComponent({
   margin-top: 16px !important;
 }
 
-/* Extra breathing room between each switch's own label text and the field(s)
+/* Extra breathing room between each switch's  label text and the field(s)
    right next to it - the shared 8px row gap (also used between Speed/
    Interval/Range themselves) read as too tight specifically here, where a
    switch's label text sits right up against its own edge. */

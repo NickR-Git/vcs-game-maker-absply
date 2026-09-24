@@ -16,7 +16,7 @@
 // Same overall shape as hooks/migrate-player-animations.js's own
 // remapPlayer1AnimationIndexesInWorkspaceXml (raw workspace XML STRING in,
 // string out, via DOMParser/XMLSerializer) - called from the same two
-// places that function is: main.js's own startup pass (an existing
+// places that function is: main.js's  startup pass (an existing
 // localStorage-persisted project) and Project.vue's "Open Project" handler
 // (a freshly opened .vcsgm file), since either path can hand this a
 // workspace that still has the old block types in it.

@@ -14,7 +14,7 @@ Blockly.defineBlocksWithJsonArray([
     ],
     'previousStatement': null,
     'nextStatement': null,
-    // Matches the Event category's own colour (rgb(39, 176, 176) - see
+    // Matches the Event category's  colour (rgb(39, 176, 176) - see
     // blocks/event.js) now that this block lives in that toolbox category
     // instead of Loops.
     'colour': 'rgb(39, 176, 176)',

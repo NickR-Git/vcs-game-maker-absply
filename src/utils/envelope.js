@@ -12,7 +12,7 @@
 // Attack ramps 0 -> peakVolume, Decay ramps peakVolume -> sustainVolume,
 // Sustain holds flat, Release ramps sustainVolume -> 0 over the LAST
 // `release` frames of totalFrames (i.e. release always ends exactly on the
-// sound/note's own last frame, matching the "key released" edge in the
+// sound/note's  last frame, matching the "key released" edge in the
 // classic ADSR diagram).
 
 // If attack+decay+release together don't fit within totalFrames, every
@@ -22,7 +22,7 @@
 // all" clamp, just generalized to 3 stages instead of 1. Exported
 // separately (not just inlined into buildEnvelopeCurve below) because the
 // ROM generator needs these exact clamped stage lengths themselves - not
-// just the resulting curve - to size/index its own per-stage data tables
+// just the resulting curve - to size/index its  per-stage data tables
 // (see generateEnvelopeChecks in generators/bbasic/soundfx.js).
 export const clampEnvelopeStages = ({attack, decay, release, totalFrames}) => {
   const frames = Math.max(1, Math.round(Number(totalFrames) || 0));

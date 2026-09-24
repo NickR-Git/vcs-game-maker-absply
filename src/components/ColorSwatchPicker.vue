@@ -33,7 +33,7 @@ import {NTSC_COLORS, colorByteToCss} from '../utils/palette';
 
 // A single reusable swatch-button + palette-grid color picker (a TIA color
 // byte, matching utils/palette.js's index<<1 convention) - the same
-// interaction Configuration.vue's own Text Minikernel background color
+// interaction Configuration.vue's  Text Minikernel background color
 // picker uses, generalized so anything needing one TIA color value (Sound
 // tab instrument colors, etc.) doesn't have to duplicate the markup/CSS.
 export default defineComponent({

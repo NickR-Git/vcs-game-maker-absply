@@ -30,7 +30,7 @@ const getAudioContext = () => {
   return audioContext;
 };
 
-// NTSC, matching the compiled ROM's own per-frame arpeggio timer (see
+// NTSC, matching the compiled ROM's  per-frame arpeggio timer (see
 // generators/bbasic/music.js) - arpeggioSpeed is a frame count there, so
 // previewing it here needs the same frames-to-seconds conversion to sound
 // like what the ROM will actually play.
@@ -77,10 +77,10 @@ const arpeggioPitchVariants = (audf, arpeggioInterval) => {
   };
 };
 
-// Matches the compiled ROM's own note envelope (see generators/bbasic/
-// music.js's own per-note envelope-config index) - steps through the exact
+// Matches the compiled ROM's  note envelope (see generators/bbasic/
+// music.js's  per-note envelope-config index) - steps through the exact
 // same per-frame AUDV curve (see utils/envelope.js's buildEnvelopeCurve),
-// scaled from AUDV's 0-15 range down into this preview's own 0-0.3 gain
+// scaled from AUDV's 0-15 range down into this preview's  0-0.3 gain
 // range, rather than a continuous fade - a stepped preview actually sounds
 // like what plays in game instead of smoothing over the same discrete
 // jumps.
@@ -93,7 +93,7 @@ const arpeggioPitchVariants = (audf, arpeggioInterval) => {
 // every note sound smoother/cleaner than the real hardware does. A REAL
 // instant step (jumping from full amplitude straight to 0 in a single
 // sample) turned out to be more of a harsh POP than the same kind of click
-// real hardware's own output actually has, though - real hardware's analog
+// real hardware's  output actually has, though - real hardware's analog
 // output stage still has some tiny natural rolloff from the circuit itself,
 // it's just far too short to sound like a fade. CLICK_GUARD_SECONDS below
 // is that same idea at a scale that's actually inaudible as a fade (a
@@ -169,10 +169,10 @@ const buildBufferCached = (context, approximation, chipClockHz, seconds) => {
 };
 
 // Synthesizes one AUDC/AUDF/AUDV instrument hit using the same per-AUDC
-// waveform approximation as the Sound tab's own preview (see
+// waveform approximation as the Sound tab's  preview (see
 // utils/sound-preview.js's AUDC_APPROXIMATIONS) - used for "Hit" steps
 // (untunable instruments), where there's no chosen pitch, just the
-// instrument's own characteristic sound. Returns null for a silent AUDC
+// instrument's  characteristic sound. Returns null for a silent AUDC
 // (0/11) - no sources are created.
 // @return {Array<AudioNode>} Every source scheduled (usually one, but an
 //     arpeggiating buffer-based hit schedules several short back-to-back
@@ -202,7 +202,7 @@ const playInstrumentHit = (context, {audc, audf, audv, arpeggioSpeed, arpeggioIn
   // A buffer is pre-rendered for one fixed clock, so it can't have its pitch
   // automated live like an oscillator - Arpeggio is previewed here instead
   // by scheduling several short buffers back-to-back, one per flip, each
-  // built at that phase's own pitch (matching the compiled ROM, which has
+  // built at that phase's  pitch (matching the compiled ROM, which has
   // no such limitation since it just writes AUDF directly every frame).
   const variants = arpeggioPitchVariants(audf, arpeggioInterval);
   const sequence = ARPEGGIO_PHASE_SEQUENCES[arpeggioRange] || ARPEGGIO_PHASE_SEQUENCES[0];
@@ -230,11 +230,11 @@ let stopTimer = null;
 
 // One entry per pattern currently scheduled to play, in order - {patternId,
 // startTime, endTime, unitSeconds} (all AudioContext-clock seconds/units, see
-// LENGTH_UNITS_PER_STEP). playSequence knows every pattern's own slot
+// LENGTH_UNITS_PER_STEP). playSequence knows every pattern's  slot
 // upfront (schedulePattern already returns each one's length before moving
 // on to the next); playPattern only ever has ONE entry at a time, replaced
 // every time its loop reschedules itself. Read by getPlaybackHead below to
-// drive the Music tab's own playhead/sequence-highlight UI - has no effect
+// drive the Music tab's  playhead/sequence-highlight UI - has no effect
 // on playback itself.
 let playbackTimeline = [];
 
@@ -245,8 +245,8 @@ let playbackTimeline = [];
 const unitSecondsForTempo = (tempo) => (30 / Math.max(1, Number(tempo) || 120)) / LENGTH_UNITS_PER_STEP;
 
 // One persistent GainNode per currently-scheduled track (pattern id + track
-// id - same key shape as MusicEditor.vue's own mutedTrackKey), routed
-// between that track's own notes and context.destination - see
+// id - same key shape as MusicEditor.vue's  mutedTrackKey), routed
+// between that track's  notes and context.destination - see
 // schedulePattern, which creates/updates one of these per track instead of
 // connecting straight to context.destination the way previewPatternNote's
 // one-off click preview still does. Its whole reason to exist: a GainNode's
@@ -254,7 +254,7 @@ const unitSecondsForTempo = (tempo) => (30 / Math.max(1, Number(tempo) || 120)) 
 // audio is already flowing through it, unlike an individual note's own
 // gain envelope (see buildGain), which is baked in once at schedule time
 // and can't be changed after the fact. setTrackMuted below is what actually
-// flips it, called from MusicEditor.vue's own mute toggle.
+// flips it, called from MusicEditor.vue's  mute toggle.
 const trackMuteGains = new Map();
 const trackMuteKey = (pattern, track) => `${pattern.id}:${track.id}`;
 
@@ -295,7 +295,7 @@ export const stopPatternPlayback = () => {
 };
 
 /**
- * Where playback currently is, for the Music tab's own playhead/sequence
+ * Where playback currently is, for the Music tab's  playhead/sequence
  * highlight - purely a UI query, reads the AudioContext clock without
  * scheduling or changing anything.
  * @return {?{patternId: number, sequenceIndex: ?number, elapsedUnits: number}}
@@ -309,8 +309,8 @@ export const getPlaybackHead = () => {
   if (!segment) return null;
   return {
     patternId: segment.patternId,
-    // Which step of the song's own Sequence list this segment came from -
-    // only set during playSequence (see its own timeline.push); undefined
+    // Which step of the song's  Sequence list this segment came from -
+    // only set during playSequence (see its  timeline.push); undefined
     // for a lone pattern preview (playPattern), which isn't part of any
     // sequence. Lets the Sequence list highlight the exact chip currently
     // sounding rather than every chip sharing this pattern's id (see
@@ -329,8 +329,8 @@ export const getPlaybackHead = () => {
  * in the piano roll - independent of any in-progress pattern playback.
  * @param {Object} sound The instrument's AUDC/AUDV plus the specific note's
  *     own AUDF - a real chosen pitch for a tunable instrument, or the
- *     instrument's own preset AUDF for an untunable one's "Hit". Also the
- *     instrument's own Arpeggio settings (arpeggio/arpeggioDivision/
+ *     instrument's  preset AUDF for an untunable one's "Hit". Also the
+ *     instrument's  Arpeggio settings (arpeggio/arpeggioDivision/
  *     arpeggioInterval/arpeggioRange - same fields playPattern/playSequence
  *     read off the sound effect itself) and tempo (the owning pattern's own
  *     effective BPM - see effectiveTempo - defaulting to DEFAULT_TEMPO for a
@@ -351,8 +351,8 @@ export const previewPatternNote = ({audc, audf, audv, arpeggio, arpeggioDivision
   const seconds = 0.18;
 
   // Same tempo-relative-to-frames conversion playPattern/playSequence use
-  // for the exact same fields (see their own comment on arpeggioSpeed) - a
-  // standalone note preview has no pattern of its own to read a real tempo
+  // for the exact same fields (see their  comment on arpeggioSpeed) - a
+  // standalone note preview has no pattern of its  to read a real tempo
   // from, so tempo defaults to DEFAULT_TEMPO instead.
   const stepSeconds = 30 / tempo;
   const arpeggioSpeed = arpeggio ? Math.max(1, Math.min(MAX_ARPEGGIO_SPEED_FRAMES, Math.round(
@@ -368,10 +368,10 @@ export const previewPatternNote = ({audc, audf, audv, arpeggio, arpeggioDivision
 };
 
 /**
- * A pattern's own Tempo field is only used when its "use own tempo"
+ * A pattern's  Tempo field is only used when its "use own tempo"
  * checkbox is checked (see the checkbox next to the pattern's Tempo field on
  * the Music tab) - otherwise it follows its song's top-level Tempo.
- * @param {Object} song The pattern's own song.
+ * @param {Object} song The pattern's  song.
  * @param {Object} pattern The pattern to resolve a tempo for.
  * @return {number} The BPM to actually play this pattern at.
  */
@@ -381,11 +381,11 @@ export const effectiveTempo = (song, pattern) =>
 // How long to wait before forcibly stopping every scheduled source, in
 // real wall-clock milliseconds from right now. totalSeconds only measures
 // the duration FROM startTime (an AudioContext timestamp already 50ms in
-// the future - see playPattern/playSequence's own startTime), not from
+// the future - see playPattern/playSequence's  startTime), not from
 // "now" - using context.currentTime again here (rather than assuming
 // startTime's 50ms lead-in is still exactly 50ms away) accounts for both
 // that lead-in and however long the synchronous scheduling work itself
-// took, so the last note always gets its own full 100ms grace period
+// took, so the last note always gets its  full 100ms grace period
 // instead of losing most of it to an unaccounted-for head start.
 const STOP_TIMER_GRACE_MS = 100;
 const stopTimerDelayMs = (context, startTime, totalSeconds) =>
@@ -394,13 +394,13 @@ const stopTimerDelayMs = (context, startTime, totalSeconds) =>
 // Schedules one pattern's note events starting at startTime (an AudioContext
 // timestamp), returning how many seconds it takes - shared by playPattern
 // (a single pattern) and playSequence (patterns chained back-to-back) so a
-// pattern's own scheduling logic only lives in one place. Each note event is
+// pattern's  scheduling logic only lives in one place. Each note event is
 // {step, midi, audf, length} - BOTH step and length are in
 // LENGTH_UNITS_PER_STEP units (not whole steps), so a note can both start at
 // and be held for any sub-step slice (see the subdivision dropdown on the
 // Music tab), not just whole-step boundaries/durations. Untunable
 // instruments (see utils/music-notes.js) only ever have "hit" events,
-// played via their own AUDC's waveform approximation rather than a chosen
+// played via their  AUDC's waveform approximation rather than a chosen
 // pitch.
 const schedulePattern = (context, pattern, soundEffects, startTime, tempo, isTrackMuted = () => false,
     startUnits = 0) => {
@@ -456,8 +456,8 @@ const schedulePattern = (context, pattern, soundEffects, startTime, tempo, isTra
       trackMuteGains.set(trackKey, trackGain);
     }
     trackGain.gain.value = isTrackMuted(pattern, track) ? 0 : 1;
-    // Whether THIS note gets its own chosen pitch or the instrument's fixed
-    // hit-audf is decided from the instrument's own CURRENT Sound type
+    // Whether THIS note gets its  chosen pitch or the instrument's fixed
+    // hit-audf is decided from the instrument's  CURRENT Sound type
     // (audc), not from whatever was true when the note was originally
     // placed (note.midi) - otherwise changing an instrument's Sound type
     // after placing notes for it leaves them playing back with a stale
@@ -471,7 +471,7 @@ const schedulePattern = (context, pattern, soundEffects, startTime, tempo, isTra
     // compiled ROM (see soundfx.js/generators/bbasic/music.js) - not
     // something set per-note. arpeggioDivision is tempo-relative (e.g. 8 =
     // "flip every 1/8 step"), converted to actual frames using this
-    // pattern's own tempo, same formula as generators/bbasic/music.js's
+    // pattern's  tempo, same formula as generators/bbasic/music.js's
     // flattenPatternEvents so the preview's flip rate matches the compiled ROM.
     const arpeggioSpeed = soundEffect.arpeggio ? Math.max(1, Math.min(MAX_ARPEGGIO_SPEED_FRAMES, Math.round(
         (stepSeconds / (Number(soundEffect.arpeggioDivision) || DEFAULT_ARPEGGIO_DIVISION)) * FRAMES_PER_SECOND,
@@ -490,8 +490,8 @@ const schedulePattern = (context, pattern, soundEffects, startTime, tempo, isTra
       if (note.step + note.length <= startUnits) return;
       maxEndUnits = Math.max(maxEndUnits, note.step + note.length);
       const audf = isTunable && note.midi !== 'hit' ? note.audf : soundEffect.audf;
-      // Per-note override (see the Music tab's own piano-roll volume row),
-      // falling back to the instrument's own preset - same DIM-scaling
+      // Per-note override (see the Music tab's  piano-roll volume row),
+      // falling back to the instrument's  preset - same DIM-scaling
       // applied either way, just to whichever value is actually in effect.
       const audv = dimSoundFx.value ?
         dimVolume(noteAudv(note, soundEffect), dimSoundFxPercent.value) :
@@ -510,7 +510,7 @@ const schedulePattern = (context, pattern, soundEffects, startTime, tempo, isTra
   });
 
   // Actually schedules one surviving [segStartUnits, segEndUnits) slice of
-  // a note - a note that's never interrupted schedules its own one full
+  // a note - a note that's never interrupted schedules its  one full
   // span; one that gets cut short by a higher (or equal, later-starting)
   // Priority note schedules only the piece before the interruption, plus a
   // second call for whatever's left over once the interruption ends (see
@@ -533,7 +533,7 @@ const schedulePattern = (context, pattern, soundEffects, startTime, tempo, isTra
     notes.sort((a, b) => a.startUnits - b.startUnits);
     // The note (if any) still sounding, not yet fully scheduled - same
     // "cut short, schedule the interrupter, then resume whatever's left"
-    // idea as flattenPatternEvents' own openNote, just scheduling real
+    // idea as flattenPatternEvents'  openNote, just scheduling real
     // audio segments here instead of building byte-stream events.
     let open = null;
     notes.forEach((note) => {
@@ -560,7 +560,7 @@ const schedulePattern = (context, pattern, soundEffects, startTime, tempo, isTra
 
 /**
  * Plays back one pattern in isolation.
- * @param {Object} song The pattern's own song (only used to resolve its
+ * @param {Object} song The pattern's  song (only used to resolve its
  *     tempo when the pattern follows the song's - see effectiveTempo).
  * @param {Object} pattern The pattern to play.
  * @param {Array<Object>} soundEffects Stored Sound tab presets.
@@ -571,12 +571,12 @@ const schedulePattern = (context, pattern, soundEffects, startTime, tempo, isTra
  *     notes entirely (a Music tab view preference, not something the
  *     compiled ROM has any concept of).
  *     startUnits (default 0) seeks the first pass to start partway through
- *     the pattern instead of from its own beginning - see handleSeekToStep
+ *     the pattern instead of from its  beginning - see handleSeekToStep
  *     in MusicEditor.vue. Only the first pass; a looping pattern's later
  *     passes always restart from 0, same as clicking Play normally would.
  *     Whether to loop is read live off song.patternPreviewLoop (one shared
  *     preference for every pattern in the song, not stored per pattern -
- *     see its own comment in blocks/music.js) on every single pass (not
+ *     see its  comment in blocks/music.js) on every single pass (not
  *     captured once up front), same as its notes already were - so toggling
  *     Loop mid-playback (see handleToggleLoopPattern in MusicEditor.vue)
  *     takes effect on the very next pass, rather than only after Stop/Play
@@ -603,12 +603,12 @@ export const playPattern = (song, pattern, soundEffects, {onDone, isTrackMuted, 
   // would otherwise be an audible gap every time the loop repeats.
   // activeSources is intentionally NOT reset between passes here (only
   // stopPatternPlayback and the final non-looping pass clear it) - the
-  // previous pass's own tail can still be genuinely playing during that
+  // previous pass's  tail can still be genuinely playing during that
   // early-scheduling window, and Stop needs to still catch it.
   // Widened from an original 0.2s - confirmed as a real cause of dropped
   // notes: this is JS-timer-scheduled (see the setTimeout below), so if the
   // main thread is busy long enough when it's due to fire (e.g. several
-  // Music tab pattern cards expanded at once, each with its own large piano
+  // Music tab pattern cards expanded at once, each with its  large piano
   // roll re-rendering), it can run late. A short note's entire start-to-end
   // window can fall entirely in the past by the time a late-running call
   // like that finally executes, so it never audibly plays at all - a long
@@ -623,10 +623,10 @@ export const playPattern = (song, pattern, soundEffects, {onDone, isTrackMuted, 
         passStartUnits);
     const endTime = startTime + totalSeconds;
     // Appended, not replaced - the NEXT pass is scheduled
-    // LOOP_RESCHEDULE_LEAD_SECONDS before the CURRENT one's own endTime (see
+    // LOOP_RESCHEDULE_LEAD_SECONDS before the CURRENT one's  endTime (see
     // the comment above), so there's a real window where this pass is still
     // genuinely playing but a plain replace would already have thrown its
-    // timeline entry away. getPlaybackHead's own find() only ever matches
+    // timeline entry away. getPlaybackHead's  find() only ever matches
     // whichever entry now actually falls within, so keeping the old one
     // around a little longer costs nothing - it just stops that window from
     // reporting no current segment at all, which fell back to showing the
@@ -634,7 +634,7 @@ export const playPattern = (song, pattern, soundEffects, {onDone, isTrackMuted, 
     // whole window, read as the playhead flashing back to the old position
     // right before every loop. Pruned to just the current pass once a loop
     // actually completes, so this can't grow across a long-running loop.
-    // Pruned against real current time, not this new pass's own startTime -
+    // Pruned against real current time, not this new pass's  startTime -
     // the immediately-preceding pass's endTime EQUALS this pass's startTime
     // exactly (back-to-back, no gap), so comparing against startTime would
     // drop it right away, before the lead window it's specifically meant to
@@ -643,7 +643,7 @@ export const playPattern = (song, pattern, soundEffects, {onDone, isTrackMuted, 
     playbackTimeline.push({
       patternId: pattern.id, startTime, endTime, unitSeconds: unitSecondsForTempo(tempo), startUnits: passStartUnits,
     });
-    // Always scheduled near this pass's own end, regardless of whether
+    // Always scheduled near this pass's  end, regardless of whether
     // song.patternPreviewLoop happens to be on or off right now - the
     // ACTUAL decision (loop again, or stop) is only made once this callback
     // fires, reading it fresh at that point. A pass that STARTED as
@@ -651,7 +651,7 @@ export const playPattern = (song, pattern, soundEffects, {onDone, isTrackMuted, 
     // turning Loop ON partway through it did nothing until Play was clicked
     // again - confirmed directly as a real bug, the mirror image of the
     // (already working) loop-ON-to-OFF direction, which happened to work
-    // already only because that direction's own decision was already
+    // already only because that direction's  decision was already
     // re-checked here on every pass.
     const delayMs = Math.max(0, (endTime - LOOP_RESCHEDULE_LEAD_SECONDS - context.currentTime) * 1000);
     stopTimer = window.setTimeout(() => {
@@ -678,22 +678,22 @@ export const playPattern = (song, pattern, soundEffects, {onDone, isTrackMuted, 
  * @param {{onDone: Function, isTrackMuted: Function, startIndex: number}} callbacks
  *     Called once playback finishes (never, while song.loop is set - see its
  *     own comment in blocks/music.js); isTrackMuted(pattern, track) skips a
- *     muted instrument's own notes entirely (see playPattern). Whether to
+ *     muted instrument's  notes entirely (see playPattern). Whether to
  *     loop is read live off song.loop on every pass, same reasoning as
- *     playPattern's own song.patternPreviewLoop - see its comment. startIndex (default
+ *     playPattern's  song.patternPreviewLoop - see its comment. startIndex (default
  *     0) skips straight to that Sequence GROUP (see blocks/music.js's own
  *     {id, patternId, count} shape) on the first pass instead of starting
  *     from the beginning - see handleSequenceChipClick in MusicEditor.vue,
  *     which uses this to jump playback to whichever chip was clicked while
  *     the song is already playing. Only the first pass; a looping song's
  *     later passes always restart at group 0, same as clicking Play
- *     normally would (matches playPattern's own startUnits).
+ *     normally would (matches playPattern's  startUnits).
  */
 export const playSequence = (song, soundEffects, {onDone, isTrackMuted, startIndex = 0} = {}) => {
   stopPatternPlayback();
   const context = getAudioContext();
 
-  // Mirrors playPattern's own self-rescheduling loop (see its comment for
+  // Mirrors playPattern's  self-rescheduling loop (see its comment for
   // the full reasoning), but at CHIP granularity instead of whole-sequence
   // granularity: only the one chip-repeat about to play is scheduled now,
   // with the next one armed via a timer that re-reads song.sequence live
@@ -707,7 +707,7 @@ export const playSequence = (song, soundEffects, {onDone, isTrackMuted, startInd
   // Widened from an original 0.2s - confirmed as a real cause of dropped
   // notes: this is JS-timer-scheduled (see the setTimeout below), so if the
   // main thread is busy long enough when it's due to fire (e.g. several
-  // Music tab pattern cards expanded at once, each with its own large piano
+  // Music tab pattern cards expanded at once, each with its  large piano
   // roll re-rendering), it can run late. A short note's entire start-to-end
   // window can fall entirely in the past by the time a late-running call
   // like that finally executes, so it never audibly plays at all - a long
@@ -720,7 +720,7 @@ export const playSequence = (song, soundEffects, {onDone, isTrackMuted, startInd
     const sequence = song.sequence || [];
     if (sequenceIndex >= sequence.length) {
       // End of one full pass - same "decide fresh, right at the boundary"
-      // reasoning as playPattern's own song.patternPreviewLoop check, so
+      // reasoning as playPattern's  song.patternPreviewLoop check, so
       // toggling Loop either direction mid-playback takes effect on the
       // very next boundary rather than only sometimes.
       if (song.loop) {
@@ -744,13 +744,13 @@ export const playSequence = (song, soundEffects, {onDone, isTrackMuted, startInd
     }
     const tempo = effectiveTempo(song, pattern);
     // Re-derived from the live group on every repeat (not captured once for
-    // all of a chip's repeats), so editing a chip's own repeat count
+    // all of a chip's repeats), so editing a chip's  repeat count
     // mid-playback is picked up the same way any other sequence edit is.
     const repeatCount = Math.max(1, Math.round(Number(group.count) || 1));
     const segmentSeconds = schedulePattern(context, pattern, soundEffects, startTime, tempo, isTrackMuted);
     const endTime = startTime + segmentSeconds;
-    // Same "keep the previous entry around a little past its own end"
-    // reasoning as playPattern's own comment - appended/filtered on every
+    // Same "keep the previous entry around a little past its  end"
+    // reasoning as playPattern's  comment - appended/filtered on every
     // chip transition now, not just once per whole pass.
     playbackTimeline = [
       ...playbackTimeline.filter(({endTime: prevEndTime}) => prevEndTime > context.currentTime),

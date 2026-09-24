@@ -21,7 +21,7 @@
 // per-tab local value, so toggling it on one tab shows/hides the grid on
 // the other too. Generic on icon (or a plain text label, see below) plus
 // titleOn/titleOff - not just the grid-lines toggle it started out as -
-// BackgroundEditor.vue also uses this same button, with its own titles/
+// BackgroundEditor.vue also uses this same button, with its  titles/
 // storage, for the grid overlay's separate "X,Y" cell-label toggle (see
 // usePixelGridLabelsStorage): no MDI icon reads as "coordinate labels" on
 // sight the way a grid icon obviously reads as "grid lines", so that one
@@ -37,7 +37,7 @@ export default {
     titleOn: {type: String, default: 'Hide pixel grid'},
     titleOff: {type: String, default: 'Show pixel grid'},
     // Lets a caller gate this toggle behind some OTHER condition (see
-    // BackgroundEditor.vue's own XY-label toggle, disabled unless the grid
+    // BackgroundEditor.vue's  XY-label toggle, disabled unless the grid
     // overlay itself is on - the labels have no visible effect without it,
     // since PixelEditor.vue's grid overlay canvas that draws them doesn't
     // even exist in the DOM while showGrid is false).
@@ -79,7 +79,7 @@ export default {
   color: #1976d2 !important;
 }
 
-/* The text variant (label prop, see this button's own comment) - a small
+/* The text variant (label prop, see this button's  comment) - a small
    boxed badge, matching the look MDI's own "alpha-*-box"/"alpha-*-box-
    outline" icons already give the Music tab's Mute/Solo buttons (a letter
    inside a bordered square, filled solid once active) - "XY" has no

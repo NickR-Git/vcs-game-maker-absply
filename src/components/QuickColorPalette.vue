@@ -68,7 +68,7 @@ import {useCollapsedIds} from '../hooks/collapse';
 import {useColorPaletteStorage} from '../hooks/project';
 import {colorByteToBBasic, colorByteToCss, NTSC_COLORS} from '../utils/palette';
 
-// A single "entry" for useCollapsedIds' own per-list-item convention -
+// A single "entry" for useCollapsedIds'  per-list-item convention -
 // there's only ever one Quick colors section per tab, not a list of them.
 // A fixed id (not per-instance) so the collapsed state - and the palette
 // data itself, via useColorPaletteStorage below - stays in sync across
@@ -79,14 +79,14 @@ const COLLAPSE_ENTRY = {id: 'quick-colors'};
 
 // Reusable "Quick colors" bar - a curated shortlist of color bytes for fast
 // reuse while picking row colors, shown under a divider with its own
-// collapsible header (matching MusicEditor's own Sequence section). Backed
+// collapsible header (matching MusicEditor's  Sequence section). Backed
 // by shared project storage (useColorPaletteStorage), so a color added on
 // one tab (e.g. Player 0) is immediately available on every other tab this
 // component appears on (Player 1, Backgrounds) too.
 //
 // v-model is the currently "armed" color byte (or null) - a plain click
 // selects/deselects a swatch here; the PARENT is expected to pass that
-// value into its own PlayfieldColorStrip instance(s) as activeQuickColor,
+// value into its  PlayfieldColorStrip instance(s) as activeQuickColor,
 // so a plain click on a row swatch there paints this color directly. Armed
 // state is local to this component instance (not shared storage) - it's a
 // live "tool selection", not project data, so it resets per-tab rather
@@ -113,7 +113,7 @@ export default defineComponent({
     const toggleCollapsed = () => toggleCollapsedEntry(COLLAPSE_ENTRY);
 
     // Tracks whether Alt is currently physically held down, purely for this
-    // bar's own hover feedback - CSS alone can't observe a keyboard
+    // bar's  hover feedback - CSS alone can't observe a keyboard
     // modifier's live state, only :hover, so this needs real key listeners.
     // Window-level (not scoped to the swatches themselves) since a key can
     // be pressed or released while the mouse sits still over a swatch,

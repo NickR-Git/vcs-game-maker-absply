@@ -51,7 +51,7 @@ Blockly.defineBlocksWithJsonArray([
   },
 ]);
 
-// Reseeds the kernel's own random number generator - "rand" always starts
+// Reseeds the kernel's  random number generator - "rand" always starts
 // from the exact same fixed byte ($A2, see 2600basic.h) on every power-on,
 // so without this, every playthrough's own "random" sequence starts
 // identically. Also seeds "rand16" whenever the Options tab's own "Use
@@ -63,7 +63,7 @@ Blockly.defineBlocksWithJsonArray([
 // value to a real byte (0-255) and, when rand16 is on, seeds it with that
 // same byte XORed against 255 rather than the identical value "rand" gets -
 // seeding both with the exact same byte would only ever reach 256 of
-// rand16's own 65,536 possible combined starting states, since the two
+// rand16's  65,536 possible combined starting states, since the two
 // would always start in lockstep.
 Blockly.defineBlocksWithJsonArray([
   {

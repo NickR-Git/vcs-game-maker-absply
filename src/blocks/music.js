@@ -13,9 +13,9 @@ const MUSIC_COLOR = 'rgb(255, 87, 34)';
 // defaults FL Studio uses for a new project's step sequencer/tempo.
 export const DEFAULT_PATTERN_STEPS = 16;
 
-// Free-entry pattern length range (see MusicEditor.vue's own Length (steps)
+// Free-entry pattern length range (see MusicEditor.vue's  Length (steps)
 // field) - 1 as the shortest possible pattern, 64 as the longest, matching
-// LENGTH_UNITS_PER_STEP's own headroom and the piano roll's fixed-width grid
+// LENGTH_UNITS_PER_STEP's  headroom and the piano roll's fixed-width grid
 // (see maxPatternSteps in MusicEditor.vue).
 export const MIN_PATTERN_STEPS = 1;
 export const MAX_PATTERN_STEPS = 64;
@@ -24,14 +24,14 @@ export const MAX_PATTERN_STEPS = 64;
 // handleStepCountChange, and the load-time clamp below for values from an
 // older save/an imported file whose stepCount predates this range or came
 // from the old fixed dropdown). Anything above MAX_PATTERN_STEPS rounds down
-// to it rather than being rejected, matching the field's own tooltip.
+// to it rather than being rejected, matching the field's  tooltip.
 export const clampPatternSteps = (value) => {
   const steps = Math.round(Number(value));
   return Number.isFinite(steps) ? Math.min(MAX_PATTERN_STEPS, Math.max(MIN_PATTERN_STEPS, steps)) : DEFAULT_PATTERN_STEPS;
 };
 
 // How many equal slices a single piano-roll step can be divided into for
-// note duration (set via the dropdown under the Music tab's own header) -
+// note duration (set via the dropdown under the Music tab's  header) -
 // e.g. 4 lets a note be as short as a quarter of a step. Note events store
 // their length in fixed, fine-grained units (see LENGTH_UNITS_PER_STEP)
 // regardless of this setting, so changing it later only changes the
@@ -55,18 +55,18 @@ const emptyTrack = (id, soundEffectId, channel = 0) => ({
   // than one (see LENGTH_UNITS_PER_STEP - length is in those units, not
   // whole steps). midi is 'hit' for untunable instruments (see
   // utils/music-notes.js), otherwise the pitch's MIDI number; audf is that
-  // specific note's own AUDF value (or null for a 'hit'), stored per-note so
+  // specific note's  AUDF value (or null for a 'hit'), stored per-note so
   // playback doesn't have to re-derive it.
   notes: [],
 });
 
 // Two steps per beat (each step is an eighth note) - see
-// utils/music-playback.js. 140 BPM matches FL Studio's own new-project
+// utils/music-playback.js. 140 BPM matches FL Studio's  new-project
 // default tempo.
 export const DEFAULT_TEMPO = 140;
 
 // Applies to every Tempo (BPM) field, song- and pattern-level alike (see
-// MusicEditor.vue's own clampTempo, and the load-time clamp below for
+// MusicEditor.vue's  clampTempo, and the load-time clamp below for
 // values from an older save/an imported file that predates this range).
 export const MIN_TEMPO = 8;
 export const MAX_TEMPO = 255;
@@ -81,22 +81,22 @@ export const DEFAULT_SONGS = {
       id: 1,
       name: 'Song 1',
       tempo: DEFAULT_TEMPO,
-      // Whether the Music tab's own song-level preview playback (Play on
-      // the song card, not any pattern's own preview - see
+      // Whether the Music tab's  song-level preview playback (Play on
+      // the song card, not any pattern's  preview - see
       // patternPreviewLoop below and handlePlaySong/playSequence) repeats
       // the whole sequence once it reaches the end, instead of stopping
       // there. A Music-tab-only preview convenience, like
       // patternPreviewLoop - has no bearing on the compiled ROM, which has
-      // its own separate Loop checkbox on the "Play song" block itself (see
+      // its  separate Loop checkbox on the "Play song" block itself (see
       // music_play_song in this same file).
       loop: false,
       // Same idea, for previewing a single PATTERN (see handleToggleLoopPattern
       // in MusicEditor.vue) - one shared preference for every pattern in
       // this song, not stored per pattern (a pattern object has no "loop"
-      // field of its own at all anymore) - switching which pattern is
+      // field of its  at all anymore) - switching which pattern is
       // active used to silently carry over whatever THAT pattern's own
       // stored flag happened to be, which read as "switching patterns turns
-      // looping on" whenever the newly-selected one's own flag was true.
+      // looping on" whenever the newly-selected one's  flag was true.
       patternPreviewLoop: false,
       patterns: [
         {
@@ -123,7 +123,7 @@ export const DEFAULT_SONGS = {
       // than expanding back to one entry per repeat - see
       // generators/bbasic/music.js's resolveProjectMusic (sequenceRepeatPacked)
       // and generateMusicChecks (the seqRepeatVar countdown) for the
-      // runtime repeat counter that replays a group's own pattern in place
+      // runtime repeat counter that replays a group's  pattern in place
       // instead of needing a table row per real repeat.
       sequence: [{id: 1, patternId: 1, count: 1}],
     },
@@ -135,20 +135,20 @@ export const DEFAULT_SONGS = {
   // (see instrumentColor in MusicEditor.vue).
   instrumentColors: {},
   // How finely a step is divided for note duration - global (not per-song),
-  // set via the dropdown right under the Music tab's own header.
+  // set via the dropdown right under the Music tab's  header.
   subdivision: DEFAULT_SUBDIVISION,
   // A fresh project has no notes to migrate.
   noteLengthUnitsMigrated: true,
 };
 
-// Normalizes a song's own sequence into the current {id, patternId, count}
+// Normalizes a song's  sequence into the current {id, patternId, count}
 // shape - handles three cases at once: the OLD shape (a flat array of raw
 // patternIds, one per real repeat, from a project saved before repeat
 // groups existed - see DEFAULT_SONGS' own comment), the current shape
 // (defensively re-validated - a hand-edited or corrupted file could have a
 // missing id/non-integer count), and an already-correct in-memory sequence
 // (a no-op pass, safe to call unconditionally on every load rather than
-// needing its own one-time migration flag the way the note-length rescale
+// needing its  one-time migration flag the way the note-length rescale
 // above does, since collapsing already-grouped entries can't lose
 // information the way re-scaling an already-migrated note length would).
 // Exported (not just used internally below) since MusicEditor.vue's own
@@ -217,7 +217,7 @@ export const processSongsStorageDefaults = (songsStorage) => {
     song.tempo = clampTempo(song.tempo ?? DEFAULT_TEMPO);
     // A song saved before this field existed had no way to loop its own
     // preview playback at all, so it always behaved like "off" - default it
-    // to staying that way (see the field's own comment in DEFAULT_SONGS).
+    // to staying that way (see the field's  comment in DEFAULT_SONGS).
     if (typeof song.loop !== 'boolean') {
       song.loop = false;
     }
@@ -225,7 +225,7 @@ export const processSongsStorageDefaults = (songsStorage) => {
     // not stored per pattern (see handleToggleLoopPattern in
     // MusicEditor.vue) - switching which pattern you're looking at (e.g.
     // clicking a Sequence chip) used to silently carry over whatever THAT
-    // pattern's own stored loop flag happened to be, which read as "clicking
+    // pattern's  stored loop flag happened to be, which read as "clicking
     // a chip turns looping on" whenever the newly-selected pattern's own
     // flag happened to be true, even though the user never touched the Loop
     // button at all. A single per-song preference means switching patterns
@@ -242,7 +242,7 @@ export const processSongsStorageDefaults = (songsStorage) => {
     (song.patterns || []).forEach((pattern) => {
       pattern.tempo = clampTempo(pattern.tempo ?? DEFAULT_TEMPO);
       // A pattern saved before this song-level Tempo field existed was
-      // definitely relying on its own tempo, not a song-level one that
+      // definitely relying on its  tempo, not a song-level one that
       // didn't exist yet - default it to staying that way, rather than
       // silently switching its playback speed to the (new, likely
       // different) song tempo.
@@ -299,7 +299,7 @@ const buildSongOptions = () => {
 // Starts (or restarts) playback of one song created on the Music tab. Any
 // number of distinct songs can be referenced across a project's own
 // music_play_song/music_play_song_by_id blocks (see resolveProjectMusic in
-// generators/bbasic/music.js) - each included song gets its own reset
+// generators/bbasic/music.js) - each included song gets its  reset
 // subroutine once there's more than one to choose between.
 Blockly.Blocks['music_play_song'] = {
   init: function() {
@@ -321,7 +321,7 @@ Blockly.Blocks['music_play_song'] = {
 // dropdown choice - since this can't be resolved at compile time, using this
 // block anywhere in the project pulls EVERY song from storage into the
 // compiled ROM, so whatever ID it's given at runtime always has real data to
-// find (see resolveProjectMusic's own usesSongById comment). A separate
+// find (see resolveProjectMusic's  usesSongById comment). A separate
 // block (not an added input on music_play_song) so existing projects using
 // that one aren't disturbed.
 Blockly.Blocks['music_play_song_by_id'] = {
@@ -346,7 +346,7 @@ Blockly.Blocks['music_play_song_by_id'] = {
 // (started by music_play_song/music_play_song_by_id, and not yet stopped or
 // naturally finished) - true even while paused (see music_pause_song: a
 // paused song is still "the one playing," just frozen, the same way this
-// app's own musicPlayingBit already treats it). On a single-song project
+// app's  musicPlayingBit already treats it). On a single-song project
 // this is just "is anything playing at all" (see the generator's own
 // comment) - there's only ever one possible song to mean.
 Blockly.Blocks['music_song_playing'] = {
@@ -367,7 +367,7 @@ Blockly.Blocks['music_song_playing'] = {
 // VALUE (a variable or computed expression) instead of a fixed dropdown
 // choice - same relationship music_song_stopped_by_number has to music_
 // song_stopped_by_id. Using this anywhere in the project pulls EVERY song
-// into the compiled ROM (see music_play_song_by_id's own comment) so
+// into the compiled ROM (see music_play_song_by_id's  comment) so
 // whatever ID it's given at runtime always has real data to compare
 // against.
 Blockly.Blocks['music_song_playing_by_number'] = {
@@ -389,7 +389,7 @@ Blockly.Blocks['music_song_playing_by_number'] = {
 // Immediately silences whatever song is currently playing (started by
 // music_play_song) and marks it as stopped - a subsequent music_play_song
 // restarts it from the beginning. Does not trigger music_song_stopped below
-// (that only fires when a non-looping song reaches its own natural end).
+// (that only fires when a non-looping song reaches its  natural end).
 Blockly.Blocks['music_stop_song'] = {
   init: function() {
     this.appendDummyInput()
@@ -502,7 +502,7 @@ Blockly.Blocks['music_song_stopped_by_number'] = {
 };
 
 // Fires once, the moment ANY Sequence chip (see the Sequence list on the
-// Music tab) finishes - its own configured repeat count fully used up, not
+// Music tab) finishes - its  configured repeat count fully used up, not
 // each individual repeat - and the song is about to move on to the next
 // chip (or wrap/stop, for the last one). Deliberately doesn't distinguish
 // WHICH chip, same "keep it simple" precedent music_song_stopped already
@@ -531,11 +531,11 @@ Blockly.Blocks['music_sequence_chip_finished'] = {
 // here for a computed/variable chip id the way music_play_song_by_id needs
 // a computed song id.
 //
-// That badge (and this field) is the chip's own CURRENT POSITION in the
+// That badge (and this field) is the chip's  CURRENT POSITION in the
 // Sequence list (1 = first), not a permanent identity - reordering,
 // inserting, or deleting chips changes which chip a given number refers
 // to. An earlier version of this used a separate, permanent id per chip
-// instead (stable across reordering) - reverted at the user's own explicit
+// instead (stable across reordering) - reverted at the user's  explicit
 // request in favor of this simpler "number = position" model.
 Blockly.Blocks['music_sequence_chip_finished_by_id'] = {
   init: function() {
@@ -565,7 +565,7 @@ Blockly.Blocks['music_sequence_chip_finished_by_id'] = {
 // than one song, just never more than one at a time (only one song is ever
 // "currently playing"). See generateSequenceChipFinished in
 // generators/bbasic/music.js for how this resolves EVERY song that has a
-// chip in this position, each to its own compile-time sequence position,
+// chip in this position, each to its  compile-time sequence position,
 // then dispatches at runtime on whichever one is actually active.
 Blockly.Blocks['music_sequence_chip_finished_current_song'] = {
   init: function() {
@@ -587,7 +587,7 @@ Blockly.Blocks['music_sequence_chip_finished_current_song'] = {
 
 // Live "is it happening right now" check, unlike music_sequence_chip_
 // finished_by_id's one-shot watch above - true for the entire time the
-// chosen song is the one currently playing AND its own Sequence position
+// chosen song is the one currently playing AND its  Sequence position
 // is at this chip, not just once at the moment it's reached. Mirrors
 // music_song_playing's own "still counts as playing while paused"
 // convention. See music_sequence_chip_playing_current_song below for the
@@ -636,11 +636,11 @@ Blockly.Blocks['music_sequence_chip_playing_current_song'] = {
 // Fires once, the moment ANY channel starts a new note using this
 // instrument - not just the first note, every single one, for as long as
 // the song keeps playing. "Instrument" here means the Sound tab preset a
-// track is pointed at when its own notes get compiled in, not any one
+// track is pointed at when its  notes get compiled in, not any one
 // specific note/track/channel - the same instrument used on more than one
 // track (even across different songs) fires this from any of them. See
 // resolveNotePlayedInstruments in generators/bbasic/music.js for how each
-// watched instrument gets its own small packed ID baked into the compiled
+// watched instrument gets its  small packed ID baked into the compiled
 // note data (there's no room to store a whole instrument reference per
 // note, only a few spare bits), and generateMusicChecks for where that ID
 // is compared against, right as each new note is actually fetched.
@@ -660,7 +660,7 @@ Blockly.Blocks['music_note_played'] = {
   },
 };
 
-// Same trigger as music_note_played above, just chosen by typing its own ID
+// Same trigger as music_note_played above, just chosen by typing its  ID
 // number directly (see the ID badge on its card on the Sound tab) instead
 // of picking it from a name dropdown - same relationship
 // data_get_element_by_id has to data_get_element.

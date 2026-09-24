@@ -25,9 +25,9 @@ export const useBackgroundsStorage = () =>
   withRomInvalidation(useJsonProjectStorage('backgrounds'));
 // One shared pool of animations, usable by either hardware player (Player 0
 // or Player 1) - replaces the old, separate 'player0'/'player1' storage keys
-// (each with its own independent animation list). See
+// (each with its  independent animation list). See
 // hooks/migrate-player-animations.js for the one-time migration that
-// combines an existing project's own separate player0/player1 animations
+// combines an existing project's  separate player0/player1 animations
 // into this pool the first time it's read.
 export const usePlayerAnimationsStorage = () =>
   withRomInvalidation(useJsonProjectStorage('playerAnimations'));
@@ -91,7 +91,7 @@ export const useErrorStorage = () => computed({
 // buildRom()) - a separate store from errorRef above so a build's own
 // step-by-step narration (which stage is running, which bank got relocated
 // and why) doesn't clobber - or get clobbered by - the single persistent
-// error banner errorRef holds for the build's own final failure (still shown
+// error banner errorRef holds for the build's  final failure (still shown
 // in red; see App.vue). Kept as a plain array of {text, level} entries so
 // each line can be colored independently ('error' red, anything else black).
 const compileLogRef = ref([]);
@@ -141,7 +141,7 @@ export const useLoadLastProjectStorage = () => {
 // defaultValue (false unless a caller says otherwise) when never having
 // been set - false matches every one of the original three settings' own
 // default in configurationState; usePixelGridLabelsStorage below is the one
-// exception, defaulting to true instead (see its own comment on why).
+// exception, defaulting to true instead (see its  comment on why).
 const useBooleanAppSetting = (key, defaultValue = false) => {
   const raw = useLocalStorage(key);
   return computed({
@@ -155,7 +155,7 @@ const useBooleanAppSetting = (key, defaultValue = false) => {
 };
 
 // Same "standing app preference, not a project setting" reasoning as the
-// others here - App.vue's own left nav-drawer is removed from the DOM
+// others here - App.vue's  left nav-drawer is removed from the DOM
 // entirely (not just closed) whenever this is on, reclaiming its layout
 // space instead of leaving an empty 200px gap.
 export const useHideSidebarStorage = () =>
@@ -165,7 +165,7 @@ export const useBlocklyControlsHorizontalStorage = () =>
 // Same "standing app preference" reasoning as the others here - applies a
 // CSS filter across every block (workspace canvas AND the toolbox/flyout,
 // see BlocklyComponent.vue's own .blocklyDiv binding) rather than touching
-// any block's own colour value, so it works uniformly regardless of which
+// any block's  colour value, so it works uniformly regardless of which
 // theme/category colours are actually in play.
 export const useDesaturateBlocklyColorsStorage = () =>
   useBooleanAppSetting('vcs-game-maker.desaturateBlocklyColors');
@@ -182,23 +182,23 @@ export const useMuteBlocklySoundsStorage = () =>
 export const useGridSnapStorage = () =>
   useBooleanAppSetting('vcs-game-maker.gridSnap');
 // Same "standing app preference, not a project setting" reasoning as the
-// others above - lets a player switch the Sound tab's own card list between
+// others above - lets a player switch the Sound tab's  card list between
 // a multi-column grid (the default) and a single full-width column, same
 // choice SoundFXEditor.vue's own .soundfx-list layout has gone back and
 // forth on for itself in the past.
 export const useSoundFxColumnsStorage = () =>
   useBooleanAppSetting('vcs-game-maker.soundFxColumns', true);
 // Same "standing app preference" reasoning as useSoundFxColumnsStorage
-// above, for the Text tab's own card list (TextEditor.vue's .text-list).
+// above, for the Text tab's  card list (TextEditor.vue's .text-list).
 export const useTextColumnsStorage = () =>
   useBooleanAppSetting('vcs-game-maker.textColumns', true);
 // Same "standing app preference" reasoning as useSoundFxColumnsStorage
-// above, for the Data tab's own card list (DataEditor.vue's .data-list).
+// above, for the Data tab's  card list (DataEditor.vue's .data-list).
 export const useDataColumnsStorage = () =>
   useBooleanAppSetting('vcs-game-maker.dataColumns', true);
 // Same "standing app preference, not a project setting" reasoning as the
 // others above - a real reported correction (it started out living in
-// configurationState/Project.vue's own configuration bag, meaning it reset
+// configurationState/Project.vue's  configuration bag, meaning it reset
 // to off every time you switched or started a new project, which defeats
 // the point of a "always bump the version for me" habit).
 export const useProjectAutoIncrementVersionStorage = () =>
@@ -211,16 +211,16 @@ export const useProjectAutoIncrementVersionStorage = () =>
 // directly (raw string, like useLoadLastProjectStorage's own "false"
 // convention) rather than useBooleanAppSetting. Meaningless in the browser
 // build (no filesystem access to launch anything with it), but harmless to
-// keep around there too - Configuration.vue's own Stella field is only
+// keep around there too - Configuration.vue's  Stella field is only
 // shown/enabled when window.electronAPI exists in the first place.
 export const useStellaPathStorage = () => useLocalStorage('vcs-game-maker.stellaPath');
 
 // Same "standing app preference, not a project setting" reasoning as the
 // others above - a real reported correction. Unlike those, DIM also gets
 // read by the real bBasic generators (generators/bbasic/music.js,
-// soundfx.js, sound.js) and baked into the compiled ROM's own audio
+// soundfx.js, sound.js) and baked into the compiled ROM's  audio
 // behavior - moving it here means a saved .vcsgm project no longer carries
-// its own DIM setting; opening it elsewhere (or after changing this
+// its  DIM setting; opening it elsewhere (or after changing this
 // yourself) compiles using whoever's local app-wide preference is current,
 // not whatever the project was originally authored/tested with. Confirmed
 // as the intended tradeoff (asked directly) rather than an oversight.
@@ -246,21 +246,21 @@ export const useDimSoundFxPercentStorage = (defaultValue) => {
 };
 
 // A standing app preference, not a project setting or per-tab local state -
-// shared by PlayerEditor.vue and BackgroundEditor.vue's own PixelEditor.vue
+// shared by PlayerEditor.vue and BackgroundEditor.vue's  PixelEditor.vue
 // instances, so toggling it on either tab shows/hides the grid overlay
 // everywhere, and it survives navigating away and back (Vue Router destroys
-// and recreates each tab's own component on navigation - see
-// hooks/collapse.js's own comment on the same lifecycle).
+// and recreates each tab's  component on navigation - see
+// hooks/collapse.js's  comment on the same lifecycle).
 export const usePixelGridOverlayStorage = () =>
   useBooleanAppSetting('vcs-game-maker.pixelGridOverlay');
 
 // Same standing-app-preference reasoning as usePixelGridOverlayStorage
-// above, for the "X,Y" coordinate labels PixelEditor.vue's own grid overlay
-// can additionally draw in each cell (see its own showCellIds prop) -
+// above, for the "X,Y" coordinate labels PixelEditor.vue's  grid overlay
+// can additionally draw in each cell (see its  showCellIds prop) -
 // currently only ever wired up on the Background tab (BackgroundEditor.vue,
 // where reading off an exact X/Y matters for wiring up "Background: pixel
 // at X/Y"-style blocks); PlayerEditor.vue never passes showCellIds at all,
-// so this has no effect there regardless of its own stored value. Defaults
+// so this has no effect there regardless of its  stored value. Defaults
 // to true (unlike every other useBooleanAppSetting caller) - showCellIds
 // was hardcoded on before this toggle existed, so a default of false here
 // would silently turn labels off for every existing user on their very
@@ -270,7 +270,7 @@ export const usePixelGridLabelsStorage = () =>
   useBooleanAppSetting('vcs-game-maker.pixelGridLabels', true);
 
 // Which Music-tab instrument rows are muted/soloed - a view preference (see
-// MusicEditor.vue's own mutedTrackIds/soloedTrackIds refs, which load these
+// MusicEditor.vue's  mutedTrackIds/soloedTrackIds refs, which load these
 // once at setup() time) that survives navigating away and back, same
 // shape as every other localStorage-backed preference above. Plain
 // load-once functions (not a reactive useLocalStorage wrapper) since
@@ -303,15 +303,15 @@ export const loadSoloedMusicTrackIds = () => {
 };
 
 // A track's REAL, effective muted state - single source of truth shared by
-// MusicEditor.vue's own preview (isTrackMuted) and the ROM generator (see
+// MusicEditor.vue's  preview (isTrackMuted) and the ROM generator (see
 // flattenPatternEvents in generators/bbasic/music.js), so both agree on
 // exactly the same answer for the same project state. As soon as ANY track
 // in the pattern is soloed, every OTHER track is effectively muted
-// regardless of its own individual mute flag, and the soloed one(s) play
-// regardless of their own mute flag too (soloing a muted track still plays
+// regardless of its  individual mute flag, and the soloed one(s) play
+// regardless of their  mute flag too (soloing a muted track still plays
 // it - same convention most DAWs use, "solo" overrides "mute" rather than
 // the two fighting). With nothing soloed, this just falls through to the
-// track's own explicit mute flag.
+// track's  explicit mute flag.
 export const isMusicTrackMuted = (mutedTrackIds, soloedTrackIds, song, pattern, track) => {
   const trackKey = (t) => `${song.id}:${t.id}`;
   const patternHasSoloedTrack = (pattern.tracks || []).some((t) => !!soloedTrackIds[trackKey(t)]);

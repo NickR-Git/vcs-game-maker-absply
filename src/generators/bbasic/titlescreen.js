@@ -26,12 +26,12 @@ const packRowToBytes = (row, blockCount) => {
 const toBinaryByte = (n) => `%${(n & 0xff).toString(2).padStart(8, '0')}`;
 const toHexByte = (n) => `$${(n & 0xff).toString(16).padStart(2, '0')}`;
 
-// One card's own image data block, in the exact format the Titlescreen
+// One card's  image data block, in the exact format the Titlescreen
 // Kernel's own *_image.asm files use (see public/bb19/titlescreen/ - this
 // mirrors 48x1_N_image.asm/48x2_N_image.asm/96x2_N_image.asm exactly,
 // generated instead of hand-edited). window defaults to the full image
 // height (the whole image shown, no scrolling) unless the card has its own
-// scrollWindow set smaller - see card.scrollWindow's own comment in
+// scrollWindow set smaller - see card.scrollWindow's  comment in
 // blocks/titlescreen.js for the runtime scroll-index byte this also
 // declares in that case (bmp_${key}_index, read directly by the kernel's
 // own per-copy asm via "ifconst").
@@ -41,7 +41,7 @@ const buildCardDataAsm = (card, key, typeInfo) => {
   const height = rows.length;
   const scrollWindow = Number(card.scrollWindow) || 0;
   const windowHeight = (scrollWindow > 0 && scrollWindow < height) ? scrollWindow : height;
-  // The kernel reads each column-block's own bytes bottom-to-top (same
+  // The kernel reads each column-block's  bytes bottom-to-top (same
   // reasoning as the row-colors list just below) - without reversing here
   // too, the image drew upside down: pixel rows and row colors both come
   // from the SAME top-to-bottom UI data, so both need the identical
@@ -57,7 +57,7 @@ const buildCardDataAsm = (card, key, typeInfo) => {
   ];
 
   // A real, writable RAM byte (not a compile-time constant, same reasoning
-  // as titlescreencolor - see registerTitleScreenSubroutine's own comment)
+  // as titlescreencolor - see registerTitleScreenSubroutine's  comment)
   // - only declared when this card is actually scrolling (window smaller
   // than the full image), matching the per-copy kernel file's own
   // "ifconst bmp_TYPE_N_index" check, which skips the extra subtraction
@@ -75,7 +75,7 @@ const buildCardDataAsm = (card, key, typeInfo) => {
   if (hasRowColors) {
     // The color list is read bottom-to-top by the kernel (see e.g.
     // 48x2_1_image.asm's own "in reverse order" comment) - reversed here
-    // so the UI's own top-to-bottom row color list doesn't need to think
+    // so the UI's  top-to-bottom row color list doesn't need to think
     // about that.
     lines.push(
         `   if >. != >[.+(bmp_${key}_height)]`,
@@ -97,7 +97,7 @@ const buildCardDataAsm = (card, key, typeInfo) => {
   }
 
   // Only the 48-wide kernels support a playfield background box behind the
-  // image (see the kernel doc's own Example 5) - 96x2 has no PF1/PF2/
+  // image (see the kernel doc's  Example 5) - 96x2 has no PF1/PF2/
   // background fields at all.
   if (typeInfo.width === 48) {
     lines.push(
@@ -124,9 +124,9 @@ const buildCardDataAsm = (card, key, typeInfo) => {
   return lines.join('\n');
 };
 
-// Resolves a "player" card's own player0Animation/player1Animation field
+// Resolves a "player" card's  player0Animation/player1Animation field
 // (an index into the shared animation pool, same convention as
-// sprite_player_animation_select's own dropdown - see blocks/sprites.js's
+// sprite_player_animation_select's  dropdown - see blocks/sprites.js's
 // own buildAnimationOptions) into the actual frame data the kernel's own
 // player_kernel.asm needs. An unresolved/empty slot falls back to a single
 // blank (all-zero) row - GRP0/GRP1 draw nothing for a zero byte regardless
@@ -141,7 +141,7 @@ const resolvePlayerSlotFrames = (animationIndex) => {
   // The kernel indexes frames as one flat array, a fixed number of rows
   // apart (see the kernel doc's own "setting the index to 0, 10, 20..."
   // example) - that only works if every frame is the SAME height, so every
-  // frame here is padded/truncated to the FIRST frame's own height rather
+  // frame here is padded/truncated to the FIRST frame's  height rather
   // than keeping its own (an animation with mismatched frame heights, e.g.
   // "Resizing a frame's height" applied to only one frame, loses whatever
   // extra/short rows don't fit that first frame's shape).
@@ -160,11 +160,11 @@ const resolvePlayerSlotFrames = (animationIndex) => {
   return {height, frames, hasRowColors};
 };
 
-// The "player" minikernel's own data block - see public/bb19/titlescreen/
+// The "player" minikernel's  data block - see public/bb19/titlescreen/
 // player_kernel.asm and the kernel doc's own "Example 5" for the format
 // this mirrors (bmp_player_window/bmp_player_kernellines/bmp_playerN_height/
 // bmp_playerN/bmp_color_playerN). Confirmed (not just inferred) that each
-// frame's own rows need reversing, same as the bitmap kernels' own
+// frame's  rows need reversing, same as the bitmap kernels' own
 // buildCardDataAsm: player0y counts DOWN once per scanline, and draw_players
 // indexes bmp_playerN by that same decreasing value ("ldy player0y; lda
 // (player0pointer),y"), so the LAST-stored row of a frame draws at the TOP
@@ -183,7 +183,7 @@ const buildPlayerDataAsm = (card) => {
   ];
   // Read back by the "Set title screen player sprite frame" block's own
   // generator (see titlescreen_player_frame_set below) - it needs each
-  // player's own per-frame height (baked in at compile time here) to turn a
+  // player's  per-frame height (baked in at compile time here) to turn a
   // friendly, 0-based frame number into the raw byte offset bmp_playerN_
   // index actually expects.
   const heights = {};
@@ -209,8 +209,8 @@ const buildPlayerDataAsm = (card) => {
   return {code: lines.join('\n'), heights};
 };
 
-// The "score" minikernel's own digit table (miniscoretable, read directly
-// by score_kernel.asm's own draw_score_display - see public/bb19/
+// The "score" minikernel's  digit table (miniscoretable, read directly
+// by score_kernel.asm's  draw_score_display - see public/bb19/
 // titlescreen/score_kernel.asm) - the same 10 digit shapes the Score tab's
 // own currently-selected font uses (resolveScoreDigitBytes, same source
 // buildScoreFontOverride/hooks/rom.js draws from for the STANDARD score
@@ -246,13 +246,13 @@ const assignKernelSlots = (screens) => {
   // One entry per screen: {id, backgroundColor, layoutMacroName, layoutLines}.
   const screenPlans = [];
   // The "player" minikernel is a project-wide singleton (see
-  // buildPlayerDataAsm's own comment/layoutmacros.asm's own "draw_player" -
+  // buildPlayerDataAsm's  comment/layoutmacros.asm's own "draw_player" -
   // there's only ever one draw_player_display routine and one set of
   // bmp_player0/bmp_player1 data, not a numbered pool like the bitmap
   // types) - true once the first "player" card is found, in screen order
-  // then card order, matching MAX_KERNEL_COPIES_PER_TYPE's own overflow
+  // then card order, matching MAX_KERNEL_COPIES_PER_TYPE's  overflow
   // convention below (any additional "player" card is silently ignored, not
-  // an error - the UI's own canAddCardType already refuses to add a second
+  // an error - the UI's  canAddCardType already refuses to add a second
   // one).
   let hasPlayerCard = false;
   let playerHeights = null;
@@ -262,11 +262,11 @@ const assignKernelSlots = (screens) => {
   // regardless of how many cards might ask for it.
   let hasScoreCard = false;
 
-  // Maps "screenId:cardId" (a card's own id is only unique within its
-  // screen, not project-wide - see handleAddCard's own getMaxId) to its
+  // Maps "screenId:cardId" (a card's  id is only unique within its
+  // screen, not project-wide - see handleAddCard's  getMaxId) to its
   // resolved "type_slot" kernel key, e.g. "48x2_1" - read back by the "Set
-  // title screen scroll position" block's own generator, which only knows
-  // the screen+card the user picked from its own dropdown, not which
+  // title screen scroll position" block's  generator, which only knows
+  // the screen+card the user picked from its  dropdown, not which
   // physical kernel copy that resolved to this build.
   const cardSlotsByRef = {};
 
@@ -300,7 +300,7 @@ const assignKernelSlots = (screens) => {
       if (!typeInfo) return;
       const slot = (slotByType[card.type] || 0) + 1;
       slotByType[card.type] = slot;
-      // Silently dropped (not an error) - the UI's own handleAddCard already
+      // Silently dropped (not an error) - the UI's  handleAddCard already
       // refuses to add a card once the shared pool for that type is full,
       // this only guards against a hand-edited/imported project file
       // exceeding it.
@@ -331,7 +331,7 @@ const assignKernelSlots = (screens) => {
 // input.js's buildKeypadPollAsm for the same trick, confirmed there
 // directly against a real build ("Unknown Mnemonic" failures without it).
 // Only the CLOSING "end" needs it too (not the opening "asm") - matching
-// that same file's own established convention.
+// that same file's  established convention.
 //
 // Structure mirrors the original single-screen Titlescreen Kernel driver
 // almost exactly (see the version history of this file/public/bb19/
@@ -341,12 +341,12 @@ const assignKernelSlots = (screens) => {
 // selectedIdVarName, set by the "Draw title screen" block generator below
 // right before its own "gosub"), so every screen can share ONE compiled
 // copy of the vsync/vblank/overscan boilerplate and this ROM's one shared
-// set of physical kernel copies instead of needing its own duplicate of
+// set of physical kernel copies instead of needing its  duplicate of
 // each (which would either waste ROM repeating identical boilerplate per
 // screen, or need every internal label renamed per screen and still fight
-// the SAME per-copy kernel files - 48x1_X_kernel.asm's own position48 calls
+// the SAME per-copy kernel files - 48x1_X_kernel.asm's  position48 calls
 // via plain same-bank "jsr" - being reachable from multiple different
-// banks, which they can't be without their own bank-switch trampolines).
+// banks, which they can't be without their  bank-switch trampolines).
 const buildDriverAsm = (selectedIdVarName, screenPlans, usedKernelKeys, hasPlayerCard, hasScoreCard) => {
   const lines = ['asm'];
 
@@ -409,10 +409,10 @@ const buildDriverAsm = (selectedIdVarName, screenPlans, usedKernelKeys, hasPlaye
   // is a fixed, compile-time-shared routine): which titlescreenlayout_N
   // macro to invoke and which background color to load, chosen by
   // comparing selectedIdVarName (set by the "Draw title screen" block,
-  // right before its own gosub) against every screen this build actually
-  // knows about. Falls through to the next screen's own check on a
-  // mismatch; the LAST screen skips its own check and always matches, so a
-  // stale/out-of-range id (shouldn't happen - the block's own dropdown can
+  // right before its  gosub) against every screen this build actually
+  // knows about. Falls through to the next screen's  check on a
+  // mismatch; the LAST screen skips its  check and always matches, so a
+  // stale/out-of-range id (shouldn't happen - the block's  dropdown can
   // only ever hold real screen ids) still draws something instead of
   // silently skipping the whole kernel.
   screenPlans.forEach((plan, index) => {
@@ -464,7 +464,7 @@ const buildDriverAsm = (selectedIdVarName, screenPlans, usedKernelKeys, hasPlaye
   // Known directly from the JS-side card scan (hasPlayerCard), so this can
   // just be included/omitted outright rather than needing its own #ifconst
   // mk_player_on guard the way the numbered bitmap kernels do (their own
-  // "used at all" state isn't known until layoutmacros.asm's own draw_TYPE_N
+  // "used at all" state isn't known until layoutmacros.asm's  draw_TYPE_N
   // macro runs during assembly).
   if (hasPlayerCard) {
     lines.push('\tinclude "player_kernel.asm"', '');
@@ -504,7 +504,7 @@ const buildDriverAsm = (selectedIdVarName, screenPlans, usedKernelKeys, hasPlaye
       // Actually wait out the overscan timer set just above - without this,
       // the "overscan period" TIM64T was configured for never really
       // happens; whatever RETURN falls into (commongamelogic, then the next
-      // loop iteration's own vsync) starts immediately, however many/few
+      // loop iteration's  vsync) starts immediately, however many/few
       // cycles that happens to take, instead of a real fixed ~30-scanline
       // gap. Confirmed as a real bug (a visible stray scanline at the very
       // top of the title screen) - present in the original bundled kernel
@@ -521,12 +521,12 @@ const buildDriverAsm = (selectedIdVarName, screenPlans, usedKernelKeys, hasPlaye
       '',
       // A real, writable RAM byte (not baked as a compile-time constant) -
       // every per-copy kernel file (48x1_N_kernel.asm/48x2_N_kernel.asm)
-      // reads this directly for its own COLUPF/PF1/PF2 defaults, not just
+      // reads this directly for its  COLUPF/PF1/PF2 defaults, not just
       // the COLUBK line above, so it has to exist as a real shared symbol
       // regardless of which screen is currently selected - confirmed as a
       // real build failure ("Unknown Mnemonic 'lda titlescreencolor'")
       // once this byte was removed under the assumption only this
-      // driver's own COLUBK line needed it. Forward/backward references
+      // driver's  COLUBK line needed it. Forward/backward references
       // both resolve fine within one DASM assembly pass, so this can sit
       // anywhere in the body - here, right before the per-card image data.
       '@titlescreencolor',
@@ -541,9 +541,9 @@ const buildDriverAsm = (selectedIdVarName, screenPlans, usedKernelKeys, hasPlaye
 
 const TITLE_SCREEN_SUBROUTINE_NAME = '_titlescreen_system';
 
-// Called from bbasic.js's own init(), right after reserveDevVar hands out
+// Called from bbasic.js's  init(), right after reserveDevVar hands out
 // selectedIdVarName - same timing/reasoning as generators/bbasic/input.js's
-// registerKeypadPollSubroutine (see its own comment): this has to run
+// registerKeypadPollSubroutine (see its  comment): this has to run
 // before anything downstream reads Blockly.BBasic.subroutines back out, and
 // the resolved var name it needs is already available at that point.
 // Compiles EVERY screen currently in storage (not just ones some "Draw
@@ -587,7 +587,7 @@ export default (Blockly) => {
     const screenId = block.getFieldValue('SCREEN');
     const selectedIdVarName = Blockly.BBasic.titleScreenSelectedIdVarName;
     // Only unset if no "Draw title screen" block exists anywhere on the
-    // workspace at all (see bbasic.js's own titleScreenDrawUsed pre-scan) -
+    // workspace at all (see bbasic.js's  titleScreenDrawUsed pre-scan) -
     // can't happen for a block that's actually being generated right now,
     // but guards against a stray leftover reference during, e.g., a
     // mid-refactor state.
@@ -623,9 +623,9 @@ export default (Blockly) => {
     if (!height) return 'rem No title screen player sprite configured\n';
     const value = Blockly.BBasic.valueToCode(block, 'VALUE', Blockly.BBasic.ORDER_MULTIPLICATION) || '0';
     // bmp_playerN_index is a raw byte offset into the flattened frame array
-    // (see resolvePlayerSlotFrames' own comment), height rows apart per
+    // (see resolvePlayerSlotFrames'  comment), height rows apart per
     // frame - height is known here at compile time (baked into the title
-    // screen's own data block above), so the multiply happens in the
+    // screen's  data block above), so the multiply happens in the
     // generated source itself (a variable times a compile-time constant),
     // not at runtime in JS, letting VALUE be any expression (a literal,
     // variable, or computed frame number).

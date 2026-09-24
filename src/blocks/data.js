@@ -44,7 +44,7 @@ export const processDataTablesStorageDefaults = (dataTablesStorage) => {
 // symbol name, hence the bank number baked in here. Bank 1 keeps the
 // original (suffix-less) name some existing generated projects may already
 // reference. Shared beyond just dataTableSymbolName below (see its own
-// callers) - the Text Minikernel's own fixed-name tables (text_offsets/
+// callers) - the Text Minikernel's  fixed-name tables (text_offsets/
 // text_scroll_max/text_static_offsets/text_has_row2/text_lines_max in
 // generators/bbasic/text-scroll.js and text-minikernel.js) need this exact
 // same per-bank-copy scheme and previously didn't have it: a project reading
@@ -110,13 +110,13 @@ Blockly.Blocks['data_get_element'] = {
 // (see the ID badge shown on each table card on the Data tab) instead of
 // picking it from a name dropdown - lets a project with many similarly-
 // structured tables be built generically (e.g. a formula elsewhere
-// computing which table's own ID to read) rather than hardcoding one
+// computing which table's  ID to read) rather than hardcoding one
 // specific table by name at edit time. TABLE_ID is a plain "Number" value
 // SOCKET (a math_number shadow, like every other numeric input in this
 // app), not a typed-in field - still has to resolve to a real, compile-time
 // literal though (see resolveTableIdLiteral in generators/bbasic/data.js):
 // which physical data table gets read is baked into the generated code at
-// compile time, the same way TABLE's own dropdown choice already is, so
+// compile time, the same way TABLE's  dropdown choice already is, so
 // only a plain number actually plugged in here (not a variable or computed
 // expression) can resolve to a table at all.
 Blockly.Blocks['data_get_element_by_id'] = {
@@ -142,7 +142,7 @@ Blockly.Blocks['data_get_element_by_id'] = {
 // variable and can't be chained onto an array read like "table[index]{n}"
 // (confirmed by a real compile: the assembler choked on a mangled
 // "LDX #0]{0" line). Its own generator instead computes the bit with pure
-// arithmetic (see its own comment there) - no "{n}" syntax, no temp
+// arithmetic (see its  comment there) - no "{n}" syntax, no temp
 // variable, so it never runs into that limitation at all.
 Blockly.Blocks['data_get_bit'] = {
   init: function() {
@@ -164,7 +164,7 @@ Blockly.Blocks['data_get_bit'] = {
 // number (see the ID badge on its card on the Data tab) instead of picking
 // it from a name dropdown - same relationship data_get_element_by_id has to
 // data_get_element, including TABLE_ID being a plain Number value socket
-// (see its own comment on data_get_element_by_id above) rather than a
+// (see its  comment on data_get_element_by_id above) rather than a
 // typed-in field.
 Blockly.Blocks['data_get_bit_by_id'] = {
   init: function() {

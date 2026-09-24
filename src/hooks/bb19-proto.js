@@ -151,7 +151,7 @@ const getIncludesManifest = () => {
 
 window.__vcsWasi19Compile = async (preprocessedCode, siblingFiles, trace) => {
   const includes = await getIncludesManifest();
-  // Mirrors the real bB 1.9 distribution's own layout exactly: a "bB" folder
+  // Mirrors the real bB 1.9 distribution's  layout exactly: a "bB" folder
   // containing 2600basic.wasm and an "includes/" subfolder (with
   // default.inc etc. inside it) - the real 2600basic.sh invokes
   // "-i $bB" where $bB is that same outer folder, preopened alongside the

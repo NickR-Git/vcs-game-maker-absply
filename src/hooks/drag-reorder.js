@@ -2,8 +2,8 @@ import {ref} from '@vue/composition-api';
 
 // Click-and-drag reordering for a list of cards, built to be reusable
 // across any tab that renders one - TextEditor.vue and SoundFXEditor.vue
-// are the current callers, with Music/etc's own card lists expected to
-// adopt this same hook later rather than growing their own copy. Uses the
+// are the current callers, with Music/etc's  card lists expected to
+// adopt this same hook later rather than growing their  copy. Uses the
 // browser's native HTML5 drag-and-drop (no external library): dragover/drop
 // compute the new order.
 //
@@ -20,15 +20,15 @@ import {ref} from '@vue/composition-api';
 // split): v-bind="dragAttrs(index)" v-on="dragHandleListeners(index)" on a
 // small drag handle within the top of the card, NOT the whole card. Making
 // the whole card draggable was tried first and reverted: `draggable="true"`
-// on an ancestor intercepts the browser's own click-and-drag
+// on an ancestor intercepts the browser's  click-and-drag
 // text-selection gesture for everything inside it, so a user could no
-// longer select text in a card's own fields.
+// longer select text in a card's  fields.
 //
 // dragTargetListeners(index) is separate and goes on the CARD itself
 // (v-on="dragTargetListeners(index)", no v-bind needed - the card itself
 // was never draggable, only a valid drop target): dragover/drop need to
 // work anywhere a dragged card might be dropped ON, not just over the
-// target's own small handle, which dragHandleListeners alone can't cover
+// target's  small handle, which dragHandleListeners alone can't cover
 // since drag-and-drop only starts from - not lands on - a `draggable`
 // element itself.
 //

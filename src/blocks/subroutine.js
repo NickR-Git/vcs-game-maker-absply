@@ -7,7 +7,7 @@ const SUBROUTINE_COLOR = 'rgb(39, 176, 176)';
 // Block for defining a named, reusable subroutine (bBasic gosub/return) -
 // its body isn't emitted where it's dropped on the canvas (see
 // generators/bbasic/subroutine.js): like an event, it's collected and
-// spliced into its own safe, never-fallen-into spot in the template, with
+// spliced into its  safe, never-fallen-into spot in the template, with
 // "subroutine_call" blocks elsewhere reaching it via a bank-tagged "gosub".
 Blockly.Blocks['subroutine_define'] = {
   init: function() {
@@ -39,7 +39,7 @@ function definedSubroutineNames(workspace) {
 
 /**
  * Lists every subroutine currently defined on the same workspace as the
- * dropdown's own block, so renamed/added/deleted subroutines show up the next
+ * dropdown's  block, so renamed/added/deleted subroutines show up the next
  * time the dropdown opens - no separate storage needed, since the definition
  * blocks living on the canvas already are the source of truth. Blockly calls
  * this with `this` bound to the field.
@@ -64,7 +64,7 @@ function buildSubroutineOptions() {
 // every later setValue() to a real subroutine name gets validated against
 // the stale empty list and silently rejected, forever, no matter how much
 // later or how many times it's retried - confirmed directly by reading
-// getOptions's own source and by reproducing the stuck cache live. Calling
+// getOptions's  source and by reproducing the stuck cache live. Calling
 // getOptions() with no argument (falsy useCache) first forces a fresh
 // generator call, which also happens to refresh the cache doClassValidation_
 // itself will read right after - that's the only thing that actually clears
@@ -83,7 +83,7 @@ function setSubroutineDropdownValue(field, newValue) {
   // WITHOUT ever reaching the forceRerender() call the "value actually
   // changed" path gets. Exactly the case here: by the time this settle pass
   // runs, the value itself is often already correct (see
-  // acceptAnyDropdownValue's own comment - just the earlier deserialization
+  // acceptAnyDropdownValue's  comment - just the earlier deserialization
   // moment's stale-cache display lookup wasn't), so setValue's own "nothing
   // changed" shortcut would otherwise leave the stale text on screen forever
   // despite selectedOption_ now being right underneath it - a real, reported
@@ -98,7 +98,7 @@ function setSubroutineDropdownValue(field, newValue) {
  * A block dragged in from the toolbox flyout is a fresh instance whose
  * FieldDropdown is constructed - and gets its initial value AND its first
  * (then permanently cached, see setSubroutineDropdownValue) options fetch -
- * while it's still on the flyout's own separate workspace, which never has
+ * while it's still on the flyout's  separate workspace, which never has
  * any "subroutine_define" blocks of its own. That leaves the NAME field
  * stuck on "" (an empty gosub target - see subroutine_call in
  * generators/bbasic/subroutine.js) even once the block lands on the real
@@ -117,9 +117,9 @@ function fixSubroutineCallNames(workspace) {
     // just when it's outright invalid - FieldDropdown.doValueUpdate_ (see
     // node_modules/blockly/core/field_dropdown.js) separately looks up
     // selectedOption_ (what the CLOSED dropdown actually displays) against
-    // its own getOptions(true) cache, at the moment setValue was called.
+    // its  getOptions(true) cache, at the moment setValue was called.
     // Now that doClassValidation_ is overridden to accept any value (see
-    // acceptAnyDropdownValue's own comment above - needed so a value
+    // acceptAnyDropdownValue's  comment above - needed so a value
     // pointing at a subroutine defined LATER in the same XML survives
     // deserialization at all), the underlying value can end up correct
     // while that separate display-text lookup still missed it, because it
@@ -139,7 +139,7 @@ function fixSubroutineCallNames(workspace) {
  * as broken when it matches nothing defined at all, so it can't tell "this
  * Call meant to follow the rename" apart from "this Call points at some
  * other, unrelated subroutine" and won't touch either. A BLOCK_CHANGE event
- * on a subroutine_define's own NAME field carries the exact old/new values,
+ * on a subroutine_define's  NAME field carries the exact old/new values,
  * which is enough to retarget only the Call blocks that actually followed
  * that specific subroutine, in the moment of the rename.
  * @param {?Blockly.Workspace} workspace
@@ -170,7 +170,7 @@ function ensureSubroutineCallListener(workspace) {
   });
   // A block reconstructed from SAVED XML (project load, not a fresh drag from
   // the toolbox) applies its saved field value AFTER init() runs, so this
-  // block's own value isn't readable yet and the change listener above never
+  // block's  value isn't readable yet and the change listener above never
   // fires unless something ELSE edits the workspace afterward. One deferred
   // pass, after the current synchronous load finishes applying every block's
   // saved value, catches any that are still stale without waiting on a
@@ -191,17 +191,17 @@ function ensureSubroutineCallListener(workspace) {
 // default (first-option) value already was - a real, reported bug ("the
 // call subroutine block keeps resetting to the first subroutine when
 // navigating away"), since Vue Router destroys and recreates this tab's
-// workspace on every visit (see hooks/collapse.js's own comment on the same
+// workspace on every visit (see hooks/collapse.js's  comment on the same
 // lifecycle), reloading the saved XML - and reproducing from scratch - every
-// time. fixSubroutineCallNames's own later correction pass can't catch this
+// time. fixSubroutineCallNames's  later correction pass can't catch this
 // either: by the time it runs, the field's value has already fallen back to
 // some OTHER real subroutine name (not garbage), which looks perfectly
 // valid to that check.
 //
-// The workspace's own subroutine_define blocks are already the single
+// The workspace's  subroutine_define blocks are already the single
 // source of truth for what's a real target (see definedSubroutineNames,
 // used identically by code generation itself in generators/bbasic/
-// subroutine.js) - there's no reason this field's own separate, load-order-
+// subroutine.js) - there's no reason this field's  separate, load-order-
 // dependent cache should ALSO get a veto. Overriding doClassValidation_ to
 // always accept removes that veto entirely; a real click in the dropdown's
 // own UI can still only ever offer currently-valid names to click in the

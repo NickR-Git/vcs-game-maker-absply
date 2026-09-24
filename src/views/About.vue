@@ -22,7 +22,7 @@
       <p class="about-description">
         VCS Game Maker is a no-code environment for building Atari 2600 games. Build your game's logic with
         Blockly blocks, and behind the scenes VCSGM generates batari Basic source code (along with a bit of
-        assembly), compiles it into a real Atari 2600 ROM and runs that ROM in a built-in Javatari emulator
+        assembly), compiles it into a real Atari 2600 ROM and runs that ROM in a built-in Gopher2600 emulator
         preview.
       </p>
 
@@ -55,7 +55,7 @@ export default {
   },
   methods: {
     // A plain <a target="_blank"> just opens another TAB in most browsers
-    // (tab-vs-window is the browser's own tabbed-browsing preference, not
+    // (tab-vs-window is the browser's  tabbed-browsing preference, not
     // something an anchor's target can force) - passing explicit window
     // features (width/height/etc, same as any classic popup call) is what
     // actually makes window.open() open a separate, real window instead.
@@ -70,7 +70,7 @@ export default {
 </script>
 
 <style scoped>
-/* Fills .app-main-inner's own real, deterministic height (see its comment
+/* Fills .app-main-inner's  real, deterministic height (see its comment
    in App.vue) instead of just sizing to content - a flex column so
    .about-text below can claim the leftover space (flex: 1, after the
    title/divider's own natural height) and vertically center its own
@@ -100,7 +100,7 @@ export default {
   text-align: center;
 }
 
-/* Flex column, centered on its own cross axis - shrinks to fit its widest
+/* Flex column, centered on its  cross axis - shrinks to fit its widest
    child (the logo) so the version text below centers relative to the logo
    specifically. Already centered as a unit by .about-text's own
    align-items above; this only needs to handle centering ITS OWN children

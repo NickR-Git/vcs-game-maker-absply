@@ -126,7 +126,7 @@
                         </v-list-item-icon>
                         <v-list-item-title>Yes, delete</v-list-item-title>
                       </v-list-item>
-                      <v-list-item>
+                      <v-list-item link>
                         <v-list-item-icon>
                           <v-icon>mdi-cancel</v-icon>
                         </v-list-item-icon>
@@ -226,13 +226,13 @@ export default defineComponent({
     const textStringsStorage = useTextStringsStorage();
     const configurationStorage = useConfigurationStorage();
 
-    // The Text Minikernel's own message background color (the "textbkcolor"
+    // The Text Minikernel's  message background color (the "textbkcolor"
     // const - see generators/bbasic.js's generateConfiguration) - a single
     // project-wide setting stored alongside the rest of Configuration.vue's
     // own options, not per-message, since only one Text Minikernel instance
     // can ever be active in a project. Defaults to black (0), matching the
     // same "?? 0" fallback generateConfiguration itself uses (and what
-    // text12a.asm's own ifnconst fallback already defaults to).
+    // text12a.asm's  ifnconst fallback already defaults to).
     const textBkColor = computed({
       get() {
         try {
@@ -253,7 +253,7 @@ export default defineComponent({
     });
 
     // Whether text12b.asm's own "more below" scroll cursor is compiled in at
-    // all (see generators/bbasic.js's own buildRom-time
+    // all (see generators/bbasic.js's  buildRom-time
     // buildTextScrollCursorOverride splice, gated on this same field) - a
     // single project-wide toggle, same reasoning/pattern as textBkColor
     // just above.
@@ -275,7 +275,7 @@ export default defineComponent({
       },
     });
 
-    // The scroll cursor's own blink speed (see BLINK_SPEED_OPTIONS/
+    // The scroll cursor's  blink speed (see BLINK_SPEED_OPTIONS/
     // resolveBlinkMask in utils/text-font.js) - only meaningful (and only
     // shown, see the template above) while enableTextScrollCursor is on.
     const textScrollCursorBlinkSpeed = computed({
@@ -297,7 +297,7 @@ export default defineComponent({
       },
     });
 
-    // How many of the Text Minikernel's own 12 physical character positions
+    // How many of the Text Minikernel's  12 physical character positions
     // this project actually uses - see TEXT_MAX_DISPLAY_WIDTH_OPTIONS' own
     // comment in blocks/text-strings.js for why this is compile-time only
     // (never a runtime-settable block) and why a narrower setting only
@@ -326,8 +326,8 @@ export default defineComponent({
 
     // Purely a visual "which card am I looking at" marker - same
     // selectCard/selectedCardId/deselectCard pattern as MusicEditor.vue's
-    // own song cards and SoundFXEditor.vue's own sound effect cards (see
-    // MusicEditor.vue's own comment for the full reasoning): plain local
+    // own song cards and SoundFXEditor.vue's  sound effect cards (see
+    // MusicEditor.vue's  comment for the full reasoning): plain local
     // component state, not persisted, not wired into anything else.
     const selectedCardId = ref(null);
     const selectCard = (id) => {
@@ -357,16 +357,16 @@ export default defineComponent({
     };
 
     // Every card starts collapsed on every visit to this tab (see
-    // collapseAll's own comment in hooks/collapse.js), not just ones never
+    // collapseAll's  comment in hooks/collapse.js), not just ones never
     // expanded before.
     const {isCollapsed, toggleCollapsed, ensureExpanded, collapseAll} = useCollapsedIds('text', true);
     collapseAll();
 
     // Card reordering - NOT built on hooks/drag-reorder.js's own
     // useDragReorder (used as-is by SoundFXEditor.vue/MusicEditor.vue's own
-    // single-column card lists), since that hook's own top-border
+    // single-column card lists), since that hook's  top-border
     // drag-over convention only makes sense for a strictly vertical stack.
-    // .text-list is a CSS grid (see its own comment - two or more cards can
+    // .text-list is a CSS grid (see its  comment - two or more cards can
     // sit side by side on a wide enough window), where the meaningful
     // drop-target edge is left/right (which card this lands before/after in
     // reading order), not top/bottom - confirmed directly as a real gap
@@ -376,7 +376,7 @@ export default defineComponent({
     const draggedEntryIndex = ref(null);
     // {index, side} - side is 'before' or 'after', which HALF of card
     // `index` the pointer is currently over - same halfway-point
-    // convention MusicEditor.vue's own dragOverSideFor/DataEditor.vue's
+    // convention MusicEditor.vue's  dragOverSideFor/DataEditor.vue's
     // own valueRowListeners already use for their identical grid-drop
     // problem.
     const dragOverEntry = ref(null);
@@ -427,8 +427,8 @@ export default defineComponent({
         draggedEntryIndex.value = null;
         dragOverEntry.value = null;
         if (from == null || from === index) return;
-        // Computed fresh off the actual drop event's own pointer position -
-        // see MusicEditor.vue's own sequenceChipListeners drop handler for
+        // Computed fresh off the actual drop event's  pointer position -
+        // see MusicEditor.vue's  sequenceChipListeners drop handler for
         // why this isn't just read back off dragOverEntry instead.
         const side = dragOverSideFor(event);
         let insertAt = side === 'after' ? index + 1 : index;
@@ -469,7 +469,7 @@ export default defineComponent({
     };
 
     // No longer clamped to TEXT_MESSAGE_LENGTH (12) characters here - a
-    // message longer than the project's own configured max display width
+    // message longer than the project's  configured max display width
     // (see textMaxDisplayWidth below) now scrolls to show the rest instead
     // of being cut off (see encodeTextMessage in generators/bbasic/
     // text-minikernel.js), so there's no reason to stop the user from
@@ -499,7 +499,7 @@ export default defineComponent({
   width: 100%;
 }
 
-/* v-list-item's own default 0 16px padding stacks on top of v-card-text's,
+/* v-list-item's  default 0 16px padding stacks on top of v-card-text's,
    pushing the message card in further than the Score tab's, which sits
    directly in a v-card-text with no list-item wrapper. Zeroing both sides
    (not just left, as this used to) matches the Player/Data/Background tabs'
@@ -546,7 +546,7 @@ export default defineComponent({
   font-size: 1rem;
 }
 
-/* Vuetify's own v-select reserves space above the input for its label,
+/* Vuetify's  v-select reserves space above the input for its label,
    sitting lower than .text-scroll-cursor-switch's own centered toggle+label
    row right next to it - nudged up to bring its own input line back onto
    the same baseline. */
@@ -585,7 +585,7 @@ export default defineComponent({
   padding-top: 0 !important;
 }
 
-/* A 12-character message doesn't need anywhere near .text-list's own full
+/* A 12-character message doesn't need anywhere near .text-list's  full
    column width (previously capped at 640px, sized for that) - grid instead
    of the v-list's normal single-column stacking, so two (or more, on a wide
    enough window) fit side by side instead of each wasting most of a full
@@ -613,7 +613,7 @@ export default defineComponent({
   flex-direction: column;
 }
 
-/* Grid stretches each item to fill its own column width automatically -
+/* Grid stretches each item to fill its  column width automatically -
    flex doesn't do that for .entry-list-item (Vuetify's own v-list-item, the
    actual flex child) on its own, leaving .text-card's own width: 100% only
    filling 100% of that un-stretched item instead of the whole row. Same
@@ -660,7 +660,7 @@ export default defineComponent({
   cursor: grab;
 }
 
-/* hooks/drag-reorder.js's own CSS_CLASS_DRAGGING (see its comment for why
+/* hooks/drag-reorder.js's  CSS_CLASS_DRAGGING (see its comment for why
    this lives per-tab instead of globally) - faded so the card being moved
    reads as "lifted" rather than duplicated. */
 .drag-reorder-dragging {
@@ -700,7 +700,7 @@ export default defineComponent({
   box-shadow: none !important;
 }
 
-/* Same icon/button sizing as the Player Sprite tab's own toolbar icons
+/* Same icon/button sizing as the Player Sprite tab's  toolbar icons
    (PixelEditor.vue's .pixel-editor-tools rules) - size only, no colour
    changes, so .delete-icon-btn's red-on-hover convention is untouched. */
 .text-icon-btn-size {
@@ -743,7 +743,7 @@ export default defineComponent({
   padding-top: 0;
 }
 
-/* Vuetify's own v-text-field__details reserves a 12px left padding by
+/* Vuetify's  v-text-field__details reserves a 12px left padding by
    default (tuned for the non-outlined variant's underline, which is inset
    from the field's own edge) - the outlined Text field's hint sat 12px
    further right than the field's own left border because of it, confirmed

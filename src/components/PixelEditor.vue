@@ -227,22 +227,22 @@ export default {
     fgColor: {type: String, default: 'white'},
     bgColor: {type: String, default: 'black'},
     // Optional per-row CSS colors for "on" pixels (one entry per row). When
-    // provided, each row's set pixels are drawn in its own color instead of
+    // provided, each row's set pixels are drawn in its  color instead of
     // fgColor, so the playfield preview reflects the batari Basic pfcolors.
     rowColors: {type: Array, default: null},
     name: {type: String, default: 'image'},
     allowChangingHeight: {type: Boolean, default: true},
     // Shows a one-click "Clear" button next to the Eraser/Pencil tools -
     // opt-in (default off) since most PixelEditor uses (sprite frames, the
-    // score font, ...) already have their own way to start a frame over
+    // score font, ...) already have their  way to start a frame over
     // (switching frames, importing an image), and a stray "wipe everything"
     // button isn't worth the risk of a misclick there. Backgrounds are the
     // one place a whole-grid clear is actually useful on its own.
     showClearButton: {type: Boolean, default: false},
     // Shows a second "Set height" checkbox that applies the SAME resize
     // (and the "scale existing contents" choice above it) to every other
-    // frame in this sprite's own animation, not just this one - opt-in
-    // (default off, see allowApplyToAllFrames' own gating below) since
+    // frame in this sprite's  animation, not just this one - opt-in
+    // (default off, see allowApplyToAllFrames'  gating below) since
     // only a frame that's actually PART of an animation (a player sprite)
     // has other frames to apply anything to at all; a background or the
     // score font (allowChangingHeight itself is already false for both)
@@ -253,7 +253,7 @@ export default {
     // ResizeObserver) - a pure visual aid, never part of the pixel data
     // itself.
     showGrid: {type: Boolean, default: false},
-    // Labels each cell with its own column index (0-based, matching the X
+    // Labels each cell with its  column index (0-based, matching the X
     // argument every "Background: pixel at X/Y" block already uses) at the
     // cell's center - opt-in separately from showGrid since it's only
     // useful on the wide, many-columned Background canvas; a narrow sprite
@@ -269,7 +269,7 @@ export default {
       heightMenuVisible: false,
       heightMenuValue: 0,
       // Off by default (reset every time the popup opens - see the
-      // activator's own click handler) - the existing truncate/pad
+      // activator's  click handler) - the existing truncate/pad
       // behavior (see handleSetHeight) is what every frame resize has
       // always done, so a first-time or occasional resize doesn't silently
       // start distorting artwork the user only meant to crop or extend.
@@ -283,7 +283,7 @@ export default {
 
       // String values (see the Eraser/Pencil/Clear v-btn "value" props),
       // not index-based - Clear sits last in the group (after Pencil) so it
-      // can be repositioned without touching Eraser's/Pencil's own values,
+      // can be repositioned without touching Eraser's/Pencil's  values,
       // but it isn't a real drawing tool, so it's excluded here and reset
       // back to whichever tool was actually active after every click (see
       // handleClear) rather than staying lit up as if selected.
@@ -310,7 +310,7 @@ export default {
       }
     },
     // The overlay canvas only exists in the DOM while showGrid is true (see
-    // the template's own v-if) - the ResizeObserver has to be (re)attached
+    // the template's  v-if) - the ResizeObserver has to be (re)attached
     // to whichever real element currently exists, not created once up
     // front.
     showGrid(value) {
@@ -320,12 +320,12 @@ export default {
         this.teardownGridOverlay();
       }
     },
-    // Extra coverage alongside initEditor's own redraw call (see its
+    // Extra coverage alongside initEditor's  redraw call (see its
     // comment) for the one case that changes row count WITHOUT going
     // through initEditor synchronously in the same tick: the Background
-    // tab's own resolution setting (Superchip pfres), which passes a new
+    // tab's  resolution setting (Superchip pfres), which passes a new
     // "height" prop value the moment it changes, slightly ahead of
-    // reflowBackgroundsToHeight's own pixel-matrix update reaching this
+    // reflowBackgroundsToHeight's  pixel-matrix update reaching this
     // component's "value" prop and triggering initEditor from there.
     height() {
       this.$nextTick(() => this.drawGridOverlay());
@@ -335,19 +335,19 @@ export default {
     },
     // Picks up a row-count change this component DIDN'T itself just emit -
     // needed for "Apply to every frame in this animation" (see
-    // handleSetHeight's own resize-all-frames event): every OTHER frame's
+    // handleSetHeight's  resize-all-frames event): every OTHER frame's
     // own PixelEditor instance never sees that resize happen locally (only
     // the ONE frame the popup was actually open on does, via
-    // handleSetHeight's own initEditor call), it only sees its "value" prop
+    // handleSetHeight's  initEditor call), it only sees its "value" prop
     // change out from under it once PlayerEditor.vue applies the resize to
     // its frame.pixels - and the underlying PixelEditor library has no
-    // built-in way to change its own row count after construction (see
-    // initEditor's own comment), so without this, every other frame would
+    // built-in way to change its  row count after construction (see
+    // initEditor's  comment), so without this, every other frame would
     // keep silently rendering at its OLD height/content until manually
     // reopened.
     //
     // A same-LENGTH "value" change also needs picking up - e.g. Copy/Paste
-    // Frame (PlayerEditor.vue's own handlePasteFrame) pastes another
+    // Frame (PlayerEditor.vue's  handlePasteFrame) pastes another
     // frame's pixels straight into this one's "value" prop with no local
     // draw stroke involved at all - confirmed as a real reported bug: when
     // the pasted frame happened to be the same height as this one, the
@@ -357,8 +357,8 @@ export default {
     // actual PIXEL mismatch against what's currently drawn (not just any
     // "value" change) so an ordinary same-height pixel edit doesn't
     // redundantly redraw itself on every stroke - that echo already matches
-    // what's on screen, since it's this same instance's own just-emitted
-    // change coming back through its own prop.
+    // what's on screen, since it's this same instance's  just-emitted
+    // change coming back through its  prop.
     value(newValue) {
       if (!this.editor || !newValue) return;
       if (newValue.length !== this.editor.height) {
@@ -369,12 +369,12 @@ export default {
     },
   },
   methods: {
-    // The overlay canvas is sized to its own CSS-rendered pixel dimensions
-    // (not the drawing canvas's own tiny intrinsic width/height, one unit
-    // per cell - see PixelEditor's own constructor) so grid lines and cell
+    // The overlay canvas is sized to its  CSS-rendered pixel dimensions
+    // (not the drawing canvas's  tiny intrinsic width/height, one unit
+    // per cell - see PixelEditor's  constructor) so grid lines and cell
     // labels stay crisp and legible at any zoom level, rather than being
     // stretched/blurred the same "pixelated" way the actual artwork is.
-    // That means it has to be redrawn whenever its own rendered SIZE
+    // That means it has to be redrawn whenever its  rendered SIZE
     // changes - zooming, resizing the window, or the sidebar/toolbar
     // reflowing - which a plain mounted()-once draw can't catch on its own.
     setupGridOverlay() {
@@ -435,7 +435,7 @@ export default {
 
       if (!this.showCellIds) return;
       // "X,Y" - matches the two arguments every "Background: pixel at X/Y"
-      // block already uses, so a cell's own coordinates can be read
+      // block already uses, so a cell's  coordinates can be read
       // straight off the grid while wiring one up. Skipped entirely once
       // cells are too small to hold a legible label, rather than drawing
       // illegible overlapping text - a wider budget than a single number
@@ -447,11 +447,11 @@ export default {
       ctx.textBaseline = 'middle';
       // A label over an "on" pixel needs a darker color than the default
       // gray to stay readable against a bright fill color (e.g. this
-      // editor's own default orange) - built once as a lookup rather than
+      // editor's  default orange) - built once as a lookup rather than
       // searching this.editor.pixels per cell. editor.pixels holds EVERY
       // cell, on or off (setPixels above always writes a real color either
       // way - this.onColorForRow(y) when on, this.bgColor when off - see
-      // its own comment), so "on" means the color differs from bgColor, the
+      // its  comment), so "on" means the color differs from bgColor, the
       // same test pixelMatrix() above already uses - not just presence in
       // the list.
       const filledCells = new Set(
@@ -466,11 +466,11 @@ export default {
     },
 
     // The underlying @curtishughes/pixel-editor library only listens for
-    // "mouseup" on the canvas ITSELF (see its own constructor) - it has no
+    // "mouseup" on the canvas ITSELF (see its  constructor) - it has no
     // "mouseleave" handling at all. Dragging the pointer off the canvas
     // while a button is still held (a real, easy-to-do gesture, e.g.
     // drawing right up to an edge) and releasing OUTSIDE it means the
-    // canvas's own "mouseup" never fires, so the library's own tool (see
+    // canvas's own "mouseup" never fires, so the library's  tool (see
     // its handlePointerDown/handlePointerUp) is left thinking the button
     // is still down - re-entering the canvas afterward, with the button
     // genuinely up, then immediately resumes drawing on the very next
@@ -479,11 +479,11 @@ export default {
     // Sprite, Background, Score digits - anywhere PixelEditor.vue is used).
     // Forcing a synthetic "mouseup" the instant the pointer leaves the
     // canvas - passing the real mouseleave event through, since
-    // PixelEditor's own mouseup(e) reads e.clientX/clientY the exact same
-    // way a real mouseup event would - releases the tool's own state
+    // PixelEditor's  mouseup(e) reads e.clientX/clientY the exact same
+    // way a real mouseup event would - releases the tool's  state
     // immediately, regardless of whether the button is later released
     // inside or outside the canvas. Not debounced (unlike handleMouse
-    // below, which still runs right after to resync Vue's own reactive
+    // below, which still runs right after to resync Vue's  reactive
     // pixel state) - the release itself needs to happen synchronously, or
     // a mousemove landing before the debounce fires would still draw.
     handleMouseLeave(event) {
@@ -538,7 +538,7 @@ export default {
           .then((img) => {
             // Where height can be changed (sprite frames, not backgrounds or
             // the score font, which have a fixed row count - see
-            // allowChangingHeight), match the imported image's own height
+            // allowChangingHeight), match the imported image's  height
             // instead of squeezing it into whatever height this frame
             // already happened to be, same range as the "Set height" slider.
             const targetHeight = this.allowChangingHeight ?
@@ -577,13 +577,13 @@ export default {
     // reload this used to do, which (via main.js's "start empty" reset on
     // every launch) was wiping the entire project, not just this frame.
     //
-    // Carries the OLD editor's own History instance into the new one
-    // (PixelEditor's own constructor takes it as an optional 4th arg,
+    // Carries the OLD editor's  History instance into the new one
+    // (PixelEditor's  constructor takes it as an optional 4th arg,
     // defaulting to a fresh one when omitted) - confirmed as a real reported
     // bug otherwise: every resize used to build a brand new PixelEditor with
     // a brand new, empty History, silently discarding every undo entry from
     // before the resize, on top of the resize itself never being undoable
-    // either. History's own undoStack/redoStack are plain {next, prev}
+    // either. History's  undoStack/redoStack are plain {next, prev}
     // pixel-coordinate deltas with no canvas-size bounds checking
     // (PixelCollection.set() is a sparse {x+y*width: color} map, and
     // getPixels() here already skips any y past the current row count), so
@@ -598,9 +598,9 @@ export default {
       this.handleMouse();
       // Row count (this.editor.height) is what the grid overlay actually
       // draws against, not the "height" PROP (only ever a construction-time
-      // default - see this method's own callers) - a height change from
+      // default - see this method's  callers) - a height change from
       // here (Set Height, cross-frame resize, importing a differently-sized
-      // image) wouldn't otherwise be caught by that prop's own watcher.
+      // image) wouldn't otherwise be caught by that prop's  watcher.
       if (this.showGrid) this.$nextTick(() => this.drawGridOverlay());
     },
 
@@ -617,10 +617,10 @@ export default {
         this.initEditor(this.heightMenuValue, resized);
       }
 
-      // Every OTHER frame in this sprite's own animation - this component
-      // has no idea what those are (it only ever sees its own one frame's
+      // Every OTHER frame in this sprite's  animation - this component
+      // has no idea what those are (it only ever sees its  one frame's
       // pixels), so the actual resizing happens one level up, in
-      // PlayerEditor.vue's own handler for this event; this only reports
+      // PlayerEditor.vue's  handler for this event; this only reports
       // what the user asked for (the same height/scale choice this frame
       // itself just used, above) and lets that handler decide who "every
       // other frame" actually is.
@@ -659,7 +659,7 @@ export default {
       this.setPixels(null);
       this.$emit('input', this.getPixels());
       // Separate from 'input' (an ordinary pixel edit) - lets a caller reset
-      // this graphic's own color fields (row colors, a single fixed color,
+      // this graphic's  color fields (row colors, a single fixed color,
       // whatever it has) alongside the pixels specifically on a real Clear
       // click, without every plain drawing stroke also wiping colors.
       this.$emit('clear');
@@ -777,7 +777,7 @@ export default {
   margin: 0 2px;
 }
 
-/* Vuetify paints its own grey hover/focus overlay here, which is the box we
+/* Vuetify paints its  grey hover/focus overlay here, which is the box we
    are removing; the states below replace it. */
 .pixel-editor-tools >>> .v-btn::before {
   display: none;
@@ -822,7 +822,7 @@ export default {
   color: rgba(0, 0, 0, 0.87);
 }
 
-/* Pulled up close to the slider's own list-item above (a larger negative
+/* Pulled up close to the slider's  list-item above (a larger negative
    top margin - confirmed the first attempt at this still left a visible
    gap). left: 16px matches v-list-item's own default horizontal padding
    (the slider row above still has that padding, being a real v-list-item;

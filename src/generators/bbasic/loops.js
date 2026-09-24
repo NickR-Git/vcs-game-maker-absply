@@ -17,15 +17,15 @@ goog.require('Blockly.BBasic');
 */
 
 
-// A "repeat N times" block's own count, when N is a complex expression (not
+// A "repeat N times" block's  count, when N is a complex expression (not
 // a plain number or bare variable name) - see controls_repeat_ext's own
 // comment below for why this needs a real, dedicated, properly-declared
 // variable rather than a shared scratch register like temp1 (which the
-// loop's own body can just as easily be using for something else entirely,
+// loop's  body can just as easily be using for something else entirely,
 // e.g. background_change_pixel, and "for X = 1 to <bound>" re-reads its own
 // bound from memory every iteration rather than caching it once). Reserved
-// via generators/bbasic.js's own init() pre-scan/reserveDevVar bucket - the
-// same mechanism every other feature's own hidden state uses (see e.g.
+// via generators/bbasic.js's  init() pre-scan/reserveDevVar bucket - the
+// same mechanism every other feature's  hidden state uses (see e.g.
 // reserveRomNoiseDevVars in generators/bbasic/sprites.js) - NOT
 // nameDB_.getDistinctName, which (confirmed directly, see bbasic.js's own
 // comment on why temp1-6 had to be reserved against user variable name
@@ -40,13 +40,13 @@ export const REPEAT_BOUND_VAR_NAME = 'repeatBound';
 // The "repeat X times" block's own "for X = 1 to <bound> : ... : next" loop
 // variable itself - used to be the literal, hardcoded bB identifier
 // "loopcounter", unconditionally reserved a whole letter (or Superchip var0-
-// 14 slot) in generators/bbasic.js's own SYSTEM_VARIABLES regardless of
+// 14 slot) in generators/bbasic.js's  SYSTEM_VARIABLES regardless of
 // whether the project has any "Repeat" block at all. Resolved through
 // nameDB_/reserveDevVar instead now, the same as REPEAT_BOUND_VAR_NAME right
-// above (reserved only when generators/bbasic.js's own repeatLoopUsed
+// above (reserved only when generators/bbasic.js's  repeatLoopUsed
 // pre-scan finds a repeat block) - a project with zero "Repeat" blocks no
 // longer pays for this at all. One shared var project-wide, same reasoning
-// as REPEAT_BOUND_VAR_NAME's own comment.
+// as REPEAT_BOUND_VAR_NAME's  comment.
 export const REPEAT_COUNTER_VAR_NAME = 'repeatcounter';
 
 // wait_frames' own "for X = 1 to <frames>" loop counter - deliberately NOT
@@ -55,21 +55,21 @@ export const REPEAT_COUNTER_VAR_NAME = 'repeatcounter';
 // A "Wait N frames" block placed inside a "Repeat X times" block's body is a
 // real, reported case - both blocks' own "for <counter> = 1 to ... next"
 // constructs would fight over the exact same variable, with the INNER
-// (wait_frames) loop's own final value clobbering the OUTER (repeat) loop's
+// (wait_frames) loop's  final value clobbering the OUTER (repeat) loop's
 // still-in-progress count the moment the wait finishes, corrupting however
 // many iterations the repeat had left. Reserved the same way
-// REPEAT_BOUND_VAR_NAME is (see its own comment just above) - a real,
+// REPEAT_BOUND_VAR_NAME is (see its  comment just above) - a real,
 // properly-declared dev var, not nameDB_.getDistinctName.
 export const WAIT_FRAMES_COUNTER_VAR_NAME = 'waitFramesCounter';
 
-// Whether a given "repeat N times" block's own TIMES input would actually
-// need REPEAT_BOUND_VAR_NAME once controls_repeat_ext's own generator runs
+// Whether a given "repeat N times" block's  TIMES input would actually
+// need REPEAT_BOUND_VAR_NAME once controls_repeat_ext's  generator runs
 // (see its own "endVar" logic below) - used by generators/bbasic.js's own
 // early pre-scan (before reserveDevVar hands out letters) to reserve
 // REPEAT_BOUND_VAR_NAME only for a project where at least one repeat block's
 // own count genuinely needs it, rather than for every project with ANY
 // repeat block at all (the previous, simpler-but-wasteful gate - see that
-// pre-scan's own comment for the one-byte tradeoff this replaces).
+// pre-scan's  comment for the one-byte tradeoff this replaces).
 // Deliberately conservative: anything this can't positively PROVE simple
 // (a bare math_number literal, or a bare variable getter) is treated as
 // needing the var, same as the real generator would for anything else -
@@ -77,7 +77,7 @@ export const WAIT_FRAMES_COUNTER_VAR_NAME = 'waitFramesCounter';
 // fewer, so it can't introduce the "reserveDevVar skipped, but generator
 // referenced it anyway" class of bug a false negative here would cause.
 export const repeatBoundVarNeeded = (block, Blockly) => {
-  // controls_repeat (the older block, not in this app's own toolbox but
+  // controls_repeat (the older block, not in this app's  toolbox but
   // still valid in an existing saved project) uses a plain inline NUMBER
   // FIELD for TIMES, not a value input to plug expressions into - see the
   // generator's own "if (block.getField('TIMES'))" branch, which always
@@ -87,7 +87,7 @@ export const repeatBoundVarNeeded = (block, Blockly) => {
   if (!target) return true;
   if (target.type === 'variables_get') return false;
   if (target.type !== 'math_number') return true;
-  // Mirrors math_number's own generator (generators/bbasic/math.js) exactly -
+  // Mirrors math_number's  generator (generators/bbasic/math.js) exactly -
   // has to reproduce that same hex/binary/decimal parsing here rather than
   // just checking the raw field text, since a hex ("$1F") or binary
   // ("%1010") literal produces a CODE string ("$1F"/"%1010") that neither
@@ -121,13 +121,13 @@ export default (Blockly) => {
     let code = '';
     // "for X = 1 to <bound>" is a whitespace-sensitive positional
     // construct, same as "pfpixel X Y OPERATION" (see
-    // background_change_pixel's own comment in generators/bbasic/
-    // background.js) and wait_frames' own identical fix - a multi-token
+    // background_change_pixel's  comment in generators/bbasic/
+    // background.js) and wait_frames'  identical fix - a multi-token
     // bound (e.g. a Random block's own "(rand / 4) + 1", which has spaces
     // in it) breaks it, confirmed directly as a real build failure. A
     // plain number or bare variable name is already safe to use directly;
     // anything else needs pre-assigning to REPEAT_BOUND_VAR_NAME first
-    // (see its own comment above for why that, not temp1).
+    // (see its  comment above for why that, not temp1).
     let endVar = repeats;
     if (!repeats.match(/^\w+$/) && !Blockly.isNumber(repeats)) {
       endVar = Blockly.BBasic.nameDB_.getName(REPEAT_BOUND_VAR_NAME, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
@@ -140,17 +140,17 @@ export default (Blockly) => {
 
     // Kept as real, separate lines (never colon-joined onto one physical
     // line, as an earlier version of this did) - a loop body containing
-    // ANY block that emits its own label (controls_if's own "@ _if_N_bodyN"
+    // ANY block that emits its  label (controls_if's own "@ _if_N_bodyN"
     // goto targets, chief among them, but also score_set, background fades,
     // Text Minikernel blocks, etc.) breaks under colon-joining: a label has
-    // to sit at the START of its own line, and squashing it onto the same
+    // to sit at the START of its  line, and squashing it onto the same
     // line as neighboring statements via " : " produces a stray "@"
     // mid-statement - a real, reported compile error ("unrecognized
     // character '@'") from an "if" block nested inside a "repeat" block.
     // Plain multi-line "for X = 1 to Y" / body / "next" is standard,
     // already-proven-working batari Basic syntax (same shape
     // Blockly.BBasic.normalizeIndents() already handles correctly for every
-    // OTHER block's own multi-line, label-bearing output), so there was
+    // OTHER block's  multi-line, label-bearing output), so there was
     // never a real need to flatten this to one line in the first place.
     if (!branch.endsWith('\n')) branch += '\n';
     const counter = Blockly.BBasic.nameDB_.getName(REPEAT_COUNTER_VAR_NAME, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
@@ -169,18 +169,18 @@ export default (Blockly) => {
   // the main loop (gosub commongamelogic : drawscreen) so sprite colors, sizes,
   // animations and sound keep updating and the screen keeps drawing normally
   // during the wait, instead of freezing or losing the sprites. commongamelogic
-  // is fixed, always-bank-1 content (see bbasic.bb.hbs) - needs its own bank
+  // is fixed, always-bank-1 content (see bbasic.bb.hbs) - needs its  bank
   // tag whenever this block itself is relocated away from bank 1 (see
-  // bankJumpSuffix), same as generateGameLoopEvent's own identical fix.
+  // bankJumpSuffix), same as generateGameLoopEvent's  identical fix.
     const argument0 = Blockly.BBasic.valueToCode(block, 'FRAMES',
         Blockly.BBasic.ORDER_ASSIGNMENT) || '1';
     const suffix = Blockly.BBasic.bankJumpSuffix(Blockly.BBasic.getCurrentBank(), 1);
     const counter = Blockly.BBasic.nameDB_.getName(
         WAIT_FRAMES_COUNTER_VAR_NAME, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
     // NOT a "for X = 1 to <bound>" loop (what this used to be): that
-    // construct re-reads its own bound from memory every iteration rather
-    // than caching it once (see REPEAT_BOUND_VAR_NAME's own comment above),
-    // and this loop's own BODY unconditionally runs "gosub commongamelogic"
+    // construct re-reads its  bound from memory every iteration rather
+    // than caching it once (see REPEAT_BOUND_VAR_NAME's  comment above),
+    // and this loop's  BODY unconditionally runs "gosub commongamelogic"
     // every iteration, which itself always calls "gosub
     // _run_once_edge_reset" first thing, whose own hand-written asm
     // unconditionally does "STA temp1" - clobbering a temp1-held bound with
@@ -192,8 +192,8 @@ export default (Blockly) => {
     // the number actually entered, every single time.
     //
     // Rewritten as a plain count-DOWN-to-zero loop instead, using only
-    // this block's own already-reserved counter (see
-    // WAIT_FRAMES_COUNTER_VAR_NAME's own comment) as both the starting
+    // this block's  already-reserved counter (see
+    // WAIT_FRAMES_COUNTER_VAR_NAME's  comment) as both the starting
     // count AND the live remaining-count - nothing else in the compiler
     // ever touches this dedicated dev var, so there's no second "bound"
     // variable to reserve or clobber: each iteration just decrements it and

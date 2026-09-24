@@ -20,12 +20,12 @@ export const preprocessError = (code, e) => {
           const rest = parts[2];
           const sourceLine = codeLines[position - 1];
           // A line number can point past the end of `code` - the assembler
-          // stage's own errors (see hooks/bb-compiler.js's assemble())
+          // stage's  errors (see hooks/bb-compiler.js's assemble())
           // number lines within main.asm, the fully macro-expanded assembly
           // DASM actually saw, not the bBasic source passed in here, which
           // is far shorter - confirmed directly as the cause of a bare
           // "undefined" appearing where the source line should have been.
-          // That stage already embeds its own correctly-numbered context
+          // That stage already embeds its  correctly-numbered context
           // lines from main.asm directly in the message, so silently
           // omitting a mismatched line here (rather than printing
           // "undefined") just leaves that context as the only line shown,

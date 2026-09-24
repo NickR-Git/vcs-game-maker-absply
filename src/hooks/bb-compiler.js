@@ -3,7 +3,7 @@
 // Compiles batari Basic source through the real bB 1.9 toolchain (preprocess
 // -> 2600basic -> postprocess -> dasm), running the same WASI-target .wasm
 // binaries the user's local install uses, via an in-browser WASI shim -
-// bundled at public/bb19/ (see that directory's own layout, mirrored exactly
+// bundled at public/bb19/ (see that directory's  layout, mirrored exactly
 // from the real bB 1.9 distribution zip).
 //
 // This replaces the old "batari-basic" npm package, which turned out to be a
@@ -218,8 +218,8 @@ const postprocess = async (bBAsmContent, workDir, log) => {
 };
 
 // Shared with the success path below and with the error-path diagnostic
-// capture (see assemble()'s own comment on partialOutput/partialSymbolmap) -
-// factored out so both places parse DASM's own symbol table text identically
+// capture (see assemble()'s  comment on partialOutput/partialSymbolmap) -
+// factored out so both places parse DASM's  symbol table text identically
 // rather than risking the two drifting apart.
 const parseSymbolmap = (symText) => {
   const symbolmap = {};
@@ -254,8 +254,8 @@ const assemble = async (mainAsmContent, workDir, log) => {
   // that was never the actual problem.
   const errors = parseDasmErrors(r.stdout);
   // DASM writes main.bin/main.sym to the WASI filesystem as it goes, not
-  // only on a clean exit - runWasi's own rawFiles/dirs capture is
-  // unconditional (see its own comment), so whatever partial output/symbol
+  // only on a clean exit - runWasi's  rawFiles/dirs capture is
+  // unconditional (see its  comment), so whatever partial output/symbol
   // table DASM managed to produce before hitting a segment overflow is
   // already sitting right here, even though the two throws below used to
   // discard it. Attached to both thrown exceptions (as best-effort,
@@ -263,7 +263,7 @@ const assemble = async (mainAsmContent, workDir, log) => {
   // table at all for some failures, e.g. a genuine syntax error before pass
   // 2 ever starts) purely as diagnostic capture: hooks/rom.js's overflow
   // handling doesn't read these yet, this is step one of confirming
-  // whether DASM's own partial symbol table is even usable (specifically,
+  // whether DASM's  partial symbol table is even usable (specifically,
   // whether "scoretable" - the same symbol utils/rom-capacity.js's
   // computeRomCapacity keys off of - exists and is trustworthy in an
   // overflowed bank) before building anything that acts on it.
@@ -285,10 +285,10 @@ const assemble = async (mainAsmContent, workDir, log) => {
     // A generous window before the error (not just a few lines) - an
     // "Origin Reverse-indexed" failure is frequently reported several
     // "bank N"/ECHO-table entries after whatever content actually caused
-    // it (DASM's own running PC tracking doesn't go wrong until it reaches
+    // it (DASM's  running PC tracking doesn't go wrong until it reaches
     // the NEXT origin-setting directive, not at the true overflow point
     // itself), so seeing only a handful of lines right at the reported one
-    // routinely shows nothing but the compiler's own fixed boilerplate.
+    // routinely shows nothing but the compiler's  fixed boilerplate.
     const annotated = errors.map((err) => {
       const header = `Line ${err.line}: ${err.msg}`;
       if (!err.line || err.line < 1 || err.line > asmLines.length) return header;
@@ -305,7 +305,7 @@ const assemble = async (mainAsmContent, workDir, log) => {
     throw err;
   }
   if (!output || !symText) {
-    // Matches the old npm wrapper's own fallback message, which
+    // Matches the old npm wrapper's  fallback message, which
     // hooks/rom.js's isOverflowError() specifically looks for to trigger its
     // automatic event/graphics relocation retry. Only reached now when DASM
     // failed to produce output AND left no parseable error of its own -
@@ -332,7 +332,7 @@ const assemble = async (mainAsmContent, workDir, log) => {
  * score_graphics.asm).
  * @param {string} preprocessedCode
  * @param {!Object<string, string>} siblingFiles
- * @param {function(string)=} log Called with each underlying tool's own CLI
+ * @param {function(string)=} log Called with each underlying tool's  CLI
  *   invocation, and this stage's total elapsed time once both tools finish.
  * @return {!Promise<{mainAsm: string, workDir: !Object<string, string>}>}
  */
@@ -348,7 +348,7 @@ export const compileBatariBasicToAsm = async (preprocessedCode, siblingFiles, lo
  * binary.
  * @param {string} mainAsm
  * @param {!Object<string, string>} workDir
- * @param {function(string)=} log Called with the underlying tool's own CLI
+ * @param {function(string)=} log Called with the underlying tool's  CLI
  *   invocation, and this stage's elapsed time once it finishes.
  * @return {!Promise<{output: !Uint8Array, symbolmap: !Object<string, number>}>}
  */

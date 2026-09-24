@@ -4,8 +4,8 @@ import '@blockly/field-grid-dropdown';
 import {COLOR_ICON} from './icon';
 import {NTSC_COLORS} from '../utils/palette';
 
-// 28x28 (up from an original 16x16) - see App.vue's own global .blocklyMenuItem
-// padding override, which shrinks each grid cell's own frame to match: a
+// 28x28 (up from an original 16x16) - see App.vue's  global .blocklyMenuItem
+// padding override, which shrinks each grid cell's  frame to match: a
 // swatch this size fills its bordered cell edge to edge instead of floating
 // as a small square inside a much bigger padded frame.
 const SWATCH_SIZE = 28;

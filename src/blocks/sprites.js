@@ -25,7 +25,7 @@ const buildAnimationOptions = (storageFactory) => () => {
 // of options, and this one has to be rebuilt each time the dropdown opens.
 // Player 0 and Player 1 share this one combined block type (see PLAYER_OPTIONS'
 // own comment below for why) - no VAR-sync extension needed here unlike
-// buildCombinedPlayerVarBlocks' own get/set/change blocks, since the animation
+// buildCombinedPlayerVarBlocks'  get/set/change blocks, since the animation
 // list itself (buildAnimationOptions) is the SAME shared pool regardless of
 // which player is picked, not a player0-prefixed/player1-prefixed pair of
 // options like a real bB variable name would be.
@@ -42,7 +42,7 @@ const buildAnimationSelectBlock = ({icon, colour, storageFactory}) => {
               new Blockly.FieldDropdown(buildAnimationOptions(storageFactory)), 'VAR');
       this.setOutput(true, 'Number');
       this.setColour(colour);
-      // sprite_player_field_sync's own colour-sync half applies fine here
+      // sprite_player_field_sync's  colour-sync half applies fine here
       // too (VAR is an animation-list index, never "player0..."-prefixed,
       // so that extension's OTHER half - VAR translation - naturally never
       // matches and no-ops) - applied directly (not via 'extensions', which
@@ -86,8 +86,8 @@ const MISSILE_SIZE_OPTIONS = [
   ['8', '$30'],
 ];
 
-// Pixels moved per frame, each direction's own X and Y step (see
-// generators/bbasic/sprites.js's own generateMissileFireChecks) - a
+// Pixels moved per frame, each direction's  X and Y step (see
+// generators/bbasic/sprites.js's  generateMissileFireChecks) - a
 // bounded dropdown rather than a free-typed field, same "small fixed
 // choice" reasoning MISSILE_SIZE_OPTIONS above already uses.
 const MISSILE_FIRE_SPEED_OPTIONS = [
@@ -95,7 +95,7 @@ const MISSILE_FIRE_SPEED_OPTIONS = [
 ];
 
 // Same 0-7 clockwise-from-Up encoding as input_joyN_direction8 (see
-// blocks/input.js's own buildJoystickDirection8Block) - used for the Fire
+// blocks/input.js's  buildJoystickDirection8Block) - used for the Fire
 // block's own "Default direction" dropdown (see generateMissileFireChecks'
 // own trigger comment): whatever the user picks here is what actually fires
 // when the Angle input evaluates to 255 ("no clear direction" - e.g. the
@@ -133,11 +133,11 @@ const MISSILE_FIRE_DEFAULT_ANGLE_OPTIONS_16 = [
   ['↖ Up-Left', '14'],
   ['⬆ Up (leaning left)', '15'],
 ];
-// Dynamic dropdown generator (Blockly's own FieldDropdown constructor
+// Dynamic dropdown generator (Blockly's  FieldDropdown constructor
 // accepts a function as well as a plain array) - "this" is the FIELD
 // instance when Blockly calls this, per the standard dynamic-options
 // convention already used elsewhere in this codebase (e.g. blocks/
-// text-strings.js's own buildTextStringOptions). Reads the SIBLING
+// text-strings.js's  buildTextStringOptions). Reads the SIBLING
 // DIRECTIONS16 checkbox off the same block to decide which of the two
 // static lists above to show - falls back to the 8-way list if the block
 // isn't attached yet (the very first call, made by the FieldDropdown
@@ -149,21 +149,21 @@ const buildMissileFireDefaultAngleOptions = function() {
   return is16 ? MISSILE_FIRE_DEFAULT_ANGLE_OPTIONS_16 : MISSILE_FIRE_DEFAULT_ANGLE_OPTIONS_8;
 };
 // Wires the DIRECTIONS16 checkbox so toggling it both refreshes
-// DEFAULT_ANGLE's own dynamic option list (FieldDropdown caches its
-// generated menu - see registerDropdownFieldSyncExtension's own identical
+// DEFAULT_ANGLE's  dynamic option list (FieldDropdown caches its
+// generated menu - see registerDropdownFieldSyncExtension's  identical
 // "getOptions() before setValue()" gotcha above) AND translates whatever
 // value was already selected onto the new scale, the same doubling this
-// block's own generator already does at compile time for a 255 ("no clear
+// block's  generator already does at compile time for a 255 ("no clear
 // direction") fallback - so a project that already had e.g. "Right" (2)
 // picked before checking "16 directions" lands on the equivalent "Right"
 // (4) on the finer scale instead of silently becoming "Right (leaning up)".
 // Halving on the way back down floors to the nearest original compass
 // point, since a halfway direction has no exact 8-way equivalent. Also
-// busts DEFAULT_ANGLE's own option cache once unconditionally right after
+// busts DEFAULT_ANGLE's  option cache once unconditionally right after
 // setup, so a block loaded from a saved project with "16 directions"
 // already checked shows the right list immediately - a field's validator
 // never fires for a value that arrives via XML load with events suppressed
-// (see registerDropdownFieldSyncExtension's own comment on that exact
+// (see registerDropdownFieldSyncExtension's  comment on that exact
 // mechanism), so waiting for a live toggle to do this wouldn't cover that
 // case.
 const setupFireDefaultAngleSync = (block) => {
@@ -187,7 +187,7 @@ const setupFireDefaultAngleSync = (block) => {
 
 // Player 0 and Player 1 are otherwise-identical hardware players (same
 // register SHAPE, just player0* vs player1* real bB variable names - see
-// generators/bbasic/sprites.js's own ROM_NOISE_COLOR_REGISTERS comment for
+// generators/bbasic/sprites.js's  ROM_NOISE_COLOR_REGISTERS comment for
 // the one place they're genuinely different real registers, which is
 // data-driven by name already, not block-shape-driven), so every Player
 // block is a single combined type with this PLAYER dropdown instead of a
@@ -198,7 +198,7 @@ const setupFireDefaultAngleSync = (block) => {
 // same "one combined type, MISSILE dropdown instead of PLAYER" treatment
 // - see MISSILE_OPTIONS just below).
 // Labels are bare "0"/"1", not "Player 0"/"Player 1" - every combined
-// Player block's own message0 already has a static "Player" word right
+// Player block's  message0 already has a static "Player" word right
 // before this dropdown (see buildCombinedPlayerVarBlocks etc. below), so
 // full labels here would read as a doubled "Player Player 0" once placed.
 const PLAYER_OPTIONS = [['0', '0'], ['1', '1']];
@@ -211,7 +211,7 @@ const playerNameFromField = (block) => `player${block && block.getFieldValue('PL
 // as pure data, never branching on which one), just missile0*/missile1*
 // real bB variable names.
 // Same "bare 0/1, not Missile 0/Missile 1" reasoning as PLAYER_OPTIONS
-// above - every combined Missile block's own message0 already has a
+// above - every combined Missile block's  message0 already has a
 // static "Missile" word right before this dropdown.
 const MISSILE_OPTIONS = [['0', '0'], ['1', '1']];
 
@@ -221,11 +221,11 @@ const missileNameFromField = (block) => `missile${block && block.getFieldValue('
 // "dynamic options" FieldDropdown support blocks/bit.js's own
 // buildVariableField already relies on) - the real variable names
 // underneath (player0x vs player1x, etc.) depend on whichever player THIS
-// block's own PLAYER field currently holds, so a plain static option array
+// block's  PLAYER field currently holds, so a plain static option array
 // can't work once Player 0/1 share one block type. extraOptionsFor, when
 // given, appends whatever extra get-only/set-only options that block needs
 // (Frame for the getter, Visibility for the setter) - "change" passes
-// nothing, matching buildSpriteBlocks' own three-way options/writeOnly/
+// nothing, matching buildSpriteBlocks'  three-way options/writeOnly/
 // readOnly split below.
 const buildPlayerVarOptionsFn = (extraOptionsFor) => function() {
   // eslint-disable-next-line no-invalid-this
@@ -235,7 +235,7 @@ const buildPlayerVarOptionsFn = (extraOptionsFor) => function() {
 
 // Same reasoning as buildPlayerVarOptionsFn above, for the combined Missile
 // 0/1 get/set/change blocks - extraOptionsFor appends Width (set-only), the
-// missile equivalent of buildPlayerVarOptionsFn's own Frame/Visibility.
+// missile equivalent of buildPlayerVarOptionsFn's  Frame/Visibility.
 const buildMissileVarOptionsFn = (extraOptionsFor) => function() {
   // eslint-disable-next-line no-invalid-this
   const name = missileNameFromField(this.getSourceBlock());
@@ -250,7 +250,7 @@ const buildMissileVarOptionsFn = (extraOptionsFor) => function() {
 // hand-duplicated.
 //
 // Single extension covering BOTH concerns every combined block needs from
-// its own dropdown field - Blockly.Block.prototype.setOnChange (see its own
+// its  dropdown field - Blockly.Block.prototype.setOnChange (see its own
 // JSDoc) REPLACES any prior onchange handler rather than composing with it,
 // so this can't be split into two separate registered extensions (one per
 // concern) the way it reads more naturally; every block gets exactly one
@@ -261,7 +261,7 @@ const buildMissileVarOptionsFn = (extraOptionsFor) => function() {
 //    used to be, before they were combined into one type each (confirmed
 //    with the user: still wanted that same visual distinction, just driven
 //    by the dropdown now instead of by which block type was dragged out).
-//    Applied once immediately (a block's own initial colour, from its JSON
+//    Applied once immediately (a block's  initial colour, from its JSON
 //    'colour' key, is only ever right for the dropdown's default value) and
 //    again on every change.
 // 2. VAR sync (only for blocks that actually have a VAR field - get/set/
@@ -283,24 +283,27 @@ const buildMissileVarOptionsFn = (extraOptionsFor) => function() {
 // is constructed (Blockly.Xml.domToBlock, called with events off for
 // performance), so a block placed in the toolbox XML with e.g.
 // `<field name="PLAYER">1</field>` never fired the change this relied on
-// and stayed whatever colour PLAYER's own JSON default resolved to. A
+// and stayed whatever colour PLAYER's  JSON default resolved to. A
 // field's LOCAL VALIDATOR (this.getValidator()/setValidator()), by
 // contrast, is called unconditionally from inside setValue() itself,
 // BEFORE that same events-enabled check - runs every single time, XML load
-// or live user edit alike. Field.prototype.setValue's own oldValue read
+// or live user edit alike. Field.prototype.setValue's  oldValue read
 // happens AFTER the validator runs but BEFORE the new value is committed,
 // so the validator's own `this.getValue()` (this = the field) is still the
-// OLD value at the point it runs, and the validator's own newValue
+// OLD value at the point it runs, and the validator's  newValue
 // parameter is the incoming one - exactly the {old, new} pair this used to
 // read off the (unreliable) BlockChange event instead.
 //
-// VAR's own getOptions() (no cache arg) has to run BEFORE its setValue() -
-// same gotcha blocks/bit.js's own refreshVariableDropdownValue documents:
+// VAR's  getOptions() (no cache arg) has to run BEFORE its setValue() -
+// same gotcha blocks/bit.js's  refreshVariableDropdownValue documents:
 // the dropdown's dynamic options are cached until something invalidates
-// them, and setValue()'s own validation reads whatever's cached, so
+// them, and setValue()'s  validation reads whatever's cached, so
 // skipping the fresh getOptions() call would just validate the translated
 // value against the OLD option list instead of the new one.
-const registerDropdownFieldSyncExtension = (extensionName, dropdownFieldName, namePrefixFor) => {
+// Exported - blocks/input.js's combined Joystick 0/1 blocks reuse this
+// directly (same "dropdown drives colour + optional VAR-prefix translate"
+// shape) rather than duplicating it.
+export const registerDropdownFieldSyncExtension = (extensionName, dropdownFieldName, namePrefixFor) => {
   const colourFor = (value) => (value === '1' ? 'blue' : 'red');
   Blockly.Extensions.register(extensionName, function() {
     // eslint-disable-next-line no-invalid-this
@@ -662,7 +665,7 @@ const buildPlayerBlocks = ({icon, colour}) => {
     // ROM noise (above) sets a runtime "active" flag that keeps overriding
     // this player's graphic pointer every single frame, forever, once
     // triggered - a normal "Set animation" block alone can't undo that,
-    // since generateRomNoiseChecks' own per-frame override runs AFTER the
+    // since generateRomNoiseChecks'  per-frame override runs AFTER the
     // animation logic every frame and only ever gets set, never cleared
     // (confirmed as a real reported gap: "I want to be able to switch back
     // to using sprite graphics after using the noise block"). This just
@@ -691,7 +694,7 @@ const buildPlayerBlocks = ({icon, colour}) => {
     // A different color on every scanline of this player - a REAL, existing
     // batari Basic kernel feature ("playercolors"/"player1colors" kernel
     // options - see std_kernel.asm's own "ifnconst playercolors" checks),
-    // not built from scratch here. Deliberately its own separate block, not
+    // not built from scratch here. Deliberately its  separate block, not
     // a checkbox on sprite_*_rom_noise: this reads ROM bytes into
     // player0color/player1color the exact same "no data table, no ROM cost"
     // way the noise block reads them into player0pointer/player1pointer
@@ -733,14 +736,14 @@ const buildPlayerBlocks = ({icon, colour}) => {
     },
     // Same "active flag only ever gets set, never cleared" gap as
     // sprite_player_rom_noise_stop above, for the rainbow-colors trigger
-    // instead - see that block's own comment. One real difference: once
+    // instead - see that block's  comment. One real difference: once
     // "playercolors"/"player1colors" is in kernel_options at all, the
     // KERNEL itself always reads (player0color),y every scanline - there's
     // no way to turn that back into a plain flat COLUP0/COLUP1 color at
     // runtime, so this can't fully "undo" rainbow colors the way the ROM
     // noise stop block can fully undo noise. What it DOES do: with the
     // Options tab's "Enable per-row sprite colors" toggle on, each
-    // animation frame already declares its own real per-row color table
+    // animation frame already declares its  real per-row color table
     // (see generateAnimations in generators/bbasic.js) every time that
     // frame is (re)shown - clearing this flag lets THAT take back over,
     // the same "something else already reasserts every frame" mechanism
@@ -788,9 +791,9 @@ const SEEK_OBJECT_OPTIONS = [
 
 // Same colour-per-choice treatment as sprite_player_fade_colour_sync above,
 // generalized to OBJECT's 5-way pick instead of a 2-way one - reusing each
-// object's own individual block colour (red for either Player 0 or
+// object's  individual block colour (red for either Player 0 or
 // Missile 0, blue for either Player 1 or Missile 1, orange for Ball,
-// matching PLAYER_ICON/MISSILE_ICON/BALL_ICON's own call sites further down
+// matching PLAYER_ICON/MISSILE_ICON/BALL_ICON's  call sites further down
 // this file) rather than inventing a new palette just for this dropdown.
 const SEEK_OBJECT_COLOURS = {
   player0: 'red', player1: 'blue', missile0: 'red', missile1: 'blue', ball: '#ff8800',
@@ -802,7 +805,7 @@ const SEEK_OBJECT_COLOURS = {
 // flyout block is constructed) - a validator on the field itself runs
 // unconditionally on every setValue call instead, XML load or live edit
 // alike (confirmed as a real reported bug: toolbox flyout copies all
-// stayed the same colour regardless of their own preset OBJECT field).
+// stayed the same colour regardless of their  preset OBJECT field).
 Blockly.Extensions.register('object_seek_colour_sync', function() {
   // eslint-disable-next-line no-invalid-this
   const block = this;
@@ -812,6 +815,59 @@ Blockly.Extensions.register('object_seek_colour_sync', function() {
   objectField.setValidator((newValue) => {
     block.setColour(SEEK_OBJECT_COLOURS[newValue] || 'purple');
     return newValue;
+  });
+});
+
+// Hides DIRECTION/RATE/MAXSPEED/DIRECTIONS16_INPUT/FINE_INPUT entirely
+// while ACTION is "stop" on the combined sprite_inertia_accelerate block -
+// none of direction/rate/max speed/16-directions/Fine are read by the Stop
+// branch (see its generator comment in generators/bbasic/sprites.js), so
+// showing them just invites editing values that quietly do nothing, the
+// same "nothing useful to show" reasoning input_fire_pattern_frames_sync
+// uses for Fire's FRAMES field. DIRECTION/RATE/MAXSPEED are each already a
+// separate named "input_value"; DIRECTIONS16_INPUT/FINE_INPUT are each a
+// dedicated named "input_dummy" wrapping the 16-directions/Fine checkbox on
+// a dedicated message row (see the block definition's comment) - so every
+// one of the five can be looked up and hidden directly by name, no need
+// for a JS init()-style block definition just to name a wrapping input.
+// Validator-based, not setOnChange - same reasoning as
+// registerDropdownFieldSyncExtension's comment above.
+Blockly.Extensions.register('sprite_inertia_accelerate_action_sync', function() {
+  // eslint-disable-next-line no-invalid-this
+  const block = this;
+  const actionField = block.getField('ACTION');
+  if (!actionField) return;
+  const applyVisibility = (action) => {
+    // Bails entirely on an insertion marker (the ghost preview block
+    // Blockly clones while dragging a new copy out of the flyout, before
+    // it's a real connected block) - confirmed as a real reported crash
+    // otherwise: an insertion marker's fields exist but aren't backed by
+    // real SVG DOM nodes yet, so block.render() throws ("Cannot read
+    // properties of null (reading 'setAttribute')") trying to lay one out.
+    // Nothing needs to show/hide on a marker anyway - it's discarded the
+    // instant the drag ends, and this validator re-runs for real on the
+    // actual dropped block once the drag finishes.
+    if (typeof block.isInsertionMarker === 'function' && block.isInsertionMarker()) return;
+    const shouldBeVisible = action !== 'stop';
+    let changed = false;
+    ['DIRECTION', 'RATE', 'MAXSPEED', 'DIRECTIONS16_INPUT', 'FINE_INPUT'].forEach((name) => {
+      const input = block.getInput(name);
+      if (!input || input.isVisible() === shouldBeVisible) return;
+      input.setVisible(shouldBeVisible);
+      changed = true;
+    });
+    // Same headless-workspace guard as input_fire_pattern_frames_sync -
+    // block.render()/workspace.resizeContents() are RenderedConnection/
+    // WorkspaceSvg-only, and ROM builds run blocks through a plain
+    // headless Blockly.Workspace with no rendering at all.
+    if (!changed || !block.workspace || !block.workspace.rendered) return;
+    if (typeof block.render === 'function') block.render();
+    if (block.workspace.resizeContents) block.workspace.resizeContents();
+  };
+  applyVisibility(actionField.getValue());
+  actionField.setValidator((newValue) => {
+    applyVisibility(newValue);
+    return undefined;
   });
 });
 
@@ -873,8 +929,8 @@ Blockly.defineBlocksWithJsonArray([
   // 'Boolean' with no outputShape override, the same "classic" connector
   // every other boolean-pluggable block here already uses), true from the
   // moment a matching object_seek_to block (same OBJECT choice) actually
-  // reaches its own target X/Y, until the next time that object's own Seek
-  // target is set again (object_seek_to's own generator clears this bit
+  // reaches its  target X/Y, until the next time that object's  Seek
+  // target is set again (object_seek_to's  generator clears this bit
   // right when it (re)triggers - see generators/bbasic/sprites.js). A seek
   // that starts already at its target (nothing to actually step) never sets
   // this - there's no real arrival to report if it was already there before
@@ -907,15 +963,42 @@ Blockly.defineBlocksWithJsonArray([
   // ANGLE field - lets it be wired straight from a "Joystick direction
   // (8-way)" block for continuous joystick-driven thrust, not just typed
   // in as a literal.
+  // Combined Start/Stop, same "one block, ACTION dropdown up front" shape
+  // as sprite_inertia_decelerate below (was two separate block types,
+  // sprite_inertia_accelerate and sprite_inertia_stop_accelerate, per an
+  // explicit request to match Decelerate's shape) - DIRECTION/RATE/MAXSPEED
+  // hide entirely while ACTION is Stop (see sprite_inertia_accelerate_
+  // action_sync's comment above for why). Old projects using the two
+  // separate block types are auto-migrated on load - see
+  // hooks/migrate-inertia-accelerate-blocks.js.
   {
     'type': 'sprite_inertia_accelerate',
-    'message0': `${INERTIA_ICON} Accelerate %1 toward direction %2 by %3, max speed %4`,
+    'message0': `${INERTIA_ICON} %1 Accelerate %2 %3 toward direction %4 by %5, max speed %6`,
     'args0': [
+      {
+        'type': 'field_dropdown',
+        'name': 'ACTION',
+        'options': [['Start', 'start'], ['Stop', 'stop']],
+      },
       {
         'type': 'field_dropdown',
         'name': 'OBJECT',
         'options': SEEK_OBJECT_OPTIONS,
       },
+      // Forces ACTION/OBJECT above onto a separate input instead of being
+      // swept into DIRECTION's - Blockly's JSON interpolation attaches any
+      // fields with no input between them and the NEXT value/statement/
+      // dummy input onto THAT next input (confirmed directly against
+      // Blockly.Block.prototype.interpolateArguments_/jsonInit_'s
+      // fieldStack logic), so without this, DIRECTION's hidden/shown
+      // input.setVisible() call in sprite_inertia_accelerate_action_sync
+      // below was ALSO hiding ACTION and OBJECT - a real reported bug
+      // ("every field gets hidden ... except 16 directions and fine",
+      // i.e. everything sharing DIRECTION's input). inputsInline (below)
+      // still renders this on the same line as everything else, same as
+      // input_joystick_fire_pattern's separately-named FRAMES_INPUT
+      // dummy achieves for the same reason.
+      {'type': 'input_dummy'},
       {
         'type': 'input_value',
         'name': 'DIRECTION',
@@ -932,54 +1015,63 @@ Blockly.defineBlocksWithJsonArray([
         'check': 'Number',
       },
     ],
-    'message1': '16 directions %1',
+    // Trailing named "input_dummy" on each row (rather than just a bare
+    // checkbox) - same "give the field an addressable wrapping input"
+    // reasoning as the DIRECTION-row's dummy above: with no input to
+    // its OWN name, a message1/message2 row's checkbox would otherwise get
+    // wrapped in an ANONYMOUS auto-created dummy input Blockly.Block.
+    // prototype.interpolate_ generates for any fields left unclaimed at
+    // the end of a message row - impossible to look up and hide later.
+    'message1': '%1 16 directions %2',
     'args1': [
       {
         'type': 'field_checkbox',
         'name': 'DIRECTIONS16',
         'checked': false,
       },
+      {'type': 'input_dummy', 'name': 'DIRECTIONS16_INPUT'},
+    ],
+    'message2': '%1 Fine %2',
+    'args2': [
+      {
+        'type': 'field_checkbox',
+        'name': 'FINE',
+        'checked': false,
+      },
+      {'type': 'input_dummy', 'name': 'FINE_INPUT'},
     ],
     'inputsInline': true,
     'previousStatement': null,
     'nextStatement': null,
     'colour': 'purple',
-    'extensions': ['object_seek_colour_sync'],
-    'tooltip': 'Starts accelerating the chosen player/missile/ball toward the given direction - ' +
-      'every frame from now on, its velocity moves "rate" closer to that direction\'s own X/Y, up ' +
-      'to "max speed" per axis, until "Stop accelerating" runs. Direction is 0-7 (0=Up, 1=Up-Right, ' +
+    'extensions': ['object_seek_colour_sync', 'sprite_inertia_accelerate_action_sync'],
+    'tooltip': 'Start: begins accelerating the chosen player/missile/ball toward the given ' +
+      'direction - every frame from now on, its velocity moves "rate" closer to that direction\'s ' +
+      'X/Y, up to "max speed" per axis, until Stop runs. Direction is 0-7 (0=Up, 1=Up-Right, ' +
       '2=Right, 3=Down-Right, 4=Down, 5=Down-Left, 6=Left, 7=Up-Left, clockwise from Up, same scale ' +
       'as "Fire") - or 0-15 on the same clockwise-from-Up scale, if "16 directions" below is checked, ' +
       'same coarse approximation "Fire"\'s own 16-direction mode uses (the 8 extra directions each ' +
       'push their dominant axis at the full rate and the other axis at half rate). Plug in a ' +
       '"Joystick direction (8-way)" block for player-controlled thrust, or a plain number for a ' +
-      'fixed direction. Running this again while already accelerating just updates the direction/' +
-      'rate/max speed in place, without resetting velocity. Velocity keeps moving the object every ' +
-      'frame on its own once accelerated at all, even after "Stop accelerating" - use "Decelerate" ' +
-      'to actually slow it back down.',
-  },
-  {
-    'type': 'sprite_inertia_stop_accelerate',
-    'message0': `${INERTIA_ICON} Stop accelerating %1`,
-    'args0': [
-      {
-        'type': 'field_dropdown',
-        'name': 'OBJECT',
-        'options': SEEK_OBJECT_OPTIONS,
-      },
-    ],
-    'previousStatement': null,
-    'nextStatement': null,
-    'colour': 'purple',
-    'extensions': ['object_seek_colour_sync'],
-    'tooltip': 'Stops accelerating the chosen player/missile/ball - its velocity is left exactly ' +
-      'where it is (still moving the object every frame) unless "Decelerate" is also turned on for ' +
-      'it, same as taking your foot off the gas rather than braking.',
+      'fixed direction. Running Start again while already accelerating just updates the direction/' +
+      'rate/max speed in place, without resetting velocity. Stop: velocity is left exactly where it ' +
+      'is (still moving the object every frame) unless "Decelerate" is also turned on for it, same ' +
+      'as taking your foot off the gas rather than braking - use "Decelerate" to actually slow it ' +
+      'back down. "Fine": rate becomes a fraction of a pixel per frame (0-255, representing ' +
+      '0-255/256ths) instead of whole pixels, so acceleration/movement can ramp up and down more ' +
+      'gradually - costs 2 extra hidden bytes per axis, and can\'t be combined with 16 directions. ' +
+      'Turning this on or off must match whatever "Decelerate" (if any) uses for the same object - ' +
+      'mixing Fine and non-Fine on the same object between the two blocks isn\'t supported.',
   },
   {
     'type': 'sprite_inertia_decelerate',
-    'message0': `${INERTIA_ICON} Decelerate %1 by %2: %3`,
+    'message0': `${INERTIA_ICON} %1 Decelerate %2 by %3`,
     'args0': [
+      {
+        'type': 'field_dropdown',
+        'name': 'ACTION',
+        'options': [['Start', 'start'], ['Stop', 'stop']],
+      },
       {
         'type': 'field_dropdown',
         'name': 'OBJECT',
@@ -990,10 +1082,13 @@ Blockly.defineBlocksWithJsonArray([
         'name': 'RATE',
         'check': 'Number',
       },
+    ],
+    'message1': '%1 Fine',
+    'args1': [
       {
-        'type': 'field_dropdown',
-        'name': 'ACTION',
-        'options': [['Start', 'start'], ['Stop', 'stop']],
+        'type': 'field_checkbox',
+        'name': 'FINE',
+        'checked': false,
       },
     ],
     'inputsInline': true,
@@ -1003,9 +1098,16 @@ Blockly.defineBlocksWithJsonArray([
     'extensions': ['object_seek_colour_sync'],
     'tooltip': 'Start: every frame from now on, the chosen player/missile/ball\'s own velocity ' +
       'moves "rate" closer to 0 per axis (real friction/drag), clamped at exactly 0 so it never ' +
-      'overshoots into moving the opposite way - until Stop turns it back off. Independent of ' +
+      'overshoots into moving the opposite way - turns itself back off automatically once velocity ' +
+      'reaches exactly 0 on both axes, same as running "Stop", so it stops re-checking already-' +
+      'stopped movement every frame; running Start again always turns it back on. Independent of ' +
       'Accelerate - an object can accelerate and decelerate at the same time (net effect: whichever ' +
-      'rate wins that frame), or decelerate on its own to coast to a stop after "Stop accelerating".',
+      'rate wins that frame), or decelerate on its own to coast to a stop after "Stop accelerating". ' +
+      '"Fine": rate becomes a fraction of a pixel per frame (0-255, representing 0-255/256ths) ' +
+      'instead of whole pixels, and movement itself slows through sub-1-pixel-per-frame speeds ' +
+      '(skipping frames automatically) as it approaches 0, instead of jumping straight from 1px/' +
+      'frame to a dead stop - costs 2 extra hidden bytes per axis. Must match whatever "Accelerate" ' +
+      '(if any) uses for the same object.',
   },
   // One block, OBJECT dropdown covers all 5 names (same shape as
   // object_seek_to/the Inertia blocks above) - replaces the old, separate
@@ -1014,10 +1116,10 @@ Blockly.defineBlocksWithJsonArray([
   // not to have separate blocks for the same functionality. Old projects
   // using the previous block types are auto-migrated on load - see
   // hooks/migrate-bounce-blocks.js. Reflects whichever movement system(s)
-  // the chosen object actually uses: Fire's own angle (missile/ball only,
-  // unchanged Combat-style guessing), Inertia's own velocity (any of the
+  // the chosen object actually uses: Fire's  angle (missile/ball only,
+  // unchanged Combat-style guessing), Inertia's  velocity (any of the
   // 5), or both at once if both are in play on the same object - see this
-  // block's own generator for exactly how.
+  // block's  generator for exactly how.
   {
     'type': 'object_bounce',
     'message0': `${INERTIA_ICON} Bounce %1`,
@@ -1046,11 +1148,11 @@ Blockly.defineBlocksWithJsonArray([
 ]);
 
 // Every object_seek_arrived block resolved to the OBJECT name(s) it actually
-// watches - needed early (bbasic.js's own init(), before reserveDevVar hands
+// watches - needed early (bbasic.js's  init(), before reserveDevVar hands
 // out user variable letters) so seekArrivedFlagsVarName only gets reserved
 // when at least one such watch really exists, same reasoning as
 // resolveBackgroundFadeFinishedWatches in blocks/background.js. Unlike that
-// one, no separate "watch key" function is needed - OBJECT's own value
+// one, no separate "watch key" function is needed - OBJECT's  value
 // (player0/player1/missile0/missile1/ball) already is the key.
 export const resolveSeekArrivedWatches = (workspace) => {
   const watched = new Set();
@@ -1062,7 +1164,7 @@ export const resolveSeekArrivedWatches = (workspace) => {
   return watched;
 };
 
-// Missile-only (NUSIZ0/1 width/copies) - the ball has its own separate
+// Missile-only (NUSIZ0/1 width/copies) - the ball has its  separate
 // width mechanism (CTRLPF, see reserveCtrlpfShadowDevVar in
 // generators/bbasic/sprites.js), so this is never called for it.
 // Missile 0/1 only (never had a Ball equivalent at all - Ball's width is
@@ -1100,14 +1202,14 @@ const buildMissileSizeBlock = ({icon, colour}) => {
 // generators/bbasic/sprites.js for the fully name-generic trigger/per-frame
 // movement this drives; nothing here is missile-specific. Defined in JS
 // rather than the JSON array shape every other block in this file uses, so
-// DEFAULT_ANGLE's own dropdown can be backed by a function (see
-// buildMissileFireDefaultAngleOptions' own comment) - same reasoning
-// text_minikernel_show_named's own comment in blocks/text-minikernel.js
+// DEFAULT_ANGLE's  dropdown can be backed by a function (see
+// buildMissileFireDefaultAngleOptions'  comment) - same reasoning
+// text_minikernel_show_named's  comment in blocks/text-minikernel.js
 // gives for the identical choice there.
 const buildFireBlock = ({name, description, icon, colour}) => {
   // Fires this missile from the given starting X/Y, moving at the given
   // angle/speed until it goes off-screen, where it just stops (see
-  // generateMissileFireChecks) - its own Height/visibility is left
+  // generateMissileFireChecks) - its  Height/visibility is left
   // entirely to the existing "sprite_<name>_set" block, never touched
   // here, so it doesn't change size or disappear on its own.
   Blockly.Blocks[`sprite_${name}_fire`] = {
@@ -1127,11 +1229,11 @@ const buildFireBlock = ({name, description, icon, colour}) => {
           .appendField('speed')
           .appendField(new Blockly.FieldDropdown(MISSILE_FIRE_SPEED_OPTIONS), 'SPEED');
       this.appendDummyInput()
-          .appendField('throttle movement')
-          .appendField(new Blockly.FieldCheckbox('FALSE'), 'THROTTLE');
+          .appendField(new Blockly.FieldCheckbox('FALSE'), 'THROTTLE')
+          .appendField('throttle movement');
       this.appendDummyInput()
-          .appendField('16 directions')
-          .appendField(new Blockly.FieldCheckbox('FALSE'), 'DIRECTIONS16');
+          .appendField(new Blockly.FieldCheckbox('FALSE'), 'DIRECTIONS16')
+          .appendField('16 directions');
       this.setInputsInline(true);
       this.setPreviousStatement(true, null);
       this.setNextStatement(true, null);
@@ -1181,22 +1283,22 @@ const buildFireBlock = ({name, description, icon, colour}) => {
 // keeps guessing differently each consecutive stuck frame (next try: mirror
 // as if it was a horizontal wall instead), and after a few frames still
 // stuck, gives up and just reverses the original heading outright (assume a
-// corner). See generateMissileFireChecks' own comment in
+// corner). See generateMissileFireChecks'  comment in
 // generators/bbasic/sprites.js for the exact stage sequence and how
 // "consecutive" is detected. No built-in screen-edge or collision detection
 // of its own (confirmed with the user: no "gravity"/physics beyond this) -
 // place this behind whatever collision check (e.g. collision_get) or
-// screen-edge check the user's own project already needs, same "trigger
+// screen-edge check the user's  project already needs, same "trigger
 // block, no detection built in" shape as sprite_*_fire itself leaving
 // throttling/rate-limiting up to the user. Meant to be called EVERY frame
 // the collision persists, not just once - unlike a plain one-shot flip, this
 // only makes its intended guess/guess/give-up progression if it keeps being
 // called each frame the object is still stuck.
-// Missile 0/1's own combined Fire block - same shape as buildFireBlock
-// above (which stays as-is, still used for Ball's own separate, never-
+// Missile 0/1's  combined Fire block - same shape as buildFireBlock
+// above (which stays as-is, still used for Ball's  separate, never-
 // combined sprite_ball_fire), just with a MISSILE dropdown prepended and
 // missile-generic tooltip text instead of a fixed ${description}. Defined
-// in JS for the same reason buildFireBlock above is - see its own comment.
+// in JS for the same reason buildFireBlock above is - see its  comment.
 const buildCombinedMissileFireBlock = ({icon, colour}) => {
   Blockly.Blocks['sprite_missile_fire'] = {
     init: function() {
@@ -1218,11 +1320,11 @@ const buildCombinedMissileFireBlock = ({icon, colour}) => {
           .appendField('speed')
           .appendField(new Blockly.FieldDropdown(MISSILE_FIRE_SPEED_OPTIONS), 'SPEED');
       this.appendDummyInput()
-          .appendField('throttle movement')
-          .appendField(new Blockly.FieldCheckbox('FALSE'), 'THROTTLE');
+          .appendField(new Blockly.FieldCheckbox('FALSE'), 'THROTTLE')
+          .appendField('throttle movement');
       this.appendDummyInput()
-          .appendField('16 directions')
-          .appendField(new Blockly.FieldCheckbox('FALSE'), 'DIRECTIONS16');
+          .appendField(new Blockly.FieldCheckbox('FALSE'), 'DIRECTIONS16')
+          .appendField('16 directions');
       this.setInputsInline(true);
       this.setPreviousStatement(true, null);
       this.setNextStatement(true, null);
@@ -1266,11 +1368,11 @@ const buildCombinedMissileFireBlock = ({icon, colour}) => {
 // Player 0 and Player 1 share these three combined block families now (see
 // PLAYER_OPTIONS' own comment in buildCombinedPlayerVarBlocks above). The
 // 'colour' passed here is only ever the construction-time placeholder,
-// immediately overridden by sprite_player_field_sync's own colour-sync half
+// immediately overridden by sprite_player_field_sync's  colour-sync half
 // (red for Player 0, blue for Player 1 - the same colours the old separate
 // sprite_player0_*/sprite_player1_* blocks used to be, restored per the
-// user's own follow-up request after this refactor first shipped them all
-// as a single flat purple) - 'red' here just matches PLAYER's own default.
+// user's  follow-up request after this refactor first shipped them all
+// as a single flat purple) - 'red' here just matches PLAYER's  default.
 buildCombinedPlayerVarBlocks({
   icon: PLAYER_ICON,
   colour: 'red',
@@ -1290,7 +1392,7 @@ buildAnimationSelectBlock({
 // Missile 0/1 share these four combined block families now (see
 // MISSILE_OPTIONS' own comment above) - 'colour' is only ever the
 // construction-time placeholder, immediately overridden by
-// sprite_missile_field_sync's own colour-sync half (red for Missile 0,
+// sprite_missile_field_sync's  colour-sync half (red for Missile 0,
 // blue for Missile 1, the same colours the old separate
 // sprite_missile0_*/sprite_missile1_* blocks used to be).
 buildCombinedMissileVarBlocks({
@@ -1366,7 +1468,7 @@ Blockly.defineBlocksWithJsonArray([
 // Also fades the matching missile (missile0 for Player 0, missile1 for
 // Player 1) with no extra code needed: real 2600 hardware has no separate
 // missile color register at all - missile0 always draws using COLUP0 (the
-// exact same register Player 0's own color lives in), missile1 uses COLUP1 -
+// exact same register Player 0's  color lives in), missile1 uses COLUP1 -
 // so fading player0realcolor/player1realcolor (which feed COLUP0/COLUP1
 // every frame - see bbasic.bb.hbs's own "COLUP0 = player0realcolor") already
 // fades whichever missile is paired with that player too.
@@ -1380,9 +1482,9 @@ const PLAYER_FADE_COLOUR = 'red';
 // registerDropdownFieldSyncExtension above already gives the combined
 // sprite_player_get/set/change/etc. blocks (confirmed with the user) -
 // simpler here since VAR IS the player choice itself (no separate PLAYER
-// field to translate anything against), so this is its own small extension
+// field to translate anything against), so this is its  small extension
 // rather than reusing that generic factory. Validator-based, not
-// setOnChange - see registerDropdownFieldSyncExtension's own comment above
+// setOnChange - see registerDropdownFieldSyncExtension's  comment above
 // for why (setOnChange never fires for a toolbox flyout block built from
 // XML with events disabled).
 Blockly.Extensions.register('sprite_player_fade_colour_sync', function() {
@@ -1455,7 +1557,7 @@ Blockly.Blocks['sprite_player_fade_finished'] = {
 };
 
 // Plain, always-current boolean read of the active bit - same shape as
-// background_fade_active's own generator (see blocks/background.js's own
+// background_fade_active's  generator (see blocks/background.js's own
 // comment), just choosing between Player 0/Player 1 instead of Background/
 // Playfield.
 Blockly.Blocks['sprite_player_fade_active'] = {

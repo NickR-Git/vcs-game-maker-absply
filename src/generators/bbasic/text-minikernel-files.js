@@ -1,10 +1,10 @@
 'use strict';
 
-// The Text Minikernel's own text12a.asm/text12b.asm, and the extended
+// The Text Minikernel's  text12a.asm/text12b.asm, and the extended
 // score_graphics.asm bundled with it (adds the fontstyle-based font
 // selection text12a.asm reads to shrink the score row so text fits
 // underneath it - the stock score_graphics.asm doesn't have this, and it's
-// also offered on its own as the "Squish" score font option - see
+// also offered on its  as the "Squish" score font option - see
 // utils/score-font.js/SQUISH_SCORE_FONT - independent of whether the Text
 // Minikernel itself is in use). Fetched once and cached; hooks/rom.js places
 // these as siblings of the compiled source throughout the whole compile
@@ -27,9 +27,9 @@ export const getExtendedScoreGraphics = () => {
 // folded into getTextMinikernelSiblingFiles below) so utils/text-font.js can
 // fetch this same content on its own: once to parse the built-in glyph
 // shapes for a fresh Text Font Editor (getDefaultTextFont), and again to
-// build a byte-for-byte override splicing the user's own edited glyphs in
+// build a byte-for-byte override splicing the user's  edited glyphs in
 // (buildTextFontOverride) - both need the real pristine bytes as their
-// starting point, the same way score font's own buildScoreFontOverride
+// starting point, the same way score font's  buildScoreFontOverride
 // starts from getPristineScoreGraphics (utils/score-font.js).
 let pristineText12bPromise = null;
 export const getPristineText12b = () => {

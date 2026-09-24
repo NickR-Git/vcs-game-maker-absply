@@ -96,7 +96,7 @@
                             </v-list-item-icon>
                             <v-list-item-title>Yes, delete</v-list-item-title>
                           </v-list-item>
-                          <v-list-item>
+                          <v-list-item link>
                             <v-list-item-icon>
                               <v-icon>mdi-cancel</v-icon>
                             </v-list-item-icon>
@@ -169,7 +169,7 @@
                                       </v-list-item-icon>
                                       <v-list-item-title>Yes, delete</v-list-item-title>
                                     </v-list-item>
-                                    <v-list-item>
+                                    <v-list-item link>
                                       <v-list-item-icon>
                                         <v-icon>mdi-cancel</v-icon>
                                       </v-list-item-icon>
@@ -430,9 +430,9 @@ export default defineComponent({
     };
 
     const cardWidth = (card) => (TITLE_SCREEN_KERNEL_TYPES[card.type] || {width: 48}).width;
-    // Matches BackgroundEditor.vue's own per-column pixel scale reasoning
+    // Matches BackgroundEditor.vue's  per-column pixel scale reasoning
     // (a fixed on-screen size per source pixel) - without this, the pixel
-    // editor's canvas (see PixelEditor.vue's own aspectRatio/proportion-
+    // editor's canvas (see PixelEditor.vue's  aspectRatio/proportion-
     // wrapper trick) stretches to fill whatever width its flex parent
     // happens to have, rendering way oversized/undersized instead of at a
     // consistent, legible scale.
@@ -446,9 +446,9 @@ export default defineComponent({
       return card.type;
     };
 
-    // Same reasoning as BackgroundEditor.vue's own editorRowColors - without
-    // this, PixelEditor.vue's own canvas always draws "on" pixels in the
-    // single fgColor regardless of a card's own row colors, which only ever
+    // Same reasoning as BackgroundEditor.vue's  editorRowColors - without
+    // this, PixelEditor.vue's  canvas always draws "on" pixels in the
+    // single fgColor regardless of a card's  row colors, which only ever
     // showed up in the sidebar strip, never the actual drawing preview
     // (confirmed as a real, reported bug). A pure black row ($00) is nudged
     // to near-black so the editor still counts those pixels as "on" rather
@@ -461,12 +461,12 @@ export default defineComponent({
       });
     };
 
-    // A 48x1 card (no row colors) has its own single fixed color
+    // A 48x1 card (no row colors) has its  single fixed color
     // (card.color) instead - PixelEditor.vue only ever falls back to its
     // own fgColor prop when rowColors is null (see its own "(this.rowColors
     // && this.rowColors[y]) || this.fgColor"), which this used to hardcode
     // to plain white regardless of card.color - a real reported bug (48x1
-    // cards never previewed their own picked color, always drawing white).
+    // cards never previewed their  picked color, always drawing white).
     // Irrelevant for a row-color card (editorRowColors above always wins
     // there), but still needs SOME value - white matches the old hardcoded
     // default for that case. Same black-nudge as editorRowColors above, for
@@ -490,10 +490,10 @@ export default defineComponent({
     // each bitmap type (see public/bb19/titlescreen/*_kernel.asm) - "space"
     // has no such limit, it's just a plain WSYNC loop. That pool is shared
     // across EVERY title screen page in the project (see
-    // generators/bbasic/titlescreen.js's own assignKernelSlots), not one
+    // generators/bbasic/titlescreen.js's  assignKernelSlots), not one
     // pool per page, so this counts cards on every page, not just the one
     // currently being edited. "player"/"score" have their own, much smaller
-    // limits (MAX_PLAYER_CARDS/MAX_SCORE_CARDS - see their own comments in
+    // limits (MAX_PLAYER_CARDS/MAX_SCORE_CARDS - see their  comments in
     // blocks/titlescreen.js) since there's only ever one of each minikernel
     // project-wide, not a numbered pool of 8.
     const countOfType = (type) => state.value.screens
@@ -532,11 +532,11 @@ export default defineComponent({
       instance.proxy.$forceUpdate();
     };
 
-    // Animation dropdown options for a "player" card's own Player 0/1
+    // Animation dropdown options for a "player" card's  Player 0/1
     // fields - both dropdowns share the same pool of animations now (see
     // hooks/project.js's usePlayerAnimationsStorage), same "index into the
     // pool, storage read fresh every call" convention as blocks/sprites.js's
-    // own buildAnimationOptions (see its own comment), so a renamed/added
+    // own buildAnimationOptions (see its  comment), so a renamed/added
     // animation shows up here without a reload. An empty option lets a card
     // draw just one of the two players, falling back to a single blank row
     // for the other (see resolvePlayerSlotFrames in generators/bbasic/
@@ -566,8 +566,8 @@ export default defineComponent({
       handleChildChange();
     };
 
-    // Clearing a card's own graphic (PixelEditor.vue's own "clear" event,
-    // separate from an ordinary pixel edit) resets its own color field(s)
+    // Clearing a card's  graphic (PixelEditor.vue's own "clear" event,
+    // separate from an ordinary pixel edit) resets its  color field(s)
     // back to the same default handleAddCard itself starts a new card at,
     // rather than leaving old picks behind on an otherwise blank card.
     const handleClearCardColors = (card) => {
@@ -579,11 +579,11 @@ export default defineComponent({
       handleChildChange();
     };
 
-    // Keeps rowColors in sync with the image's own current height whenever
-    // the pixel editor's own height changes (drawing taller/shorter,
+    // Keeps rowColors in sync with the image's  current height whenever
+    // the pixel editor's  height changes (drawing taller/shorter,
     // resizing, importing a differently-sized image) - same
     // pad-or-truncate-without-clobbering-existing-picks reasoning as
-    // PlayerEditor.vue's own ensureRowColors.
+    // PlayerEditor.vue's  ensureRowColors.
     const ensureRowColors = (card) => {
       if (!cardHasRowColors(card)) return;
       const rows = card.pixels.length || 1;
@@ -609,8 +609,8 @@ export default defineComponent({
     collapseAllScreens();
 
     // Card collapse state is shared across every screen (one storage
-    // namespace, same as every other tab), but a card's own id is only
-    // unique WITHIN its screen (see handleAddCard's own getMaxId, scoped
+    // namespace, same as every other tab), but a card's  id is only
+    // unique WITHIN its screen (see handleAddCard's  getMaxId, scoped
     // per screen) - so two different screens' cards can share the same raw
     // id. cardCollapseKey combines both into one id useCollapsedIds can
     // safely key on without those colliding.
@@ -630,11 +630,11 @@ export default defineComponent({
         },
     );
 
-    // One useDragReorder instance PER SCREEN (each screen's own card list
+    // One useDragReorder instance PER SCREEN (each screen's  card list
     // reorders independently) - useDragReorder is a plain factory (see
     // hooks/drag-reorder.js), not a Vue lifecycle hook, so it's safe to call
     // more than once/lazily like this. Cached by screen id so every card in
-    // the same screen shares one instance (its own draggedIndex/
+    // the same screen shares one instance (its  draggedIndex/
     // dragOverIndex refs), rather than creating a fresh, disconnected one
     // per card.
     const cardDragReordersByScreen = new Map();
@@ -657,8 +657,8 @@ export default defineComponent({
 
     // Purely a visual "which card am I looking at" marker, plain local
     // component state - same reasoning/shape as every other tab's own
-    // selectCard/deselectCard (see e.g. MusicEditor.vue's own comment).
-    // Screens get their own separate selection (a page and a graphic card
+    // selectCard/deselectCard (see e.g. MusicEditor.vue's  comment).
+    // Screens get their  separate selection (a page and a graphic card
     // are never the same thing to have "selected" at once).
     const selectedCardId = ref(null);
     const selectCard = (id) => {
@@ -698,7 +698,7 @@ export default defineComponent({
   margin-bottom: 16px;
 }
 
-/* Same reasoning as BackgroundEditor.vue's own identical rule - keeps
+/* Same reasoning as BackgroundEditor.vue's  identical rule - keeps
    editor-zoom and pixel-grid-toggle on one visually-centered line. */
 .editor-toolbar-row {
   display: flex;
@@ -709,7 +709,7 @@ export default defineComponent({
   margin-top: 16px;
 }
 
-/* hooks/drag-reorder.js's own CSS_CLASS_DRAGGING/CSS_CLASS_DRAG_OVER -
+/* hooks/drag-reorder.js's  CSS_CLASS_DRAGGING/CSS_CLASS_DRAG_OVER -
    applying those classes alone does nothing without the actual visual
    rule for them, which this tab never had (confirmed as a real bug: the
    classes WERE being toggled correctly, just invisible). Same top-border
@@ -724,14 +724,14 @@ export default defineComponent({
   border-top: 3px solid var(--v-primary-base, #1976d2) !important;
 }
 
-/* v-list-item's own default 0 16px padding stacks on top of v-card-text's,
+/* v-list-item's  default 0 16px padding stacks on top of v-card-text's,
    pushing every card in further on the right than the left - same fix as
    BackgroundEditor.vue's own identical rule (see its own comment). */
 .entry-list-item {
   padding: 0;
 }
 
-/* Same fix as DataEditor.vue's own identical rule: without this,
+/* Same fix as DataEditor.vue's  identical rule: without this,
    .v-list-item__content's default overflow: hidden clips a selected card's
    own 2px outline on its left/right edges (min-width: 0 has to come with
    it - overflow: visible alone silently undoes this flex item's default
@@ -759,7 +759,7 @@ export default defineComponent({
   margin-bottom: 8px;
 }
 
-/* Only .titlescreen-card needs this: when collapsed, its own body (which
+/* Only .titlescreen-card needs this: when collapsed, its  body (which
    normally supplies margin-top: 34px to clear the absolutely positioned
    collapse button/ID badge/corner toolbar - see .titlescreen-card-body's
    own comment) isn't rendered at all, so without this the card's own box
@@ -805,7 +805,7 @@ export default defineComponent({
   cursor: grab;
 }
 
-/* Matches every other tab's own collapse button placement exactly (see
+/* Matches every other tab's  collapse button placement exactly (see
    BackgroundEditor.vue's own .background-collapse-btn/PlayerEditor.vue's
    own .animation-collapse-btn) - absolutely positioned in the card's
    top-left corner, not flowed in normal layout. */
@@ -843,7 +843,7 @@ export default defineComponent({
   box-shadow: none !important;
 }
 
-/* Same reasoning as BackgroundEditor.vue's own identical rules - Vuetify's
+/* Same reasoning as BackgroundEditor.vue's  identical rules - Vuetify's
    default v-card-text padding (16px on every side) otherwise left a wide
    gap to the left of the canvas (and above/below it) that had nothing to
    do with this card's own 12px padding, which already provides its own
@@ -977,7 +977,7 @@ export default defineComponent({
   margin-top: 8px;
 }
 
-/* Same class name/positioning as BackgroundEditor.vue's own identical
+/* Same class name/positioning as BackgroundEditor.vue's  identical
    "Add background" button - a floating primary-colored FAB in the bottom-
    right corner, absolutely positioned relative to the outer wrapping div
    (a sibling of .editor-container, not inside its v-card-text). */
@@ -985,7 +985,7 @@ export default defineComponent({
   bottom: 8px;
 }
 
-/* Matches BackgroundEditor.vue's own identical .editor-container rule -
+/* Matches BackgroundEditor.vue's  identical .editor-container rule -
    without this, the card just flows in normal page scroll (this tab never
    had its own override, unlike Background's), and .add-frame-buttom above
    (a sibling outside this card, not inside its own scroll region) ends up

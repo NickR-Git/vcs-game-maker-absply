@@ -1,10 +1,10 @@
 'use strict';
 
-// The Titlescreen Kernel's own static drawing code (see public/bb19/
+// The Titlescreen Kernel's  static drawing code (see public/bb19/
 // titlescreen/) - the fixed, cycle-exact assembly adapted from Mike
 // Saarna's "bB Titlescreen Kernel" 1.8. Fetched once and cached, same
 // "hooks/rom.js places these as siblings of the compiled source" reasoning
-// as text-minikernel-files.js's own getTextMinikernelSiblingFiles - only
+// as text-minikernel-files.js's  getTextMinikernelSiblingFiles - only
 // the files actually needed for whichever bitmap kernel copies (1-8, per
 // type) the current project uses are included, so an unused kernel/copy
 // costs nothing to fetch either.
@@ -14,7 +14,7 @@ const fetchText = (path) => fetch(path).then((r) => r.text());
 // registerTitleScreenSubroutine (generators/bbasic/titlescreen.js) now
 // generates that driver/color content directly in JS, one shared copy for
 // every title screen page in the project instead of one static, single-
-// page file (see its own comment for why: a per-copy kernel file like
+// page file (see its  comment for why: a per-copy kernel file like
 // 48x1_1_kernel.asm reaches shared routines like position48 via a plain
 // same-bank "jsr", so every page has to compile into the SAME subroutine/
 // bank rather than each getting its own).

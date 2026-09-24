@@ -55,7 +55,7 @@
         title="Release/Sustain - drag horizontally to change Release, vertically to change Sustain level"
         @mousedown="startDrag('release', $event)"
       />
-      <!-- Always sits at the graph's own right edge (releaseX is 100% by
+      <!-- Always sits at the graph's  right edge (releaseX is 100% by
            construction - totalUnits is defined as the sum that includes
            release, so this dot can never actually move away from the edge
            no matter what release is set to) - a fixed reference point for
@@ -65,7 +65,7 @@
            straight back to the edge on every drag update, since its own
            position can't respond to the value dragging it would produce. -->
       <div class="envelope-graph-dot envelope-graph-dot-static" :style="dotStyle(releaseX, 0)" />
-      <!-- Positioned under each segment's own midpoint (not evenly spaced
+      <!-- Positioned under each segment's  midpoint (not evenly spaced
            regardless of actual segment width) so a label always sits under
            the part of the curve it actually names. -->
       <span class="envelope-graph-stage-label" :style="labelStyle(0, attackX)">Atk</span>
@@ -82,7 +82,7 @@ import {ENVELOPE_STAGE_FRAME_OPTIONS, ENVELOPE_ATTACK_RELEASE_FRAME_OPTIONS,
 
 // Purely a visual shape indicator (straight ramp lines matching the classic
 // ADSR diagram/FL Studio's Fruity Envelope Controller reference), not a
-// sample-accurate plot of utils/envelope.js's own discretized AUDV-per-frame
+// sample-accurate plot of utils/envelope.js's  discretized AUDV-per-frame
 // curve - a smooth ramp reads more clearly at this size than a coarse,
 // stair-stepped one would, and the actual runtime curve is already governed
 // by the same attack/decay/sustain/release numbers this draws from, so the
@@ -91,7 +91,7 @@ import {ENVELOPE_STAGE_FRAME_OPTIONS, ENVELOPE_ATTACK_RELEASE_FRAME_OPTIONS,
 //
 // Sustain has no fixed length of its own (it holds until the sound/note
 // ends, whenever that is) - drawn with a fixed visual width purely so the
-// plateau is visible, matching every ADSR reference diagram's own portrayal.
+// plateau is visible, matching every ADSR reference diagram's  portrayal.
 const SUSTAIN_VISUAL_WIDTH = 6;
 
 export default defineComponent({
@@ -107,9 +107,9 @@ export default defineComponent({
       dragStartX: 0,
       dragStartY: 0,
       dragStartValues: null,
-      // 0-100%, this preset's own peak volume - see the class-level comment
+      // 0-100%, this preset's  peak volume - see the class-level comment
       // on ENVELOPE_SUSTAIN_PERCENT_OPTIONS in blocks/soundfx.js for why
-      // Sustain (and so this whole graph's own Y axis) is a percentage of
+      // Sustain (and so this whole graph's  Y axis) is a percentage of
       // that, not a raw AUDV value.
       scaleTicks: [100, 75, 50, 25, 0],
     };
@@ -131,7 +131,7 @@ export default defineComponent({
       return (this.attack + this.decay + SUSTAIN_VISUAL_WIDTH + this.release) / this.totalUnits * 100;
     },
     // Same midpoints labelStyle itself centers each of the 4 stage labels
-    // on (see the template's own labelStyle calls) - one vertical line
+    // on (see the template's  labelStyle calls) - one vertical line
     // above each label, reusing that exact math rather than duplicating a
     // second copy of it.
     labelXPercents() {
@@ -144,7 +144,7 @@ export default defineComponent({
     },
     // SVG y=0 is the TOP, so every level here is (100 - percent) to make
     // "100%" (peak volume) draw at the top and "0%" (silence) at the
-    // bottom, matching the reference diagram's own Amplitude axis.
+    // bottom, matching the reference diagram's  Amplitude axis.
     polylinePoints() {
       const pts = [
         [0, 100],
@@ -160,7 +160,7 @@ export default defineComponent({
     dotStyle(xPercent, yPercent) {
       return {left: `${xPercent}%`, top: `${100 - yPercent}%`};
     },
-    // Centers a label under its own segment's midpoint, clamped so a very
+    // Centers a label under its  segment's midpoint, clamped so a very
     // narrow (or zero-length, e.g. Decay/Release set to 0 frames) segment's
     // label still stays fully inside the graph instead of clipping off one
     // edge.
@@ -171,14 +171,14 @@ export default defineComponent({
     // Snaps a raw value to whichever entry in `options` is numerically
     // closest - shared by every drag handler below so dragging always lands
     // on the same small, fixed value set the dropdowns themselves offer
-    // (see blocks/soundfx.js's own comment on why those stay bounded), just
+    // (see blocks/soundfx.js's  comment on why those stay bounded), just
     // reached by dragging instead of picking from a list.
     snapTo(options, value) {
       return options.reduce((closest, option) =>
         Math.abs(option - value) < Math.abs(closest - value) ? option : closest, options[0]);
     },
     startDrag(handle, event) {
-      // Without this, the browser's own default mousedown behavior (text
+      // Without this, the browser's  default mousedown behavior (text
       // selection, or - since this card sits in a click-and-drag reorderable
       // list, see hooks/drag-reorder.js - being misread as the start of a
       // native drag gesture on some ancestor) fires alongside this custom
@@ -215,15 +215,15 @@ export default defineComponent({
         // FIXED right edge (releaseX is always exactly 100%, see the
         // now-static dot there), moving LEFT as Release grows. Reusing the
         // same "distance from 0" shape the other two handles use would
-        // make Release move the WRONG way (and, at Release's own minimum
+        // make Release move the WRONG way (and, at Release's  minimum
         // of 0 - where this handle starts out coinciding with that fixed
         // edge - never move at all): dragging left has to mean "release
         // starts earlier, so it's LONGER", not shorter. `totalUnits - xUnits`
         // is exactly that distance, measured from wherever the cursor
-        // lands back to the fixed edge, using this frame's own totalUnits
+        // lands back to the fixed edge, using this frame's  totalUnits
         // (already stale by the time it's applied, same as every other
-        // handle here - the next mousemove's own fresh totalUnits corrects
-        // it, same self-correcting approximation decaySustain's own drag
+        // handle here - the next mousemove's  fresh totalUnits corrects
+        // it, same self-correcting approximation decaySustain's  drag
         // already relies on).
         const release = this.snapTo(ENVELOPE_ATTACK_RELEASE_FRAME_OPTIONS, Math.max(0, totalUnits - xUnits));
         const sustainPercent = this.snapTo(ENVELOPE_SUSTAIN_PERCENT_OPTIONS, yPercent);
@@ -327,7 +327,7 @@ export default defineComponent({
   width: 100%;
   height: 100%;
   display: block;
-  /* Positioned (not just static/in-flow) so its own stacking is decided by
+  /* Positioned (not just static/in-flow) so its  stacking is decided by
      DOM order against .envelope-graph-scale, same as every other
      absolutely-positioned sibling here - without this, a static element
      always paints BELOW any positioned sibling regardless of source order,
@@ -344,7 +344,7 @@ export default defineComponent({
   background: rgba(0, 0, 0, 0.1);
 }
 
-/* One per draggable dot (Attack/Decay/Release-start), at its own CURRENT
+/* One per draggable dot (Attack/Decay/Release-start), at its  CURRENT
    position - stronger than the snap grid above so it reads as "this dot is
    here" rather than "you could snap here". */
 .envelope-graph-current-line {

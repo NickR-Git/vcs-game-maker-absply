@@ -76,7 +76,7 @@ Blockly.defineBlocksWithJsonArray([
     'tooltip': `Updates the score's color`,
   },
   // Block for fading the score's color - same mechanism as Background's own
-  // "Fade color to" (see blocks/background.js's own fade var-name helpers
+  // "Fade color to" (see blocks/background.js's  fade var-name helpers
   // and generateBackgroundFadeChecks in generators/bbasic/background.js,
   // both now generalized past just COLUBK/COLUPF), just always targeting
   // scorecolor rather than offering a register choice - there's only one

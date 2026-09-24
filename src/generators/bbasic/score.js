@@ -126,7 +126,7 @@ export default (Blockly) => {
     // value (a variable, "framecounter", "loopcounter", ...) just gets its
     // raw BINARY byte poked straight into the packed BCD bytes with no
     // conversion at all, so it displays as whatever decimal digits that
-    // byte's own hex NIBBLES happen to spell out, not the actual number -
+    // byte's  hex NIBBLES happen to spell out, not the actual number -
     // confirmed as a real reported bug this way ("loopcounter" showing a
     // fixed "60", "framecounter" a fixed "54", neither ever changing:
     // exactly what byte 0x60/0x54 read as packed BCD would show). See below
@@ -227,7 +227,7 @@ export default (Blockly) => {
   };
 
   Blockly.BBasic[`score_fade_finished`] = function(block) {
-    // Score's own fade-finished watch - same shared mechanism as
+    // Score's  fade-finished watch - same shared mechanism as
     // Background's own "When ... color has finished fading" (see
     // emitFadeFinishedWatch in generators/bbasic/background.js), always
     // targeting scorecolor.
@@ -258,20 +258,20 @@ export default (Blockly) => {
     return `scorecolor = scorecolor ${operator} ${argument0}\n`;
   };
 
-  // The standard kernel's own generic score-row background hook - a
-  // "minikernel" subroutine, called during the score row's own WSYNC-timed
+  // The standard kernel's  generic score-row background hook - a
+  // "minikernel" subroutine, called during the score row's  WSYNC-timed
   // drawing, that (if defined) gets to set COLUBK for that one scanline
   // group before the kernel restores it for the rest of the screen. Placed
-  // in bbasic.bb.hbs's own trailing "never fallen into" section (see the
+  // in bbasic.bb.hbs's  trailing "never fallen into" section (see the
   // comment there) - like generateDivMul's div_mul.asm, only ever entered
-  // via the kernel's own internal call, never by falling through from the
+  // via the kernel's  internal call, never by falling through from the
   // line above, which naturally lands it in whatever bank ends up last
   // once every other, earlier piece of code has been assigned to a bank
   // (matching the reference docs' own "add this to last bank"
   // instruction).
   //
   // Only emitted when the Text Minikernel ISN'T active (that case is
-  // handled instead by scorebkcolor's own dim - see
+  // handled instead by scorebkcolor's  dim - see
   // generateScoreBkColorRuntimeDims/generateScoreBkColorDefaults below -
   // since both this and the Text Minikernel compile to a subroutine
   // literally labeled "minikernel", the standard kernel's one generic
@@ -280,7 +280,7 @@ export default (Blockly) => {
   // generateScoreBkColorDefaults does when the Score tab's background
   // color picker (see views/ScoreFontEditor.vue) hasn't been touched.
   //
-  // This whole subroutine is ours (unlike text12a.asm's own vendored one -
+  // This whole subroutine is ours (unlike text12a.asm's  vendored one -
   // see generateScoreBkColorRuntimeDims below for how that side handles the
   // same "Use background color" case): a single one-shot "jsr minikernel"
   // call with no packed per-scanline timing budget to protect, so it can
@@ -294,7 +294,7 @@ export default (Blockly) => {
   // runtime change - not just this project's starting color the way any
   // explicitly picked palette color here is stuck with. Deliberately
   // backgroundrealcolor (COLUBK - the general screen backdrop), not
-  // playfieldrealcolor (COLUPF - the playfield's own drawn shape color):
+  // playfieldrealcolor (COLUPF - the playfield's  drawn shape color):
   // the latter only ever reflects a real per-background color when
   // "Enable per-row playfield colors" is on (it's a fixed default
   // otherwise, regardless of what's drawn in the Background editor), so it
@@ -309,7 +309,7 @@ export default (Blockly) => {
       '       lda backgroundrealcolor' :
       `       lda #${colorByteToBBasic(this.resolveScoreBkColorByte(config.scoreBkColor))}`;
     // "end" has to sit at column 0, same quirk score_digit_set works around
-    // with its own "@end" trick (see its own comment) - confirmed directly:
+    // with its own "@end" trick (see its  comment) - confirmed directly:
     // the leading space this used to have here reproduced the exact
     // "Missing end keyword at end of inline asm" failure, for every project
     // with the Text Minikernel inactive (the only condition this function
@@ -326,22 +326,22 @@ export default (Blockly) => {
     ].join('\n');
   };
 
-  // scorebkcolor's own RAM home when the Text Minikernel IS active. Used to
+  // scorebkcolor's  RAM home when the Text Minikernel IS active. Used to
   // be a plain "const scorebkcolor = <literal>" (see generateConfiguration
   // in generators/bbasic.js), which text12a.asm read with immediate
   // addressing ("lda #scorebkcolor") - fine for a fixed literal, but a
   // compile-time const has no runtime existence, so there was no way to
   // make it track backgroundrealcolor. text12a.asm has since been patched
-  // (see its own inline comment, right where "lda #scorebkcolor" became
+  // (see its  inline comment, right where "lda #scorebkcolor" became
   // "lda scorebkcolor") to read scorebkcolor as a real RAM address instead
   // - so it now needs an actual dim.
   //
   // Deliberately never "dim scorebkcolor = <some other dim'd NAME>" -
-  // chaining one dim onto another dim's own NAME (rather than a raw
+  // chaining one dim onto another dim's  NAME (rather than a raw
   // register letter/varN) doesn't reliably resolve here (confirmed: it
   // compiled to a bare, unresolved "lda =" - an empty operand - once
-  // assembled), unlike scoreDigitAliases' own scorebyte1/2/3 below, which
-  // alias onto "score"/"score+N" (bB's own built-in multi-byte variable,
+  // assembled), unlike scoreDigitAliases'  scorebyte1/2/3 below, which
+  // alias onto "score"/"score+N" (bB's  built-in multi-byte variable,
   // not another ordinary dim). So both cases below resolve to a raw
   // target instead: "Use background color" reads backgroundRealColorRawTarget()
   // (the exact same raw letter/varN backgroundrealcolor's own
@@ -358,18 +358,18 @@ export default (Blockly) => {
     const configurationStorage = useConfigurationStorage();
     const config = (configurationStorage && configurationStorage.value) || {};
     // Never aliases when a "Score set background color" block is in use
-    // (see usesScoreBkColorSetter's own comment in generators/bbasic.js) -
-    // that block needs a real, independent byte of its own to write to,
-    // not backgroundrealcolor's own raw target.
+    // (see usesScoreBkColorSetter's  comment in generators/bbasic.js) -
+    // that block needs a real, independent byte of its  to write to,
+    // not backgroundrealcolor's  raw target.
     if (this.usesScoreBkColorSetter || !this.scoreBkColorIsBackground(config.scoreBkColor)) return '';
     const comment = (config.showVariableComments ?? true) ?
       '  ; score row\'s own background color, aliased onto the live background color' : '';
     return `\n dim scorebkcolor = ${this.backgroundRealColorRawTarget()}${comment}`;
   };
 
-  // Initializes scorebkcolor's own dev var (see
+  // Initializes scorebkcolor's  dev var (see
   // generateScoreBkColorRuntimeDims above) once at Setup time, the same
-  // spot TextColor's own default gets written (see
+  // spot TextColor's  default gets written (see
   // generateTextMinikernelDefaults in generators/bbasic/text-minikernel.js,
   // spliced right alongside this in generators/bbasic.js). Needed for the
   // literal/default case, and also (see usesScoreBkColorSetter's own
@@ -382,7 +382,7 @@ export default (Blockly) => {
   // reaches it). "Use background color" with NO setter block in use is the
   // only remaining case that still aliases directly onto backgroundrealcolor
   // instead, which is already initialized elsewhere, so there's nothing of
-  // its own to set here.
+  // its  to set here.
   Blockly.BBasic.generateScoreBkColorDefaults = function() {
     if (!this.isTextMinikernelActive()) return '';
     const configurationStorage = useConfigurationStorage();
@@ -418,13 +418,13 @@ export default (Blockly) => {
   Blockly.BBasic[`score_digit_change`] = function(block) {
     // Same "score is special-cased, so writing a single digit needs inline
     // asm" reasoning as score_digit_set above - this just reads the current
-    // digit back out first (same expression score_digit_get's own generator
+    // digit back out first (same expression score_digit_get's  generator
     // builds) and feeds "current +/- delta" into the same poke helper,
     // instead of a plain literal/expression. Whatever that computes is
     // masked down to 4 bits when it's poked back in (see
     // buildDigitPokeLines's own "and #$0F") - not a decimal wrap or carry
     // into the neighboring digit, just a hex nibble truncation, which is
-    // why the block's own tooltip tells the user to keep the result inside
+    // why the block's  tooltip tells the user to keep the result inside
     // 0-9 themselves rather than claiming any automatic correction.
     const configurationStorage = useConfigurationStorage();
     const config = (configurationStorage && configurationStorage.value) || {};
@@ -477,7 +477,7 @@ export default (Blockly) => {
   // renders as one solid block, N=3 lives renders as 3 evenly spaced dots,
   // and N=0 safely loops zero times (no wraparound).
   //
-  // temp1/temp2 are the compiler's own scratch registers, already reused
+  // temp1/temp2 are the compiler's  scratch registers, already reused
   // this way elsewhere for one-off statement-local bookkeeping (see
   // event_frame_even_odd) - nothing needs them to persist past this block.
   const buildBarFillLoop = (varName, targetCode, stepExpression) => [
@@ -525,7 +525,7 @@ export default (Blockly) => {
   // are unsigned, so a "negative" runtime value is really a large positive
   // one (two's complement wraparound), not something "temp < 0" can detect
   // - so that case only supports growing the bar; shrinking always needs a
-  // literal negative number. Documented on the block's own tooltip.
+  // literal negative number. Documented on the block's  tooltip.
   const buildBarChangeLoop = (varName, deltaCode, growStep, shrinkStep) => {
     const literalMatch = /^\s*(-?\d+)\s*$/.exec(deltaCode);
     if (literalMatch) {

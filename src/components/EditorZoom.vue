@@ -58,7 +58,7 @@ export default defineComponent({
   font-variant-numeric: tabular-nums;
 }
 
-/* Matches PixelGridToggle.vue's own icon button - v-btn only shows
+/* Matches PixelGridToggle.vue's  icon button - v-btn only shows
    "cursor: pointer" while enabled, so a zoomed-all-the-way-in/out button
    (canZoomIn/canZoomOut false) still correctly falls back to the default
    cursor instead of a misleading hand on a button that can't be clicked.

@@ -28,13 +28,13 @@ export const resetRelocationBanks = () => {
   banks = {graphicsBanks: {}, musicBanks: {}, subroutineBanks: {}, eventBanks: {}, functionBanks: {}};
 };
 
-// Read-only snapshot for the generator's own bank-lookup functions
+// Read-only snapshot for the generator's  bank-lookup functions
 // (getEventBank/graphicsUnitBank/musicUnitBank/getSubroutineBank in
 // generators/bbasic.js) and for surfacing in error diagnostics.
 export const getRelocationBanks = () => banks;
 
 // Records unitName (of the given kind - one of the four keys above) as
-// relocated to bank. Called by rom.js's own retry loop as it works through
+// relocated to bank. Called by rom.js's  retry loop as it works through
 // relocation candidates for the build currently in progress.
 export const setRelocationBank = (kind, unitName, bank) => {
   banks = {...banks, [kind]: {...banks[kind], [unitName]: bank}};
@@ -44,7 +44,7 @@ export const setRelocationBank = (kind, unitName, bank) => {
 // in-memory only (never written to configurationStorage/localStorage, so it
 // never survives a reload and never gets saved with the project the way the
 // old, reverted version did), and only ever used as a first-attempt HINT
-// that rom.js's own retry loop immediately abandons in favor of a true
+// that rom.js's  retry loop immediately abandons in favor of a true
 // from-scratch restart the moment it doesn't compile clean - never
 // incrementally patched from. That sidesteps the exact failure mode the
 // comment above documents (a stale assignment silently outliving the
@@ -52,7 +52,7 @@ export const setRelocationBank = (kind, unitName, bank) => {
 // heuristics drifting between saved sessions) while still skipping the
 // relocation search entirely on the common case: rebuilding again shortly
 // after a small edit, where last time's layout is very likely still exactly
-// right. Keyed by romSize (like useRomCapacity's own cached measurement -
+// right. Keyed by romSize (like useRomCapacity's  cached measurement -
 // see its comment in hooks/rom.js) since a layout found for one ROM size
 // means nothing for another.
 let lastSuccessfulBanks = null;
@@ -70,7 +70,7 @@ export const recordSuccessfulRelocationBanks = (romSize) => {
 // if a hint exists for this exact romSize, seeds `banks` with it (a plain
 // reassignment, not a mutation of the stored snapshot itself - every
 // setRelocationBank call after this still only ever produces NEW objects via
-// its own spread, so the stored snapshot below is never at risk of being
+// its  spread, so the stored snapshot below is never at risk of being
 // mutated out from under a later build that goes on to fail and re-record).
 // Returns whether a hint was actually applied, so the caller can log it and
 // know whether a full resetRelocationBanks() is needed if this first

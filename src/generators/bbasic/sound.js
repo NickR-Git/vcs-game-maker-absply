@@ -29,8 +29,8 @@ export default (Blockly) => {
     // is a separate, freeform way to set AUDC/AUDF/AUDV directly, so it was
     // bypassing DIM entirely regardless of which sound type (AUDC) was
     // picked.
-    // App-wide preference (see useDimSoundFxStorage's own comment in
-    // hooks/project.js), not part of this project's own saved configuration.
+    // App-wide preference (see useDimSoundFxStorage's  comment in
+    // hooks/project.js), not part of this project's  saved configuration.
     const effectiveAudv = useDimSoundFxStorage().value ?
       dimVolume(audv, useDimSoundFxPercentStorage(DEFAULT_DIM_PERCENT).value) : audv;
 

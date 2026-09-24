@@ -131,7 +131,7 @@
                             </v-list-item-icon>
                             <v-list-item-title>Yes, delete</v-list-item-title>
                           </v-list-item>
-                          <v-list-item>
+                          <v-list-item link>
                             <v-list-item-icon>
                               <v-icon>mdi-cancel</v-icon>
                             </v-list-item-icon>
@@ -146,16 +146,16 @@
                   <div class="pixel-editor-container" :style="{width: editorWidth, maxWidth: editorWidth}">
                     <pixel-editor
                       :width="32"
-                      :height="backgroundRows"
+                      :height="background.pixels.length"
                       name="background"
-                      v-model="background.pixels"
+                      :value="background.pixels"
                       fgColor="orange"
                       :rowColors="editorRowColors(background)"
-                      :allowChangingHeight="false"
+                      :allowChangingHeight="true"
                       :showClearButton="true"
                       :showGrid="showPixelGrid"
                       :showCellIds="showPixelGridLabels"
-                      @input="handleChildChange"
+                      @input="(pixels) => handleBackgroundPixelsInput(background, pixels)"
                       @clear="() => handleClearRowColors(background)"
                     >
                       <template v-if="pfColorsEnabled" v-slot:sidebar>
@@ -218,12 +218,12 @@ const EDITOR_BASE_WIDTH = 480;
 // reverted: a brand new background starting with existing pixels already
 // set meant clearing them by hand was the normal first step before drawing
 // anything new, every time - matches how a new player animation frame
-// starts blank too, see PlayerEditor.vue's own handleAddAnimation).
+// starts blank too, see PlayerEditor.vue's  handleAddAnimation).
 const buildDefaultBackgroundPixels = (rows, cols = 32) =>
   new Array(rows).fill(0).map(() => new Array(cols).fill(0));
 
 // Same "module-scope, not a ref inside setup()" reasoning as
-// PlayerEditor.vue's own copiedFrameRowColors/copiedFrameData - keeps the
+// PlayerEditor.vue's  copiedFrameRowColors/copiedFrameData - keeps the
 // clipboard alive across navigating away from and back to this tab (Vue
 // Router destroys and recreates this component each time).
 const copiedBackgroundRowColors = ref(null);
@@ -236,17 +236,17 @@ export default defineComponent({
     const configurationStorage = useConfigurationStorage();
     const zoom = useEditorZoom('background');
     const editorWidth = computed(() => `${Math.round(EDITOR_BASE_WIDTH * zoom.value)}px`);
-    // Shared with PlayerEditor.vue's own Player 0/1 tabs (see
-    // PixelGridToggle.vue's own comment).
+    // Shared with PlayerEditor.vue's  Player 0/1 tabs (see
+    // PixelGridToggle.vue's  comment).
     const showPixelGrid = usePixelGridOverlayStorage();
-    // Background-tab-only (see usePixelGridLabelsStorage's own comment) -
+    // Background-tab-only (see usePixelGridLabelsStorage's  comment) -
     // controls the grid overlay's "X,Y" cell labels independently of the
     // grid lines themselves (showPixelGrid above).
     const showPixelGridLabels = usePixelGridLabelsStorage();
 
     // Same "armed color for direct-painting" reasoning as PlayerEditor.vue's
     // own selectedQuickColor - v-model'd to the QuickColorPalette instance
-    // above, passed into PlayfieldColorStrip's own activeQuickColor prop
+    // above, passed into PlayfieldColorStrip's  activeQuickColor prop
     // below. Read-only access to the palette DATA itself
     // (quickColorPalette) - QuickColorPalette owns writing to that shared
     // storage; this just needs the list to pass into PlayfieldColorStrip's
@@ -263,7 +263,7 @@ export default defineComponent({
 
     // Per-row playfield colors (batari Basic pfcolors) are an all-or-nothing,
     // project-wide setting (see the Options tab) - once it's on, every
-    // background needs its own color list, since the compiled kernel always
+    // background needs its  color list, since the compiled kernel always
     // draws every background's playfield from that color table.
     const pfColorsEnabled = computed(() =>
       (configurationStorage && configurationStorage.value && configurationStorage.value.enablePfColors) ?? false);
@@ -283,8 +283,8 @@ export default defineComponent({
 
     // Purely a visual "which card am I looking at" marker - same
     // selectCard/selectedCardId/deselectCard pattern as MusicEditor.vue's
-    // own song cards and the other tabs' own entry cards (see
-    // MusicEditor.vue's own comment for the full reasoning): plain local
+    // own song cards and the other tabs'  entry cards (see
+    // MusicEditor.vue's  comment for the full reasoning): plain local
     // component state, not persisted, not wired into anything else.
     const selectedCardId = ref(null);
     const selectCard = (id) => {
@@ -315,21 +315,37 @@ export default defineComponent({
       state.value = state.value;
     };
 
+    // Handles the pixel editor's own "input" event for a background's
+    // pixel grid - a plain pixel edit (drawing/erasing) never changes the
+    // row count, but the pixel editor's "Set height" tool (enabled here via
+    // allowChangingHeight) emits a resized array instead. Marking
+    // customHeight the moment a resize is detected is what lets
+    // reflowBackgroundsToHeight (blocks/background.js) leave this
+    // background alone from then on, even if pfres later changes -
+    // otherwise a pfres change would silently truncate/pad rows the user
+    // added on purpose (e.g. for a future vertical scroll block to pan
+    // through).
+    const handleBackgroundPixelsInput = (background, pixels) => {
+      if (pixels.length !== background.pixels.length) background.customHeight = true;
+      background.pixels = pixels;
+      handleChildChange();
+    };
+
     // Every card starts collapsed on every visit to this tab (see
-    // collapseAll's own comment in hooks/collapse.js), not just ones never
+    // collapseAll's  comment in hooks/collapse.js), not just ones never
     // expanded before.
     const {isCollapsed, toggleCollapsed, collapseAll} = useCollapsedIds('background', true);
     collapseAll();
 
     // Card reordering - NOT built on hooks/drag-reorder.js's own
     // useDragReorder (used as-is by SoundFXEditor.vue/MusicEditor.vue's own
-    // single-column card lists), since that hook's own top-border
+    // single-column card lists), since that hook's  top-border
     // drag-over convention only makes sense for a strictly vertical stack.
-    // .background-list is a CSS grid (see its own comment - two or more
+    // .background-list is a CSS grid (see its  comment - two or more
     // cards can sit side by side on a wide enough window), where the
     // meaningful drop-target edge is left/right (which card this lands
     // before/after in reading order), not top/bottom - same reasoning as
-    // TextEditor.vue's own identical replacement.
+    // TextEditor.vue's  identical replacement.
     const draggedIndex = ref(null);
     // {index, side} - side is 'before' or 'after', which HALF of card
     // `index` the pointer is currently over.
@@ -394,7 +410,7 @@ export default defineComponent({
     const handleRowColorsInput = (background, colors) => {
       background.rowColors = colors;
       handleChildChange();
-      // The editors hold their own display state, so persisting isn't enough to
+      // The editors hold their  display state, so persisting isn't enough to
       // repaint the preview — force a re-render so the pixel editor receives the
       // updated row colors and recolors its canvas.
       instance.proxy.$forceUpdate();
@@ -437,7 +453,7 @@ export default defineComponent({
     };
 
     // Same "whole image, pixels + row colors together" pair as
-    // PlayerEditor.vue's own handleCopyFrame/handlePasteFrame.
+    // PlayerEditor.vue's  handleCopyFrame/handlePasteFrame.
     const handleCopyBackground = (background) => {
       copiedBackgroundData.value = {
         pixels: structuredClone(background.pixels),
@@ -447,6 +463,12 @@ export default defineComponent({
     };
     const handlePasteBackground = (background) => {
       if (!copiedBackgroundData.value) return;
+      // Same reasoning as handleBackgroundPixelsInput's own customHeight
+      // check - pasting a taller/shorter image is just as much a resize as
+      // dragging the pixel editor's own "Set height" slider.
+      if (copiedBackgroundData.value.pixels.length !== background.pixels.length) {
+        background.customHeight = true;
+      }
       background.pixels = structuredClone(copiedBackgroundData.value.pixels);
       if (pfColorsEnabled.value && copiedBackgroundData.value.rowColors) {
         background.rowColors = structuredClone(copiedBackgroundData.value.rowColors);
@@ -479,7 +501,7 @@ export default defineComponent({
     };
 
     return {selectedCardId, selectCard, deselectCard,
-      state, handleChildChange, handleAddBackground, handleDeleteBackground,
+      state, handleChildChange, handleBackgroundPixelsInput, handleAddBackground, handleDeleteBackground,
       selectedQuickColor, quickColorPalette,
       handleRowColorsInput, handleClearRowColors, editorRowColors, isCollapsed, toggleCollapsed,
       zoom, showPixelGrid, showPixelGridLabels, editorWidth, backgroundRows, pfColorsEnabled,
@@ -508,7 +530,7 @@ export default defineComponent({
   width: 100%;
 }
 
-/* v-list-item's own default 0 16px padding stacks on top of v-card-text's,
+/* v-list-item's  default 0 16px padding stacks on top of v-card-text's,
    pushing the graphic card in further than the Score tab's, which sits
    directly in a v-card-text with no list-item wrapper. Zeroing both sides
    (not just left, as this used to) keeps the card's right edge from sitting
@@ -594,7 +616,7 @@ export default defineComponent({
   padding: 12px;
 }
 
-/* PixelEditor.vue always wraps itself in its own outlined v-card with
+/* PixelEditor.vue always wraps itself in its  outlined v-card with
    card-text padding - useful standalone (e.g. each Player tab animation
    frame, where it's the only border that card has), but redundant once
    .background-card above already frames the WHOLE background entry the
@@ -658,7 +680,7 @@ export default defineComponent({
   border-right: 3px solid var(--v-primary-base, #1976d2) !important;
 }
 
-/* Sits in v-list-item-title, which (unlike the pixel editor's own toolbar)
+/* Sits in v-list-item-title, which (unlike the pixel editor's  toolbar)
    is always rendered regardless of collapse state, so the toolbar stays
    visible on a collapsed card instead of disappearing along with the pixel
    editor. Same "one flex row of whichever buttons are actually present"
@@ -672,7 +694,7 @@ export default defineComponent({
   gap: 4px;
 }
 
-/* Same reasoning as PlayerEditor.vue's own identical rule - lets the
+/* Same reasoning as PlayerEditor.vue's  identical rule - lets the
    color-only badge (position: absolute) anchor to the button itself. */
 .copy-paste-color-btn {
   position: relative;
@@ -692,7 +714,7 @@ export default defineComponent({
   pointer-events: none;
 }
 
-/* margin: 0 (not "0 1px") to match PixelEditor.vue's own base toolbar
+/* margin: 0 (not "0 1px") to match PixelEditor.vue's  base toolbar
    button trim - see its own comment on why every bit of width matters for
    this row to fit without wrapping at higher zoom. */
 .player-icon-btn-size {
@@ -706,7 +728,7 @@ export default defineComponent({
   font-size: 19px !important;
 }
 
-/* Same reasoning/values as PlayerEditor.vue's own identical rule -
+/* Same reasoning/values as PlayerEditor.vue's  identical rule -
    mdi-delete reads visually smaller than mdi-content-copy/mdi-content-paste
    at the same font-size, so it needs a couple extra pixels to look the same
    size as its neighbors at a glance. */
@@ -721,7 +743,7 @@ export default defineComponent({
   align-items: center;
 }
 
-/* Absolutely positioned (matching Text/SoundFX/Data/Music's own collapse
+/* Absolutely positioned (matching Text/SoundFX/Data/Music's  collapse
    button placement exactly) rather than flowed in a flex row alongside the
    ID badge - the row wrapper this used to sit in is gone; .background-
    name-field's own margin-top (below) makes room for both this and the

@@ -51,7 +51,7 @@ export const shiftClockFor = (audf, {slowClock = false} = {}) =>
 // divisor of NTSC_SHIFT_CLOCK, so NTSC_SHIFT_CLOCK / chipClockHz always
 // is too), instead of Math.round()-ing to the nearest 44100Hz/48000Hz
 // sample and landing slightly sharp or flat depending on which pitch and
-// host sample rate happened to be in play. Real hardware's own shift
+// host sample rate happened to be in play. Real hardware's  shift
 // register genuinely only ever changes state this often, never in between -
 // matching that exactly, rather than a host-rate approximation of it, is
 // what actually gets closer to how it sounds on real hardware.
@@ -170,7 +170,7 @@ export const buildSquareBuffer = (context, chipClockHz, seconds) => {
 // the actual sound output) only advances on chips where the poly5 bit just
 // shifted out was 1 - on a 0, the output holds whatever it was. This is a
 // genuinely different mechanism from a single gated/divided LFSR, not just a
-// different bit-width, so it gets its own dual-register builder.
+// different bit-width, so it gets its  dual-register builder.
 export const buildGatedBuzzBuffer = (context, chipClockHz, seconds) => {
   const sampleRate = TIA_SAMPLE_RATE;
   const length = Math.max(1, Math.ceil(sampleRate * seconds));
@@ -276,7 +276,7 @@ const ARPEGGIO_PHASE_SEQUENCES = [
   ['base', 'alt', 'upBase', 'upAlt', 'upBase', 'alt'], // UP-DOWN 2 OCT
 ];
 
-// Same derivation as music-playback.js's own arpeggioPitchVariants - AUDF is
+// Same derivation as music-playback.js's  arpeggioPitchVariants - AUDF is
 // a frequency divisor, so alt (base minus interval) sounds higher than base,
 // up is base halved (one octave higher), down is base doubled (one octave
 // lower), all wrapped to the hardware's real 5-bit AUDF range.
@@ -293,15 +293,15 @@ const arpeggioPitchVariants = (audf, arpeggioInterval) => {
   };
 };
 
-// Same per-frame flip rate the compiled ROM's own arpeggio timer uses (see
+// Same per-frame flip rate the compiled ROM's  arpeggio timer uses (see
 // generateMusicChecks in generators/bbasic/music.js) and MAX_ARPEGGIO_SPEED_
 // FRAMES' 4-bit-nibble ceiling there - duplicated for the same
 // avoid-a-circular-import reason as ARPEGGIO_PHASE_SEQUENCES above.
 const FRAMES_PER_SECOND = 60;
 const MAX_ARPEGGIO_SPEED_FRAMES = 15;
-// Same reasoning as music-playback.js's own identical constant: a real,
+// Same reasoning as music-playback.js's  identical constant: a real,
 // instant step from full amplitude to 0 pops harder than the real
-// hardware's own click, so this rounds off just that last sliver instead -
+// hardware's  click, so this rounds off just that last sliver instead -
 // far too short to read as an actual fade.
 const CLICK_GUARD_SECONDS = 0.002;
 
@@ -314,7 +314,7 @@ export const stopSoundEffectPreview = () => {
  * Plays a short approximation of a TIA sound effect for previewing in the
  * editor. duration is in NTSC frames (60 per second), matching the generated
  * bBasic code's units. arpeggio/arpeggioDivision/arpeggioInterval/
- * arpeggioRange are the instrument's own Arpeggio fields (see blocks/
+ * arpeggioRange are the instrument's  Arpeggio fields (see blocks/
  * soundfx.js) - when arpeggio is on, the preview steps through the same
  * pitch sequence the compiled ROM would (see generateMusicChecks in
  * generators/bbasic/music.js) instead of holding one static pitch. There's
@@ -341,10 +341,10 @@ export const previewSoundEffect = ({
   const now = context.currentTime;
   const gainNode = context.createGain();
   const peakGain = Math.min(1, Math.max(0, Number(audv) || 0) / 15) * 0.3;
-  // Matches generators/bbasic/soundfx.js's own generateEnvelopeChecks -
+  // Matches generators/bbasic/soundfx.js's  generateEnvelopeChecks -
   // steps through the exact same per-frame AUDV curve (see
   // utils/envelope.js's buildEnvelopeCurve) the compiled ROM writes, scaled
-  // from AUDV's 0-15 range down into this preview's own 0-0.3 gain range,
+  // from AUDV's 0-15 range down into this preview's  0-0.3 gain range,
   // rather than a continuous fade - a stepped preview actually sounds like
   // what plays in game instead of smoothing over the same discrete jumps.
   let endValue;
@@ -398,7 +398,7 @@ export const previewSoundEffect = ({
     // A buffer is pre-rendered for one fixed clock, so its pitch can't be
     // automated live like an oscillator's - scheduled as several short
     // back-to-back buffers instead, one per flip, each built at that
-    // phase's own pitch (matches how music-playback.js's own
+    // phase's  pitch (matches how music-playback.js's own
     // playInstrumentHit previews a buzzy/noisy arpeggiating instrument).
     const variants = arpeggioPitchVariants(audf, Number(arpeggioInterval) || 0);
     const sequence = ARPEGGIO_PHASE_SEQUENCES[Number(arpeggioRange) || 0] || ARPEGGIO_PHASE_SEQUENCES[0];

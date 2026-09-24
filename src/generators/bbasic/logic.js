@@ -19,15 +19,15 @@ goog.require('Blockly.BBasic');
 export default (Blockly) => {
   Blockly.BBasic['controls_if'] = function(block) {
   // If/elseif/else condition. Loops over every "IFn"/"DOn" pair the
-  // block's own mutator added (n = 0, 1, 2, ... - same "keep reading until
-  // the next IFn input doesn't exist" loop Blockly's own real JavaScript
+  // block's  mutator added (n = 0, 1, 2, ... - same "keep reading until
+  // the next IFn input doesn't exist" loop Blockly's  real JavaScript
   // generator uses for this block) rather than only ever reading IF0/DO0 -
   // a previous version of this only handled a single if/else, which SILENTLY
   // dropped every "else if" branch from the compiled output (the block's
   // own gear-icon mutator still let a project add as many as it wanted; they
   // just never made it into the ROM, with no build error to notice by).
   //
-  // Each branch gets its own condition-check label and body label, chained
+  // Each branch gets its  condition-check label and body label, chained
   // by "if cond then goto <body> else goto <next check, or else, or end>" -
   // the same "if X then goto Y else goto Z" shape the single-branch version
   // already used, just repeated once per branch instead of assuming there's
@@ -49,12 +49,12 @@ export default (Blockly) => {
       // background_get_pixel, ...) can smuggle setup statements ahead of its
       // real expression as a newline-joined preamble, hoisted onto
       // Blockly.BBasic.pendingPreambleLines by Blockly.BBasic.scrub_ itself
-      // (see its own top comment) the instant valueToCode above resolves -
+      // (see its  top comment) the instant valueToCode above resolves -
       // drained HERE, immediately, rather than left for whatever statement
       // happens to run next. Left for later was confirmed as a real
       // reported bug ("wrong sprite graphics and xy"): statementToCode below
-      // resolves this branch's own BODY, whose first statement (if it also
-      // needed a preamble-emitting value, as makeScene's own body reliably
+      // resolves this branch's  BODY, whose first statement (if it also
+      // needed a preamble-emitting value, as makeScene's  body reliably
       // does) would drain the queue itself first - stealing the CONDITION's
       // own preamble along with its own, and positioning both AFTER the "if"
       // line instead of before it. That left the "if" comparing a stale

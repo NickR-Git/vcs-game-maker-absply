@@ -1,6 +1,6 @@
 'use strict';
 
-// The box-collision minikernel's own collision_undo.asm. Fetched once and
+// The box-collision minikernel's  collision_undo.asm. Fetched once and
 // cached; hooks/rom.js places this as a sibling of the compiled source
 // throughout the whole compile pipeline (see compileBatariBasicToAsm in
 // hooks/bb-compiler.js), the same relationship it'd have as a real file next

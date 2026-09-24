@@ -20,14 +20,25 @@ export const markRomOutdated = () => {
 // romOutdated (which flips back to true the moment the project changes
 // again), this stays true once set: the "Save ROM" button (App.vue) reads
 // this to disable itself only until the first successful build, since a
-// previously-compiled ROM (window.Javatari.compiledResult) is still valid
-// and downloadable even after the project's own edits make it stale, right
-// up until a real page reload clears Javatari's own in-memory state (see
-// handleRefreshEmulator's own comment on why that's the one thing that
-// actually loses it).
+// previously-compiled ROM (see compiledRomBytes below) is still valid and
+// downloadable even after the project's edits make it stale, right up
+// until a real page reload clears it (see handleRefreshEmulator's comment
+// on why that's the one thing that actually loses it).
 const hasCompiledRom = ref(false);
 
 export const useHasCompiledRom = () => hasCompiledRom;
+
+// The last successfully assembled ROM (an assembleBatariBasic() result:
+// {output: Uint8Array, ...}) - used by "Save ROM"/"Test in Stella" in
+// App.vue. Kept here rather than as a global on the emulator object, unlike
+// the Javatari-era `Javatari.compiledResult` stash this replaces.
+const compiledRomBytes = ref(null);
+
+export const useCompiledRomBytes = () => compiledRomBytes;
+
+export const setCompiledRomBytes = (result) => {
+  compiledRomBytes.value = result;
+};
 
 export const markRomUpToDate = () => {
   romOutdated.value = false;

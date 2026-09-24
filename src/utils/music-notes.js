@@ -3,10 +3,10 @@
 // Maps TIA AUDC/AUDF combinations to musical notes, for the Music tab's
 // pattern editor. AUDC 4/5/12/13 ("pure tone") produce a clean,
 // single-frequency square wave, so their in-tune notes are computed directly
-// from the TIA's own shift-clock formula below. AUDC 1/6/10/14 are
+// from the TIA's  shift-clock formula below. AUDC 1/6/10/14 are
 // buzzy/LFSR-driven distortions that don't follow that simple formula, but
 // DO have real, recognizable pitches - EMPIRICAL_NOTE_CHARTS supplies their
-// notes from an actual by-ear chart instead (see its own comment). Every
+// notes from an actual by-ear chart instead (see its  comment). Every
 // other AUDC value has no well-defined single pitch at all, so those only
 // ever get a plain on/off hit.
 const NTSC_SHIFT_CLOCK = 31440;
@@ -20,9 +20,9 @@ const NOTE_SEMITONE = {
 };
 
 // Both standard spellings for each of the 5 "black key" semitones (a
-// natural has only one name, same as a real piano's own key labels) - one
+// natural has only one name, same as a real piano's  key labels) - one
 // name alone is arbitrary (C# and Db are the exact same pitch; which one a
-// piece "should" use depends on its own key signature, not on anything this
+// piece "should" use depends on its  key signature, not on anything this
 // app knows), so every displayed note name shows both rather than silently
 // picking just the sharp spelling the way this used to work.
 const NOTE_NAME_PAIRS = [
@@ -48,7 +48,7 @@ const noteLabel = (semitone, octave) => NOTE_NAME_PAIRS[semitone].map((name) => 
 // one whenever the pitch class sequence doubles back upward (see
 // inferOctaves), anchored to start near the top of the existing pure-tone
 // range. Treat the resulting octave placement as a best-effort approximation
-// rather than a verified absolute pitch match to AUDC 4/12's own rows.
+// rather than a verified absolute pitch match to AUDC 4/12's  rows.
 const EMPIRICAL_NOTE_CHARTS_RAW = {
   1: [
     ['C', -5], ['C', -5], ['F', -5], ['C', 0], ['G#', 11], ['F', -5], ['D', 30], ['C', 0],
@@ -112,7 +112,7 @@ const shiftClockFor = (audf, slowClock) =>
 
 // A pure tone square wave takes two shift-register clocks per cycle (one
 // high, one low), so its actual pitch is half the shift rate - matches
-// sound-preview.js's own oscillator.frequency calculation.
+// sound-preview.js's  oscillator.frequency calculation.
 const frequencyForAudf = (audf, slowClock) => shiftClockFor(audf, slowClock) / 2;
 
 const A4_FREQUENCY = 440;
@@ -194,7 +194,7 @@ export const audcHasTunableNotes = (audc) =>
 
 // The piano-roll's row list, highest pitch first: the union of every tunable
 // AUDC family's note names (the pure-tone pair run off the fast/slow shift
-// clocks, the empirically-charted ones off their own by-ear charts), so they
+// clocks, the empirically-charted ones off their  by-ear charts), so they
 // cover different, only partially overlapping pitch ranges. One instrument's
 // actual playable AUDF for a given row can differ from another's - see
 // notesForAudc for that per-instrument lookup - this is only the shared row
@@ -215,7 +215,7 @@ export const CANONICAL_NOTE_ROWS = (() => {
  * Builds a midi-note-number -> AUDF lookup for one AUDC value, for
  * highlighting/enabling a piano-roll's rows against a specific instrument.
  * @param {string|number} audc The AUDC value to look up.
- * @return {Map<number, number>} Map of midi number to that AUDC's own AUDF.
+ * @return {Map<number, number>} Map of midi number to that AUDC's  AUDF.
  */
 export const audfByMidiForAudc = (audc) => {
   const map = new Map();
@@ -224,15 +224,15 @@ export const audfByMidiForAudc = (audc) => {
 };
 
 /**
- * A note's own effective AUDV (volume, 0-15) - an explicit per-note
- * override (see the Music tab's own piano-roll volume row) if one's been
- * set, else the instrument's own preset value, exactly like a note with no
+ * A note's  effective AUDV (volume, 0-15) - an explicit per-note
+ * override (see the Music tab's  piano-roll volume row) if one's been
+ * set, else the instrument's  preset value, exactly like a note with no
  * override already behaved before per-note volume existed. Shared by the
- * editor's own live preview, the Web Audio preview playback, and the
- * compiled ROM's own event generator, so all three always agree on
+ * editor's  live preview, the Web Audio preview playback, and the
+ * compiled ROM's  event generator, so all three always agree on
  * whichever value is actually in effect for a given note.
  * @param {Object} note The note to resolve a volume for.
- * @param {Object} soundEffect The note's own instrument (Sound tab preset).
+ * @param {Object} soundEffect The note's  instrument (Sound tab preset).
  * @return {number} The effective AUDV, 0-15.
  */
 export const noteAudv = (note, soundEffect) =>

@@ -263,18 +263,72 @@
       :mobile-breakpoint="0"
     >
       <div class="emulator-drawer-inner" :style="{paddingBottom: errorHeight + 'px'}">
-        <v-btn
-          block
-          small
-          text
-          class="emulator-refresh-button"
-          title="Reload the page to fix the emulator preview if it has disappeared - you'll need to click Update ROM again afterward"
-          @click="handleRefreshEmulator"
-        >
-          <v-icon left small>mdi-refresh</v-icon>
-          Refresh emulator
-        </v-btn>
-        <div id="javatari-target-container" :style="emulatorScaleStyle"></div>
+        <div class="emulator-toolbar-row">
+          <v-btn
+            small
+            text
+            class="emulator-refresh-button"
+            title="Reload the page to fix the emulator preview if it has disappeared - you'll need to click Update ROM again afterward"
+            @click="handleRefreshEmulator"
+          >
+            <v-icon left small>mdi-refresh</v-icon>
+            Refresh emulator
+          </v-btn>
+          <key-mapping-dialog></key-mapping-dialog>
+        </div>
+        <div id="gopher2600-target-container" :style="emulatorScaleStyle"></div>
+        <div class="panel-switches-row mt-2">
+          <v-btn
+            small
+            :color="emulatorPoweredOn ? 'primary' : undefined"
+            title="Power the emulated console on or off"
+            @click="handleTogglePower(!emulatorPoweredOn)"
+          >
+            <v-icon small>mdi-power</v-icon>
+          </v-btn>
+          <v-btn
+            small
+            :color="emulatorColorMode ? 'primary' : undefined"
+            title="Color/B&W switch"
+            @click="handleToggleColorMode(!emulatorColorMode)"
+          >
+            {{ emulatorColorMode ? 'Color' : 'B&W' }}
+          </v-btn>
+          <v-btn
+            small
+            :color="emulatorLeftDifficultyPro ? 'primary' : undefined"
+            title="Left (Player 1) difficulty switch"
+            @click="handleToggleDifficulty('left', !emulatorLeftDifficultyPro)"
+          >
+            P1: {{ emulatorLeftDifficultyPro ? 'A' : 'B' }}
+          </v-btn>
+          <v-btn
+            small
+            :color="emulatorRightDifficultyPro ? 'primary' : undefined"
+            title="Right (Player 2) difficulty switch"
+            @click="handleToggleDifficulty('right', !emulatorRightDifficultyPro)"
+          >
+            P2: {{ emulatorRightDifficultyPro ? 'A' : 'B' }}
+          </v-btn>
+          <v-btn
+            small
+            title="Select switch - hold to select (e.g. cycle game variation)"
+            @mousedown="handlePressSelect"
+            @mouseup="handleReleaseSelect"
+            @mouseleave="handleReleaseSelect"
+          >
+            Select
+          </v-btn>
+          <v-btn
+            small
+            title="Reset switch - hold to reset the running game"
+            @mousedown="handlePressReset"
+            @mouseup="handleReleaseReset"
+            @mouseleave="handleReleaseReset"
+          >
+            Reset
+          </v-btn>
+        </div>
         <div class="rom-buttons-row mt-2">
           <v-btn
             :color="romOutdated ? 'warning' : 'primary'"
@@ -414,17 +468,20 @@
 <script>
 import {useCompileLog, useErrorStorage, useHideDescriptionTextStorage, useHideSidebarStorage,
   useStellaPathStorage} from './hooks/project';
-import {buildRom, useRomCapacity, useRomOutdated, useHasCompiledRom} from './hooks/rom';
+import {buildRom, useRomCapacity, useRomOutdated, useHasCompiledRom, useCompiledRomBytes} from './hooks/rom';
+import {safeWithGopher2600} from './hooks/emulator';
+import KeyMappingDialog from './components/KeyMappingDialog.vue';
 import {productName, version} from '../package.json';
 
 // Below this fraction of the bank's usable space remaining, the capacity
 // display switches to a warning color.
 const ROM_CAPACITY_LOW_THRESHOLD = 0.1;
 
-// Javatari renders at a fixed size and never reflows to fit its container, so
-// the emulator is scaled with a CSS transform instead. It picks that size from
-// the space available when it starts, so it varies with the window and has to
-// be measured rather than assumed.
+// The emulator canvas renders at a fixed pixel resolution (the real TIA's
+// cropped picture size) and never reflows to fit its container, so it's
+// scaled with a CSS transform instead - see emulatorScaleStyle/
+// updateEmulatorScale. That resolution isn't known until the first frame
+// renders, so it has to be measured rather than assumed.
 const EMULATOR_DEFAULT_WIDTH = 256;
 const EMULATOR_MIN_WIDTH = 200;
 const EMULATOR_MAX_WIDTH = 900;
@@ -445,13 +502,13 @@ const ERROR_MIN_HEIGHT = 112;
 // content) when dragging the error pane very tall.
 const ERROR_MIN_REMAINING_HEIGHT = 150;
 const ERROR_HEIGHT_KEY = 'vcs-game-maker.errorHeight';
-// How long to keep waiting for Javatari to lay out before giving up. A timer
-// is used rather than an animation frame so this still settles when the window
-// is in the background.
+// How long to keep waiting for the emulator canvas to lay out before giving
+// up. A timer is used rather than an animation frame so this still settles
+// when the window is in the background.
 const EMULATOR_MEASURE_RETRIES = 60;
 const EMULATOR_MEASURE_INTERVAL = 50;
 
-// Alphabetizes the "Variables" panel's own per-slot lists (a-z for a plain
+// Alphabetizes the "Variables" panel's  per-slot lists (a-z for a plain
 // letter slot; numeric-aware for a Superchip "varN" slot, so var2 sorts
 // before var10 rather than after it as a plain string compare would) -
 // these arrive in RESERVATION order (whichever feature/user variable
@@ -479,6 +536,7 @@ const readStoredErrorHeight = () => {
 const readStoredEmulatorVisible = () => localStorage.getItem(EMULATOR_VISIBLE_KEY) !== 'false';
 
 export default {
+  components: {KeyMappingDialog},
   data: () => ({
     drawer: null,
     emulatorWidth: readStoredWidth(),
@@ -490,13 +548,20 @@ export default {
     resizingError: false,
     building: false,
     launchingStella: false,
+    // Front-panel switch state. Power defaults on (matches the previous
+    // Javatari preview always being "on"); the rest default to real Atari
+    // 2600 power-on defaults (Color, both difficulties set to "A"/pro).
+    emulatorPoweredOn: true,
+    emulatorColorMode: true,
+    emulatorLeftDifficultyPro: true,
+    emulatorRightDifficultyPro: true,
   }),
   setup() {
     const errorStorage = useErrorStorage();
     console.info('Text', version);
     return {
       errorStorage, compileLog: useCompileLog(), romOutdated: useRomOutdated(), romCapacity: useRomCapacity(),
-      hasCompiledRom: useHasCompiledRom(),
+      hasCompiledRom: useHasCompiledRom(), compiledRomBytes: useCompiledRomBytes(),
       productName, version, hideDescriptionTextStorage: useHideDescriptionTextStorage(),
       hideSidebarStorage: useHideSidebarStorage(),
       stellaPathStorage: useStellaPathStorage(),
@@ -505,22 +570,20 @@ export default {
   mounted() {
     this.attachEmulator();
     window.addEventListener('resize', this.handleWindowResize);
+    window.addEventListener('gopher2600-ready', this.handleGopher2600Ready);
   },
   beforeDestroy() {
     this.stopResize();
     window.removeEventListener('resize', this.handleWindowResize);
+    window.removeEventListener('gopher2600-ready', this.handleGopher2600Ready);
     if (this.emulatorResizeObserver) {
       this.emulatorResizeObserver.disconnect();
       this.emulatorResizeObserver = null;
     }
-    if (this.emulatorReparentObserver) {
-      this.emulatorReparentObserver.disconnect();
-      this.emulatorReparentObserver = null;
-    }
   },
   computed: {
     // See Configuration.vue's "Expert mode" switch - reads the same standing
-    // app preference (useHideDescriptionTextStorage, see its own comment in
+    // app preference (useHideDescriptionTextStorage, see its  comment in
     // hooks/project.js - not part of the project itself, unlike the rest of
     // configurationState), bound as a class on the root v-app below so the
     // global ".hide-description-text .v-messages__message" CSS rule can
@@ -530,7 +593,7 @@ export default {
     hideDescriptionText() {
       // this.hideDescriptionTextStorage is a computed RETURNED from setup() -
       // Vue's Composition API auto-unwraps that when accessed through the
-      // component instance (confirmed against this file's own romCapacityText
+      // component instance (confirmed against this file's  romCapacityText
       // above, which reads "this.romCapacity" the same unwrapped way), so
       // it's already the plain boolean here, not a ref needing its own
       // ".value".
@@ -538,12 +601,12 @@ export default {
     },
     // Same auto-unwrapping reasoning as hideDescriptionText just above - see
     // Configuration.vue's "Never show the left sidebar" switch/
-    // useHideSidebarStorage's own comment in hooks/project.js.
+    // useHideSidebarStorage's  comment in hooks/project.js.
     hideSidebar() {
       return !!this.hideSidebarStorage;
     },
     // Same "window.electronAPI's mere presence" check as Configuration.vue's
-    // own isElectron - see preload.js's own comment. Gates the "Test in
+    // own isElectron - see preload.js's  comment. Gates the "Test in
     // Stella" button's very existence (not just whether it's enabled),
     // since a plain web build has no way to launch a local program at all.
     isElectron() {
@@ -596,8 +659,8 @@ export default {
     // separately from the byte-capacity text above since these are a
     // completely different, hard-capped resource (25-55 slots project-wide
     // depending on Superchip, not bytes) that can run out well before ROM
-    // space does. Superchip's own half is omitted entirely when it's off
-    // (available is 0 then - see computeVariableUsage's own comment) rather
+    // space does. Superchip's  half is omitted entirely when it's off
+    // (available is 0 then - see computeVariableUsage's  comment) rather
     // than shown as "0 of 0", which would read as broken rather than simply
     // not applicable yet.
     romVariablesSummary() {
@@ -605,12 +668,12 @@ export default {
       if (!usage) return '';
       const parts = [`${usage.letters.used} of ${usage.letters.available} letters`];
       if (usage.superchip.available) parts.push(`${usage.superchip.used} of ${usage.superchip.available} Superchip RAM`);
-      // Superchip's own separate r/w pool (see computeVariableUsage's own
+      // Superchip's  separate r/w pool (see computeVariableUsage's own
       // comment in hooks/rom.js) - a completely different resource from the
       // "Superchip RAM" figure just above (that one shares the same 48-
       // byte-freed-playfield-plus-26-letter budget the plain letters figure
-      // also draws from; this is its own distinct 128-byte region), so it's
-      // its own clause here rather than folded into that count.
+      // also draws from; this is its  distinct 128-byte region), so it's
+      // its  clause here rather than folded into that count.
       if (usage.superchipRw.available) {
         parts.push(`${usage.superchipRw.used} of ${usage.superchipRw.available} Superchip read/write vars`);
       }
@@ -622,7 +685,7 @@ export default {
     // romVariableAssignments/romVariablesSummary below: those two describe the
     // competitive dev/user var pool specifically (14 letters without
     // Superchip, matching USER_VARIABLE_LETTERS_WITHOUT_SUPERCHIP - see its
-    // own comment in generators/bbasic.js for why system variables' own 12
+    // own comment in generators/bbasic.js for why system variables'  12
     // letters are excluded from that count), so merging system variables into
     // that same list would make "X of 14" look wrong the moment the list
     // shows more than 14 entries, even though nothing is actually broken.
@@ -633,9 +696,9 @@ export default {
     // Per-slot breakdown of the competitive dev/user var pool (see bbasic.js's
     // own letterVarAssignments/superchipVarAssignments and hooks/rom.js's
     // computeVariableUsage), split into two separate lists by each entry's own
-    // isUserVariable flag (see bbasic.js's own userVarNames comment) - a dev
-    // var some block quietly needs (rand16, collision-move's own backtrack
-    // bytes, missile fire's own fired-direction state, etc.) reads very
+    // isUserVariable flag (see bbasic.js's  userVarNames comment) - a dev
+    // var some block quietly needs (rand16, collision-move's  backtrack
+    // bytes, missile fire's  fired-direction state, etc.) reads very
     // differently from a variable the user themselves created on the
     // Variables tab, even though both draw from the exact same letter/
     // Superchip budget and both count toward the summary line's own "X of Y"
@@ -650,7 +713,7 @@ export default {
     romUserVariableAssignments() {
       return this.romVariableAssignmentsByOwner(true);
     },
-    // Per-bank breakdown (see computeRomCapacity's own perBank field) - the
+    // Per-bank breakdown (see computeRomCapacity's  perBank field) - the
     // summary above averages over every bank, which can look like there's
     // plenty of room even when a SPECIFIC bank (the one a new relocated unit
     // would actually need to land in) has almost none left. Each bank's own
@@ -694,7 +757,7 @@ export default {
     },
     emulatorVisible(value) {
       localStorage.setItem(EMULATOR_VISIBLE_KEY, value ? 'true' : 'false');
-      // Re-measure once it's shown again - updateEmulatorScale's own retry
+      // Re-measure once it's shown again - updateEmulatorScale's  retry
       // loop already tolerates being called before the drawer's slide-in
       // transition (transform/visibility - see .emulator-drawer's own
       // transition-property) finishes, the same way it already tolerates a
@@ -706,12 +769,12 @@ export default {
     // scrolled (usually the top, showing only the earliest "Preprocessing
     // started..."-style lines) while new lines keep appending below the
     // visible area. compileLog gets a whole new array reference on every
-    // append (see hooks/project.js's own appendCompileLog), so a plain
+    // append (see hooks/project.js's  appendCompileLog), so a plain
     // (non-deep) watcher already fires on every line, not just the first.
     compileLog() {
       this.$nextTick(this.scrollErrorConsoleToBottom);
     },
-    // Same reasoning as compileLog above - a build's own final failure
+    // Same reasoning as compileLog above - a build's  final failure
     // message renders through this separate ref (see errorStorage's own
     // comment in hooks/project.js), not as another compileLog line.
     errorStorage() {
@@ -729,7 +792,7 @@ export default {
       return [
         ...sortByAssignmentSlot((usage.letterAssignments || []).filter(matches)),
         ...sortByAssignmentSlot((usage.superchipAssignments || []).filter(matches)),
-        // Superchip's own r/w pool (see computeVariableUsage's own comment
+        // Superchip's  r/w pool (see computeVariableUsage's  comment
         // in hooks/rom.js) - every entry here is isUserVariable: false, so
         // this only ever contributes to the block list, never the user one,
         // matching this pool's own "never offered to the user" design.
@@ -746,8 +809,8 @@ export default {
       if (!el) return;
       el.scrollTop = el.scrollHeight;
     },
-    // Formats one bank's own contents (see hooks/rom.js's computeBankContents)
-    // as a list of {label, names} entries for romCapacityBanks's own per-bank
+    // Formats one bank's  contents (see hooks/rom.js's computeBankContents)
+    // as a list of {label, names} entries for romCapacityBanks's  per-bank
     // entry - one entry per kind present (rather than one long comma-separated
     // line) so a bank holding several different kinds of content stays
     // scannable, and an empty array for a bank with nothing in it. Kept
@@ -774,119 +837,20 @@ export default {
       if (contents.bankOverhead) parts.push({label: 'Bank switching overhead', names: ''});
       return parts;
     },
-    // Javatari's own size is whatever it chose at startup, so scale it to the
-    // column by measuring both. offsetWidth/offsetHeight are layout sizes and
-    // so are unaffected by the transform already applied.
-    // Ugly hack in order to move the Javatari screen to a Vue component.
-    // Javatari builds its screen on its own schedule, so it may not exist yet
-    // when this component mounts. Appending it then threw, leaving the emulator
-    // missing entirely, so wait for it instead.
-    attachEmulator(retriesLeft = EMULATOR_MEASURE_RETRIES) {
-      const container = document.getElementById('javatari-target-container');
-      const javatariScreen = document.getElementById('javatari-screen');
-      if (!container) return;
-      if (!javatariScreen) {
-        if (retriesLeft > 0) {
-          window.setTimeout(
-              () => this.attachEmulator(retriesLeft - 1), EMULATOR_MEASURE_INTERVAL);
-        }
-        return;
-      }
-      container.appendChild(javatariScreen);
-      this.resetScreenStyle(javatariScreen);
-      this.observeEmulatorSize(container, javatariScreen);
-      this.observeEmulatorReparenting(container);
-      this.pollEmulatorVisibility(container);
+    // The canvas lives directly in public/index.html (see
+    // tools/gopher2600-wasm), so unlike the old Javatari integration it
+    // exists from page load rather than being asynchronously created and
+    // placed by an external library - no retry-until-it-exists dance needed,
+    // just move it into this component's container once and start
+    // observing its size.
+    attachEmulator() {
+      const container = document.getElementById('gopher2600-target-container');
+      const screen = document.getElementById('gopher2600-screen');
+      if (!container || !screen) return;
+      container.appendChild(screen);
+      screen.style.display = '';
+      this.observeEmulatorSize(container, screen);
       this.updateEmulatorScale();
-    },
-    // Wipes the screen element's inline style (Javatari sets some of its own
-    // when it owns the element's placement, e.g. while it's parked in its
-    // default DOM location) EXCEPT margin-bottom, which Javatari also uses,
-    // separately, to reserve room below the screen for its own console-panel
-    // graphic (power/reset/difficulty switches) whenever that panel is
-    // active. A blanket "style = ''" here used to wipe that margin along with
-    // everything else; updateEmulatorScale() then sized the container from
-    // the now-zero margin, and since the container clips overflow, the panel
-    // was still being drawn - just below the bottom edge of a container too
-    // short to show it. Confirmed by manually restoring the margin and
-    // triggering a rescale, which brought the panel back with no other
-    // change. Preserving it here keeps the container sized to include it.
-    resetScreenStyle(screen) {
-      const marginBottom = screen.style.marginBottom;
-      screen.style = '';
-      screen.style.marginBottom = marginBottom;
-    },
-    // Javatari sometimes re-inserts its own screen element back into its
-    // default location in the DOM (observed after loading a new ROM via
-    // "Update ROM") rather than leaving it where attachEmulator() moved it -
-    // since our layout only shows what's inside #javatari-target-container,
-    // this makes the preview appear to vanish. A single re-attach right after
-    // a build finishes (handleRomUpdate already does this) isn't reliable if
-    // Javatari does the move on its own schedule; watching for it and moving
-    // the screen back the moment it happens is more robust than reacting only
-    // once, after the fact.
-    //
-    // Also dismisses Javatari's own dialogs here rather than only once from
-    // handleRomUpdate - see dismissEmulatorDialogs()'s own comment for why a
-    // dialog can open on Javatari's own schedule, after the one-shot
-    // post-build call already ran, and previously stayed open forever since
-    // nothing ever checked again. "attributes: true" with a class filter is
-    // needed for that: opening a dialog toggles an existing element's
-    // "jt-show" class rather than inserting a new node, which the
-    // childList-only observer below never saw.
-    // Shared by both the event-driven MutationObserver below and the
-    // time-based poller (pollEmulatorVisibility) - the observer only fires
-    // for mutations it was specifically told to watch (childList, "class",
-    // "style"), so any OTHER way the screen could end up hidden or
-    // misplaced (a Javatari-internal state change that doesn't touch those,
-    // or one this app doesn't know about yet) would slip past it silently.
-    // Polling the same check on a timer catches those too, since it doesn't
-    // depend on knowing what caused the problem - only on verifying the
-    // current state is correct.
-    checkAndFixEmulatorVisibility(container) {
-      this.dismissEmulatorDialogs();
-      const screen = document.getElementById('javatari-screen');
-      if (!screen) return;
-      const reparented = screen.parentElement !== container;
-      if (reparented) container.appendChild(screen);
-      if (reparented || screen.style.display === 'none' || screen.style.visibility === 'hidden' ||
-          screen.style.opacity === '0') {
-        this.resetScreenStyle(screen);
-        this.updateEmulatorScale();
-      }
-    },
-    observeEmulatorReparenting(container) {
-      if (this.emulatorReparentObserver) return;
-      this.emulatorReparentObserver = new MutationObserver(() => this.checkAndFixEmulatorVisibility(container));
-      this.emulatorReparentObserver.observe(document.body,
-          {childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style']});
-    },
-    // Time-based backstop for whatever the event-driven observer above
-    // misses - see checkAndFixEmulatorVisibility's own comment. Runs
-    // indefinitely (this component is never unmounted in normal use - it's
-    // the app's own root), so no clearInterval on a matching lifecycle hook.
-    pollEmulatorVisibility(container) {
-      if (this.emulatorVisibilityPoller) return;
-      this.emulatorVisibilityPoller = window.setInterval(
-          () => this.checkAndFixEmulatorVisibility(container), 500);
-    },
-    // Root cause of the preview "vanishing" after "Update ROM": Javatari's
-    // own "Select Cartridge"/"Select ROM Format"/"Save/Load State" dialogs
-    // (all share the "jt-select-dialog" class, shown/hidden via the "jt-show"
-    // class) are drawn on TOP of the screen at a high z-index. If one is
-    // already open - most commonly the cartridge chooser, which Javatari
-    // opens on its own at startup whenever there's no cartridge inserted yet
-    // and it has recent ROMs to offer - loading a new ROM via
-    // fileLoader.loadFromContent() builds and runs it correctly underneath,
-    // but doesn't close whatever dialog happened to already be open, leaving
-    // it covering the now-running game. Removing "jt-show" from every such
-    // dialog closes them the same way Javatari's own Escape-key handler does,
-    // without triggering any of their side effects (loading a different ROM,
-    // opening a file picker, etc. - those only run from their own dialog
-    // button/key handlers, not from this class removal).
-    dismissEmulatorDialogs() {
-      document.querySelectorAll('.jt-select-dialog.jt-show')
-          .forEach((dialog) => dialog.classList.remove('jt-show'));
     },
     // A single measurement is fragile: if it runs while the container's width
     // has not settled to the drawer width yet, the scale comes out too large,
@@ -895,13 +859,14 @@ export default {
     // changes makes the height self-correct once layout settles, instead of
     // staying wrong until the user resizes.
     //
-    // Also watches the Javatari screen element itself, not just the
-    // container: toggling Javatari's own fullscreen button changes the
-    // screen's *intrinsic* size (screen.offsetWidth/offsetHeight, what the
-    // scale is computed from), without necessarily changing the container's
-    // width - leaving the container-only check above blind to it, so the
-    // scale stayed stuck at whatever it was before fullscreen and the
-    // preview came back the wrong size after exiting.
+    // Also watches the canvas element itself, not just the container: the
+    // emulator resizes the canvas's width/height attributes to match
+    // the cropped picture it's rendering (see gopher2600-wasm's
+    // onAnimationFrame, which can change size e.g. between NTSC/PAL), which
+    // changes its *intrinsic* size (screen.offsetWidth/offsetHeight, what
+    // the scale is computed from) without necessarily changing the
+    // container's width - leaving the container-only check above blind
+    // to it.
     observeEmulatorSize(container, screen) {
       if (this.emulatorResizeObserver || typeof ResizeObserver === 'undefined') {
         return;
@@ -938,12 +903,14 @@ export default {
       this.updateEmulatorScale();
     },
     updateEmulatorScale(retriesLeft = EMULATOR_MEASURE_RETRIES) {
-      const container = document.getElementById('javatari-target-container');
-      const screen = document.getElementById('javatari-screen');
+      const container = document.getElementById('gopher2600-target-container');
+      const screen = document.getElementById('gopher2600-screen');
       if (!container || !screen) return;
-      // Javatari lays out after this component mounts, so it may still have no
-      // size. Measuring then would collapse the container to zero height and
-      // clip the emulator away entirely. Also guards the container's own
+      // The canvas has no size until the emulator's first rendered frame
+      // sets its width/height attributes (see gopher2600-wasm's
+      // onAnimationFrame). Measuring before then would collapse the
+      // container to zero height and clip the emulator away entirely. Also
+      // guards the container's
       // width, not just the screen's - this is called synchronously right
       // after a ROM build finishes (see handleRomUpdate), which can land
       // before the drawer has laid out again since the last reflow, momentarily
@@ -1028,62 +995,51 @@ export default {
       window.setTimeout(() => {
         buildRom().finally(() => {
           this.building = false;
-          // Loading a new ROM sometimes leaves the preview looking like it
-          // vanished - re-running the same attach/observe logic used on
-          // mount is a cheap, safe way to re-sync regardless of the exact
-          // cause (it re-finds the screen element fresh rather than
-          // trusting a reference that may be stale, and re-attaching an
-          // already-attached element or re-observing an already-observed
-          // one is a no-op). dismissEmulatorDialogs() closes the actual
-          // confirmed cause - see its own comment.
-          this.dismissEmulatorDialogs();
+          // Re-running the same attach/observe logic used on mount is a
+          // cheap, safe way to keep the canvas correctly placed and sized
+          // after a build (re-finds the element fresh rather than trusting
+          // a reference that may be stale; re-attaching an already-attached
+          // element or re-observing an already-observed one is a no-op).
           this.attachEmulator();
         });
       }, 0);
     },
-    // Manual escape hatch for the emulator preview intermittently vanishing.
-    // Re-parenting/re-styling the existing screen element (the same recovery
-    // dismissEmulatorDialogs()/attachEmulator()/checkAndFixEmulatorVisibility
-    // already do automatically) turned out not to be enough on its own -
-    // confirmed the DOM element can be present, correctly parented, and
-    // correctly styled while still showing nothing, meaning Javatari's own
-    // internal rendering had actually stopped, not just been hidden or
-    // misplaced. There's no supported way to restart only Javatari's
-    // internals from here (it's a page-embedded <script>, not something this
-    // app owns or can re-inject on its own), so this reloads the whole page
-    // instead - the one guaranteed way to get a fresh, working instance.
+    // Manual fallback if the emulator preview ever gets into a bad state
+    // this component's logic doesn't recover from by itself (e.g. the
+    // WASM module itself crashing - see gopher2600-wasm's onAnimationFrame,
+    // which recovers panics in the render loop but not a fatal WASM trap).
+    // A full reload is the one guaranteed way to get a fresh instance.
     // Project data lives in localStorage and survives this; the compiled ROM
-    // (kept in memory by Javatari) and the Generated tab's own in-memory
-    // code ref don't, so the user needs to click "Update ROM" again
-    // afterward. Deliberately NOT done automatically here: if a bad ROM is
-    // itself what froze the emulator, auto-rebuilding it the moment the
-    // page comes back up would just re-trigger the same freeze immediately,
-    // soft-locking the user out of ever seeing a stable page to fix the
-    // project from.
+    // and the Generated tab's in-memory code ref don't, so the user
+    // needs to click "Update ROM" again afterward. Deliberately NOT done
+    // automatically here: if a bad ROM is itself what crashed the emulator,
+    // auto-rebuilding it the moment the page comes back up would just
+    // re-trigger the same crash immediately, soft-locking the user out of
+    // ever seeing a stable page to fix the project from.
     handleRefreshEmulator() {
       window.location.reload();
     },
     handleRomDownload() {
-      if (!window.Javatari?.compiledResult) {
+      if (!this.compiledRomBytes) {
         this.errorStorage.value =
           'There is no compiled ROM yet; use "Update ROM" first.';
         return;
       }
-      const blob = new Blob([Javatari.compiledResult.output], {type: 'application/octet-stream'});
+      const blob = new Blob([this.compiledRomBytes.output], {type: 'application/octet-stream'});
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
       link.download = 'compiled-rom.bin';
       link.click();
     },
-    // "Test in Stella" - launches the user's own local Stella install
-    // (configured on the Options tab - see Configuration.vue's own Stella
+    // "Test in Stella" - launches the user's  local Stella install
+    // (configured on the Options tab - see Configuration.vue's  Stella
     // field) with the just-compiled ROM, with no extra CLI flags ("default
-    // settings", per the explicit request - Stella's own UI already
+    // settings", per the explicit request - Stella's  UI already
     // remembers whatever the user last configured there across runs). Only
     // reachable in the desktop build at all (see isElectron above) - a
     // browser tab has no way to launch a local program.
     async handleTestInStella() {
-      if (!window.Javatari?.compiledResult) {
+      if (!this.compiledRomBytes) {
         this.errorStorage.value = 'There is no compiled ROM yet; use "Update ROM" first.';
         return;
       }
@@ -1093,7 +1049,7 @@ export default {
       }
       this.launchingStella = true;
       try {
-        const result = await window.electronAPI.launchStella(this.stellaPathStorage, Javatari.compiledResult.output);
+        const result = await window.electronAPI.launchStella(this.stellaPathStorage, this.compiledRomBytes.output);
         if (!result.success) {
           this.errorStorage.value = `Couldn't launch Stella: ${result.error}`;
         }
@@ -1101,13 +1057,54 @@ export default {
         this.launchingStella = false;
       }
     },
+    // Front-panel switches - Gopher2600 (unlike Javatari) draws no
+    // console-panel graphic itself, so these are real UI, wired
+    // directly to gopher2600-wasm's exposed API (tools/gopher2600-wasm/main.go).
+    handleTogglePower(poweredOn) {
+      this.emulatorPoweredOn = poweredOn;
+      safeWithGopher2600((gopher2600) => {
+        if (poweredOn) {
+          gopher2600.powerOn();
+          // A fresh VCS resets every switch to hardware defaults - restore
+          // whatever position the UI currently shows for the persistent
+          // (non-momentary) ones.
+          gopher2600.setColorMode(this.emulatorColorMode);
+          gopher2600.setDifficulty('left', this.emulatorLeftDifficultyPro);
+          gopher2600.setDifficulty('right', this.emulatorRightDifficultyPro);
+        } else {
+          gopher2600.powerOff();
+        }
+      });
+    },
+    handlePressReset() {
+      safeWithGopher2600((gopher2600) => gopher2600.pressReset());
+    },
+    handleReleaseReset() {
+      safeWithGopher2600((gopher2600) => gopher2600.releaseReset());
+    },
+    handlePressSelect() {
+      safeWithGopher2600((gopher2600) => gopher2600.pressSelect());
+    },
+    handleReleaseSelect() {
+      safeWithGopher2600((gopher2600) => gopher2600.releaseSelect());
+    },
+    handleToggleColorMode(color) {
+      this.emulatorColorMode = color;
+      safeWithGopher2600((gopher2600) => gopher2600.setColorMode(color));
+    },
+    handleToggleDifficulty(port, pro) {
+      if (port === 'left') this.emulatorLeftDifficultyPro = pro;
+      else this.emulatorRightDifficultyPro = pro;
+      safeWithGopher2600((gopher2600) => gopher2600.setDifficulty(port, pro));
+    },
   },
 };
 </script>
-<!-- Unscoped: #javatari-screen is injected by Javatari at runtime, so it never
+<!-- Unscoped: #gopher2600-screen lives directly in public/index.html and is
+     moved into this component's DOM by attachEmulator(), so it never
      carries this component's scope attribute. -->
 <style>
-/* The app's own default font, as a custom property so switching it later
+/* The app's  default font, as a custom property so switching it later
    (see public/index.html's own <link> for the actual font file/weights)
    only means changing this one value, not hunting down every place that
    might otherwise hardcode a font name. .v-application is the exact
@@ -1117,7 +1114,7 @@ export default {
    second, lower-priority one beside it. */
 :root {
   --app-font-family: 'Inter', sans-serif;
-  /* Blockly's own block/flyout text only - deliberately separate from
+  /* Blockly's  block/flyout text only - deliberately separate from
      --app-font-family above (the rest of the app, Vuetify panels included,
      stays on Inter) - see the .blocklyText/.blocklyFlyoutLabelText rule
      below and APP_BLOCKLY_THEME's own fontStyle in ActionEditor.vue, which
@@ -1212,7 +1209,7 @@ export default {
   box-shadow: none !important;
 }
 
-/* Recolors a selected card's own border to the app's primary blue, plus a
+/* Recolors a selected card's  border to the app's primary blue, plus a
    2px outline (drawn outside the border edge, never part of layout/box-
    sizing, so a card's own content never shifts when selected) for extra
    visual weight. Both need !important: border-color beats v-sheet--
@@ -1234,7 +1231,7 @@ export default {
   outline: 2px solid var(--v-primary-base, #1976d2) !important;
 }
 
-/* Every tab's own main window card shares this exact class name
+/* Every tab's  main window card shares this exact class name
    (PlayerEditor/BackgroundEditor/SoundFXEditor/TextEditor/DataEditor.vue,
    among others) - squared off globally here rather than per-file, so it
    reads consistently with Options/Music (which use v-card's own "flat"
@@ -1247,7 +1244,7 @@ export default {
   border-radius: 0 !important;
 }
 
-/* Vuetify's own default drawer border (an internal 1px div it renders, not
+/* Vuetify's  default drawer border (an internal 1px div it renders, not
    a CSS border property) for both the tool sidebar (.nav-drawer) and the
    emulator pane (.emulator-drawer) - darkened here to match the same
    .v-sheet--outlined border color above rather than Vuetify's default
@@ -1262,7 +1259,7 @@ export default {
   background-color: rgba(0, 0, 0, 0.24) !important;
 }
 
-/* Vuetify assigns v-menu/v-dialog overlay content its own z-index
+/* Vuetify assigns v-menu/v-dialog overlay content its  z-index
    dynamically at open time (computed from whatever's already on the page,
    not a fixed CSS value - there's nothing to override in its own
    stylesheet), and that computed value routinely lands below this app's
@@ -1274,7 +1271,7 @@ export default {
    confirmation) instead of under them. Pushed well above every one of
    those instead of tuning each one down, so no future chrome-level z-index
    added here needs to keep this in mind too. */
-/* Was pinned to a fixed 30 - too low. .v-overlay (Vuetify's own generic
+/* Was pinned to a fixed 30 - too low. .v-overlay (Vuetify's  generic
    modal-backdrop wrapper - shared by v-dialog, v-menu, AND a temporary
    v-navigation-drawer's own scrim, e.g. the emulator sidebar) gets its own
    z-index assigned dynamically by Vuetify, unrelated to this stylesheet,
@@ -1321,7 +1318,7 @@ export default {
   background-color: rgba(0, 0, 0, 0.4);
 }
 
-/* Blockly draws its own scrollbars as SVG rects (.blocklyScrollbarHandle),
+/* Blockly draws its  scrollbars as SVG rects (.blocklyScrollbarHandle),
    not real browser scrollbars, so the ::-webkit-scrollbar rules above never
    reach them - overridden here with the same rest/hover colors so they read
    as the same design instead of Blockly's own default light grey.
@@ -1346,7 +1343,7 @@ export default {
   fill: rgba(0, 0, 0, 0.4);
 }
 
-/* Matches the grid-snap icon's own rest/hover/press opacity steps (see
+/* Matches the grid-snap icon's  rest/hover/press opacity steps (see
    ActionEditor.vue's setupGridSnapZoomButton) - overrides Blockly's own
    stock ".blocklyZoom>image"/"...:hover"/"...:active" rule (css.js,
    .4/.6/.8), which is the SAME selector this app's own stylesheet uses, so
@@ -1374,7 +1371,7 @@ export default {
    width/x/rx isn't reliable enough across browsers for something this
    visible. */
 
-/* Overrides Vuetify's own bundled reset (ress.css), which sets
+/* Overrides Vuetify's  bundled reset (ress.css), which sets
    "html { overflow-y: scroll }" deliberately (its own comment: "All
    browsers without overlaying scrollbars") to reserve scrollbar space
    up front and avoid a width shift on pages that sometimes need to
@@ -1438,7 +1435,7 @@ html {
   font-family: var(--app-font-family) !important;
 }
 
-/* Blockly ships its own bundled CSS (font: 11pt sans-serif on these exact
+/* Blockly ships its  bundled CSS (font: 11pt sans-serif on these exact
    selectors) rather than inheriting the page's own font-family, so the
    block canvas/flyout text stayed in the browser's generic sans-serif even
    after .v-application above switched everywhere else - confirmed directly
@@ -1477,7 +1474,7 @@ html {
   border-radius: 8px !important;
 }
 
-/* @blockly/field-grid-dropdown's own default 7px grid-gap between cells -
+/* @blockly/field-grid-dropdown's  default 7px grid-gap between cells -
    with the border/padding shrink below already making each cell mostly
    just its own swatch, that gap read as a wide, oddly deliberate-looking
    gutter between adjacent colors rather than the label-affording spacing
@@ -1486,7 +1483,7 @@ html {
   grid-gap: 0 !important;
 }
 
-/* Each swatch cell's own bordered frame, shrunk to match blocks/color.js's
+/* Each swatch cell's  bordered frame, shrunk to match blocks/color.js's
    own 28x28 swatch images (up from an original 16x16) - @blockly/field-
    grid-dropdown's own default padding-left:15px is leftover checkmark
    space (this app already hides the checkmark itself, see that package's
@@ -1525,7 +1522,7 @@ html {
   box-shadow: inset 0 0 0 2px #000 !important;
 }
 
-/* Vuetify's own hint/error text under a field (e.g. the description under
+/* Vuetify's  hint/error text under a field (e.g. the description under
    the "Enable Superchip RAM..." switch on the Options tab) - default
    line-height (12px, exactly matching its own 12px font-size, i.e. no
    leading at all) reads as cramped once a hint runs to more than one line.
@@ -1549,7 +1546,7 @@ html {
   display: none;
 }
 
-/* Vuetify gives every ".v-messages" wrapper its own 14px min-height
+/* Vuetify gives every ".v-messages" wrapper its  14px min-height
    regardless of whether a message is actually rendered inside it (reserved
    so a validation error popping in/out doesn't shift surrounding layout) -
    hiding just the text above still left that empty 14px box behind, so
@@ -1560,28 +1557,29 @@ html {
   min-height: 0;
 }
 
-#javatari-target-container {
+#gopher2600-target-container {
   overflow: hidden;
   /* This sits inside .emulator-drawer-inner's flex column, at a fixed
      JS-computed height (see App.vue's own updateEmulatorScale) - without
      this, once the ROM capacity bank-contents text below it (see
      .rom-capacity-detail) grew long enough after a build that everything in
      the column no longer fit, the flex column's own default flex-shrink: 1
-     silently compressed this container below its real height instead of
-     leaving it alone, clipping the bottom of the emulator (Javatari's own
-     console-panel graphic) behind whatever sits right after it - the
-     Update ROM/Get generated ROM buttons - instead of showing it. That text
-     block already has its own overflow-y: auto (see its own flex: 1 1 auto)
-     specifically to absorb space shortages like this on its own, so nothing
-     above it - this container, the buttons, the summary text - should ever
-     need to shrink at all.
+     would silently compress this container below its real height instead
+     of leaving it alone, clipping the bottom of the emulator canvas behind
+     whatever sits right after it - the panel switches/Update ROM/Get
+     generated ROM buttons - instead of showing it. That text block already
+     has overflow-y: auto (see its flex: 1 1 auto) specifically
+     to absorb space shortages like this by itself, so nothing above it -
+     this container, the buttons, the summary text - should ever need to
+     shrink at all.
   */
   flex-shrink: 0;
 }
 
-#javatari-target-container > #javatari-screen {
+#gopher2600-target-container > #gopher2600-screen {
   transform: scale(var(--emulator-scale, 1));
   transform-origin: top left;
+  image-rendering: pixelated;
 }
 
 
@@ -1597,7 +1595,7 @@ html {
   box-shadow: none !important;
 }
 
-/* Shrinks the handle to the same diameter as the track's own height (14px,
+/* Shrinks the handle to the same diameter as the track's  height (14px,
    giving it the same 7px radius as the track/channel), instead of
    Vuetify's default handle (20px) sticking out past both edges of the
    track. top is re-centered to match (Vuetify's own rule computes it as
@@ -1728,7 +1726,7 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
   transition: none !important;
 }
 
-/* Vuetify's own default v-btn sizing (min-width: 64px, 0 16px padding) is
+/* Vuetify's  default v-btn sizing (min-width: 64px, 0 16px padding) is
    meant for a TEXT button - applied here to plain icon-only buttons (no
    "icon" prop, since these need to stay clickable/keyboard-focusable
    v-btn-with-text, not the smaller round "icon" button variant elsewhere
@@ -1748,7 +1746,7 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
   margin: 0 4px !important;
 }
 
-/* v-app-bar's own "app" positioning normally sets its own inline "left"
+/* v-app-bar's own "app" positioning normally sets its  inline "left"
    style past the drawer's own width automatically, via Vuetify's shared
    $vuetify.application.left tracking - which only accounts for space an
    ACTUALLY PRESENT drawer reserves. Whenever the drawer isn't there to
@@ -1823,7 +1821,7 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
   line-height: 1;
 }
 
-/* .app-logo's own divider, independent of the drawer's own border-top
+/* .app-logo's  divider, independent of the drawer's  border-top
    below (which only actually renders on-screen while the drawer itself is
    both present AND open) - confirmed directly as a real gap: the drawer is
    translated off-screen (not just closed) below Vuetify's own responsive
@@ -1847,7 +1845,7 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
   pointer-events: none;
 }
 
-/* Same divider, same color, on the sidebar's own top edge - now that the
+/* Same divider, same color, on the sidebar's  top edge - now that the
    drawer is "clipped" (starts below the app-bar instead of the system-bar
    above it, see the template), this lines up exactly with .top-toolbar's
    own border-bottom above, reading as one continuous line across the whole
@@ -1956,7 +1954,7 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
      rendering on top of the console footer (a sibling, not a descendant, so
      the console's own z-index couldn't help) instead of stopping above it
      the way the emulator drawer itself already does. */
-  /* Straddles the drawer's own left edge (-5px to +5px, via the "right"
+  /* Straddles the drawer's  left edge (-5px to +5px, via the "right"
      style bound to emulatorWidth - 5 in the template), matching
      .error-resize-handle's own straddle - a plain 6px strip fully inside
      the drawer was too easy to miss by a pixel and land on the emulator
@@ -1995,7 +1993,9 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
   background-color: rgba(0, 0, 0, 0.4);
 }
 
-.emulator-refresh-button {
+.emulator-toolbar-row {
+  display: flex;
+  align-items: center;
   margin-top: 8px;
   margin-bottom: 4px;
 }
@@ -2019,7 +2019,7 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
   box-shadow: none !important;
 }
 
-/* right: 16px (not flush against the window's own edge) - flush placement
+/* right: 16px (not flush against the window's  edge) - flush placement
    sat exactly where the browser's native scrollbar renders, which (unlike
    the DOM z-index fix .emulator-hide-button needed) can't be fixed with
    z-index at all: an OS/browser-drawn scrollbar always paints on top of
@@ -2066,7 +2066,7 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
   box-sizing: border-box;
   /* The "Refresh emulator"/"Update ROM"/"Get generated ROM" buttons are all
      "block" (100% width of this container), which previously ran them
-     flush edge to edge with no breathing room. #javatari-target-container
+     flush edge to edge with no breathing room. #gopher2600-target-container
      (the emulator screen itself) also ends up very slightly narrower as a
      result, rather than compensating it back out with its own negative
      margin - that container's own width feeds a live ResizeObserver-driven
@@ -2079,8 +2079,9 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
 /* "Update ROM"/"Get generated ROM" side by side in one row (used to each be
    a separate "block" full-width v-btn, stacked) - each sized to its own
    label's natural width (not stretched to fill/split the row) and the pair
-   centered as a group. */
-.rom-buttons-row {
+   centered as a group. Front-panel switches use the same layout. */
+.rom-buttons-row,
+.panel-switches-row {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
@@ -2118,7 +2119,7 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
    identically), it was purely this element-wide opacity multiplying that
    same color down for the sidebar alone. */
 
-/* The top v-app-bar's own tab buttons (.actions-item/.player-item/etc,
+/* The top v-app-bar's  tab buttons (.actions-item/.player-item/etc,
    the exact same class names as the sidebar's own v-list-item entries just
    above - see the rules right below this one) used to render with
    Vuetify's own default v-btn appearance, a solid light grey fill
@@ -2196,7 +2197,7 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
   border-left-color: rgb(156, 39, 176) !important;
 }
 
-/* Never had a color rule of its own before this - fell back to the same
+/* Never had a color rule of its  before this - fell back to the same
    unstyled default color the About tab (also with no rule of its own)
    happens to render with, making the two tabs look identically colored
    even though they're unrelated. */
@@ -2314,7 +2315,7 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
   user-select: text;
 }
 
-/* The "Variables:" summary line's own per-slot breakdown - same sizing as
+/* The "Variables:" summary line's  per-slot breakdown - same sizing as
    .rom-capacity-summary just above (it reads as a continuation of that line,
    not a new section), indented like .rom-capacity-bank-contents' own list
    items so each "letter: name" pair reads as a sub-item of the summary. */
@@ -2421,7 +2422,7 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
   overflow-y: auto;
 }
 
-/* v-footer's own default is a row-direction flex container (fine for a
+/* v-footer's  default is a row-direction flex container (fine for a
    single <pre>, wrong once this holds many stacked lines) - column instead,
    with no gap of its own, so spacing between lines comes only from
    .compile-log-line's own tight line-height below. */
@@ -2458,7 +2459,7 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
   position: absolute;
   left: 0;
   right: 0;
-  /* Straddles the footer's own top edge (-5px to +5px) rather than sitting
+  /* Straddles the footer's  top edge (-5px to +5px) rather than sitting
      entirely inside it - a plain 6px strip fully inside the panel was too
      easy to miss by a pixel and land on the error text right below it
      instead, starting a text selection instead of a resize drag. */
@@ -2472,7 +2473,7 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
   background-color: rgba(0, 0, 0, 0.15);
 }
 
-/* Matches .emulator-resize-handle's own grip bar above - same rest/hover
+/* Matches .emulator-resize-handle's  grip bar above - same rest/hover
    grey, just rotated for this handle's horizontal drag axis. */
 .error-resize-handle::after {
   content: '';

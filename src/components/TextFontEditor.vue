@@ -170,7 +170,7 @@ import {
   DEFAULT_TEXT_CURSOR,
 } from '../utils/text-font';
 
-// Same reasoning as ScoreFontEditor.vue's own PIXEL_ASPECT - these glyphs are
+// Same reasoning as ScoreFontEditor.vue's  PIXEL_ASPECT - these glyphs are
 // drawn with player graphics too (one color clock per pixel bit, stretched
 // 2:1 by the screen itself), regardless of being only 4 bits wide instead of
 // 8.
@@ -182,9 +182,9 @@ const PIXEL_ASPECT = 2;
 const GLYPH_BASE_WIDTH = 70;
 
 // One blank scanline between every real pixel row (see text12b.asm's own
-// drawtextrow - each "Text line N/5" section draws a row's own GRP0/GRP1
+// drawtextrow - each "Text line N/5" section draws a row's  GRP0/GRP1
 // bytes once, then a SECOND WSYNC'd scanline right after resets COLUP0/
-// COLUP1 to textbkcolor before the next row's own bytes are ready), so a
+// COLUP1 to textbkcolor before the next row's  bytes are ready), so a
 // glyph's real on-screen height is 2 scanlines per pixel row, not 1 - the
 // second one always blank. Purely a preview concern (see interlacedPreviewRows
 // below) - the stored/edited pixel matrix itself (state.glyphs) never
@@ -192,11 +192,11 @@ const GLYPH_BASE_WIDTH = 70;
 const buildBlankRow = () => new Array(TEXT_GLYPH_WIDTH).fill(0);
 
 // A single fixed pseudo-entry id for useCollapsedIds (hooks/collapse.js) -
-// that hook is built around a LIST of entries each with their own id (see
-// TextEditor.vue's own per-message cards), but works just as well for
-// remembering one single card's own collapsed state, keyed under its own
+// that hook is built around a LIST of entries each with their  id (see
+// TextEditor.vue's  per-message cards), but works just as well for
+// remembering one single card's  collapsed state, keyed under its own
 // dedicated tab name ('text-font-card', passed to useCollapsedIds below) so
-// it can never collide with an actual text message's own id.
+// it can never collide with an actual text message's  id.
 const CARD_ENTRY = {id: 'glyphs'};
 
 export default defineComponent({
@@ -214,7 +214,7 @@ export default defineComponent({
     // Whether the Text tab's own "Show a blinking scroll cursor" switch is
     // on - read directly (not passed as a prop) since nothing else about
     // this component depends on a parent already knowing/passing it down,
-    // same reasoning textBkColor's own read in TextEditor.vue already
+    // same reasoning textBkColor's  read in TextEditor.vue already
     // establishes for other Configuration-storage-backed Text Minikernel
     // settings.
     const enableTextScrollCursor = computed(() => {
@@ -227,18 +227,18 @@ export default defineComponent({
     });
 
     // Plain local view state, not persisted - same reasoning as
-    // selectedCardId in TextEditor.vue's own setup(): nothing here should
+    // selectedCardId in TextEditor.vue's  setup(): nothing here should
     // round-trip through a saved project.
     const showInGamePreview = ref(false);
     // Inserts a blank row (buildBlankRow) strictly BETWEEN each of the
-    // glyph's own real pixel rows (see buildBlankRow's own comment for why) -
+    // glyph's  real pixel rows (see buildBlankRow's  comment for why) -
     // N real rows become N*2-1 total, never a leading or trailing blank one.
     const interlacedPreviewRows = (glyphRows) => glyphRows
         .flatMap((row, i) => (i === glyphRows.length - 1 ? [row] : [row, buildBlankRow()]));
 
     // getDefaultTextFont() parses the real vendored text12b.asm (an async
     // fetch, cached after the first call) rather than a hand-transcribed
-    // constant - see its own comment in utils/text-font.js. state/handleReset
+    // constant - see its  comment in utils/text-font.js. state/handleReset
     // below simply have nothing to fall back to until this resolves, same as
     // any other "first paint waits on an async default" case in this app.
     const defaultGlyphs = ref(null);
@@ -272,12 +272,12 @@ export default defineComponent({
 
     // The pixel editor mutates its matrix in place, so the whole object is
     // reassigned to push it back into storage - same pattern as
-    // ScoreFontEditor.vue's own handleChange.
+    // ScoreFontEditor.vue's  handleChange.
     const handleChange = () => {
       state.value = state.value;
     };
 
-    // The space glyph's own char (' ') renders as empty, collapsed text -
+    // The space glyph's  char (' ') renders as empty, collapsed text -
     // without a visible stand-in, its label div has no content at all,
     // leaving it (and it alone) shorter than every other glyph's own
     // labeled card, so its whole card sits higher than the rest of its row
@@ -285,7 +285,7 @@ export default defineComponent({
     const glyphLabel = (char) => (char === ' ' ? '(space)' : char);
 
     // Same "PixelEditor only reads its value prop once, on mount" reset
-    // trick as ScoreFontEditor.vue's own resetToken.
+    // trick as ScoreFontEditor.vue's  resetToken.
     const resetToken = ref(0);
     const handleReset = () => {
       state.value = {
@@ -410,7 +410,7 @@ export default defineComponent({
   margin-top: -8px;
 }
 
-/* Matches PixelEditor.vue's own outlined v-card shape/width - kept a plain
+/* Matches PixelEditor.vue's  outlined v-card shape/width - kept a plain
    read-only rendering rather than a second PixelEditor instance (see the
    template's own comment on why), so its sizing has to be replicated by
    hand instead of coming from that component's own CSS. */
@@ -427,7 +427,7 @@ export default defineComponent({
   display: flex;
 }
 
-/* aspect-ratio 2/1 matches PIXEL_ASPECT (edit mode's own pixel cells are
+/* aspect-ratio 2/1 matches PIXEL_ASPECT (edit mode's  pixel cells are
    twice as wide as tall, for the same "one screen pixel is 2:1" reason - see
    PIXEL_ASPECT's own comment) - a blank interlaced row (see
    interlacedPreviewRows) is a real scanline too, so it keeps the exact same

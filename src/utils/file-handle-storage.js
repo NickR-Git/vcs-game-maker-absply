@@ -1,5 +1,5 @@
 // Persists the single "active project" FileSystemFileHandle (see
-// Project.vue's own data.activeFileHandle) across a page reload, so "Save"
+// Project.vue's  data.activeFileHandle) across a page reload, so "Save"
 // keeps writing straight back to the same file the user last saved to or
 // opened, instead of silently reverting to "Save As..." behavior just
 // because the tab got refreshed. A real reported gap: the handle used to
@@ -9,7 +9,7 @@
 // A FileSystemFileHandle can't go in localStorage (string-only), but IS a
 // structured-cloneable object IndexedDB can store directly - a single
 // fixed key is enough here, since there's only ever one "current project"
-// handle at a time (matching data.activeFileHandle's own single-value
+// handle at a time (matching data.activeFileHandle's  single-value
 // shape), not a per-project history.
 const DB_NAME = 'vcs-game-maker';
 const STORE_NAME = 'file-handles';
@@ -77,8 +77,8 @@ export const ensureWritePermission = async (handle) => {
   return false;
 };
 
-// The Electron build's own equivalent of the above, for the active
-// project's absolute file path (see background.js's own project:save-as/
+// The Electron build's  equivalent of the above, for the active
+// project's absolute file path (see background.js's  project:save-as/
 // project:open handlers) rather than a FileSystemFileHandle - a plain
 // string, so localStorage (not IndexedDB) is enough to persist it across
 // a reload.

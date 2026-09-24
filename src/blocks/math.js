@@ -32,10 +32,10 @@ Blockly.Blocks['math_number'] = {
   },
 };
 
-// Override the built-in arithmetic block to add batari Basic's own real
+// Override the built-in arithmetic block to add batari Basic's  real
 // bitwise operators (AND/OR/XOR - "&"/"|"/"^", confirmed against the real
 // command reference) alongside the stock +/-/×/÷/^ options. Hand-written
-// JSON (matching Blockly's own stock math_arithmetic definition, just with
+// JSON (matching Blockly's  stock math_arithmetic definition, just with
 // three extra OPERATOR options and plain ASCII symbols instead of the
 // stock block's %{BKY_...} localized ones - this app has no localization
 // elsewhere either) rather than patching the registered block after the
@@ -43,8 +43,8 @@ Blockly.Blocks['math_number'] = {
 // is used, not just after some other code path happens to touch it.
 // "math_op_tooltip" is the SAME extension the stock block already uses
 // (see node_modules/blockly/blocks/math.js) - it reads
-// Blockly.Constants.Math.TOOLTIPS_BY_OP for each OP value's own tooltip,
-// so the three new ops get their own entries added to that same shared
+// Blockly.Constants.Math.TOOLTIPS_BY_OP for each OP value's  tooltip,
+// so the three new ops get their  entries added to that same shared
 // map below, rather than needing a whole new extension.
 Blockly.Blocks['math_arithmetic'] = {
   init: function() {

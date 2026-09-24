@@ -34,24 +34,25 @@
 
 import Blockly from 'blockly';
 import {debounce} from 'lodash';
+import {WorkspaceSearch} from '@blockly/plugin-workspace-search';
 
 import {useBlocklyControlsHorizontalStorage, useDesaturateBlocklyColorsStorage} from '../hooks/project';
 
-// Blockly's own default for a block style's colourTertiary (the outline/
+// Blockly's  default for a block style's colourTertiary (the outline/
 // border stroke colour - see renderers/common/path_object.js's own
 // "stroke: this.style.colourTertiary") - whenever a theme doesn't set one
 // explicitly, which the Classic theme this app uses never does (only
 // colourPrimary, a bare hue number, per category - see node_modules/
-// blockly/core/theme/classic.js) - blends the block's own colour 30% of the
-// way toward WHITE, producing a lighter border than the block's own fill.
+// blockly/core/theme/classic.js) - blends the block's  colour 30% of the
+// way toward WHITE, producing a lighter border than the block's  fill.
 // Confirmed as a real reported bug this way ("all the borders/outlines are
-// now a lighter color than the block color") once Thrasos' own flat drawer
+// now a lighter color than the block color") once Thrasos'  flat drawer
 // made that border the ONLY outline a block has (Geras' light/dark bevel
 // highlight used to sit visually on top of it, made the lighter border less
 // noticeable). Same 0.3 blend factor, toward BLACK instead - a plain darker
 // border, no bevel, on every block regardless of which category/custom
 // colour it uses (this app defines plenty of block colours as raw CSS
-// strings outside Classic's own named categories too - e.g. 'purple',
+// strings outside Classic's  named categories too - e.g. 'purple',
 // SCORE_COLOR - which resolve through this exact same code path via
 // Blockly's "auto_<colour>" style lookup, so patching here covers those the
 // same way, with no per-block-file changes needed).
@@ -61,12 +62,12 @@ Blockly.blockRendering.ConstantProvider.prototype.generateTertiaryColour_ = func
 
 // Options tab's own "Desaturate Blockly block colors" toggle (see
 // useDesaturateBlocklyColorsStorage in hooks/project.js) - -50% saturation,
-// applied in real HSL space (matching Photoshop's own Hue/Saturation
+// applied in real HSL space (matching Photoshop's  Hue/Saturation
 // adjustment, which scales S the same way) - NOT a CSS filter:
 // filter: saturate() operates on non-linear sRGB via a fixed luminance
 // matrix, a different algorithm that visibly darkened blues in particular
 // instead of just muting them, confirmed as a real reported mismatch
-// against Photoshop's own result at the same "50%".
+// against Photoshop's  result at the same "50%".
 const clamp01 = (n) => Math.max(0, Math.min(1, n));
 
 const hexToRgb = (hex) => {
@@ -112,7 +113,7 @@ const hslToRgb = (h, s, l) => {
 };
 
 // saturationFactor multiplies S (0.5 = Photoshop's "-50") - same slider
-// Photoshop's own Hue/Saturation dialog exposes, applied to the same
+// Photoshop's  Hue/Saturation dialog exposes, applied to the same
 // component.
 const desaturateHex = (hex, saturationFactor) => {
   const [h, s, l] = rgbToHsl(...hexToRgb(hex));
@@ -124,12 +125,12 @@ const desaturateHex = (hex, saturationFactor) => {
 // colour - a Classic-theme hue NUMBER (see generateTertiaryColour_'s own
 // comment above) or a raw hex/CSS colour name string alike - resolves
 // through on its way to becoming colourPrimary (see renderers/common/
-// constants.js's own validatedBlockStyle_), so patching THIS one function
+// constants.js's  validatedBlockStyle_), so patching THIS one function
 // covers every block regardless of which of those two forms defined its
 // colour, with no per-block-file changes needed - and colourSecondary/
 // colourTertiary (generateSecondaryColour_/generateTertiaryColour_ above)
 // both derive FROM colourPrimary, so they pick up the same desaturated
-// base automatically too, with no separate patch of their own required.
+// base automatically too, with no separate patch of their  required.
 // Read live (not cached) on every call, same "just check the stored value
 // directly, no reactive binding needed" pattern isBlocklyControlsHorizontal
 // below already uses - this only ever actually runs while a workspace is
@@ -137,8 +138,8 @@ const desaturateHex = (hex, saturationFactor) => {
 // mid-session case to handle here.
 //
 // Guarded (isDesaturationPatch) against re-wrapping itself - the 'blockly'
-// module instance persists across this FILE's own dev-server hot-reloads,
-// but this file's own module-level code (this patch included) re-executes
+// module instance persists across this FILE's  dev-server hot-reloads,
+// but this file's  module-level code (this patch included) re-executes
 // on every one of them; without the guard, each edit-triggered reload
 // wrapped whatever the PREVIOUS reload had already wrapped, compounding the
 // desaturation further with every single edit made during a dev session -
@@ -159,7 +160,7 @@ if (!Blockly.utils.parseBlockColour.isDesaturationPatch) {
 
 // Same reasoning/guard as the parseBlockColour patch just above, for the
 // TOOLBOX CATEGORY labels ("Logic", "Loops", "Math", etc) - confirmed
-// directly that these resolve their own colour through an entirely
+// directly that these resolve their  colour through an entirely
 // SEPARATE function (ToolboxCategory.prototype.parseColour_, not
 // Blockly.utils.parseBlockColour), so without this, "Soft Blockly colors"
 // left every category label in the toolbox sidebar still fully saturated
@@ -243,7 +244,7 @@ Blockly.Scrollbar.scrollbarThickness = 13;
 
 // Stock Blockly's "Set [variable] to" flyout block starts with its VALUE
 // input empty - unlike math_change (see flyoutCategoryBlocks below, in
-// node_modules/blockly/core/variables.js) it doesn't get its own math_number
+// node_modules/blockly/core/variables.js) it doesn't get its  math_number
 // shadow, so dragging it out gave no visible drop target until something was
 // plugged in. Wrapped (not overwritten outright) so the button and every
 // other block flyoutCategoryBlocks builds - math_change, variables_get -
@@ -299,7 +300,7 @@ if (!Blockly.Variables.flyoutCategoryBlocks.isExtraBlocksPatch) {
 // the bottom edge" switch - a live read (not cached at patch time, since
 // this module only ever runs once but the setting can change any time
 // afterward) of that setting. A standing app preference (see
-// useBlocklyControlsHorizontalStorage's own comment in hooks/project.js),
+// useBlocklyControlsHorizontalStorage's  comment in hooks/project.js),
 // not part of the project itself.
 const isBlocklyControlsHorizontal = () => {
   try {
@@ -327,13 +328,13 @@ const isBlocklyControlsHorizontal = () => {
 // overlapping it.
 //
 // Only bumpDirection.UP/DOWN exist in this Blockly version (see
-// positionable_helpers.js's own bumpDirection enum - no LEFT/RIGHT) - collision
+// positionable_helpers.js's  bumpDirection enum - no LEFT/RIGHT) - collision
 // bumping is always vertical regardless of which axis the buttons themselves
 // are laid out along, so that part of the original logic (verticalPosition/
 // bumpDirection/bumpPositionRect) is kept completely unchanged here; only the
 // WIDTH_/HEIGHT_ swap (for sizing) and the button-layout axis (X instead of Y,
 // using horizontalPosition instead of verticalPosition to decide which end
-// zoomOut anchors nearest, mirroring the original's own vertical version
+// zoomOut anchors nearest, mirroring the original's  vertical version
 // exactly) actually differ.
 const originalZoomControlsGetBoundingRectangle = Blockly.ZoomControls.prototype.getBoundingRectangle;
 Blockly.ZoomControls.prototype.getBoundingRectangle = function() {
@@ -353,16 +354,16 @@ Blockly.ZoomControls.prototype.position = function(metrics, savedPositions) {
   const cornerPosition = Blockly.uiPosition.getCornerOppositeToolbox(this.workspace_, metrics);
   let width = this.SMALL_SPACING_ + 2 * this.WIDTH_;
   if (this.zoomResetGroup_) width += this.LARGE_SPACING_ + this.WIDTH_;
-  // ActionEditor.vue's own grid-snap toggle (see setupGridSnapZoomButton,
+  // ActionEditor.vue's  grid-snap toggle (see setupGridSnapZoomButton,
   // which sets this.gridSnapGroup_ directly rather than this file having to
-  // go hunting through this.svgGroup_'s own children by index - a previous
+  // go hunting through this.svgGroup_'s  children by index - a previous
   // version did that, and broke the moment anything about sibling order
   // assumptions was even slightly off) gets counted as a genuine 4th slot in
-  // the row's own reserved width from the start, sitting FIRST (local x=0,
+  // the row's  reserved width from the start, sitting FIRST (local x=0,
   // the leftmost icon in the row) with the 3 real buttons all shifted right
   // by realButtonsOffset to make room - rather than appended AFTER the 3
   // real buttons, which is what let it either overlap the trashcan or
-  // render outside the row's own actual on-screen box in earlier attempts
+  // render outside the row's  actual on-screen box in earlier attempts
   // at this.
   const hasGridSnap = !!this.gridSnapGroup_;
   const realButtonsOffset = hasGridSnap ? this.LARGE_SPACING_ + this.WIDTH_ : 0;
@@ -371,32 +372,32 @@ Blockly.ZoomControls.prototype.position = function(metrics, savedPositions) {
       cornerPosition, new Blockly.utils.Size(width, this.HEIGHT_),
       this.MARGIN_HORIZONTAL_, this.MARGIN_VERTICAL_, metrics, this.workspace_);
 
-  // The trashcan (weight 1, positioned before zoom controls' own weight 2 -
-  // see workspace_svg.js's own position-pass loop, which runs every
+  // The trashcan (weight 1, positioned before zoom controls'  weight 2 -
+  // see workspace_svg.js's  position-pass loop, which runs every
   // POSITIONABLE component in ascending weight order) claims this same
   // corner first, so the stock bump logic below - vertical-only, see this
-  // override's own top comment - always stacks the zoom row ABOVE or BELOW
-  // it rather than beside it. Read the trashcan's own already-computed
+  // override's  top comment - always stacks the zoom row ABOVE or BELOW
+  // it rather than beside it. Read the trashcan's  already-computed
   // top_/left_/size directly instead, and sit alongside it in the SAME row
-  // (vertically centered against its own height) whenever it exists, rather
+  // (vertically centered against its  height) whenever it exists, rather
   // than bumping away from it - the normal bump path below is kept purely as
   // a fallback for the (currently never exercised in this app) case where a
   // workspace has no trashcan at all.
   const trashcan = this.workspace_.trashcan;
   let positionRect;
   if (trashcan) {
-    // trashcanScaledWidth_ is set by this file's own Trashcan.position
+    // trashcanScaledWidth_ is set by this file's  Trashcan.position
     // override below whenever it actually shrank the icon to match this row
     // - falls back to the real, unscaled width otherwise. trashcan.top_ IS
-    // where its own nominal (lid+body) box starts, but the drawn trash
+    // where its  nominal (lid+body) box starts, but the drawn trash
     // sprite itself doesn't fill that box - measured directly (drew the
     // actual sprite sheet to an offscreen canvas and scanned for the first
     // non-transparent row) rather than assumed: the lid graphic's own
-    // visible pixels start about 37% of the way down the lid's own nominal
-    // height, well below y=0, while the zoom icons' own sprites fill their
+    // visible pixels start about 37% of the way down the lid's  nominal
+    // height, well below y=0, while the zoom icons'  sprites fill their
     // box with zero padding - aligning box-tops (this override's own
     // previous approach) therefore left the zoom row looking higher than
-    // the trashcan's own visible ink. TRASHCAN_VISIBLE_TOP_FRACTION (see
+    // the trashcan's  visible ink. TRASHCAN_VISIBLE_TOP_FRACTION (see
     // TRASHCAN_SCALE below) encodes that measured padding as a fraction of
     // LID_HEIGHT_, so it stays correct even if LID_HEIGHT_ itself changes.
     const trashWidth = trashcan.trashcanScaledWidth_ || trashcan.WIDTH_;
@@ -445,16 +446,16 @@ Blockly.ZoomControls.prototype.position = function(metrics, savedPositions) {
 // 32px-square zoom buttons it now sits beside in a row (see the
 // ZoomControls.position override above) - shrunk here to match ZoomControls'
 // own HEIGHT_ exactly, only when horizontal mode is on, by appending a plain
-// SVG "scale(...)" after trashcan's own real translate (SVG applies
-// transforms right-to-left, so this scales around the group's own local
+// SVG "scale(...)" after trashcan's  real translate (SVG applies
+// transforms right-to-left, so this scales around the group's  local
 // origin FIRST, then places that already-shrunk icon at left_/top_ - the
 // same anchor point the unscaled version would have used, so top_/left_
 // still mean what every other reader of them - this file's own
 // ZoomControls.position override included - expects).
 //
 // getClientRect (the actual drag-and-drop hit-test, a different method from
-// getBoundingRectangle - see its own use in dragged_connection_manager.js)
-// is deliberately left unpatched: it derives its own base rect from
+// getBoundingRectangle - see its  use in dragged_connection_manager.js)
+// is deliberately left unpatched: it derives its  base rect from
 // svgGroup_.getBoundingClientRect(), which already reflects this scale
 // automatically, then pads it by a few constants for a generous drop
 // hotspot - shrinking those pad constants too would be extra risk for a
@@ -464,10 +465,10 @@ const TRASHCAN_SCALE = Blockly.ZoomControls.prototype.HEIGHT_ /
   (Blockly.Trashcan.prototype.BODY_HEIGHT_ + Blockly.Trashcan.prototype.LID_HEIGHT_);
 
 // Measured directly against the real sprite sheet (media/sprites.png, via
-// the ZoomControls.position override's own trashcan.top_ comment above) -
+// the ZoomControls.position override's  trashcan.top_ comment above) -
 // drew it to an offscreen canvas and scanned for the first non-transparent
-// row within the lid's own clip region: its visible pixels start about 37%
-// of the way down the lid's own nominal height. Expressed as a fraction of
+// row within the lid's  clip region: its visible pixels start about 37%
+// of the way down the lid's  nominal height. Expressed as a fraction of
 // LID_HEIGHT_ (rather than a flat pixel count) so it stays correct if
 // LID_HEIGHT_ itself ever changes.
 const TRASHCAN_VISIBLE_TOP_FRACTION = 0.371;
@@ -502,31 +503,31 @@ Blockly.Trashcan.prototype.getBoundingRectangle = function() {
 // as the actual cause of a real, longstanding reported bug: dragging a group
 // of connected blocks made them visibly lose alignment/connection with each
 // other mid-drag, snapping back correctly only once the drag ended.
-// Root cause, confirmed directly against Blockly's own BlockDragger.
+// Root cause, confirmed directly against Blockly's  BlockDragger.
 // prototype.drag (node_modules/blockly/core/block_dragger.js): that method
 // calls moveDuringDrag(newLoc) to move the block(s) visually, then
 // SEPARATELY calls this.draggedConnectionManager_.update(delta, ...) - using
 // the ORIGINAL, un-rounded delta - to compute the insertion-marker/
 // connection-highlight ghost outline. The patch only rounded the position
 // inside moveDuringDrag, so the block rendered at its snapped spot while
-// Blockly's own connection-highlight system kept working from the real,
+// Blockly's  connection-highlight system kept working from the real,
 // unsnapped mouse position - the two disagreed for the whole drag,
-// reconciling only at drop. Stock Blockly's own default (snap only at the
+// reconciling only at drop. Stock Blockly's  default (snap only at the
 // very end of a drag, via BlockSvg.prototype.snapToGrid, reached through
-// BlockDragger's own endDrag flow) doesn't have this problem, since nothing
+// BlockDragger's  endDrag flow) doesn't have this problem, since nothing
 // about connection-highlighting happens after that point - reverting to it
 // entirely was the safer fix over trying to also patch BlockDragger.
 // prototype.drag itself to keep the two in sync.
 
 // No wheel-behavior patch needed here (an earlier version of this had one,
 // for a since-reverted shift-to-zoom scheme) - Ctrl+wheel to zoom, plain
-// wheel to scroll vertically, is already stock Blockly's own default
+// wheel to scroll vertically, is already stock Blockly's  default
 // onMouseWheel_ behavior (node_modules/blockly/core/workspace_svg.js: zooms
 // when canWheelZoom && e.ctrlKey, otherwise scrolls). The only reason plain
 // wheel used to always zoom regardless of Ctrl was that this app never set
 // a "move" option at all, leaving wheel-scrolling off entirely (see
 // ActionEditor.vue's own "move: {wheel: true}" option, which is the actual
-// fix) - once that's on, stock Blockly's own logic already does exactly
+// fix) - once that's on, stock Blockly's  logic already does exactly
 // what's wanted with no override needed.
 
 // Module-scope (not component data) - same reasoning as every other
@@ -544,13 +545,14 @@ export default {
   data() {
     return {
       workspace: null,
+      workspaceSearch: null,
       lastSavedWorkspace: null,
     };
   },
   computed: {
-    // Only the block TEXT (see .blocklyDiv-desaturated's own CSS comment
+    // Only the block TEXT (see .blocklyDiv-desaturated's  CSS comment
     // for why emoji glyphs specifically need this, unlike ordinary block
-    // fill colours - see Blockly.utils.parseBlockColour's own patch above)
+    // fill colours - see Blockly.utils.parseBlockColour's  patch above)
     // needs a live, reactive binding here - block fill colour itself is
     // desaturated once, up front, at colour-resolution time, with no
     // per-render reactivity needed since a workspace is never re-injected
@@ -569,8 +571,19 @@ export default {
     this.workspace.addChangeListener(debounce(() => this.handleChange()));
     this.loadWorkspace(this.value);
 
+    // Finds/highlights blocks already placed on the canvas - Ctrl+F (Cmd+F
+    // on Mac) opens it, Escape or its close button closes it. Kept as an
+    // instance field (not local to mounted()) so beforeDestroy() below can
+    // dispose it - this component's workspace gets torn down and
+    // re-injected on remount (e.g. switching project tabs), and the plugin
+    // registers its keyboard shortcut/DOM against the workspace it was
+    // built with, so it has to be disposed and rebuilt every time, not just
+    // created once.
+    this.workspaceSearch = new WorkspaceSearch(this.workspace);
+    this.workspaceSearch.init();
+
     // IBM Plex Mono (--blockly-font-family, see App.vue, and
-    // ActionEditor.vue's own matching "normal 11px" fontStyle) loads
+    // ActionEditor.vue's  matching "normal 11px" fontStyle) loads
     // asynchronously via a <link> in public/index.html, same as any web
     // font - browsers fetch that stylesheet eagerly, but LAZILY defer
     // actually downloading the font FILE it references until something on
@@ -589,10 +602,10 @@ export default {
     // attempt still needed a page refresh), it can resolve before the real
     // font ever starts loading, let alone finishes. document.fonts.load()
     // instead actively requests this exact font (deduped by the browser if
-    // it's already loading/cached) and its own returned promise only
+    // it's already loading/cached) and its  returned promise only
     // resolves once THAT specific load genuinely completes - a real signal,
     // not an ambient one. Once it resolves, re-rendering every block
-    // re-runs Blockly's own text measurement (a live DOM
+    // re-runs Blockly's  text measurement (a live DOM
     // getComputedTextLength() call, not something Blockly caches across
     // renders) against the now-correct font.
     if (document.fonts && document.fonts.load) {
@@ -602,11 +615,11 @@ export default {
     }
 
     // Applied synchronously, right here - BEFORE the browser ever paints
-    // this mount's own first frame - rather than from inside the resize-
+    // this mount's  first frame - rather than from inside the resize-
     // settle pass below. An earlier version restored it there instead
     // (reasoning: scroll(x, y) is a raw pixel translate, not something that
-    // depends on the container's own size the way the scrollbar's THUMB
-    // position does - see resizeWorkspace's own comment just below for the
+    // depends on the container's  size the way the scrollbar's THUMB
+    // position does - see resizeWorkspace's  comment just below for the
     // actual thing that settle pass exists for), which was confirmed as a
     // real, reported bug: the workspace visibly rendered at Blockly's own
     // default scroll position for a moment, then visibly JUMPED to the
@@ -623,13 +636,13 @@ export default {
     // resize), which would otherwise leave the SVG mis-sized and its zoom and
     // trashcan controls anchored off-screen.
     //
-    // The scrollbar specifically needs its own extra settle-and-recompute
+    // The scrollbar specifically needs its  extra settle-and-recompute
     // pass: ResizeObserver can fire mid-reflow (e.g. while a sibling panel's
     // resize is still being applied across a couple of frames), and
     // Blockly.svgResize()/workspace.resize() then caches the scrollbar's
     // position from that in-between size instead of the final one - the SVG
     // itself keeps tracking the container correctly (CSS does that on its
-    // own), so only the scrollbar (positioned from Blockly's own cached
+    // own), so only the scrollbar (positioned from Blockly's  cached
     // metrics, not live CSS) ends up visibly drawn in the wrong place versus
     // where it actually receives clicks.
     const resizeWorkspace = () => {
@@ -644,6 +657,24 @@ export default {
     this.resizeObserver.observe(this.$refs['blocklyDiv']);
   },
   beforeDestroy() {
+    if (this.workspaceSearch) {
+      // This plugin version's dispose() (see node_modules/@blockly/
+      // plugin-workspace-search/src/WorkspaceSearch.js) nulls out its DOM
+      // refs but never unregisters itself from the workspace's
+      // ComponentManager (a real bug, only fixed in much later plugin
+      // versions this old Blockly can't run) - left registered, ANY later
+      // resize (e.g. this same tab remounting, or just the window/pane
+      // resizing again) calls its position() method against those
+      // now-null refs and throws "Cannot read properties of null (reading
+      // 'style')", confirmed directly against a real crash. Removed here
+      // by hand, by the same id the plugin itself registers under, before
+      // dispose() runs.
+      if (this.workspace) {
+        this.workspace.getComponentManager().removeComponent(this.workspaceSearch.id);
+      }
+      this.workspaceSearch.dispose();
+      this.workspaceSearch = null;
+    }
     // Captured here (not just read live from this.workspace whenever
     // mounted() next needs it) since the workspace itself - along with
     // scrollX/scrollY/scale - is torn down entirely once this component is
@@ -663,18 +694,18 @@ export default {
   },
   methods: {
     // Re-measures/re-renders every block once the real IBM Plex Mono font
-    // has actually finished loading (see mounted()'s own document.fonts.load
+    // has actually finished loading (see mounted()'s  document.fonts.load
     // comment for the full race this fixes) - deferred (not run immediately)
     // whenever a drag gesture is in progress at the moment the font-load
     // promise resolves. Confirmed as a real reported bug otherwise: a block
-    // currently being dragged lives on Blockly's own separate "drag surface"
+    // currently being dragged lives on Blockly's  separate "drag surface"
     // layer (see BlockSvg.prototype.moveToDragSurface in node_modules/
     // blockly/core/block_svg.js), tracked there via that surface's own
     // transform rather than the block's normal workspace-relative position -
     // rendering it mid-gesture (which reads/writes that normal position)
     // produced a large, arbitrary jump, not the small (half a grid-spacing)
     // pop a grid-snap-on-drop would explain. Retries on a short poll (same
-    // "just check back shortly" shape as this file's own resize-settle timer
+    // "just check back shortly" shape as this file's  resize-settle timer
     // just above) rather than a one-shot deferral, since a drag can easily
     // still be in progress the first time this checks back too.
     rerenderForFontLoad() {
@@ -683,11 +714,11 @@ export default {
         setTimeout(() => this.rerenderForFontLoad(), 100);
         return;
       }
-      // Blockly's own WorkspaceSvg.prototype.render() (node_modules/blockly/
+      // Blockly's  WorkspaceSvg.prototype.render() (node_modules/blockly/
       // core/workspace_svg.js) - NOT a hand-rolled
       // "getAllBlocks().forEach(block => block.render())" loop, which this
       // used to be. That loop walks blocks in forward (parent-before-child)
-      // order; Blockly's own version deliberately renders in REVERSE
+      // order; Blockly's  version deliberately renders in REVERSE
       // (children/leaves first), since a parent with inline inputs sizes its
       // own row layout from its children's already-rendered dimensions -
       // render the parent first (while a child has just been measured with
@@ -699,7 +730,7 @@ export default {
       // itself, explains.
       this.workspace.render();
       // The toolbox flyout is a genuinely separate sub-workspace (its own
-      // blocks, its own earlier text measurement race) - workspace.render()
+      // blocks, its  earlier text measurement race) - workspace.render()
       // above only walks the MAIN workspace, so a category open at the
       // moment the font finishes loading still stayed the wrong size until
       // it was closed and reopened, a real reported recurrence of this same
@@ -735,14 +766,14 @@ export default {
     },
     // Entry point for the 'value' watch below - skipped outright (not
     // deferred/retried) whenever a drag is in progress, so a v-model round
-    // trip triggered by the drag's own mid-drag 'move' event never rebuilds
+    // trip triggered by the drag's  mid-drag 'move' event never rebuilds
     // the workspace out from under it. Retrying a queued copy of THIS same
     // stale snapshot once the drag ends was tried first and is wrong -
-    // Blockly.Xml.domToWorkspace (loadWorkspace's own call) never clears
+    // Blockly.Xml.domToWorkspace (loadWorkspace's  call) never clears
     // the workspace first, so replaying that now-stale snapshot on top of
     // the already-correct post-drag workspace just duplicated every block.
-    // Dropping it here instead is safe: the drag's own final 'move' event
-    // fires its own handleChange/emit round trip right after, which lands
+    // Dropping it here instead is safe: the drag's  final 'move' event
+    // fires its  handleChange/emit round trip right after, which lands
     // as a genuinely fresh (not dragging) call to this same method with
     // current data - and since that data was already captured into
     // lastSavedWorkspace before being emitted, it's a no-op here anyway.
@@ -771,9 +802,9 @@ export default {
     // prop) can deliver a snapshot of the workspace taken WHILE a block is
     // still mid-drag. Rebuilding every block from that snapshot right then
     // (loadWorkspace disposes and recreates the whole tree) is exactly the
-    // dragged group's own visible misalignment/detachment that was
+    // dragged group's  visible misalignment/detachment that was
     // confirmed via screen recording - it self-corrects afterwards only
-    // because the drag's own final 'move' event repeats this same round
+    // because the drag's  final 'move' event repeats this same round
     // trip once more with the real, settled position.
     value(newVal) {
       this.loadExternalWorkspace(newVal);
@@ -817,5 +848,21 @@ export default {
 .blocklyDiv-desaturated >>> .blocklyText,
 .blocklyDiv-desaturated >>> .blocklyFlyoutLabelText {
   filter: saturate(50%);
+}
+
+/* @blockly/plugin-workspace-search's CSS (injected as a runtime <style>
+   tag into <head> the first time WorkspaceSearch.init() runs, not
+   authored here - see node_modules/@blockly/plugin-workspace-search/src/
+   css.js) gives its search bar a heavy drop shadow by default. Same >>>
+   deep-scope reasoning as .blocklyText above (its .blockly-ws-search div
+   is appended into the workspace's injection div, a descendant of
+   .blocklyDiv, but never carries this component's scope attribute since
+   it's created imperatively, not from this component's template) - a
+   two-class-equivalent selector so this reliably beats the plugin's
+   plain ".blockly-ws-search" rule on specificity regardless of which
+   <style> tag ends up later in <head> (its runtime injection timing isn't
+   guaranteed to run after this component's compiled styles). */
+.blocklyDiv >>> .blockly-ws-search {
+  box-shadow: none;
 }
 </style>

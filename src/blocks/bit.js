@@ -5,7 +5,7 @@ import {BIT_ICON} from './icon';
 export const BIT_OPTIONS = [...Array(8).keys()].map((n) => [`${n}`, `${n}`]);
 
 // Built-in batari Basic variables worth reading/writing directly - plain
-// names, unlike the user's own variables, which are listed by id. Shared
+// names, unlike the user's  variables, which are listed by id. Shared
 // between the per-bit blocks below (BUILT_IN_VARIABLES) and
 // system_variable_get further down (SYSTEM_VARIABLE_OPTIONS, same list,
 // already in dropdown-option [label, value] shape) - reading the WHOLE
@@ -18,7 +18,7 @@ export const SYSTEM_VARIABLE_OPTIONS = [
   'player0frame',
   'player1frame',
   'framecounter',
-  // "repeatcounter" (the "Repeat X times" block's own for-loop variable -
+  // "repeatcounter" (the "Repeat X times" block's  for-loop variable -
   // see REPEAT_COUNTER_VAR_NAME in generators/bbasic/loops.js) deliberately
   // isn't listed here - unlike every name above (all unconditionally
   // dimmed/real hardware registers), it's only ever declared for a project
@@ -33,7 +33,7 @@ export const SYSTEM_VARIABLE_OPTIONS = [
 ].map((name) => [name, name]);
 const BUILT_IN_VARIABLES = SYSTEM_VARIABLE_OPTIONS;
 
-// A block in the toolbox flyout belongs to the flyout's own workspace, which
+// A block in the toolbox flyout belongs to the flyout's  workspace, which
 // has no variables of its own.
 const workspaceOf = (field) => {
   const block = field.getSourceBlock();
@@ -75,7 +75,7 @@ const selectedVariable = (block) => {
 // field keeps showing whatever label was cached from the last time its
 // dropdown opened, stale until the user happens to click it again.
 // getOptions() (no cache arg) has to run BEFORE setValue(), same gotcha
-// documented in subroutine.js's own setSubroutineDropdownValue - setValue's
+// documented in subroutine.js's  setSubroutineDropdownValue - setValue's
 // validation reads the cache, so a rename without a preceding fresh
 // getOptions() call would just re-validate against the same stale label.
 /**
@@ -114,7 +114,7 @@ Blockly.Blocks['bit_get'] = {
         .appendField(buildVariableField(), 'VAR');
     this.setOutput(true, 'Boolean');
     // A theme style, not a raw colour - matches the stock variables_get/set/change
-    // blocks' own colour resolution exactly (see variables.js in Blockly core),
+    // blocks'  colour resolution exactly (see variables.js in Blockly core),
     // instead of going through setColour's separate, compounding desaturation path.
     this.setStyle('variable_blocks');
     this.setTooltip('Checks if a single bit of a variable is set (1) or clear (0).');

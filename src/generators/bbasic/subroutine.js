@@ -1,16 +1,16 @@
 'use strict';
 export default (Blockly) => {
   // Doesn't emit inline where it's dropped on the canvas - like an event
-  // block, its body is collected here and spliced into its own safe,
+  // block, its body is collected here and spliced into its  safe,
   // never-fallen-into spot in the template (see generateSubroutines in
   // bbasic.js), with a label + "return" wrapped around it there - or, once
-  // relocated (see getSubroutineBank), into that bank's own section instead
+  // relocated (see getSubroutineBank), into that bank's  section instead
   // (see generateRelocatedSections).
   //
   // currentEventName is set to "subroutine_<name>" (a prefix
   // getCurrentBank() specifically recognizes and resolves through
   // getSubroutineBank rather than getEventBank) so any bank-crossing code
-  // generated INSIDE this subroutine's own body - a nested subroutine call,
+  // generated INSIDE this subroutine's  body - a nested subroutine call,
   // a data table read - correctly targets wherever THIS subroutine actually
   // ends up, not always bank 1.
   Blockly.BBasic['subroutine_define'] = function(block) {
@@ -27,7 +27,7 @@ export default (Blockly) => {
   // A subroutine's label can live in any bank now (see getSubroutineBank),
   // so calling it needs the same explicit "bankN" tag any other cross-bank
   // goto/gosub does (see bankJumpSuffix) whenever the caller and the
-  // subroutine's own bank differ - calling it from its own bank (the common
+  // subroutine's  bank differ - calling it from its  bank (the common
   // case, including every call before this feature existed, when everything
   // was always bank 1) stays untagged. "return" never takes a bank suffix of
   // its own - the compiler restores the caller's bank automatically
@@ -37,12 +37,12 @@ export default (Blockly) => {
   // nothing on the definition side needs to know or care which bank called
   // it.
   Blockly.BBasic['subroutine_call'] = function(block) {
-    // The dropdown's own displayed value can be a stale/empty leftover from
+    // The dropdown's  displayed value can be a stale/empty leftover from
     // before it's had a chance to snap to a real subroutine (see
     // ensureSubroutineCallListener in blocks/subroutine.js) - that snapping
     // is UI-timing-dependent, not guaranteed to have happened yet by the
     // time code generation runs, so it's re-checked here against the
-    // workspace's own subroutine_define blocks (always fully present by
+    // workspace's  subroutine_define blocks (always fully present by
     // generation time, regardless of UI state) rather than trusting the
     // field verbatim. An empty/unmatched name would otherwise compile to a
     // blank "gosub" target, which the assembler reports as the cryptic

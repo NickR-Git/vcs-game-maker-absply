@@ -14,10 +14,10 @@ const TEXT_COLOR = '#3F51B5';
 // A message longer than the Text tab's own "Max characters to display at
 // once" setting (see resolveTextMaxDisplayWidth in blocks/text-strings.js)
 // always auto-scrolls, regardless of which "Show text" block shows it (see
-// generators/bbasic/text-minikernel.js's own encodeMessageRow) - the three
+// generators/bbasic/text-minikernel.js's  encodeMessageRow) - the three
 // "..._scroll" block variants below just add speed/pause fields to tune
 // that, using DEFAULT_SCROLL_SPEED/DEFAULT_SCROLL_PAUSE otherwise (see
-// their own use in generators/bbasic/text-minikernel.js).
+// their  use in generators/bbasic/text-minikernel.js).
 const appendScrollInputs = (block) => {
   block.appendValueInput('SCROLL_SPEED')
       .setCheck('Number')
@@ -59,9 +59,9 @@ Blockly.Blocks['text_minikernel_show_named'] = {
 };
 
 // Same dropdown as text_minikernel_show_named above, but puts just that
-// entry's own FIRST line on the chosen row (1 or 2) - the OTHER row always
+// entry's  FIRST line on the chosen row (1 or 2) - the OTHER row always
 // comes out blank, same "no way to update just one row" limitation as
-// text_minikernel_show_row (see its own comment). Only the first line is
+// text_minikernel_show_row (see its  comment). Only the first line is
 // ever used here (no word-wrap/"Wrap to line 2"/scrolling) - for an entry
 // that needs more than a single row's worth of text, use plain "Show text"
 // instead.
@@ -132,7 +132,7 @@ Blockly.defineBlocksWithJsonArray([
   },
   // Sets ONE row directly (row 1 or row 2, picked from the dropdown) rather
   // than a whole message - the OTHER row always comes out blank (see
-  // generators/bbasic/text-minikernel.js's own registerFreeTypedRowMessage):
+  // generators/bbasic/text-minikernel.js's  registerFreeTypedRowMessage):
   // this always compiles in a real 2-row entry with the chosen row set to
   // TEXT and the other row set to spaces, since the Text Minikernel's own
   // row 2 is always read from a fixed offset right after row 1 (text12b.asm's
@@ -186,13 +186,13 @@ Blockly.defineBlocksWithJsonArray([
       'entry\'s "Wrap to line 2" is on, otherwise it automatically scrolls.',
   },
   // Same runtime id lookup as text_minikernel_show_by_id above, but shows
-  // only that entry's own first line, on just one row (1 or 2) - the OTHER
+  // only that entry's  first line, on just one row (1 or 2) - the OTHER
   // row always comes out blank, same limitation every other "show row"
-  // block has (see text_minikernel_show_row's own comment). ROW=2 costs
-  // extra ROM (a second, parallel copy of every Text tab entry's own first
-  // line - see generateTextRow2OffsetsTable's own comment in generators/
+  // block has (see text_minikernel_show_row's  comment). ROW=2 costs
+  // extra ROM (a second, parallel copy of every Text tab entry's  first
+  // line - see generateTextRow2OffsetsTable's  comment in generators/
   // bbasic/text-minikernel.js) - ROW=1 doesn't, since an entry's row 1 IS
-  // its own first line already.
+  // its  first line already.
   {
     'type': 'text_minikernel_show_by_id_row',
     'message0': `${TEXT_ICON} Show text row %1 ID %2`,
@@ -306,11 +306,11 @@ Blockly.defineBlocksWithJsonArray([
       'is on - visible by default.',
   },
   // Fades TextColor toward a target - same shared mechanism as Background's
-  // own "Fade color to" (see blocks/background.js's own fade var-name
+  // own "Fade color to" (see blocks/background.js's  fade var-name
   // helpers and generateBackgroundFadeChecks in generators/bbasic/
   // background.js, both now generalized past just COLUBK/COLUPF), just
   // always targeting TextColor rather than offering a register choice.
-  // Fire-and-forget, same as Background's own version: triggering this once
+  // Fire-and-forget, same as Background's  version: triggering this once
   // keeps the color stepping toward the target every frame afterward on its
   // own, only while the Text Minikernel is in use elsewhere in the project.
   {
@@ -355,7 +355,7 @@ Blockly.defineBlocksWithJsonArray([
   // call that intentionally left it paused), Unpause reads better paired
   // with a "Pause" earlier in the same logic, but they do the same thing.
   //
-  // Stop freezes the message at its own start (offset 0) and pauses it
+  // Stop freezes the message at its  start (offset 0) and pauses it
   // there - Restart resets to offset 0 too, but leaves it running (and
   // waits the "pause at limits" duration before its first step, the same
   // as a genuinely new message - see buildTextScrollSetupLines' own
@@ -410,10 +410,10 @@ Blockly.defineBlocksWithJsonArray([
       'i.e. there\'s nothing left below the currently shown message to scroll down to.',
   },
   // Moves the currently shown message up/down one or two lines at a time
-  // whenever its own text (the Text tab's own multi-line field) is more than
+  // whenever its  text (the Text tab's  multi-line field) is more than
   // 2 lines - works regardless of whether "Wrap to line 2" is on: that
   // toggle only decides whether line 2 draws automatically without
-  // scrolling, not whether a message's own overflow text is split into real,
+  // scrolling, not whether a message's  overflow text is split into real,
   // separate lines at all (a long message always word-wraps into more than
   // one line, on or off). Distinct from the "Text scroll" blocks above
   // (which move a single line horizontally, character by character) - these
@@ -462,7 +462,7 @@ Blockly.defineBlocksWithJsonArray([
 ]);
 
 // Free-typed version of text_minikernel_show_named_scroll above - see
-// text_minikernel_show's own comment for why free-typed text gets its own
+// text_minikernel_show's  comment for why free-typed text gets its own
 // block instead of a Text tab entry.
 Blockly.Blocks['text_minikernel_show_scroll'] = {
   init: function() {
@@ -480,7 +480,7 @@ Blockly.Blocks['text_minikernel_show_scroll'] = {
 };
 
 // Runtime-ID version of text_minikernel_show_named_scroll above - see
-// text_minikernel_show_by_id's own comment for the ID-lookup mechanics.
+// text_minikernel_show_by_id's  comment for the ID-lookup mechanics.
 // Since which message this ends up showing isn't known until runtime,
 // whether it scrolls (and how far) is also resolved at runtime, from a
 // small lookup table generated alongside text_strings itself (see

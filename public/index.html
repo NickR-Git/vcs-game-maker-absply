@@ -17,7 +17,109 @@
     <div id="app"></div>
     <!-- built files will be auto injected -->
 
-    <div id="javatari-screen" style="display: none"></div>
-    <script src="js/javatari.js"></script>
+    <canvas id="gopher2600-screen" style="display: none; background-color: #000;"></canvas>
+    <script src="js/wasm_exec.js"></script>
+    <script>
+      // Web Audio playback for the gopher2600-wasm preview emulator (see
+      // tools/gopher2600-wasm/main.go's onAnimationFrame): each rendered
+      // frame's audio samples arrive here as one Float32Array chunk, played
+      // back-to-back via individually-scheduled AudioBufferSourceNodes -
+      // the standard low-latency streaming pattern for Web Audio, since
+      // there's no single long-lived buffer to append to.
+      let gopher2600AudioCtx = null;
+      let gopher2600AudioNextStart = 0;
+      // How far ahead of real time this is ever allowed to schedule -
+      // without a cap, any burst of onAnimationFrame calls arriving faster
+      // than real-time audio playback (a hidden/throttled tab catching up
+      // when it regains focus, a devtools pause/resume, a slow frame
+      // followed by several fast ones) pushes gopher2600AudioNextStart
+      // further ahead with NO way to ever recover: every later chunk keeps
+      // stacking onto that same ever-growing timestamp regardless of how
+      // far it's already drifted from gopher2600AudioCtx.currentTime,
+      // scheduling an unbounded, permanently-growing queue of live
+      // AudioBufferSourceNodes further and further into the future - a real
+      // reported crash (the whole PC needing a hard restart, not just the
+      // tab). Clamping the schedule-ahead window means a burst just
+      // re-syncs close to real time (audible as a brief glitch/skip, the
+      // same tradeoff any live-streaming audio scheduler makes) instead of
+      // diverging forever.
+      const GOPHER2600_AUDIO_MAX_LOOKAHEAD_SECONDS = 0.5;
+      window.playGopher2600AudioChunk = function(sampleRate, samples) {
+        if (!gopher2600AudioCtx) {
+          gopher2600AudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          gopher2600AudioNextStart = gopher2600AudioCtx.currentTime;
+        }
+        if (gopher2600AudioCtx.state === 'suspended') {
+          gopher2600AudioCtx.resume();
+        }
+        const buffer = gopher2600AudioCtx.createBuffer(1, samples.length, sampleRate);
+        buffer.getChannelData(0).set(samples);
+        const source = gopher2600AudioCtx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(gopher2600AudioCtx.destination);
+        const maxStart = gopher2600AudioCtx.currentTime + GOPHER2600_AUDIO_MAX_LOOKAHEAD_SECONDS;
+        const startAt = Math.min(Math.max(gopher2600AudioNextStart, gopher2600AudioCtx.currentTime), maxStart);
+        source.start(startAt);
+        gopher2600AudioNextStart = startAt + buffer.duration;
+      };
+      // Browsers block audio until a user gesture; the emulator keeps
+      // rendering silently until the first click anywhere resumes it.
+      document.addEventListener('click', () => {
+        if (gopher2600AudioCtx && gopher2600AudioCtx.state === 'suspended') {
+          gopher2600AudioCtx.resume();
+        }
+      });
+
+      // Instantiated once at page load (independent of the app's build
+      // pipeline) so window.gopher2600 is ready before the first "Update
+      // ROM" finishes - see src/hooks/rom.js. Wrapped in a reusable function
+      // (not just a one-shot top-level call) so a fatal WASM trap - a real
+      // reported crash ("RuntimeError: memory access out of bounds" from
+      // inside onAnimationFrame) - can be recovered from automatically
+      // instead of leaving the preview permanently dead until the user
+      // notices and manually reloads the whole page. Go's own panic/recover
+      // (see onAnimationFrame's own defer in main.go) can NOT catch this -
+      // a raw WASM memory trap halts the entire Go runtime instantly, below
+      // the level Go's own recover() operates at, so window.gopher2600's
+      // function properties survive as live JS references but every call
+      // into them throws "Go program has already exited" from that point on
+      // forever, unless a genuinely NEW WASM instance replaces it.
+      let gopher2600Go = null;
+      const loadGopher2600Wasm = () => {
+        gopher2600Go = new Go();
+        WebAssembly.instantiateStreaming(fetch('js/gopher2600.wasm'), gopher2600Go.importObject)
+            .then((result) => {
+              gopher2600Go.run(result.instance);
+              // A fresh instance is powered on with no ROM attached (Go's
+              // own console.powerOn() default) - src/hooks/emulator.js's
+              // own listener re-pushes whatever ROM was last compiled, and
+              // App.vue's own listener re-applies the current front-panel
+              // switch positions, once this fires.
+              window.dispatchEvent(new Event('gopher2600-ready'));
+            })
+            .catch((err) => console.error('gopher2600-wasm failed to load:', err));
+      };
+      loadGopher2600Wasm();
+
+      // Detects the fatal-trap signature specifically (rather than every
+      // window "error" event, which also fires for completely unrelated
+      // page errors this has no business reacting to) and reinstantiates.
+      // Rate-limited: a ROM that reliably crashes the emulator every frame
+      // would otherwise reinstantiate in a tight, page-freezing loop -
+      // capped to a handful of automatic recoveries per page load, after
+      // which it gives up and leaves the (now genuinely unrecoverable)
+      // error on screen for the user to see, same as before this existed.
+      let gopher2600CrashRecoveries = 0;
+      const GOPHER2600_MAX_CRASH_RECOVERIES = 5;
+      window.addEventListener('error', (event) => {
+        const message = (event && event.message) || '';
+        if (!/memory access out of bounds|Go program has already exited/.test(message)) return;
+        if (gopher2600CrashRecoveries >= GOPHER2600_MAX_CRASH_RECOVERIES) return;
+        gopher2600CrashRecoveries++;
+        console.error('gopher2600-wasm crashed (' + message + ') - reinstantiating a fresh instance ' +
+          '(recovery ' + gopher2600CrashRecoveries + '/' + GOPHER2600_MAX_CRASH_RECOVERIES + ')');
+        loadGopher2600Wasm();
+      });
+    </script>
    </body>
 </html>

@@ -3,18 +3,18 @@
 // One-time migration from the old, separate sprite_missile_bounce/
 // sprite_ball_bounce block types into the single object_bounce type they
 // now share (an OBJECT dropdown covering all 5 sprite names, since Bounce
-// now also reflects Inertia's own velocity for Player 0/1, which never had
-// a Bounce block at all before - see object_bounce's own comment in
+// now also reflects Inertia's  velocity for Player 0/1, which never had
+// a Bounce block at all before - see object_bounce's  comment in
 // blocks/sprites.js/generators/bbasic/sprites.js for why). Unlike
-// hooks/migrate-player-blocks.js's own OLD_TYPE_TO_NEW map (a fixed
-// literal per old type), sprite_missile_bounce's own replacement OBJECT
+// hooks/migrate-player-blocks.js's  OLD_TYPE_TO_NEW map (a fixed
+// literal per old type), sprite_missile_bounce's  replacement OBJECT
 // value depends on that block's OWN existing MISSILE field (0 or 1) - read
 // before the block is rewritten, not a constant - so this needs its own
 // per-block logic rather than a flat lookup table. sprite_ball_bounce has
-// no fields at all, so its own replacement is always the literal 'ball'.
+// no fields at all, so its  replacement is always the literal 'ball'.
 // Same overall shape as migrate-player-blocks.js otherwise (raw workspace
 // XML string in, string out, via DOMParser/XMLSerializer) - called from the
-// same two places that migration is: main.js's own startup pass (an
+// same two places that migration is: main.js's  startup pass (an
 // existing localStorage-persisted project) and Project.vue's "Open Project"
 // handler (a freshly opened .vcsgm file), since either path can hand this a
 // workspace that still has the old block types in it.

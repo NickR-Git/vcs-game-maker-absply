@@ -12,7 +12,7 @@ const collapsedRefs = {};
 
 // Which tab names have already had collapseAll actually run once this
 // session (a plain in-memory Set, not persisted - resets naturally on a
-// real page reload, unlike collapsedRefs' own localStorage-backed state,
+// real page reload, unlike collapsedRefs'  localStorage-backed state,
 // which is exactly the point: collapseAll should only actually reset
 // anything the FIRST time a tab is visited after loading the app, not
 // every single time its component happens to remount from navigating away
@@ -42,9 +42,9 @@ const collapsedRefFor = (name) => {
  * @param {string} name Identifies the tab, e.g. "text", "player0".
  * @param {boolean=} defaultCollapsed Whether an entry with no stored
  *     preference yet (never toggled before) starts collapsed - false (start
- *     expanded) matches every existing caller's own prior behavior, so this
+ *     expanded) matches every existing caller's  prior behavior, so this
  *     only needs to be passed where a card should default to closed (e.g.
- *     TextFontEditor.vue's own single card).
+ *     TextFontEditor.vue's  single card).
  * @return {{isCollapsed: Function, toggleCollapsed: Function}}
  */
 export const useCollapsedIds = (name, defaultCollapsed = false) => {
@@ -58,7 +58,7 @@ export const useCollapsedIds = (name, defaultCollapsed = false) => {
     localStorage.setItem(keyOf(name), JSON.stringify(stored.value));
   };
   // For a freshly created entry - ids are reassigned starting from
-  // (current max id) + 1 (see e.g. TextEditor.vue's own handleAddEntry), so
+  // (current max id) + 1 (see e.g. TextEditor.vue's  handleAddEntry), so
   // deleting the highest-numbered card and adding a new one reuses that same
   // id. Without this, a brand new card silently inherited whatever collapsed
   // state that old, deleted id happened to have in localStorage - a real
@@ -73,7 +73,7 @@ export const useCollapsedIds = (name, defaultCollapsed = false) => {
   // Discards every remembered per-card override, so every card falls back
   // to defaultCollapsed - unlike the rest of this hook, for a tab whose
   // cards should start collapsed the first time it's visited after loading
-  // the app (see every editor tab's own call site in mounted()/setup()),
+  // the app (see every editor tab's  call site in mounted()/setup()),
   // rather than remembering whichever ones a previous visit left expanded.
   // Only actually does anything the FIRST time it's called for this name
   // in the current session (see collapseAllRanForName above) - every

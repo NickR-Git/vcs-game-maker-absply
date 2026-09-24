@@ -10,7 +10,7 @@ import {SOUND_ICON} from './icon';
 const SOUND_COLOR = 'rgb(156, 39, 176)';
 
 // How often the arpeggio flips pitch, as a note division relative to the
-// song/pattern's own tempo (matching DURATION_SUBDIVISION_OPTIONS' style in
+// song/pattern's  tempo (matching DURATION_SUBDIVISION_OPTIONS' style in
 // blocks/music.js) - e.g. 8 means "flip every 1/8 step", so the arpeggio
 // speeds up and slows down with the song instead of staying a fixed frame
 // count. Converted to an actual frame count (and clamped to the 4-bit
@@ -20,7 +20,7 @@ const SOUND_COLOR = 'rgb(156, 39, 176)';
 export const ARPEGGIO_DIVISION_OPTIONS = [1, 2, 4, 8, 16, 32];
 export const DEFAULT_ARPEGGIO_DIVISION = 8;
 
-// Default fixed AUDF bump between the note's own pitch and the "other"
+// Default fixed AUDF bump between the note's  pitch and the "other"
 // arpeggio pitch.
 export const DEFAULT_ARPEGGIO_INTERVAL = 3;
 // Must fit in the 3 spare bits alongside the real AUDF value (see
@@ -32,7 +32,7 @@ export const MAX_ARPEGGIO_INTERVAL = 7;
 // Shape + range of the arpeggio pattern, like an old-style synth
 // arpeggiator's range setting - see ARPEGGIO_PHASE_SEQUENCES in
 // generators/bbasic/music.js for the exact note order each one plays:
-// - UP/DOWN 1 OCT: the note's own pitch and pitch+interval, in ascending or
+// - UP/DOWN 1 OCT: the note's  pitch and pitch+interval, in ascending or
 //   descending order.
 // - UP/DOWN 2 OCT: that same two-note pattern, then repeats it one octave
 //   up or down (pitch halved/doubled, since AUDF is a frequency divisor).
@@ -47,7 +47,7 @@ export const ARPEGGIO_RANGE_UP_DOWN_2_OCT = 5;
 export const DEFAULT_ARPEGGIO_RANGE = ARPEGGIO_RANGE_UP_1_OCT;
 // Display order only - the stored value (see ARPEGGIO_RANGE_* above) is
 // what generators/bbasic/music.js and utils/music-playback.js actually key
-// off of (an index into their own ARPEGGIO_PHASE_SEQUENCES), so reordering
+// off of (an index into their  ARPEGGIO_PHASE_SEQUENCES), so reordering
 // this list doesn't require touching either of them.
 export const ARPEGGIO_RANGE_OPTIONS = [
   ['UP 2 OCT', ARPEGGIO_RANGE_UP_2_OCT],
@@ -66,7 +66,7 @@ export const ARPEGGIO_RANGE_OPTIONS = [
 // buildEnvelopeCurve, which now covers both shapes).
 //
 // Attack/Decay/Release are frame counts; Sustain is a LEVEL (percent of
-// this sound's own peak volume), not a duration - see utils/envelope.js's
+// this sound's  peak volume), not a duration - see utils/envelope.js's
 // own comment for why. Small, fixed dropdown option sets (not free-typed
 // numbers) are deliberate, same reasoning the old fade-length dropdowns
 // already established: keeps the total number of DISTINCT envelope shapes
@@ -76,7 +76,7 @@ export const ARPEGGIO_RANGE_OPTIONS = [
 export const ENVELOPE_STAGE_FRAME_OPTIONS = [0, 2, 4, 8, 16];
 // Attack/Release specifically (not Decay, which stays on the smaller set
 // above) get a wider range up to 32 frames - confirmed with the user: only
-// those two needed expanding, not Decay. Each stage's own table cost (see
+// those two needed expanding, not Decay. Each stage's  table cost (see
 // buildEnvelopeConfigTables in generators/bbasic/soundfx.js) is still just
 // one ROM byte per frame of that specific stage, so this only makes an
 // envelope that actually USES a longer attack/release slightly bigger, not
@@ -150,12 +150,12 @@ export const processSoundEffectsStorageDefaults = (soundEffectsStorage) => {
     soundEffect.arpeggio = !!soundEffect.arpeggio;
     // Vue.set (not a plain assignment) for every envelope* field below -
     // soundEffectsStorage is a Vue ref whose reactivity was already set up
-    // (once, at load time - see hooks/storage.js's own ref(readInitial())
+    // (once, at load time - see hooks/storage.js's  ref(readInitial())
     // comment) from whatever plain JSON was in localStorage. A preset saved
     // before this feature existed simply never HAD an "envelope" key at
     // that point, so a plain "soundEffect.envelope = ..." assignment here
     // creates an ordinary, non-reactive property - Vue never defined a
-    // getter/setter for a key that didn't exist during its own initial
+    // getter/setter for a key that didn't exist during its  initial
     // walk. Confirmed as a real reported bug this way: the Envelope switch/
     // dropdowns/graph all silently stopped updating the view (toggling
     // Arpeggio - an OLD, already-reactive field - incidentally forced a
@@ -163,7 +163,7 @@ export const processSoundEffectsStorageDefaults = (soundEffectsStorage) => {
     // untracked values, and closing/reopening the card did the same via a
     // full remount). Vue.set defines the missing property properly instead,
     // exactly like $set is already used for the same reason elsewhere in
-    // this app (see DataEditor.vue's own instance.proxy.$set calls).
+    // this app (see DataEditor.vue's  instance.proxy.$set calls).
     Vue.set(soundEffect, 'envelope', !!soundEffect.envelope);
     // Presets saved before this existed (or before it replaced the old
     // single-stage Fade) won't have these yet - same Number() coercion as
@@ -207,7 +207,7 @@ export const processSoundEffectsStorageDefaults = (soundEffectsStorage) => {
     soundEffect.arpeggioRange = ARPEGGIO_RANGE_OPTIONS.some(([, value]) => value === range) ?
       range : DEFAULT_ARPEGGIO_RANGE;
     // Presets saved before this existed won't have it yet - defaults false
-    // (a plain "sound effect"), matching every preset's own behavior before
+    // (a plain "sound effect"), matching every preset's  behavior before
     // this tag existed.
     soundEffect.isInstrument = !!soundEffect.isInstrument;
     // Same Number() coercion as arpeggioRange above, for the same v-select

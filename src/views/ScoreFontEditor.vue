@@ -124,7 +124,7 @@ const BASE_SCORE_FONT_OPTIONS = [
 ];
 const CUSTOM_SCORE_FONT_OPTION = {text: 'Custom (drawn below)', value: CUSTOM_SCORE_FONT};
 
-// backgroundrealcolor's own hardcoded Setup default (see bbasic.bb.hbs) -
+// backgroundrealcolor's  hardcoded Setup default (see bbasic.bb.hbs) -
 // used only for the "Use background color" preview swatch below, since
 // there's no per-project stored value to read it from otherwise (a project
 // with no "Background: set color" block never changes it from this).
@@ -139,9 +139,9 @@ export default defineComponent({
     const zoom = useEditorZoom('scorefont');
     const digitWidth = computed(() => `${Math.round(DIGIT_BASE_WIDTH * zoom.value)}px`);
 
-    // Squish (and Squish Custom, which starts from Squish's own digits and is
+    // Squish (and Squish Custom, which starts from Squish's  digits and is
     // then editable below like the regular Custom font) shrinks the score
-    // row to make room for the Text Minikernel's own text lines underneath
+    // row to make room for the Text Minikernel's  text lines underneath
     // it - always offered, even with no Text Minikernel block placed yet,
     // since a smaller score font is a reasonable choice on its own.
     const scoreFontOptions = computed(() => [...BASE_SCORE_FONT_OPTIONS,
@@ -169,15 +169,15 @@ export default defineComponent({
       },
     });
 
-    // The score row's own background color, independent of the playfield -
-    // only takes effect with the standard kernel's own generic "minikernel"
+    // The score row's  background color, independent of the playfield -
+    // only takes effect with the standard kernel's  generic "minikernel"
     // score-row hook (see generators/bbasic/score.js's
     // generateScoreBkColorAsm/generateScoreBkColorRuntimeDims). Three
     // possible states: a byte (an explicitly picked palette color), the
     // string 'background' (explicitly track the live backgroundrealcolor
     // system variable - see backgroundPreviewColor below), or unset, which
     // is treated the SAME as 'background' (see
-    // Blockly.BBasic.scoreBkColorIsBackground's own comment in generators/
+    // Blockly.BBasic.scoreBkColorIsBackground's  comment in generators/
     // bbasic.js - a project that never visited this picker should match its
     // actual background, not default to black underneath the score row) -
     // normalized to the literal string here too, so the swatch always shows
@@ -223,7 +223,7 @@ export default defineComponent({
       },
     });
 
-    // 'background' has no palette swatch of its own to highlight - the
+    // 'background' has no palette swatch of its  to highlight - the
     // picker only understands a byte or null (its own "nothing selected"
     // state), so that sentinel is translated to/from null here rather than
     // taught to the shared component.
@@ -231,7 +231,7 @@ export default defineComponent({
       scoreBkColor.value === 'background' ? null : scoreBkColor.value);
 
     // A preview swatch color for the "Use background color" option -
-    // backgroundrealcolor's own hardcoded Setup default (there's no other
+    // backgroundrealcolor's  hardcoded Setup default (there's no other
     // stored value to read ahead of time; a "Background: set color" block
     // could change it at runtime, which this static preview can't reflect).
     // Both generateScoreBkColorRuntimeDims (Text Minikernel active) and
@@ -243,7 +243,7 @@ export default defineComponent({
     const backgroundPreviewColor = computed(() => colorByteToCss(BACKGROUND_DEFAULT_COLOR_BYTE));
 
     // Squish Custom edits a separate set of digits from the regular Custom
-    // font (different storage key, seeded from Squish's own compact shapes
+    // font (different storage key, seeded from Squish's  compact shapes
     // instead of the standard 8-row digits), so the editor below switches
     // which one it's bound to based on the current selection.
     const isSquishCustomSelected = computed(() => selectedFont.value === SQUISH_CUSTOM_SCORE_FONT);
@@ -258,11 +258,11 @@ export default defineComponent({
     const showExtraGlyphs = computed(() =>
       selectedFont.value === CUSTOM_SCORE_FONT || isSquishCustomSelected.value);
     // Same condition as showExtraGlyphs above, but gating the base 0-9 digit
-    // editors themselves (see the template's own v-if on .digit-list) - only
+    // editors themselves (see the template's  v-if on .digit-list) - only
     // Custom/Squish Custom are actually EDITABLE fonts (backed by real
     // storage this editor writes to); Default and every named preset are
     // fixed, compiled-in bitmaps (see generators/score-fonts.js) with no
-    // storage of their own to write to at all. Before this, the digit grid
+    // storage of their  to write to at all. Before this, the digit grid
     // stayed visible and editable regardless of selectedFont - editing it
     // always silently wrote to the Custom (or Squish Custom) font's own
     // storage no matter what was actually selected, which looked like (and
@@ -296,7 +296,7 @@ export default defineComponent({
     });
     // How many extra blank scanlines (0, 1, or 2) the score row draws of its
     // own background color right after the digits finish (see
-    // generators/bbasic.js's own scorePaddingConfigurationCode, which emits
+    // generators/bbasic.js's  scorePaddingConfigurationCode, which emits
     // "const scorepaddinglines = N" - text12a.asm's own
     // "if scorepaddinglines >= N" checks read that). 0 by default - a
     // project that's never visited this dropdown keeps its existing frame
@@ -404,7 +404,7 @@ export default defineComponent({
   max-width: 200px;
 }
 
-/* Breathing room from the "Use extra glyphs" switch's own hint text
+/* Breathing room from the "Use extra glyphs" switch's  hint text
    ("Costs 48 extra bytes of ROM space.") directly above - the two sat flush
    against each other otherwise. */
 .score-editor-zoom {
@@ -419,7 +419,7 @@ export default defineComponent({
   margin-bottom: 16px;
 }
 
-/* Vuetify's own switch margin-top (meant for stacking below other fields)
+/* Vuetify's  switch margin-top (meant for stacking below other fields)
    otherwise pushes this out of line with the swatch/label sharing this same
    row - same override TextEditor.vue's own .text-columns-switch uses for
    an identical inline-row switch. margin-left separates it from the label
@@ -431,7 +431,7 @@ export default defineComponent({
   flex: 0 0 auto;
 }
 
-/* Matches .score-bkcolor-label's own explicit size below - Vuetify's switch
+/* Matches .score-bkcolor-label's  explicit size below - Vuetify's switch
    label otherwise renders at its own default size, which read visibly
    smaller/larger than the plain-text label sharing this same row. */
 .score-fade-switch >>> .v-label {

@@ -50,20 +50,19 @@
                     @change="handleChildChange"
                   />
 
-                  <!-- Preview-only: stretches how wide each frame's own
-                       pixel grid RENDERS here, to sanity-check what a
-                       NUSIZ-doubled/quadrupled sprite would actually look
-                       like on real hardware, without touching the frame's
-                       own stored pixel data (a genuinely wider sprite is a
-                       different bB feature - "player0size"/"player1size" -
-                       this is purely a display aid for previewing that
-                       choice's visual effect while still drawing at the
-                       real 8-pixel resolution). Per-animation, not global
-                       or per-frame: different animations on the same
-                       player commonly use different NUSIZ settings (e.g. a
-                       normal walk cycle vs. a doubled-width "power-up"
-                       pose), so a single shared setting wouldn't preview
-                       either one accurately once the other diverged. -->
+                  <!-- Sets this animation's real NUSIZ width (normal/double/
+                       quad), not just a preview - the pixel grid still edits
+                       at the real 8-pixel resolution underneath, but the
+                       compiled ROM now sets player{N}size to match this
+                       choice every frame the animation is active (see
+                       processAnimation's own comment in generators/
+                       bbasic.js), overriding whatever a "Set player size"
+                       block elsewhere set moments earlier for as long as
+                       this animation stays selected. Per-animation, not
+                       global or per-frame: different animations on the same
+                       player commonly want different widths (e.g. a normal
+                       walk cycle vs. a doubled-width "power-up" pose), so a
+                       single shared setting couldn't represent both. -->
                   <v-btn-toggle
                     v-if="!isCollapsed(animation)"
                     :value="animation.previewWidthScale || 1"
@@ -72,9 +71,9 @@
                     mandatory
                     @change="(scale) => handleSetPreviewScale(animation, scale)"
                   >
-                    <v-btn :value="1" x-small title="Preview at normal (1x) width">1x</v-btn>
-                    <v-btn :value="2" x-small title="Preview at doubled (2x) width">2x</v-btn>
-                    <v-btn :value="4" x-small title="Preview at quadrupled (4x) width">4x</v-btn>
+                    <v-btn :value="1" x-small title="Normal (1x) width">1x</v-btn>
+                    <v-btn :value="2" x-small title="Doubled (2x) width">2x</v-btn>
+                    <v-btn :value="4" x-small title="Quadrupled (4x) width">4x</v-btn>
                   </v-btn-toggle>
 
                   <div class="animation-corner-toolbar">
@@ -142,7 +141,7 @@
                             </v-list-item-icon>
                             <v-list-item-title>Yes, delete</v-list-item-title>
                           </v-list-item>
-                          <v-list-item>
+                          <v-list-item link>
                             <v-list-item-icon>
                               <v-icon>mdi-cancel</v-icon>
                             </v-list-item-icon>
@@ -263,7 +262,7 @@
                                     </v-list-item-icon>
                                     <v-list-item-title>Yes, delete</v-list-item-title>
                                   </v-list-item>
-                                  <v-list-item>
+                                  <v-list-item link>
                                     <v-list-item-icon>
                                       <v-icon>mdi-cancel</v-icon>
                                     </v-list-item-icon>
@@ -332,14 +331,14 @@ import {loadImageFromFile, openFileDialogMultiple} from '../utils/file';
 import {createResizedCanvas} from '../utils/image';
 
 // Width of one frame editor at 100% zoom. The container is normally sized by
-// its own contents, so this pins it before the zoom factor is applied.
+// its  contents, so this pins it before the zoom factor is applied.
 const EDITOR_BASE_WIDTH = 275;
 
 // Orders a batch of imported image files into animation frame order - by
 // the number embedded in each filename (e.g. "walk1.png"/"walk2.png",
 // "frame_03.png") when EVERY file in the batch has one, since that's a
 // much more reliable signal of the intended frame order than however the
-// OS/browser's own file picker happened to report them. Falls back to
+// OS/browser's  file picker happened to report them. Falls back to
 // plain selection order (the array as given) the moment even one filename
 // has no extractable number at all - a partial/inconsistent numbering
 // scheme is more likely to produce a confusing, wrong-looking order than
@@ -361,9 +360,9 @@ export const sortImportedAnimationFrameFiles = (files) => {
 // handlePasteRowColors) - module-scope, not a ref inside setup(), so a
 // copied row-color set survives navigating away from this tab and back
 // (this component is destroyed/recreated on navigation - see
-// hooks/collapse.js's own comment on that lifecycle). null until the first
+// hooks/collapse.js's  comment on that lifecycle). null until the first
 // copy. Same "module-scope ref shared across instances" pattern
-// Configuration.vue's own collapsedSections uses for the same reason.
+// Configuration.vue's  collapsedSections uses for the same reason.
 const copiedFrameRowColors = ref(null);
 
 // Same reasoning/mechanism as copiedFrameRowColors just above, for the
@@ -380,15 +379,15 @@ export default defineComponent({
   setup(props) {
     const zoom = useEditorZoom(props.name);
     // Shared across Player 0/1 AND the Background tab (see
-    // PixelGridToggle.vue's own comment) - not per-player like zoom above.
+    // PixelGridToggle.vue's  comment) - not per-player like zoom above.
     const showPixelGrid = usePixelGridOverlayStorage();
     const editorWidth = computed(() => `${Math.round(EDITOR_BASE_WIDTH * zoom.value)}px`);
-    // Widens the frame editor's own container by the SAME factor the
+    // Widens the frame editor's  container by the SAME factor the
     // aspectRatio calculation below scales by, instead of just increasing
     // aspectRatio alone against a fixed-width container - confirmed as a
     // real bug that way: the proportion-wrapper's height is a PERCENTAGE OF
     // ITS OWN WIDTH (padding-bottom: 100/aspectRatio%, see PixelEditor.vue),
-    // so widening the aspect ratio while the container's own width stayed
+    // so widening the aspect ratio while the container's  width stayed
     // fixed just made the box shorter, not wider. Scaling width and
     // aspectRatio by the same factor keeps the derived height exactly
     // where it was at 1x (height = width / aspectRatio - both the
@@ -404,12 +403,12 @@ export default defineComponent({
     // Per-row SPRITE colors (batari Basic playercolors/player1colors) - see
     // the Options tab's own "Enable per-row Player 0/1 sprite colors"
     // toggles (still two independent, per-hardware-player toggles - see
-    // generateConfiguration's own comment in generators/bbasic.js for why
-    // player1colors is valid on its own but playercolors isn't). This
+    // generateConfiguration's  comment in generators/bbasic.js for why
+    // player1colors is valid on its  but playercolors isn't). This
     // editor is now a SINGLE shared tab (one pool of animations either
     // hardware player can use - see PlayerEditorView.vue), not one instance
-    // per player, so it has no "which player" context of its own anymore -
-    // the row-color painting UI shows if EITHER player's own toggle is on,
+    // per player, so it has no "which player" context of its  anymore -
+    // the row-color painting UI shows if EITHER player's  toggle is on,
     // since a shared animation's rowColors data is meaningful to show/edit
     // as long as at least one hardware player would actually render it.
     const spriteColorsEnabled = computed(() => {
@@ -419,7 +418,7 @@ export default defineComponent({
 
     // Read-only here - components/QuickColorPalette.vue (mounted above)
     // owns writing to this same shared storage; this component only needs
-    // the list itself, to pass into PlayfieldColorStrip's own quickColors
+    // the list itself, to pass into PlayfieldColorStrip's  quickColors
     // prop below.
     const colorPaletteStorage = useColorPaletteStorage();
     const spriteColorPalette = computed(() => colorPaletteStorage.value || []);
@@ -435,7 +434,7 @@ export default defineComponent({
     // than following the user across them.
     const selectedQuickColor = ref(null);
 
-    // Same reasoning/mechanism as BackgroundEditor's own ensureRowColors -
+    // Same reasoning/mechanism as BackgroundEditor's  ensureRowColors -
     // fills in a missing/mismatched-length row color list (a frame's own
     // height can change via "Set height", unlike a background's fixed
     // pfres-driven row count) whenever per-row sprite colors is on, without
@@ -452,8 +451,8 @@ export default defineComponent({
 
     // Purely a visual "which card am I looking at" marker - same
     // selectCard/selectedCardId/deselectCard pattern as MusicEditor.vue's
-    // own song cards and the other tabs' own entry cards (see
-    // MusicEditor.vue's own comment for the full reasoning): plain local
+    // own song cards and the other tabs'  entry cards (see
+    // MusicEditor.vue's  comment for the full reasoning): plain local
     // component state, not persisted, not wired into anything else.
     const selectedCardId = ref(null);
     const selectCard = (id) => {
@@ -481,7 +480,7 @@ export default defineComponent({
             }
           }
           // One-time renumbering for a project saved before animations
-          // started at id 0 (see handleAddAnimation's own comment) - shifts
+          // started at id 0 (see handleAddAnimation's  comment) - shifts
           // every id down by the current minimum, preserving relative order
           // and any gaps exactly as they were, so an existing project's
           // first animation reads "ID: 0" too instead of staying stuck at
@@ -515,13 +514,13 @@ export default defineComponent({
     };
 
     // Every card starts collapsed on every visit to this tab (see
-    // collapseAll's own comment in hooks/collapse.js), not just ones never
+    // collapseAll's  comment in hooks/collapse.js), not just ones never
     // expanded before.
     const {isCollapsed, toggleCollapsed, collapseAll} = useCollapsedIds(props.name, true);
     collapseAll();
 
     // Card reordering - same hook/pattern as Text/SoundFX/Data/Music/
-    // Background (see hooks/drag-reorder.js's own comment).
+    // Background (see hooks/drag-reorder.js's  comment).
     const {dragAttrs, dragCardClass, dragHandleListeners, dragTargetListeners} = useDragReorder(
         () => state.value.animations,
         (items) => {
@@ -556,7 +555,7 @@ export default defineComponent({
         pixels,
         // Copied the same "previous frame, or nothing" way as pixels just
         // above - a brand new frame with no previous one to copy from just
-        // gets ensureRowColors' own default fill (run on the next
+        // gets ensureRowColors'  default fill (run on the next
         // state.value read) instead of an explicit empty array here.
         ...(previousFrame && previousFrame.rowColors ?
           {rowColors: structuredClone(previousFrame.rowColors)} : {}),
@@ -586,7 +585,7 @@ export default defineComponent({
     // dialog until the user clicks elsewhere afterward.
     const importMenuOpenAnimationId = ref(null);
 
-    // Converts one loaded image into this animation's own frame pixel
+    // Converts one loaded image into this animation's  frame pixel
     // format - width is always forced to 8 (the fixed player-sprite width;
     // see the pixel-editor's own :width="8" above, not something a frame
     // can individually override), height auto-sized to the image's own
@@ -641,12 +640,12 @@ export default defineComponent({
     };
 
     // Applies the SAME resize (and "scale existing contents" choice) the
-    // triggering frame's own PixelEditor instance just used on itself, to
+    // triggering frame's  PixelEditor instance just used on itself, to
     // every OTHER frame in the same animation - the triggering frame
-    // itself is skipped here since its own handleSetHeight already
-    // resized it locally (see PixelEditor.vue's own resize-all-frames
+    // itself is skipped here since its  handleSetHeight already
+    // resized it locally (see PixelEditor.vue's  resize-all-frames
     // comment); redoing it here too would just repeat the same work.
-    // Every OTHER frame's own PixelEditor instance picks up its new
+    // Every OTHER frame's  PixelEditor instance picks up its new
     // pixels via its own "value" watcher (see that component's own
     // comment on why a watcher is needed there at all, not just a prop).
     const handleResizeAllFrames = (animation, triggeringFrame, {height, scaleContents}) => {
@@ -697,11 +696,11 @@ export default defineComponent({
       // created should still open right away, so they can see/start
       // drawing its first frame immediately instead of having to expand it
       // themselves first. ensureExpanded (used elsewhere purely to stop a
-      // brand new entry from inheriting a REUSED id's own stale override)
+      // brand new entry from inheriting a REUSED id's  stale override)
       // isn't enough here on its own - it only clears an existing override,
       // it doesn't fight the "true" default this tab now has, so a
       // never-before-seen id would still read as collapsed. toggleCollapsed
-      // instead flips (and explicitly stores) this exact id's own state
+      // instead flips (and explicitly stores) this exact id's  state
       // starting from whatever isCollapsed currently resolves to (the
       // collapsed default, for a brand new id), landing on expanded.
       toggleCollapsed(newAnimation);
@@ -717,7 +716,7 @@ export default defineComponent({
       instance.proxy.$forceUpdate();
     };
 
-    // Preview-only display setting (see the toggle's own template comment) -
+    // Preview-only display setting (see the toggle's  template comment) -
     // stored on the animation itself, not a separate zoom-style hook, since
     // it's meant to persist with the project the same way every other
     // animation/frame property here already does, unlike the Player 0/1
@@ -728,11 +727,11 @@ export default defineComponent({
       instance.proxy.$forceUpdate();
     };
 
-    // Same reasoning/mechanism as BackgroundEditor's own handleRowColorsInput.
+    // Same reasoning/mechanism as BackgroundEditor's  handleRowColorsInput.
     const handleRowColorsInput = (frame, colors) => {
       frame.rowColors = colors;
       handleChildChange();
-      // The pixel editor holds its own display state, so persisting isn't
+      // The pixel editor holds its  display state, so persisting isn't
       // enough to repaint the preview - force a re-render so it receives the
       // updated row colors and recolors its canvas.
       instance.proxy.$forceUpdate();
@@ -749,7 +748,7 @@ export default defineComponent({
 
     // Copies/pastes a frame's ENTIRE row-color list at once (not one row at
     // a time) - same "copy this whole thing, paste it onto another" pattern
-    // as MusicEditor's own handleCopyTrack/handlePasteTrack for an
+    // as MusicEditor's  handleCopyTrack/handlePasteTrack for an
     // instrument's notes. Pasting doesn't resize the target frame's own
     // list to match the source's length - handleRowColorsInput->
     // ensureRowColors (run on the next state.value read, same as every
@@ -789,7 +788,7 @@ export default defineComponent({
       instance.proxy.$forceUpdate();
     };
 
-    // Same reasoning/mechanism as BackgroundEditor's own editorRowColors.
+    // Same reasoning/mechanism as BackgroundEditor's  editorRowColors.
     const editorRowColors = (frame) => {
       if (!spriteColorsEnabled.value || !frame.rowColors) {
         return null;
@@ -825,7 +824,7 @@ export default defineComponent({
   width: 100%;
 }
 
-/* v-list-item's own default 0 16px padding stacks on top of v-card-text's,
+/* v-list-item's  default 0 16px padding stacks on top of v-card-text's,
    pushing everything in each row (name field and frame editors alike) in
    further than the Score tab's graphic cards, which sit directly in a
    v-card-text with no list-item wrapper. Zeroing both sides (not just left,
@@ -945,7 +944,7 @@ export default defineComponent({
   margin-top: 6px;
 }
 
-/* Absolutely positioned (matching Text/SoundFX/Data/Music's own collapse
+/* Absolutely positioned (matching Text/SoundFX/Data/Music's  collapse
    button placement exactly) rather than flowed in a flex row alongside the
    ID badge - the row wrapper this used to sit in is gone; .animation-
    name-field's own margin-top (below) makes room for both this and the
@@ -1000,7 +999,7 @@ export default defineComponent({
   font-size: 11px;
 }
 
-/* Matches the app's own primary blue (already used for the "Add frame"/
+/* Matches the app's  primary blue (already used for the "Add frame"/
    "Add animation" fab buttons and the drawing-tool active state right
    above), white text for contrast - Vuetify's own v-btn-toggle default
    "selected" look (a faint grey tint, barely different from unselected)
@@ -1010,7 +1009,7 @@ export default defineComponent({
   color: #fff !important;
 }
 
-/* Holds the animation card's own corner buttons (Import animation frames,
+/* Holds the animation card's  corner buttons (Import animation frames,
    Delete) in one absolutely-positioned flex row, same shape/reasoning as
    .frame-corner-toolbar below (added first, for the frame-level buttons) -
    top/right match every other tab's own delete corner button (see
@@ -1088,7 +1087,7 @@ export default defineComponent({
   flex-wrap: nowrap;
 }
 
-/* Same icon/button sizing as the Player Sprite tab's own toolbar icons
+/* Same icon/button sizing as the Player Sprite tab's  toolbar icons
    (PixelEditor.vue's .pixel-editor-tools rules) - size only, no colour
    changes, so .delete-icon-btn's red-on-hover convention is untouched.
    margin: 0 (not "0 1px") to match that same base component's own trim -
@@ -1114,7 +1113,7 @@ export default defineComponent({
   align-items: center;
 }
 
-/* mdi-delete's own glyph reads visually smaller than mdi-content-copy/
+/* mdi-delete's  glyph reads visually smaller than mdi-content-copy/
    mdi-content-paste at the exact same font-size (more built-in padding
    around the trash-can shape than those two icons have) - bumped up a
    couple pixels so all three corner buttons read as the same size at a

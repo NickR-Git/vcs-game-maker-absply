@@ -114,20 +114,6 @@
           class="option-switch"
         />
         <v-switch
-          v-model="configurationState.enableBallBlankLines"
-          @change="handleChangeConfiguration"
-          :disabled="configurationState.enablePfColors || player0RainbowColorsActive"
-          :color="(configurationState.enablePfColors || player0RainbowColorsActive) ? 'amber darken-2' : undefined"
-          label="Fill blank lines with the ball instead of missile0 (ball_blank_lines)"
-          :hint="configurationState.enablePfColors ?
-            'Forced off: this only works with per-row playfield colors (pfcolors, below) turned off.' :
-            (player0RainbowColorsActive ?
-              'Forced off: the player0 rainbow colors block requires blank lines shown normally.' :
-              'An alternative to turning \'Show blank lines\' off above: removes the gaps between playfield rows using the ball\'s graphics circuitry instead of missile0\'s, so missile0 stays free to use as a normal sprite (unlike turning \'Show blank lines\' off, which costs missile0 entirely). Works automatically, no Ball blocks needed. On a solid playfield color (pfcolors off), the ball\'s fill pixels - if you also use it as a sprite - already match the background for free, since the ball always draws in the playfield color.')"
-          persistent-hint
-          class="option-switch"
-        />
-        <v-switch
           v-model="configurationState.enablePlayer0SpriteColors"
           @change="handleChangeConfiguration"
           label="Enable per-row Player 0 sprite colors (playercolors)"
@@ -294,13 +280,13 @@ import {useBackgroundsStorage, useBlocklyControlsHorizontalStorage, useConfigura
 import {BANK_COUNT_BY_ROMSIZE, countUsedVariables, usesPlayer0RainbowColors} from '../hooks/rom';
 import {effectiveBackgroundRows, reflowBackgroundsToHeight} from '../blocks/background';
 
-// 64k compiles correctly (see generators/bbasic.js's own SUPPORTED_ROM_SIZES/
+// 64k compiles correctly (see generators/bbasic.js's  SUPPORTED_ROM_SIZES/
 // BANK_COUNT_BY_ROMSIZE_MINI) but isn't offered here yet - the bundled
-// preview emulator (public/js/javatari.js) can't actually run bB's own 64k
+// preview emulator (public/js/javatari.js) can't actually run bB's  64k
 // bankswitch scheme (confirmed directly: still "AUTO: FAILED"/no video even
 // forcing every cartridge format it has that's remotely close - EF included,
 // the one whose own hotspot address genuinely matches bB's), so exposing it
-// here would just let someone build a ROM this app's own preview can't show
+// here would just let someone build a ROM this app's  preview can't show
 // them running. Re-add once that's sorted out (a newer/different bundled
 // emulator, most likely).
 const ROM_SIZE_OPTIONS = ['2k', '4k', '8k', '16k', '32k'];
@@ -321,7 +307,7 @@ const MIN_SUPERCHIP_ROM_SIZE_INDEX = ROM_SIZE_OPTIONS.indexOf('8k');
 // collapsed," whereas this page wants every section collapsed the FIRST
 // time (before the user has ever toggled anything) - a plain module-scope
 // ref, hydrated from localStorage once here, covers both without changing
-// that shared hook's own contract for its other callers.
+// that shared hook's  contract for its other callers.
 const OPTIONS_COLLAPSED_SECTIONS_KEY = 'vcs-game-maker.collapsed.options-sections';
 const DEFAULT_COLLAPSED_SECTIONS = ['rom', 'kernel', 'compiler', 'vcsgm'];
 const loadCollapsedSections = () => {
@@ -335,7 +321,7 @@ const loadCollapsedSections = () => {
 };
 const collapsedSections = ref(loadCollapsedSections());
 
-// Hoisted out of configurationState's own getter (module scope, like
+// Hoisted out of configurationState's  getter (module scope, like
 // collapsedSections above) so handleResetToDefaults can reuse the exact
 // same values rather than keeping a second, easily-drifting copy of every
 // default in sync by hand.
@@ -343,7 +329,6 @@ const DEFAULT_CONFIGURATION = {
   showScore: true,
   enableScoreFade: false,
   showBlankLines: true,
-  enableBallBlankLines: false,
   enablePlayer0SpriteColors: false,
   enablePlayer1SpriteColors: false,
   enablePfColors: false,
@@ -367,7 +352,7 @@ export default defineComponent({
     const configurationStorage = useConfigurationStorage();
     const backgroundsStorage = useBackgroundsStorage();
     // A standing app preference, not part of the project itself (see
-    // hooks/project.js's own comment) - kept separate from configurationState
+    // hooks/project.js's  comment) - kept separate from configurationState
     // below so it survives clearProjectStorage() and can be checked at
     // startup, before deciding whether to call that at all.
     const loadLastProject = useLoadLastProjectStorage();
@@ -395,8 +380,8 @@ export default defineComponent({
     };
 
     // Which sections are collapsed - a Set of section keys, matching the
-    // collapse pattern already used by the other tabs' own cards (a plain
-    // left-aligned chevron icon button, not Vuetify's own v-expansion-panels,
+    // collapse pattern already used by the other tabs'  cards (a plain
+    // left-aligned chevron icon button, not Vuetify's  v-expansion-panels,
     // which puts its arrow on the right). See collapsedSections' own
     // module-scope definition above for why this isn't just a local ref.
     const isSectionCollapsed = (key) => collapsedSections.value.has(key);
@@ -416,7 +401,7 @@ export default defineComponent({
 
           // Spread (not a DEFAULT_CONFIGURATION-keys-only rebuild) so fields
           // this page doesn't know about - graphicsBanks/eventBanks, the
-          // auto-relocation system's own bank-assignment cache (see
+          // auto-relocation system's  bank-assignment cache (see
           // hooks/rom.js) - pass through untouched instead of silently
           // vanishing the moment this getter runs.
           return {...DEFAULT_CONFIGURATION, ...configuration};
@@ -473,7 +458,7 @@ export default defineComponent({
     // change. Also forces Player 1 sprite colors on: batari Basic's own
     // kernel_options combination table never has a valid row with
     // "playercolors" alone, it always needs "player1colors" too (see
-    // generateConfiguration's own comment in generators/bbasic.js) - so
+    // generateConfiguration's  comment in generators/bbasic.js) - so
     // whenever playercolors is needed (a player0 rainbow-colors block, OR
     // the "Enable per-row Player 0 sprite colors" toggle), player1colors has
     // to come along with it, same reasoning/pattern as showBlankLines just
@@ -481,10 +466,9 @@ export default defineComponent({
     watch(player0RainbowColorsActive, (active) => {
       if (!active) return;
       const state = configurationState.value;
-      if (state.showBlankLines && state.enablePlayer1SpriteColors && !state.enableBallBlankLines) return;
+      if (state.showBlankLines && state.enablePlayer1SpriteColors) return;
       state.showBlankLines = true;
       state.enablePlayer1SpriteColors = true;
-      state.enableBallBlankLines = false;
       configurationState.value = state;
     }, {immediate: true});
 
@@ -514,12 +498,6 @@ export default defineComponent({
     const handleChangeConfiguration = () => {
       const state = configurationState.value;
       if (player0RainbowColorsActive.value) state.showBlankLines = true;
-      // ball_blank_lines only makes sense with pfcolors off (see its
-      // hint text) and can't coexist with the player0 rainbow colors
-      // requirement above (blank lines shown normally) - forced off rather
-      // than left in a combination guaranteed to be ignored/fail to build,
-      // same "force off and disable" pattern showBlankLines itself uses.
-      if (state.enablePfColors || player0RainbowColorsActive.value) state.enableBallBlankLines = false;
       configurationState.value = enforceInlineRandExclusivity(state);
     };
 
@@ -541,12 +519,12 @@ export default defineComponent({
     // Unlike pfres above, this doesn't change how many rows the playfield
     // has (no reflow needed) - it only overrides the row HEIGHT the kernel
     // draws each one at (see pfRowDivisorFor in utils/playfield-coords.js,
-    // which prefers this value over its own round(96/pfres) calculation
+    // which prefers this value over its  round(96/pfres) calculation
     // whenever the "Override playfield row height" switch above is on), so
     // background pixel data stays exactly as-is. Whether the override is
-    // APPLIED is entirely the switch's own job (enablePfRowHeight) - this
-    // field's own stored number is just clamped to a sane positive integer
-    // here, same as pfres's own handleChangeResolution just above, so an
+    // APPLIED is entirely the switch's  job (enablePfRowHeight) - this
+    // field's  stored number is just clamped to a sane positive integer
+    // here, same as pfres's  handleChangeResolution just above, so an
     // invalid/emptied field can't leave a NaN or 0 behind for whenever the
     // switch gets turned back on.
     const handleChangePfRowHeight = () => {
@@ -555,7 +533,7 @@ export default defineComponent({
       configurationState.value = state;
     };
 
-    // With Superchip off, the app's own bookkeeping variables have to live on
+    // With Superchip off, the app's  bookkeeping variables have to live on
     // letters, leaving only USER_VARIABLE_LETTERS_WITHOUT_SUPERCHIP free for
     // user-created ones (see bbasic.js's SYSTEM_VARIABLES comment) - turning
     // Superchip off is blocked if the project already uses more variables
@@ -580,14 +558,13 @@ export default defineComponent({
     // real project choices, not toggles, so a "reset to defaults" for
     // toggles specifically leaves them alone. Covers both configurationState
     // (project-scoped, saved with the .vcsgm file) and the four standing app
-    // preferences kept in their own separate storage (see loadLastProject's
+    // preferences kept in their  separate storage (see loadLastProject's
     // own comment above for why those live apart from configurationState).
     const handleResetToDefaults = () => {
       const state = configurationState.value;
       state.showScore = DEFAULT_CONFIGURATION.showScore;
       state.enableScoreFade = DEFAULT_CONFIGURATION.enableScoreFade;
       state.showBlankLines = DEFAULT_CONFIGURATION.showBlankLines;
-      state.enableBallBlankLines = DEFAULT_CONFIGURATION.enableBallBlankLines;
       state.enablePlayer0SpriteColors = DEFAULT_CONFIGURATION.enablePlayer0SpriteColors;
       state.enablePlayer1SpriteColors = DEFAULT_CONFIGURATION.enablePlayer1SpriteColors;
       state.enablePfColors = DEFAULT_CONFIGURATION.enablePfColors;

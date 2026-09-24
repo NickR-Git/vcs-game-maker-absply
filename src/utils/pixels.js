@@ -20,7 +20,7 @@ export const scalePixelMatrixHeight = (pixels, newHeight, width) => {
 };
 
 // Shared by every "resize this pixel matrix to a new height" call site
-// (PixelEditor.vue's own single-frame resize, and PlayerEditor.vue's own
+// (PixelEditor.vue's  single-frame resize, and PlayerEditor.vue's own
 // "apply to every frame in this animation" option) so the two never drift
 // apart on what "resize" actually means. scaleContents picks between the
 // two available strategies: nearest-neighbor resampling the existing

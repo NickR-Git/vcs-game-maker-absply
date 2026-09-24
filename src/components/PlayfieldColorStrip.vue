@@ -60,13 +60,13 @@ export default {
     // Optional curated shortlist of color bytes (see PlayerEditor.vue's own
     // "quick colors" palette) shown above the full palette grid in every
     // row's popup, for fast reuse without hunting through all 128 colors.
-    // Empty by default so BackgroundEditor's own use of this component
+    // Empty by default so BackgroundEditor's  use of this component
     // (which has no such shortlist) renders exactly as before.
     quickColors: {type: Array, default: () => []},
     // A color byte the user has "armed" from the quick colors bar (see
-    // PlayerEditor.vue's own selectedQuickColor), or null. While set, a
+    // PlayerEditor.vue's  selectedQuickColor), or null. While set, a
     // plain click on a row swatch fills that row with THIS color directly
-    // instead of opening the row's own popup - a faster paint-bucket-style
+    // instead of opening the row's  popup - a faster paint-bucket-style
     // workflow than picking from the popup every single row.
     activeQuickColor: {type: Number, default: null},
   },
@@ -76,7 +76,7 @@ export default {
       paletteColumns: PALETTE_COLUMNS,
       // Click-and-drag row painting: mousedown on a row remembers which
       // color to spread (the armed quick color if one's selected, else
-      // that row's own current color) without picking anything yet - a
+      // that row's  current color) without picking anything yet - a
       // plain click still opens the popup/paints just that one row via the
       // existing click handler below, since a real cross-element drag
       // never fires a native "click" event at all (only mousedown+mouseup

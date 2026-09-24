@@ -10,7 +10,7 @@ import * as Blockly from 'blockly/core';
 // sheet, while the <image> elements themselves keep the sprite sheet's full,
 // unscaled pixel size - so a naive shrink just crops a smaller window into
 // the same full-size icon instead of scaling it, chopping off part of it.
-// createDom() is copied from Blockly's own source (trashcan.js) with the
+// createDom() is copied from Blockly's  source (trashcan.js) with the
 // sprite <image> geometry (width/height/x/y) also multiplied by SCALE, so
 // the clip window and the image it's clipping shrink together.
 const SCALE = 32 / 47;
