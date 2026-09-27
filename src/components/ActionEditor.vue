@@ -104,7 +104,7 @@ const APP_BLOCKLY_THEME = Blockly.Theme.defineTheme('app', {
 // keeps working exactly as it did (see generators/bbasic.js's own
 // isEnabled()-based pre-scan, unaffected by this), same as any other
 // toolbox-only restriction in this app.
-const buildToolboxXml = (enablePlayer0SpriteColors, enablePlayer1SpriteColors) =>
+const buildToolboxXml = (enablePlayer0SpriteColors, enablePlayer1SpriteColors, kernelIsDpcPlus) =>
   Handlebars.compile(blocklyToolboxTemplate)({
     blocklyToolboxPlayer0Movement,
     blocklyToolboxPlayer1Movement,
@@ -113,6 +113,7 @@ const buildToolboxXml = (enablePlayer0SpriteColors, enablePlayer1SpriteColors) =
     blocklyToolboxExampleEvent,
     enablePlayer0SpriteColors,
     enablePlayer1SpriteColors,
+    kernelIsDpcPlus,
   });
 
 export default {
@@ -195,7 +196,8 @@ export default {
           scaleSpeed: 1.2,
         },
         toolbox: buildToolboxXml((configurationStorage.value || {}).enablePlayer0SpriteColors,
-            (configurationStorage.value || {}).enablePlayer1SpriteColors),
+            (configurationStorage.value || {}).enablePlayer1SpriteColors,
+            (configurationStorage.value || {}).kernel === 'dpcplus'),
       },
       workspaceStorage: useWorkspaceStorage(),
       errorStorage: useErrorStorage(),
@@ -372,6 +374,9 @@ export default {
     player1SpriteColorsEnabled() {
       return !!(this.configurationStorage.value || {}).enablePlayer1SpriteColors;
     },
+    kernelIsDpcPlus() {
+      return (this.configurationStorage.value || {}).kernel === 'dpcplus';
+    },
     workspaceData: {
       get() {
         try {
@@ -398,12 +403,20 @@ export default {
     player0SpriteColorsEnabled() {
       const workspace = this.$refs['foo'] && this.$refs['foo'].workspace;
       if (!workspace) return;
-      workspace.updateToolbox(buildToolboxXml(this.player0SpriteColorsEnabled, this.player1SpriteColorsEnabled));
+      workspace.updateToolbox(buildToolboxXml(this.player0SpriteColorsEnabled, this.player1SpriteColorsEnabled,
+          this.kernelIsDpcPlus));
     },
     player1SpriteColorsEnabled() {
       const workspace = this.$refs['foo'] && this.$refs['foo'].workspace;
       if (!workspace) return;
-      workspace.updateToolbox(buildToolboxXml(this.player0SpriteColorsEnabled, this.player1SpriteColorsEnabled));
+      workspace.updateToolbox(buildToolboxXml(this.player0SpriteColorsEnabled, this.player1SpriteColorsEnabled,
+          this.kernelIsDpcPlus));
+    },
+    kernelIsDpcPlus() {
+      const workspace = this.$refs['foo'] && this.$refs['foo'].workspace;
+      if (!workspace) return;
+      workspace.updateToolbox(buildToolboxXml(this.player0SpriteColorsEnabled, this.player1SpriteColorsEnabled,
+          this.kernelIsDpcPlus));
     },
   },
   mounted() {

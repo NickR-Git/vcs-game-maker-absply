@@ -22,7 +22,7 @@
       <p class="about-description">
         VCS Game Maker is a no-code environment for building Atari 2600 games. Build your game's logic with
         Blockly blocks, and behind the scenes VCSGM generates batari Basic source code (along with a bit of
-        assembly), compiles it into a real Atari 2600 ROM and runs that ROM in a built-in Javatari emulator
+        assembly), compiles it into a real Atari 2600 ROM and runs that ROM in a built-in Gopher2600 emulator
         preview.
       </p>
 

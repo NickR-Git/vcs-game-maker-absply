@@ -25,90 +25,16 @@ import {appendCompileLog, clearCompileLog, useBackgroundsStorage, useConfigurati
   usePlayerAnimationsStorage, useTextFontStorage, useWorkspaceStorage} from './project';
 import {getRelocationBanks, resetRelocationBanks, setRelocationBank,
   recordSuccessfulRelocationBanks, seedRelocationBanksFromLastSuccess} from './relocation-banks';
-import {markRomUpToDate, markRomOutdated, useRomOutdated, useHasCompiledRom} from './rom-status';
+import {markRomUpToDate, markRomOutdated, useRomOutdated, useHasCompiledRom,
+  useCompiledRomBytes, setCompiledRomBytes} from './rom-status';
+import {withGopher2600} from './emulator';
 import {setRomCapacity, useRomCapacity} from './rom-capacity';
 
 Vue.use(VueCompositionApi);
 
-export {markRomOutdated, useRomOutdated, useRomCapacity, useHasCompiledRom};
+export {markRomOutdated, useRomOutdated, useRomCapacity, useHasCompiledRom, useCompiledRomBytes};
 
 const EMPTY_WORKSPACE = '<xml xmlns="https://developers.google.com/blockly/xml"/>';
-
-// The generated ROM always declares "set tv ntsc" (see bbasic.bb.hbs) - but
-// that's a compile-time directive baked into the KERNEL's own timing code,
-// not something Javatari can read back out of the compiled binary. Left
-// alone, Javatari instead auto-detects the video standard at runtime by
-// watching the ROM's own early frame timing for ~90 frames after load - a
-// heuristic that's genuinely timing-sensitive and can fail intermittently
-// even for a correct, working ROM (confirmed directly: an identical ROM,
-// rebuilt with no code changes, sometimes passed and sometimes got
-// Javatari's own "AUTO: FAILED" on-screen message with a rolling/garbled
-// picture, purely depending on real-world timing jitter around load - not
-// a bug in the generated code).
-//
-// A first attempt simulated Javatari's own video-standard hotkey
-// (jt.ConsoleControls.VIDEO_STANDARD via consoleControls.processControlState)
-// once per page load, since there's no direct "set and stop auto-detecting"
-// call exposed - only that control, which CYCLES (Auto -> NTSC -> PAL ->
-// Auto). That didn't reliably stick (confirmed directly: still reproduced
-// "AUTO: FAILED" after a hard refresh) - the auto-detector's own ~90-frame
-// window can still run concurrently and overwrite whatever the hotkey just
-// set once it finishes, win or lose.
-//
-// This instead directly calls the video output's own setVideoStandard - a
-// plain, idempotent setter (unlike the hotkey, calling it again is always
-// safe, never cycles to PAL) - both immediately after load AND again after
-// a delay comfortably past that ~90-frame/~1.5s detection window, so
-// whatever the auto-detector concludes (or fails to conclude) in between
-// gets overridden by our own final, correct answer. The "AUTO: FAILED"
-// on-screen message may still flash briefly if detection loses, but the
-// actual picture recovers to correct NTSC rendering right after, instead
-// of staying stuck rolling/garbled.
-const forceJavatariNtsc = () => {
-  const videoOutput = window.Javatari && window.Javatari.room &&
-    window.Javatari.room.console && window.Javatari.room.console.getVideoOutput();
-  const jt = window.jt;
-  if (!videoOutput || !jt) {
-    // Javatari's own room can still be mid-initialization the very first
-    // time a build finishes right after a fresh page load (its startup is
-    // async, independent of our own compile pipeline) - retry shortly
-    // instead of giving up on this attempt entirely.
-    setTimeout(forceJavatariNtsc, 250);
-    return;
-  }
-  videoOutput.setVideoStandard(jt.VideoStandard.NTSC);
-  setTimeout(() => videoOutput.setVideoStandard(jt.VideoStandard.NTSC), 2000);
-};
-
-// Turns Javatari's own Keyboard/Keypad Controller emulation on or off (see
-// AtariConsole.setKeypadMode in the vendored public/js/javatari.js - a fork
-// of ppeccin/javatari.js with that peripheral newly implemented, since
-// upstream doesn't support it at all: https://github.com/ppeccin/javatari.js/issues/17).
-// Same "Javatari's own startup is async, independent of our compile
-// pipeline" retry reasoning as forceJavatariNtsc above. Called on every
-// build (not just ones that use keypad blocks) so a project that USED to
-// use the keypad and just removed the last block correctly turns it back
-// off too, rather than leaving a stale prior build's setting stuck on.
-const setJavatariKeypadMode = (enabled) => {
-  const room = window.Javatari && window.Javatari.room;
-  const console_ = room && room.console;
-  const consoleControls = room && room.consoleControls;
-  if (!console_ || typeof console_.setKeypadMode !== 'function' ||
-      !consoleControls || typeof consoleControls.setKeypadMode !== 'function') {
-    setTimeout(() => setJavatariKeypadMode(enabled), 250);
-    return;
-  }
-  // Two independent switches: console_.setKeypadMode covers the TIA/PIA
-  // emulation itself (real hardware protocol) plus the physical-keyboard
-  // key mapping; consoleControls.setKeypadMode covers a gamepad-shaped
-  // Keyboard/Keypad Controller USB adapter, whose 12 raw buttons would
-  // otherwise collide with Javatari's own default gamepad button
-  // assignments (see GamepadConsoleControls' own setKeypadMode comment in
-  // the vendored fork) - both need to be on together for the peripheral to
-  // work regardless of which physical form it takes.
-  console_.setKeypadMode(enabled);
-  consoleControls.setKeypadMode(enabled);
-};
 
 // Loads the stored workspace headlessly (so this works from any tab, not
 // just the editor) and runs it through the given callback, disposing it
@@ -153,7 +79,7 @@ const regenerateCode = () => withHeadlessWorkspace((workspace) => BlocklyBB.work
 export const countUsedVariables = () =>
   withHeadlessWorkspace((workspace) => {
     BlocklyBB.workspaceToCode(workspace);
-    return (BlocklyBB.letterVarsUsed || 0) + (BlocklyBB.superchipVarsUsed || 0);
+    return (BlocklyBB.letterVarsUsed || 0) + (BlocklyBB.superchipVarsUsed || 0) + (BlocklyBB.dpcPlusVarsUsed || 0);
   });
 
 // Whether the project needs "playercolors" (player0's own per-row sprite
@@ -213,6 +139,23 @@ export const usesPlayer0RainbowColors = () => {
 const isOverflowError = (e) => /segment overflow|origin reverse-indexed|Unknown Mnemonic 'jmp BS_(jsr|return)'/i
     .test((e && e.message) || '');
 
+// std_kernel.asm/score_graphics.asm both self-report free space via a real
+// `echo "... bytes of ROM space left in bank 1"` before the bankswitch
+// footer's own ORG statement runs - DASM still executes that echo even on a
+// build that goes on to fail moments later (see bb-compiler.js's own
+// `err.dasmStdout` comment), so a negative number here is a direct,
+// authoritative answer to "is bank 1's own fixed content over capacity",
+// independent of whichever unit the relocation retry loop happens to be
+// trying this attempt. Takes the LAST match (a project can hit this echo
+// more than once across relocation attempts within the same stdout blob in
+// principle) - returns null if the line isn't present at all (an overflow
+// shape that isn't this one, e.g. a genuinely different bank).
+const parseBank1FreeBytesEcho = (stdout) => {
+  const matches = [...((stdout || '').matchAll(/(-?\d+) bytes of ROM space left in bank 1/g))];
+  if (!matches.length) return null;
+  return parseInt(matches[matches.length - 1][1], 10);
+};
+
 // How many physical banks each bankswitched ROM size actually provides
 // (2k/4k don't bankswitch at all, so they're absent - overflowing there just
 // surfaces the real error, with nowhere to relocate anything). Every bank
@@ -221,7 +164,52 @@ const isOverflowError = (e) => /segment overflow|origin reverse-indexed|Unknown 
 // bank, and cross-bank calls work identically regardless of which bank
 // number is used (confirmed for bank 2 directly against the compiler and
 // the emulator - see the bank-targeting feasibility notes).
-export const BANK_COUNT_BY_ROMSIZE = {'8k': 2, '16k': 4, '32k': 8, '64k': 16};
+// 'dpcplus' isn't a romSize value - DPC+ fixes its own bank count (1-6
+// addressable, 8 total 4K regions) the moment "set kernel DPC+" is seen, independent of whatever
+// romSize the UI would otherwise offer (which is hidden entirely once DPC+
+// is selected - see Configuration.vue). Callers key this table (and every
+// other romSize-keyed cache in this file) via bankSizeKeyFor below rather
+// than config.romSize directly.
+// DPC+ is 6, not 7 or 8. The 32KB DPC+ ROM has 8 total 4K regions, but only
+// 6 (bank 1 through bank 6) are addressable via a bBasic "bank N" tag - the
+// other two are the graphics bank and a SEPARATE ARM-driver bank, confirmed
+// directly against both the real batari Basic docs (randomterrain.com's own
+// DPC+ Kernel section: "4K bB system, 20K of your basic code, 4K graphics
+// data, and 4K ARM code = 32K binary" - i.e. bank 1 + banks 2-6 = 6 code
+// banks, graphics + ARM as two distinct reserved 4K regions) and gopher2600's
+// own DPC+ mapper source (driverSize=3072/dataSize=4096/freqSize=1024 fixed
+// regions = 8192 bytes reserved, leaving exactly 32768-8192=24576=6*4096 for
+// addressable banks). 8 was wrong first (forced an unsupported "bank 8"
+// declaration, corrupting the compiler's own internal per-bank bookkeeping -
+// confirmed directly: DASM crashed with a WASM "memory access out of bounds"
+// fault reading whatever postprocess.wasm's own out-of-bounds write had left
+// behind). 7 was ALSO wrong (an earlier fix that stopped that crash by
+// happening to stay under DASM's own hard "bank not supported" ceiling, but
+// still overflows the real 32K budget: 7*4096 + 8192 = 36864 > 32768) -
+// confirmed directly this time by the compiled ROM's own 6507 program
+// hitting a genuine CPU JAM (illegal-opcode hardware halt) a few hundred
+// bytes into what should have been bank 1's own tiny "goto bank2" stub, from
+// whatever got misplaced at the resulting bank-boundary overflow.
+export const BANK_COUNT_BY_ROMSIZE = {'8k': 2, '16k': 4, '32k': 8, '64k': 16, 'dpcplus': 6};
+
+export const bankSizeKeyFor = (config) => ((config && config.kernel) === 'dpcplus' ? 'dpcplus' : config && config.romSize);
+
+// DPC+ permanently reserves bank 2 for the whole commongamelogic/main-loop
+// body (see generateDpcPlusBankPreamble's own comment in generators/
+// bbasic.js) - bank 2 is never part of the shared pool individual events/
+// graphics/music/subroutines compete for there, unlike every other kernel
+// (where that pool starts at bank 2, right after bank 1's own normal,
+// roomy content). Passed as pickNextBank's own minBank param everywhere it's
+// called.
+const minRelocationBankFor = (config) => (bankSizeKeyFor(config) === 'dpcplus' ? 3 : 2);
+
+// The bank every relocatable unit implicitly defaults to until it's
+// explicitly moved elsewhere (see pickRelocationCandidate/
+// estimateBank1Total/familyStillInBank1's own "no entry defaults to this"
+// convention) - bank 2 for DPC+ (see generateDpcPlusBankPreamble's own
+// comment: DPC+ physically compiles everything not individually relocated
+// into bank 2, not bank 1), bank 1 for every other kernel.
+const primaryBankFor = (config) => (bankSizeKeyFor(config) === 'dpcplus' ? 2 : 1);
 
 // Graphics unit keys (see wrapRelocatableGraphics in generators/bbasic.js)
 // are generated, code-facing identifiers ("background3", "player0default",
@@ -331,6 +319,15 @@ const computeVariableUsage = () => {
       used: BlocklyBB.superchipRwUsed || 0,
       available: BlocklyBB.superchipRwAvailable || 0,
     },
+    // DPC+'s own always-on bonus RAM pool (var0-var8, 9 slots - see
+    // DPCPLUS_VAR_COUNT's own comment in generators/bbasic.js) - unlike
+    // Superchip, there's no toggle for this; available is simply 0 whenever
+    // kernel isn't DPC+, same "0 means not applicable" convention as the
+    // other pools here.
+    dpcPlus: {
+      used: BlocklyBB.dpcPlusVarsUsed || 0,
+      available: BlocklyBB.dpcPlusVarsAvailable || 0,
+    },
     // System variables (player0frame, newbackground, etc. - see
     // SYSTEM_VARIABLES' own comment in generators/bbasic.js) are a SEPARATE,
     // always-unconditional set of "dim" lines - never routed through
@@ -349,6 +346,7 @@ const computeVariableUsage = () => {
     // display's own expandable list.
     letterAssignments: BlocklyBB.letterVarAssignments || [],
     superchipAssignments: BlocklyBB.superchipVarAssignments || [],
+    dpcPlusAssignments: BlocklyBB.dpcPlusVarAssignments || [],
     // Same per-slot breakdown, for Superchip's own separate r/w pool (see
     // reserveDevVarRW's own comment in generators/bbasic.js) - every entry
     // here always has isUserVariable: false (this pool is never offered to
@@ -380,7 +378,7 @@ const computeBankContents = (maxBanks, textMinikernelActive) => {
   }
   const place = (list, names, bankMap, labelFn) => {
     names.forEach((name) => {
-      const bank = bankMap[name] || 1;
+      const bank = bankMap[name] || BlocklyBB.primaryBank();
       if (contents[bank]) contents[bank][list].push(labelFn ? labelFn(name) : name);
     });
   };
@@ -409,7 +407,7 @@ const computeBankContents = (maxBanks, textMinikernelActive) => {
   place('soundEffects', graphicsKeys.filter((key) => key === 'soundfxEnvelopeChecks'),
       banks.graphicsBanks || {}, () => 'Sound envelope checks');
   BlocklyBB.getMusicUnitKeys().forEach((unitKey) => {
-    const bank = (banks.musicBanks || {})[unitKey] || 1;
+    const bank = (banks.musicBanks || {})[unitKey] || BlocklyBB.primaryBank();
     if (!contents[bank]) return;
     const labels = unitKey === 'musicEngine' ? resolveMusicSongLabels() : [];
     contents[bank].music.push(...(labels.length ? labels : [unitKey]));
@@ -438,7 +436,7 @@ const computeBankContents = (maxBanks, textMinikernelActive) => {
       .filter((table) => table.values && table.values.length)
       .forEach((table) => {
         const usage = dataTableUsage[table.id];
-        const tableBanks = usage && usage.size ? [...usage] : [1];
+        const tableBanks = usage && usage.size ? [...usage] : [BlocklyBB.primaryBank()];
         tableBanks.forEach((bank) => {
           if (contents[bank]) contents[bank].dataTables.push(table.name || `Unnamed ${table.id}`);
         });
@@ -555,8 +553,10 @@ const estimateFamilySize = (members) => members.reduce((sum, {kind, name}) =>
 // so a family whose members haven't been touched yet, the common case,
 // still reads correctly as bank 1 by the same "no entry defaults to 1"
 // convention every other bank map in this file already uses).
-const familyStillInBank1 = (members, banks) =>
-  members.every(({kind, name}) => ((banks[kind] || {})[name] || 1) === 1);
+const familyStillInBank1 = (members, banks, primaryBank) => {
+  const primary = primaryBank || 1;
+  return members.every(({kind, name}) => ((banks[kind] || {})[name] || primary) === primary);
+};
 
 // True if ANYTHING outside this family bare-calls one of its own function
 // members directly - an ordinary user-authored subroutine (or an event)
@@ -604,13 +604,14 @@ const familyHasExternalBareCaller = (members) => {
 // and subroutine/function names are only known after that call too, since
 // they're generated from the project's own content rather than fixed like
 // the event names.
-const pickRelocationCandidate = (banks, hasReservedMusicBank) => {
+const pickRelocationCandidate = (banks, hasReservedMusicBank, primaryBank) => {
+  const primary = primaryBank || 1;
   const eventBanks = banks.eventBanks || {};
   const graphicsBanks = banks.graphicsBanks || {};
   const musicBanks = banks.musicBanks || {};
   const subroutineBanks = banks.subroutineBanks || {};
   const musicCandidates = BlocklyBB.getMusicUnitKeys()
-      .filter((name) => (musicBanks[name] || 1) === 1)
+      .filter((name) => (musicBanks[name] || primary) === primary)
       .map((name) => ({kind: 'musicBanks', name, size: BlocklyBB.estimateMusicUnitSize(name)}));
   // Music still sitting in bank 1 jumps the queue whenever it has its own
   // reserved bank waiting (see musicReservedBank) - moving it there is a
@@ -639,15 +640,15 @@ const pickRelocationCandidate = (banks, hasReservedMusicBank) => {
     // for a different reason - it's picked up by the family-based
     // candidates below instead, never as an ordinary standalone subroutine.
     ...RELOCATABLE_EVENT_NAMES
-        .filter((name) => (eventBanks[name] || 1) === 1)
+        .filter((name) => (eventBanks[name] || primary) === primary)
         .filter((name) => !BlocklyBB.codeReferencesAnyFunction((BlocklyBB.gameEvents[name] || []).join('\n')))
         .map((name) => ({kind: 'eventBanks', name, size: BlocklyBB.estimateEventSize(name)})),
     ...BlocklyBB.getGraphicsUnitKeys()
-        .filter((name) => (graphicsBanks[name] || 1) === 1)
+        .filter((name) => (graphicsBanks[name] || primary) === primary)
         .map((name) => ({kind: 'graphicsBanks', name, size: BlocklyBB.estimateGraphicsUnitSize(name)})),
     ...musicCandidates,
     ...BlocklyBB.getSubroutineNames()
-        .filter((name) => (subroutineBanks[name] || 1) === 1)
+        .filter((name) => (subroutineBanks[name] || primary) === primary)
         .filter((name) => !BlocklyBB.codeReferencesAnyFunction(BlocklyBB.subroutines[name] || ''))
         .map((name) => ({kind: 'subroutineBanks', name, size: BlocklyBB.estimateSubroutineSize(name)})),
     // Every function/wrapper "family" still entirely at bank 1 - relocated
@@ -660,7 +661,7 @@ const pickRelocationCandidate = (banks, hasReservedMusicBank) => {
     // not a candidate here any more than an ordinary function-referencing
     // subroutine/event is above.
     ...computeFunctionFamilies()
-        .filter(({members}) => familyStillInBank1(members, banks))
+        .filter(({members}) => familyStillInBank1(members, banks, primary))
         .filter(({members}) => !familyHasExternalBareCaller(members))
         .map(({members}) => ({
           kind: 'family',
@@ -680,8 +681,9 @@ const pickRelocationCandidate = (banks, hasReservedMusicBank) => {
 // compare against a real, previously-measured bank 1 capacity before that
 // pre-pass ever moves anything. Same "must run right after
 // regenerateCode()" requirement as pickRelocationCandidate.
-const estimateBank1Total = (banks) => {
-  const inBank1 = (bankMap, name) => (bankMap[name] || 1) === 1;
+const estimateBank1Total = (banks, primaryBank) => {
+  const primary = primaryBank || 1;
+  const inBank1 = (bankMap, name) => (bankMap[name] || primary) === primary;
   const eventTotal = RELOCATABLE_EVENT_NAMES
       .filter((name) => inBank1(banks.eventBanks || {}, name))
       .reduce((sum, name) => sum + BlocklyBB.estimateEventSize(name), 0);
@@ -700,7 +702,7 @@ const estimateBank1Total = (banks) => {
       .filter((name) => !BlocklyBB.codeReferencesAnyFunction(BlocklyBB.subroutines[name] || ''))
       .reduce((sum, name) => sum + BlocklyBB.estimateSubroutineSize(name), 0);
   const functionFamilyTotal = computeFunctionFamilies()
-      .filter(({members}) => familyStillInBank1(members, banks))
+      .filter(({members}) => familyStillInBank1(members, banks, primary))
       .reduce((sum, {members}) => sum + estimateFamilySize(members), 0);
   return eventTotal + graphicsTotal + musicTotal + subroutineTotal + functionFamilyTotal;
 };
@@ -719,9 +721,10 @@ const estimateBank1Total = (banks) => {
 // otherwise, which is worse than dedicating it a bank up front. Returns null
 // if there aren't enough banks to spare one just for music (need at least
 // one bank left over for the shared graphics/events pool too).
-const musicReservedBank = (maxBanks, textMinikernelActive) => {
+const musicReservedBank = (maxBanks, textMinikernelActive, minBank) => {
+  const lowestBank = minBank || 2;
   const highestBank = textMinikernelActive ? maxBanks - 1 : maxBanks;
-  return highestBank - 2 >= 1 ? highestBank : null;
+  return highestBank - lowestBank >= 1 ? highestBank : null;
 };
 
 // Spreads relocated units (events, graphics, and subroutines together, since
@@ -770,11 +773,12 @@ const musicReservedBank = (maxBanks, textMinikernelActive) => {
 // case is instead handled at the stuckBank fallback's own call site by
 // clearing that one unit's own tried-set and giving it a fresh attempt,
 // rather than by softening the exclusion here.
-const pickNextBank = (banks, maxBanks, textMinikernelActive, excludeBanks) => {
+const pickNextBank = (banks, maxBanks, textMinikernelActive, excludeBanks, minBank) => {
+  const lowestBank = minBank || 2;
   const highestBank = textMinikernelActive ? maxBanks - 1 : maxBanks;
-  if (highestBank < 2) return null;
+  if (highestBank < lowestBank) return null;
   const counts = {};
-  for (let bank = 2; bank <= highestBank; bank++) {
+  for (let bank = lowestBank; bank <= highestBank; bank++) {
     if (excludeBanks && excludeBanks.has(bank)) continue;
     counts[bank] = 0;
   }
@@ -846,7 +850,7 @@ export const buildRom = async () => {
   // identically to how this has always worked.
   resetRelocationBanks();
   const seededFromLastSuccess = seedRelocationBanksFromLastSuccess(
-      (configurationStorage.value || {}).romSize);
+      bankSizeKeyFor(configurationStorage.value || {}));
   clearCompileLog();
   if (seededFromLastSuccess) {
     appendCompileLog('Trying the last successful bank layout first...', 'stage');
@@ -887,10 +891,11 @@ export const buildRom = async () => {
   // know or care whether a unit got there proactively or reactively.
   try {
     const proactiveConfig = configurationStorage.value || {};
-    const proactiveMaxBanks = BANK_COUNT_BY_ROMSIZE[proactiveConfig.romSize];
+    const proactiveBankSizeKey = bankSizeKeyFor(proactiveConfig);
+    const proactiveMaxBanks = BANK_COUNT_BY_ROMSIZE[proactiveBankSizeKey];
     const lastCapacity = useRomCapacity().value;
     if (proactiveMaxBanks && lastCapacity && lastCapacity.bank1 &&
-        lastCapacity.romSize === proactiveConfig.romSize) {
+        lastCapacity.romSize === proactiveBankSizeKey) {
       // Needed so the size estimators below reflect THIS project's current
       // content - graphics/music unit keys and subroutine names are only
       // known after a real code-generation pass (same requirement
@@ -902,16 +907,17 @@ export const buildRom = async () => {
       regenerateCode();
       const threshold = lastCapacity.bank1.usableBytes * 1.15;
       const textMinikernelActive = BlocklyBB.isTextMinikernelActive();
-      const reservedMusicBank = musicReservedBank(proactiveMaxBanks, textMinikernelActive);
+      const reservedMusicBank = musicReservedBank(proactiveMaxBanks, textMinikernelActive,
+          minRelocationBankFor(proactiveConfig));
       for (let i = 0; i < 8; i++) {
         const banks = getRelocationBanks();
-        if (estimateBank1Total(banks) <= threshold) break;
-        const candidate = pickRelocationCandidate(banks, !!reservedMusicBank);
+        if (estimateBank1Total(banks, primaryBankFor(proactiveConfig)) <= threshold) break;
+        const candidate = pickRelocationCandidate(banks, !!reservedMusicBank, primaryBankFor(proactiveConfig));
         if (!candidate) break;
         const bank = candidate.kind === 'musicBanks' && reservedMusicBank ?
           reservedMusicBank :
           pickNextBank(banks, proactiveMaxBanks, textMinikernelActive,
-              reservedMusicBank ? new Set([reservedMusicBank]) : null);
+              reservedMusicBank ? new Set([reservedMusicBank]) : null, minRelocationBankFor(proactiveConfig));
         if (!bank) break;
         // A "family" candidate (see computeFunctionFamilies) carries several
         // members that must all land in the SAME bank together - every
@@ -1078,15 +1084,31 @@ export const buildRom = async () => {
       const compiled = await compileBatariBasicToAsm(preprocessed, siblingFiles, log);
       appendCompileLog('Assembling ROM...', 'stage');
       const compiledResult = await assembleBatariBasic(compiled.mainAsm, compiled.workDir, log);
-      Javatari.fileLoader.loadFromContent('main.bin', compiledResult.output);
-      forceJavatariNtsc();
-      setJavatariKeypadMode(!!(BlocklyBB.keypad0Used || BlocklyBB.keypad1Used));
 
-      // TODO: Implement this without a global variable
-      Javatari.compiledResult = compiledResult;
+      // The ROM itself is fully compiled and valid at this point - a failure
+      // from here on is the PREVIEW emulator's problem, not a compile error,
+      // and must never be reported (or retried into) as one. In particular,
+      // if gopher2600.wasm has previously crashed (a fatal WASM trap - its
+      // JS object reference survives, but every call into it throws "Go
+      // program has already exited"), every future build would otherwise
+      // permanently masquerade as a bBasic compile failure even though
+      // nothing about the project or the compiler is actually broken.
+      try {
+        withGopher2600((gopher2600) => {
+          gopher2600.loadRom(compiledResult.output);
+          gopher2600.setKeypadMode('left', !!BlocklyBB.keypad0Used);
+          gopher2600.setKeypadMode('right', !!BlocklyBB.keypad1Used);
+        });
+      } catch (previewError) {
+        console.error('gopher2600-wasm: failed to load the compiled ROM into the preview emulator ' +
+          '(the ROM itself compiled successfully) - try "Refresh emulator":', previewError);
+      }
+
+      setCompiledRomBytes(compiledResult);
       markRomUpToDate();
-      const capacity = computeRomCapacity(compiledResult);
-      const maxBanks = BANK_COUNT_BY_ROMSIZE[config.romSize];
+      const bankSizeKey = bankSizeKeyFor(config);
+      const capacity = computeRomCapacity(compiledResult, bankSizeKey === 'dpcplus' ? 1 : 0);
+      const maxBanks = BANK_COUNT_BY_ROMSIZE[bankSizeKey];
       // Safety net for the "third overflow shape" isOverflowError's own
       // comment documents (Superchip + a pfres above 12 + a bankswitched ROM
       // above 8k): bank 1 can overflow its RORG'd segment without DASM
@@ -1121,7 +1143,7 @@ export const buildRom = async () => {
       // measurement from a since-changed ROM size would misinform rather
       // than help.
       setRomCapacity(capacity ?
-        {...capacity, romSize: config.romSize,
+        {...capacity, romSize: bankSizeKey,
           bankContents: maxBanks ? computeBankContents(maxBanks, textMinikernelActive) : undefined,
           variableUsage: computeVariableUsage()} :
         capacity);
@@ -1131,7 +1153,7 @@ export const buildRom = async () => {
       // just ones that needed relocation at all, so a project that fits in
       // bank 1 alone keeps skipping straight to a real compile too (an empty
       // banks object is itself a perfectly valid, useful "hint").
-      recordSuccessfulRelocationBanks(config.romSize);
+      recordSuccessfulRelocationBanks(bankSizeKey);
       appendCompileLog('Build succeeded.', 'stage');
       appendCompileLog(`Total build time: ${Math.round(performance.now() - buildStartedAt)}ms.`, 'stage');
       return true;
@@ -1145,7 +1167,7 @@ export const buildRom = async () => {
       // block's own git history/comments below), starting from true
       // scratch exactly like a never-seeded build's own first failure would.
       if (attempt === 0 && seededFromLastSuccess) resetRelocationBanks();
-      const maxBanks = BANK_COUNT_BY_ROMSIZE[config.romSize];
+      const maxBanks = BANK_COUNT_BY_ROMSIZE[bankSizeKeyFor(config)];
       if (isOverflowError(e) && maxBanks) {
         // Diagnostic-only for now (see bb-compiler.js's own comment on
         // partialOutput/partialSymbolmap) - not read by anything below yet.
@@ -1162,7 +1184,8 @@ export const buildRom = async () => {
         // below, only skip logging.
         if (e.partialSymbolmap) {
           try {
-            const partialCapacity = computeRomCapacity({output: e.partialOutput, symbolmap: e.partialSymbolmap});
+            const partialCapacity = computeRomCapacity({output: e.partialOutput, symbolmap: e.partialSymbolmap},
+                bankSizeKeyFor(config) === 'dpcplus' ? 1 : 0);
             appendCompileLog(partialCapacity ?
               `[diagnostic] Partial capacity on overflow - bank 1 free: ${partialCapacity.bank1.freeBytes}b, ` +
               `per-bank free: ${partialCapacity.perBank.map((b) => b.freeBytes).join(', ')}` :
@@ -1175,14 +1198,42 @@ export const buildRom = async () => {
           appendCompileLog('[diagnostic] No partial symbol table available on this overflow.');
         }
         const textMinikernelActive = BlocklyBB.isTextMinikernelActive();
-        const reservedMusicBank = musicReservedBank(maxBanks, textMinikernelActive);
+        const reservedMusicBank = musicReservedBank(maxBanks, textMinikernelActive, minRelocationBankFor(config));
         const banks = getRelocationBanks();
-        let candidate = pickRelocationCandidate(banks, !!reservedMusicBank);
+        let candidate = pickRelocationCandidate(banks, !!reservedMusicBank, primaryBankFor(config));
         let bank = candidate && (
           candidate.kind === 'musicBanks' && reservedMusicBank ?
             reservedMusicBank :
             pickNextBank(banks, maxBanks, textMinikernelActive,
-                reservedMusicBank ? new Set([reservedMusicBank]) : null));
+                reservedMusicBank ? new Set([reservedMusicBank]) : null, minRelocationBankFor(config)));
+
+        // Bank 1 itself (not some other bank) is over capacity, AND nothing
+        // is left in it to relocate out (candidate came back empty just
+        // above) - the stuckBank fallback right below this exists to shuffle
+        // content between OTHER banks, which can never shrink bank 1's own
+        // fixed/mandatory footprint (the trampoline, score table, and
+        // whatever of the project's own code can't be relocated at all).
+        // Every one of the up-to-64 remaining attempts would fail identically
+        // no matter what gets shuffled where, so this stops immediately with
+        // the real, exact number instead of burning through all of them
+        // first - confirmed directly against a bare-minimum DPC+ project
+        // (kernel's own fixed header/score-table/startup overhead alone
+        // already leaves less than a full 4096-byte bank1 budget available,
+        // unlike the standard kernel).
+        if (!candidate) {
+          const freeBytes = parseBank1FreeBytesEcho(e.dasmStdout);
+          if (freeBytes != null && freeBytes < 0) {
+            appendCompileLog('Build failed.', 'error');
+            const bank1Error = new Error(
+                `Bank 1 is ${-freeBytes} bytes over capacity, and every relocatable unit is already ` +
+                'in another bank - nothing left to move out of bank 1 to fix this. Reduce bank 1\'s ' +
+                'own fixed content (fewer/simpler always-resident events, a shorter startup routine, ' +
+                'DPC+\'s own always-included score table, etc.) rather than adding more content ' +
+                'elsewhere.');
+            showError(errorStorage, 'Error while compiling bBasic code', code, bank1Error);
+            return false;
+          }
+        }
 
         // Fallback for when nothing is left in bank 1 to relocate, but some
         // OTHER bank turns out to be too full too - the one case
@@ -1330,7 +1381,8 @@ export const buildRom = async () => {
               // caused a different real bug, a unit oscillating forever
               // between the same two equally-penalized banks.
               const excludeBanks = new Set([reservedMusicBank, ...triedBanks].filter(Boolean));
-              let nextBank = pickNextBank(banks, maxBanks, textMinikernelActive, excludeBanks);
+              let nextBank = pickNextBank(banks, maxBanks, textMinikernelActive, excludeBanks,
+                  minRelocationBankFor(config));
               // Every available bank has now been tried for this ONE unit
               // (not the whole build - see the outer stuckBank exhaustion
               // check above, a separate case) - rather than give up on it
@@ -1345,7 +1397,7 @@ export const buildRom = async () => {
                 triedBanks.clear();
                 triedBanks.add(stuckBank);
                 nextBank = pickNextBank(banks, maxBanks, textMinikernelActive,
-                    new Set([reservedMusicBank, stuckBank].filter(Boolean)));
+                    new Set([reservedMusicBank, stuckBank].filter(Boolean)), minRelocationBankFor(config));
               }
               if (nextBank) {
                 candidate = {kind: next.kind, name: next.name, members: next.members};

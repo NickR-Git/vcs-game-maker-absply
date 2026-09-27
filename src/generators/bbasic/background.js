@@ -1169,5 +1169,64 @@ export default (Blockly) => {
     const frames = Blockly.BBasic.valueToCode(block, 'FRAMES', Blockly.BBasic.ORDER_ASSIGNMENT) || '0';
     return `${framesVar} = ${frames}\n`;
   };
+
+  // DPC+ only - see this block's own definition in blocks/background.js for
+  // why nothing else sets DFxFRACINC automatically. The real formula
+  // (confirmed against two real DPC+ example programs' own numbers) is
+  // FRACINC = round(256/scanlines) - but 256 itself doesn't fit an 8-bit
+  // byte, so that can only be computed exactly at compile time, when
+  // SCANLINES is a literal typed-in number (the common case, matching how
+  // every real DPC+ example hand-picks a fixed FRACINC value rather than
+  // computing one from a variable). resolveTableIdLiteral in generators/
+  // bbasic/data.js is the precedent for this "read a literal math_number
+  // directly, fall back to a real runtime expression otherwise" split.
+  //
+  // When SCANLINES is a runtime variable/expression instead, 256 can't be
+  // represented, so this falls back to 255/scanlines - off by exactly 1
+  // from the true value whenever scanlines evenly divides 256 (e.g. 8
+  // scanlines: true value 32, this gives 31), otherwise exact. A single
+  // scanline off out of 200-ish is not visually meaningful for a coarse,
+  // trig-free row-height setting - same tolerance this codebase already
+  // accepts for DIRECTION16_STEPS' own coarse approximation.
+  Blockly.BBasic[`background_set_dpc_plus_row_height`] = function(block) {
+    const target = block.getInputTargetBlock('SCANLINES');
+    const literal = target && target.type === 'math_number' ? Number(target.getFieldValue('NUM')) : null;
+    let fracInc;
+    // valueToCode is only ever called once below - calling it twice would
+    // generate the connected block's own code twice, a real risk for
+    // anything more than a bare literal/variable.
+    const setupLines = [];
+    if (literal && literal > 0) {
+      fracInc = `${Math.max(1, Math.min(255, Math.round(256 / literal)))}`;
+    } else {
+      const scanlines = Blockly.BBasic.valueToCode(block, 'SCANLINES', Blockly.BBasic.ORDER_ASSIGNMENT) || '8';
+      // temp1 is bB's own always-available scratch byte (not a reserved
+      // dev var) - safe here since this is a one-shot trigger, not a
+      // per-frame check, so nothing else could be mid-use of it in the
+      // same statement sequence.
+      setupLines.push(` temp1 = 255 / ${scanlines}`, ` if temp1 = 0 then temp1 = 1`);
+      fracInc = 'temp1';
+    }
+    // Per-row playfield/background color resolution (DF4/DF6FRACINC) is
+    // kept in lockstep with pixel-data resolution (DF0-3FRACINC) here
+    // rather than exposed as its own separate setting, for Phase 1
+    // simplicity - real DPC+ projects CAN run color at a different (often
+    // finer) rate than pixel data (confirmed via real examples setting
+    // DF4/DF6FRACINC=255 while DF0-3 used 128), but that's a follow-up, not
+    // required for basic per-row color support to work.
+    const configurationStorage = useConfigurationStorage();
+    const config = (configurationStorage && configurationStorage.value) || {};
+    const colorLines = [];
+    if (config.enableDpcPlusPfColors) colorLines.push(` DF4FRACINC = ${fracInc}`);
+    if (config.enableDpcPlusBkColors) colorLines.push(` DF6FRACINC = ${fracInc}`);
+    return [
+      ...setupLines,
+      ` DF0FRACINC = ${fracInc}`,
+      ` DF1FRACINC = ${fracInc}`,
+      ` DF2FRACINC = ${fracInc}`,
+      ` DF3FRACINC = ${fracInc}`,
+      ...colorLines,
+    ].join('\n') + '\n';
+  };
 };
 

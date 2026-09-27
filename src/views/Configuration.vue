@@ -18,6 +18,7 @@
       </div>
       <div v-if="!isSectionCollapsed('rom')" class="option-section-content">
         <v-select
+          v-if="!kernelIsDpcPlus"
           v-model="configurationState.romSize"
           @change="handleChangeConfiguration"
           :items="romSizeOptions"
@@ -42,47 +43,49 @@
           persistent-hint
           class="option-switch"
         />
-        <v-switch
-          v-model="configurationState.enableSuperchip"
-          @change="handleToggleSuperchip"
-          label="Enable Superchip RAM for higher-resolution playfields"
-          hint="Adds a Superchip (SC) to the ROM and lets the playfield use more than 11 rows. Requires an 8k or larger ROM (bumped automatically if needed), and horizontal playfield scrolling (left/right) isn't supported once this is on. Also moves the app's bookkeeping variables off letters and into extra Superchip RAM, freeing every letter (a-z) for your variables."
-          persistent-hint
-          class="option-switch"
-        />
-        <v-text-field
-          v-model.number="configurationState.pfres"
-          @change="handleChangeResolution"
-          type="number"
-          min="1"
-          max="32"
-          :disabled="!configurationState.enableSuperchip"
-          label="Playfield vertical resolution (pfres)"
-          :hint="configurationState.enableSuperchip ?
-            'Up to 32 rows. Values that don\'t evenly divide 96 (3, 4, 6, 8, 12, 16, 24, 32) may leave the screen slightly shorter than normal.' :
-            'Only takes effect with Superchip RAM on above - the standard kernel always uses a fixed 11-row default otherwise.'"
-          persistent-hint
-          class="pfres-field"
-        />
-        <v-switch
-          v-model="configurationState.enablePfRowHeight"
-          @change="handleChangeConfiguration"
-          label="Override playfield row height (pfrowheight)"
-          hint="Advanced: overrides the row height (in scanlines) the kernel derives from pfres above. Doesn't change how many rows the playfield has, only how tall each one is drawn."
-          persistent-hint
-          class="option-switch pfrowheight-switch"
-        />
-        <v-text-field
-          v-model.number="configurationState.pfrowheight"
-          @change="handleChangePfRowHeight"
-          type="number"
-          min="1"
-          :disabled="!configurationState.enablePfRowHeight"
-          label="Playfield row height (pfrowheight)"
-          hint="The sprite/playfield coordinate conversion blocks on the Actions tab use this value too, so they stay accurate."
-          persistent-hint
-          class="pfrowheight-field"
-        />
+        <template v-if="!kernelIsDpcPlus">
+          <v-switch
+            v-model="configurationState.enableSuperchip"
+            @change="handleToggleSuperchip"
+            label="Enable Superchip RAM for higher-resolution playfields"
+            hint="Adds a Superchip (SC) to the ROM and lets the playfield use more than 11 rows. Requires an 8k or larger ROM (bumped automatically if needed), and horizontal playfield scrolling (left/right) isn't supported once this is on. Also moves the app's bookkeeping variables off letters and into extra Superchip RAM, freeing every letter (a-z) for your variables."
+            persistent-hint
+            class="option-switch"
+          />
+          <v-text-field
+            v-model.number="configurationState.pfres"
+            @change="handleChangeResolution"
+            type="number"
+            min="1"
+            max="32"
+            :disabled="!configurationState.enableSuperchip"
+            label="Playfield vertical resolution (pfres)"
+            :hint="configurationState.enableSuperchip ?
+              'Up to 32 rows. Values that don\'t evenly divide 96 (3, 4, 6, 8, 12, 16, 24, 32) may leave the screen slightly shorter than normal.' :
+              'Only takes effect with Superchip RAM on above - the standard kernel always uses a fixed 11-row default otherwise.'"
+            persistent-hint
+            class="pfres-field"
+          />
+          <v-switch
+            v-model="configurationState.enablePfRowHeight"
+            @change="handleChangeConfiguration"
+            label="Override playfield row height (pfrowheight)"
+            hint="Advanced: overrides the row height (in scanlines) the kernel derives from pfres above. Doesn't change how many rows the playfield has, only how tall each one is drawn."
+            persistent-hint
+            class="option-switch pfrowheight-switch"
+          />
+          <v-text-field
+            v-model.number="configurationState.pfrowheight"
+            @change="handleChangePfRowHeight"
+            type="number"
+            min="1"
+            :disabled="!configurationState.enablePfRowHeight"
+            label="Playfield row height (pfrowheight)"
+            hint="The sprite/playfield coordinate conversion blocks on the Actions tab use this value too, so they stay accurate."
+            persistent-hint
+            class="pfrowheight-field"
+          />
+        </template>
       </div>
 
       <v-divider class="my-2" />
@@ -93,7 +96,16 @@
         <span class="text-subtitle-1">Kernel Options</span>
       </div>
       <div v-if="!isSectionCollapsed('kernel')" class="option-section-content">
+        <v-select
+          v-model="configurationState.kernel"
+          @change="handleChangeConfiguration"
+          :items="kernelOptions"
+          label="Kernel"
+          hint="DPC+ trades the standard kernel's playfield/missile/ball tricks (Superchip, per-row playfield colors, no_blank_lines/ball_blank_lines) for an ARM co-processor with its own capabilities (settable playfield row height, independent per-row playfield AND background colors) - see the options that appear below once selected."
+          persistent-hint
+        />
         <v-switch
+          v-if="!kernelIsDpcPlus"
           v-model="configurationState.enableRand16"
           @change="handleChangeConfiguration"
           label="Use 16-bit random number generator (rand16)"
@@ -101,32 +113,63 @@
           persistent-hint
           class="option-switch"
         />
-        <v-switch
-          v-model="enableMissile0BlankLines"
-          @change="handleChangeConfiguration"
-          :disabled="player0RainbowColorsActive"
-          :color="player0RainbowColorsActive ? 'amber darken-2' : undefined"
-          label="Fill blank lines between background rows with missile0 (no_blank_lines)"
-          :hint="player0RainbowColorsActive ?
-            'Forced off: the player0 rainbow colors block requires blank lines shown normally - batari Basic never allows player-colors and no_blank_lines together.' :
-            'Turning this on packs playfield rows tighter together, but uses missile0\'s graphics circuitry, so missile0 can no longer be used as a sprite.'"
-          persistent-hint
-          class="option-switch"
-        />
-        <v-switch
-          v-model="configurationState.enableBallBlankLines"
-          @change="handleChangeConfiguration"
-          :disabled="configurationState.enablePfColors || player0RainbowColorsActive"
-          :color="(configurationState.enablePfColors || player0RainbowColorsActive) ? 'amber darken-2' : undefined"
-          label="Fill blank lines with the ball instead of missile0 (ball_blank_lines)"
-          :hint="configurationState.enablePfColors ?
-            'Forced off: this only works with per-row playfield colors (pfcolors, below) turned off.' :
-            (player0RainbowColorsActive ?
-              'Forced off: the player0 rainbow colors block requires blank lines shown normally.' :
-              'An alternative to turning \'Show blank lines\' off above: removes the gaps between playfield rows using the ball\'s graphics circuitry instead of missile0\'s, so missile0 stays free to use as a normal sprite (unlike turning \'Show blank lines\' off, which costs missile0 entirely). Works automatically, no Ball blocks needed. On a solid playfield color (pfcolors off), the ball\'s fill pixels - if you also use it as a sprite - already match the background for free, since the ball always draws in the playfield color.')"
-          persistent-hint
-          class="option-switch"
-        />
+        <template v-if="!kernelIsDpcPlus">
+          <v-switch
+            v-model="enableMissile0BlankLines"
+            @change="handleChangeConfiguration"
+            :disabled="player0RainbowColorsActive"
+            :color="player0RainbowColorsActive ? 'amber darken-2' : undefined"
+            label="Fill blank lines between background rows with missile0 (no_blank_lines)"
+            :hint="player0RainbowColorsActive ?
+              'Forced off: the player0 rainbow colors block requires blank lines shown normally - batari Basic never allows player-colors and no_blank_lines together.' :
+              'Turning this on packs playfield rows tighter together, but uses missile0\'s graphics circuitry, so missile0 can no longer be used as a sprite.'"
+            persistent-hint
+            class="option-switch"
+          />
+          <v-switch
+            v-model="configurationState.enableBallBlankLines"
+            @change="handleChangeConfiguration"
+            :disabled="configurationState.enablePfColors || player0RainbowColorsActive"
+            :color="(configurationState.enablePfColors || player0RainbowColorsActive) ? 'amber darken-2' : undefined"
+            label="Fill blank lines with the ball instead of missile0 (ball_blank_lines)"
+            :hint="configurationState.enablePfColors ?
+              'Forced off: this only works with per-row playfield colors (pfcolors, below) turned off.' :
+              (player0RainbowColorsActive ?
+                'Forced off: the player0 rainbow colors block requires blank lines shown normally.' :
+                'An alternative to turning \'Show blank lines\' off above: removes the gaps between playfield rows using the ball\'s graphics circuitry instead of missile0\'s, so missile0 stays free to use as a normal sprite (unlike turning \'Show blank lines\' off, which costs missile0 entirely). Works automatically, no Ball blocks needed. On a solid playfield color (pfcolors off), the ball\'s fill pixels - if you also use it as a sprite - already match the background for free, since the ball always draws in the playfield color.')"
+            persistent-hint
+            class="option-switch"
+          />
+        </template>
+        <template v-else>
+          <v-text-field
+            v-model.number="configurationState.dpcPlusRowScanlines"
+            @change="handleChangeConfiguration"
+            type="number"
+            min="1"
+            max="255"
+            label="Default playfield row height (scanlines)"
+            hint="Used by the new 'Set playfield row height' block's default value (Actions tab, Background category) - DPC+ has no fixed row-height default of its own, so a Set block is required somewhere in your project for the playfield to render at a sane height at all."
+            persistent-hint
+            class="pfres-field"
+          />
+          <v-switch
+            v-model="configurationState.enableDpcPlusPfColors"
+            @change="handleChangeConfiguration"
+            label="Enable per-row playfield colors"
+            hint="Lets the playfield show a different color on every row, the same as the standard kernel's own pfcolors - but under DPC+ this can run independently of (and alongside) per-row background colors below, which the standard kernel can't do at all."
+            persistent-hint
+            class="option-switch"
+          />
+          <v-switch
+            v-model="configurationState.enableDpcPlusBkColors"
+            @change="handleChangeConfiguration"
+            label="Enable per-row background colors"
+            hint="A DPC+-only capability with no standard-kernel equivalent: an independent color per background row, on top of (not instead of) per-row playfield colors above."
+            persistent-hint
+            class="option-switch"
+          />
+        </template>
         <v-switch
           v-model="configurationState.enablePlayer0SpriteColors"
           @change="handleChangeConfiguration"
@@ -294,16 +337,13 @@ import {useBackgroundsStorage, useBlocklyControlsHorizontalStorage, useConfigura
 import {BANK_COUNT_BY_ROMSIZE, countUsedVariables, usesPlayer0RainbowColors} from '../hooks/rom';
 import {effectiveBackgroundRows, reflowBackgroundsToHeight} from '../blocks/background';
 
-// 64k compiles correctly (see generators/bbasic.js's own SUPPORTED_ROM_SIZES/
-// BANK_COUNT_BY_ROMSIZE_MINI) but isn't offered here yet - the bundled
-// preview emulator (public/js/javatari.js) can't actually run bB's own 64k
-// bankswitch scheme (confirmed directly: still "AUTO: FAILED"/no video even
-// forcing every cartridge format it has that's remotely close - EF included,
-// the one whose own hotspot address genuinely matches bB's), so exposing it
-// here would just let someone build a ROM this app's own preview can't show
-// them running. Re-add once that's sorted out (a newer/different bundled
-// emulator, most likely).
-const ROM_SIZE_OPTIONS = ['2k', '4k', '8k', '16k', '32k'];
+// 64k was withheld here under the previous Javatari-based preview, which had
+// no support for bB's EF bankswitch scheme at all (confirmed directly:
+// "AUTO: FAILED"/no video even forcing every cartridge format it has that's
+// remotely close). Gopher2600 (see tools/gopher2600-wasm) has a real EF
+// mapper (hardware/memory/cartridge/mapper_atari_ef.go), so this is no
+// longer withheld.
+const ROM_SIZE_OPTIONS = ['2k', '4k', '8k', '16k', '32k', '64k'];
 const MIN_PFRES = 1;
 const MAX_PFRES = 32;
 // Superchip RAM only works on a bankswitched ROM ("Superchip RAM is only used
@@ -340,6 +380,10 @@ const collapsedSections = ref(loadCollapsedSections());
 // same values rather than keeping a second, easily-drifting copy of every
 // default in sync by hand.
 const DEFAULT_CONFIGURATION = {
+  kernel: 'standard',
+  dpcPlusRowScanlines: 8,
+  enableDpcPlusPfColors: false,
+  enableDpcPlusBkColors: false,
   showScore: true,
   enableScoreFade: false,
   showBlankLines: true,
@@ -361,6 +405,14 @@ const DEFAULT_CONFIGURATION = {
   muteAllAudio: false,
   showVariableComments: true,
 };
+
+// Standard/DPC+ dropdown items for the new Kernel select - a plain, static
+// list (not a computed) since it doesn't depend on any other config value,
+// unlike romSizeOptions below.
+const KERNEL_OPTIONS = [
+  {text: 'Standard', value: 'standard'},
+  {text: 'DPC+', value: 'dpcplus'},
+];
 
 export default defineComponent({
   setup(props, context) {
@@ -449,6 +501,10 @@ export default defineComponent({
     // combination that's guaranteed to fail to build.
     const player0RainbowColorsActive = computed(() => usesPlayer0RainbowColors());
 
+    // Gates every DPC+-only/std-kernel-only v-if pair in the template
+    // below, and the equivalent branches in generators/bbasic.js.
+    const kernelIsDpcPlus = computed(() => configurationState.value.kernel === 'dpcplus');
+
     // Display-only inverted proxy for the "Show blank lines" toggle -
     // configurationState.showBlankLines itself keeps its original polarity
     // everywhere else in this file and in generators/bbasic.js
@@ -520,6 +576,19 @@ export default defineComponent({
       // than left in a combination guaranteed to be ignored/fail to build,
       // same "force off and disable" pattern showBlankLines itself uses.
       if (state.enablePfColors || player0RainbowColorsActive.value) state.enableBallBlankLines = false;
+      // DPC+ has no Superchip/no_blank_lines/ball_blank_lines equivalent -
+      // the template hides these switches under DPC+, but force them off
+      // here too in case an old project has them set from before the
+      // kernel was switched. rand16 is different: DPC+ has its own
+      // hardware-based 32-bit LFSR (see real docs: "the DPC+ kernel has an
+      // ARM-based 32-bit LFSR for improved random numbers, so 'dim rand16 =
+      // <var>' is no longer needed") - rand16 wouldn't just be a no-op under
+      // DPC+, it would waste a variable slot for nothing.
+      if (state.kernel === 'dpcplus') {
+        state.enableSuperchip = false;
+        state.enableBallBlankLines = false;
+        state.enableRand16 = false;
+      }
       configurationState.value = enforceInlineRandExclusivity(state);
     };
 
@@ -584,6 +653,10 @@ export default defineComponent({
     // own comment above for why those live apart from configurationState).
     const handleResetToDefaults = () => {
       const state = configurationState.value;
+      state.kernel = DEFAULT_CONFIGURATION.kernel;
+      state.dpcPlusRowScanlines = DEFAULT_CONFIGURATION.dpcPlusRowScanlines;
+      state.enableDpcPlusPfColors = DEFAULT_CONFIGURATION.enableDpcPlusPfColors;
+      state.enableDpcPlusBkColors = DEFAULT_CONFIGURATION.enableDpcPlusBkColors;
       state.showScore = DEFAULT_CONFIGURATION.showScore;
       state.enableScoreFade = DEFAULT_CONFIGURATION.enableScoreFade;
       state.showBlankLines = DEFAULT_CONFIGURATION.showBlankLines;
@@ -618,6 +691,8 @@ export default defineComponent({
       romSizeOptions,
       romSizeIsBankswitched,
       player0RainbowColorsActive,
+      kernelIsDpcPlus,
+      kernelOptions: KERNEL_OPTIONS,
       enableMissile0BlankLines,
       loadLastProject,
       muteBlocklySounds, hideSidebar, blocklyControlsHorizontal, desaturateBlocklyColors,

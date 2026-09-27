@@ -274,7 +274,60 @@
           <v-icon left small>mdi-refresh</v-icon>
           Refresh emulator
         </v-btn>
-        <div id="javatari-target-container" :style="emulatorScaleStyle"></div>
+        <div id="gopher2600-target-container" :style="emulatorScaleStyle"></div>
+        <div class="panel-switches-row mt-2">
+          <v-btn
+            small
+            :color="emulatorPoweredOn ? 'primary' : undefined"
+            title="Power the emulated console on or off"
+            @click="handleTogglePower(!emulatorPoweredOn)"
+          >
+            <v-icon left small>mdi-power</v-icon>
+            {{ emulatorPoweredOn ? 'Power On' : 'Power Off' }}
+          </v-btn>
+          <v-btn
+            small
+            title="Reset switch - hold to reset the running game"
+            @mousedown="handlePressReset"
+            @mouseup="handleReleaseReset"
+            @mouseleave="handleReleaseReset"
+          >
+            Reset
+          </v-btn>
+          <v-btn
+            small
+            title="Select switch - hold to select (e.g. cycle game variation)"
+            @mousedown="handlePressSelect"
+            @mouseup="handleReleaseSelect"
+            @mouseleave="handleReleaseSelect"
+          >
+            Select
+          </v-btn>
+          <v-btn
+            small
+            :color="emulatorColorMode ? 'primary' : undefined"
+            title="Color/B&W switch"
+            @click="handleToggleColorMode(!emulatorColorMode)"
+          >
+            {{ emulatorColorMode ? 'Color' : 'B&W' }}
+          </v-btn>
+          <v-btn
+            small
+            :color="emulatorLeftDifficultyPro ? 'primary' : undefined"
+            title="Left (Player 1) difficulty switch"
+            @click="handleToggleDifficulty('left', !emulatorLeftDifficultyPro)"
+          >
+            P1: {{ emulatorLeftDifficultyPro ? 'A' : 'B' }}
+          </v-btn>
+          <v-btn
+            small
+            :color="emulatorRightDifficultyPro ? 'primary' : undefined"
+            title="Right (Player 2) difficulty switch"
+            @click="handleToggleDifficulty('right', !emulatorRightDifficultyPro)"
+          >
+            P2: {{ emulatorRightDifficultyPro ? 'A' : 'B' }}
+          </v-btn>
+        </div>
         <div class="rom-buttons-row mt-2">
           <v-btn
             :color="romOutdated ? 'warning' : 'primary'"
@@ -414,17 +467,19 @@
 <script>
 import {useCompileLog, useErrorStorage, useHideDescriptionTextStorage, useHideSidebarStorage,
   useStellaPathStorage} from './hooks/project';
-import {buildRom, useRomCapacity, useRomOutdated, useHasCompiledRom} from './hooks/rom';
+import {buildRom, useRomCapacity, useRomOutdated, useHasCompiledRom, useCompiledRomBytes} from './hooks/rom';
+import {safeWithGopher2600} from './hooks/emulator';
 import {productName, version} from '../package.json';
 
 // Below this fraction of the bank's usable space remaining, the capacity
 // display switches to a warning color.
 const ROM_CAPACITY_LOW_THRESHOLD = 0.1;
 
-// Javatari renders at a fixed size and never reflows to fit its container, so
-// the emulator is scaled with a CSS transform instead. It picks that size from
-// the space available when it starts, so it varies with the window and has to
-// be measured rather than assumed.
+// The emulator canvas renders at a fixed pixel resolution (the real TIA's
+// own cropped picture size) and never reflows to fit its container, so it's
+// scaled with a CSS transform instead - see emulatorScaleStyle/
+// updateEmulatorScale. That resolution isn't known until the first frame
+// renders, so it has to be measured rather than assumed.
 const EMULATOR_DEFAULT_WIDTH = 256;
 const EMULATOR_MIN_WIDTH = 200;
 const EMULATOR_MAX_WIDTH = 900;
@@ -445,9 +500,9 @@ const ERROR_MIN_HEIGHT = 112;
 // content) when dragging the error pane very tall.
 const ERROR_MIN_REMAINING_HEIGHT = 150;
 const ERROR_HEIGHT_KEY = 'vcs-game-maker.errorHeight';
-// How long to keep waiting for Javatari to lay out before giving up. A timer
-// is used rather than an animation frame so this still settles when the window
-// is in the background.
+// How long to keep waiting for the emulator canvas to lay out before giving
+// up. A timer is used rather than an animation frame so this still settles
+// when the window is in the background.
 const EMULATOR_MEASURE_RETRIES = 60;
 const EMULATOR_MEASURE_INTERVAL = 50;
 
@@ -490,13 +545,20 @@ export default {
     resizingError: false,
     building: false,
     launchingStella: false,
+    // Front-panel switch state. Power defaults on (matches the previous
+    // Javatari preview always being "on"); the rest default to real Atari
+    // 2600 power-on defaults (Color, both difficulties set to "A"/pro).
+    emulatorPoweredOn: true,
+    emulatorColorMode: true,
+    emulatorLeftDifficultyPro: true,
+    emulatorRightDifficultyPro: true,
   }),
   setup() {
     const errorStorage = useErrorStorage();
     console.info('Text', version);
     return {
       errorStorage, compileLog: useCompileLog(), romOutdated: useRomOutdated(), romCapacity: useRomCapacity(),
-      hasCompiledRom: useHasCompiledRom(),
+      hasCompiledRom: useHasCompiledRom(), compiledRomBytes: useCompiledRomBytes(),
       productName, version, hideDescriptionTextStorage: useHideDescriptionTextStorage(),
       hideSidebarStorage: useHideSidebarStorage(),
       stellaPathStorage: useStellaPathStorage(),
@@ -512,10 +574,6 @@ export default {
     if (this.emulatorResizeObserver) {
       this.emulatorResizeObserver.disconnect();
       this.emulatorResizeObserver = null;
-    }
-    if (this.emulatorReparentObserver) {
-      this.emulatorReparentObserver.disconnect();
-      this.emulatorReparentObserver = null;
     }
   },
   computed: {
@@ -613,6 +671,13 @@ export default {
       // its own clause here rather than folded into that count.
       if (usage.superchipRw.available) {
         parts.push(`${usage.superchipRw.used} of ${usage.superchipRw.available} Superchip read/write vars`);
+      }
+      // DPC+'s own always-on bonus RAM pool (var0-var8 - see
+      // computeVariableUsage's own comment in hooks/rom.js) - no toggle to
+      // gate on, so this simply doesn't show for non-DPC+ builds (available
+      // is 0 then), same convention as the Superchip clauses above.
+      if (usage.dpcPlus.available) {
+        parts.push(`${usage.dpcPlus.used} of ${usage.dpcPlus.available} DPC+ bonus RAM`);
       }
       return `${parts.join(', ')} used.`;
     },
@@ -729,6 +794,7 @@ export default {
       return [
         ...sortByAssignmentSlot((usage.letterAssignments || []).filter(matches)),
         ...sortByAssignmentSlot((usage.superchipAssignments || []).filter(matches)),
+        ...sortByAssignmentSlot((usage.dpcPlusAssignments || []).filter(matches)),
         // Superchip's own r/w pool (see computeVariableUsage's own comment
         // in hooks/rom.js) - every entry here is isUserVariable: false, so
         // this only ever contributes to the block list, never the user one,
@@ -774,119 +840,20 @@ export default {
       if (contents.bankOverhead) parts.push({label: 'Bank switching overhead', names: ''});
       return parts;
     },
-    // Javatari's own size is whatever it chose at startup, so scale it to the
-    // column by measuring both. offsetWidth/offsetHeight are layout sizes and
-    // so are unaffected by the transform already applied.
-    // Ugly hack in order to move the Javatari screen to a Vue component.
-    // Javatari builds its screen on its own schedule, so it may not exist yet
-    // when this component mounts. Appending it then threw, leaving the emulator
-    // missing entirely, so wait for it instead.
-    attachEmulator(retriesLeft = EMULATOR_MEASURE_RETRIES) {
-      const container = document.getElementById('javatari-target-container');
-      const javatariScreen = document.getElementById('javatari-screen');
-      if (!container) return;
-      if (!javatariScreen) {
-        if (retriesLeft > 0) {
-          window.setTimeout(
-              () => this.attachEmulator(retriesLeft - 1), EMULATOR_MEASURE_INTERVAL);
-        }
-        return;
-      }
-      container.appendChild(javatariScreen);
-      this.resetScreenStyle(javatariScreen);
-      this.observeEmulatorSize(container, javatariScreen);
-      this.observeEmulatorReparenting(container);
-      this.pollEmulatorVisibility(container);
+    // The canvas lives directly in public/index.html (see
+    // tools/gopher2600-wasm), so unlike the old Javatari integration it
+    // exists from page load rather than being asynchronously created and
+    // placed by an external library - no retry-until-it-exists dance needed,
+    // just move it into this component's own container once and start
+    // observing its size.
+    attachEmulator() {
+      const container = document.getElementById('gopher2600-target-container');
+      const screen = document.getElementById('gopher2600-screen');
+      if (!container || !screen) return;
+      container.appendChild(screen);
+      screen.style.display = '';
+      this.observeEmulatorSize(container, screen);
       this.updateEmulatorScale();
-    },
-    // Wipes the screen element's inline style (Javatari sets some of its own
-    // when it owns the element's placement, e.g. while it's parked in its
-    // default DOM location) EXCEPT margin-bottom, which Javatari also uses,
-    // separately, to reserve room below the screen for its own console-panel
-    // graphic (power/reset/difficulty switches) whenever that panel is
-    // active. A blanket "style = ''" here used to wipe that margin along with
-    // everything else; updateEmulatorScale() then sized the container from
-    // the now-zero margin, and since the container clips overflow, the panel
-    // was still being drawn - just below the bottom edge of a container too
-    // short to show it. Confirmed by manually restoring the margin and
-    // triggering a rescale, which brought the panel back with no other
-    // change. Preserving it here keeps the container sized to include it.
-    resetScreenStyle(screen) {
-      const marginBottom = screen.style.marginBottom;
-      screen.style = '';
-      screen.style.marginBottom = marginBottom;
-    },
-    // Javatari sometimes re-inserts its own screen element back into its
-    // default location in the DOM (observed after loading a new ROM via
-    // "Update ROM") rather than leaving it where attachEmulator() moved it -
-    // since our layout only shows what's inside #javatari-target-container,
-    // this makes the preview appear to vanish. A single re-attach right after
-    // a build finishes (handleRomUpdate already does this) isn't reliable if
-    // Javatari does the move on its own schedule; watching for it and moving
-    // the screen back the moment it happens is more robust than reacting only
-    // once, after the fact.
-    //
-    // Also dismisses Javatari's own dialogs here rather than only once from
-    // handleRomUpdate - see dismissEmulatorDialogs()'s own comment for why a
-    // dialog can open on Javatari's own schedule, after the one-shot
-    // post-build call already ran, and previously stayed open forever since
-    // nothing ever checked again. "attributes: true" with a class filter is
-    // needed for that: opening a dialog toggles an existing element's
-    // "jt-show" class rather than inserting a new node, which the
-    // childList-only observer below never saw.
-    // Shared by both the event-driven MutationObserver below and the
-    // time-based poller (pollEmulatorVisibility) - the observer only fires
-    // for mutations it was specifically told to watch (childList, "class",
-    // "style"), so any OTHER way the screen could end up hidden or
-    // misplaced (a Javatari-internal state change that doesn't touch those,
-    // or one this app doesn't know about yet) would slip past it silently.
-    // Polling the same check on a timer catches those too, since it doesn't
-    // depend on knowing what caused the problem - only on verifying the
-    // current state is correct.
-    checkAndFixEmulatorVisibility(container) {
-      this.dismissEmulatorDialogs();
-      const screen = document.getElementById('javatari-screen');
-      if (!screen) return;
-      const reparented = screen.parentElement !== container;
-      if (reparented) container.appendChild(screen);
-      if (reparented || screen.style.display === 'none' || screen.style.visibility === 'hidden' ||
-          screen.style.opacity === '0') {
-        this.resetScreenStyle(screen);
-        this.updateEmulatorScale();
-      }
-    },
-    observeEmulatorReparenting(container) {
-      if (this.emulatorReparentObserver) return;
-      this.emulatorReparentObserver = new MutationObserver(() => this.checkAndFixEmulatorVisibility(container));
-      this.emulatorReparentObserver.observe(document.body,
-          {childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style']});
-    },
-    // Time-based backstop for whatever the event-driven observer above
-    // misses - see checkAndFixEmulatorVisibility's own comment. Runs
-    // indefinitely (this component is never unmounted in normal use - it's
-    // the app's own root), so no clearInterval on a matching lifecycle hook.
-    pollEmulatorVisibility(container) {
-      if (this.emulatorVisibilityPoller) return;
-      this.emulatorVisibilityPoller = window.setInterval(
-          () => this.checkAndFixEmulatorVisibility(container), 500);
-    },
-    // Root cause of the preview "vanishing" after "Update ROM": Javatari's
-    // own "Select Cartridge"/"Select ROM Format"/"Save/Load State" dialogs
-    // (all share the "jt-select-dialog" class, shown/hidden via the "jt-show"
-    // class) are drawn on TOP of the screen at a high z-index. If one is
-    // already open - most commonly the cartridge chooser, which Javatari
-    // opens on its own at startup whenever there's no cartridge inserted yet
-    // and it has recent ROMs to offer - loading a new ROM via
-    // fileLoader.loadFromContent() builds and runs it correctly underneath,
-    // but doesn't close whatever dialog happened to already be open, leaving
-    // it covering the now-running game. Removing "jt-show" from every such
-    // dialog closes them the same way Javatari's own Escape-key handler does,
-    // without triggering any of their side effects (loading a different ROM,
-    // opening a file picker, etc. - those only run from their own dialog
-    // button/key handlers, not from this class removal).
-    dismissEmulatorDialogs() {
-      document.querySelectorAll('.jt-select-dialog.jt-show')
-          .forEach((dialog) => dialog.classList.remove('jt-show'));
     },
     // A single measurement is fragile: if it runs while the container's width
     // has not settled to the drawer width yet, the scale comes out too large,
@@ -895,13 +862,14 @@ export default {
     // changes makes the height self-correct once layout settles, instead of
     // staying wrong until the user resizes.
     //
-    // Also watches the Javatari screen element itself, not just the
-    // container: toggling Javatari's own fullscreen button changes the
-    // screen's *intrinsic* size (screen.offsetWidth/offsetHeight, what the
-    // scale is computed from), without necessarily changing the container's
-    // width - leaving the container-only check above blind to it, so the
-    // scale stayed stuck at whatever it was before fullscreen and the
-    // preview came back the wrong size after exiting.
+    // Also watches the canvas element itself, not just the container: the
+    // emulator resizes the canvas's own width/height attributes to match
+    // the cropped picture it's rendering (see gopher2600-wasm's
+    // onAnimationFrame, which can change size e.g. between NTSC/PAL), which
+    // changes its *intrinsic* size (screen.offsetWidth/offsetHeight, what
+    // the scale is computed from) without necessarily changing the
+    // container's width - leaving the container-only check above blind
+    // to it.
     observeEmulatorSize(container, screen) {
       if (this.emulatorResizeObserver || typeof ResizeObserver === 'undefined') {
         return;
@@ -938,12 +906,14 @@ export default {
       this.updateEmulatorScale();
     },
     updateEmulatorScale(retriesLeft = EMULATOR_MEASURE_RETRIES) {
-      const container = document.getElementById('javatari-target-container');
-      const screen = document.getElementById('javatari-screen');
+      const container = document.getElementById('gopher2600-target-container');
+      const screen = document.getElementById('gopher2600-screen');
       if (!container || !screen) return;
-      // Javatari lays out after this component mounts, so it may still have no
-      // size. Measuring then would collapse the container to zero height and
-      // clip the emulator away entirely. Also guards the container's own
+      // The canvas has no size until the emulator's first rendered frame
+      // sets its width/height attributes (see gopher2600-wasm's
+      // onAnimationFrame). Measuring before then would collapse the
+      // container to zero height and clip the emulator away entirely. Also
+      // guards the container's own
       // width, not just the screen's - this is called synchronously right
       // after a ROM build finishes (see handleRomUpdate), which can land
       // before the drawer has laid out again since the last reflow, momentarily
@@ -1028,48 +998,37 @@ export default {
       window.setTimeout(() => {
         buildRom().finally(() => {
           this.building = false;
-          // Loading a new ROM sometimes leaves the preview looking like it
-          // vanished - re-running the same attach/observe logic used on
-          // mount is a cheap, safe way to re-sync regardless of the exact
-          // cause (it re-finds the screen element fresh rather than
-          // trusting a reference that may be stale, and re-attaching an
-          // already-attached element or re-observing an already-observed
-          // one is a no-op). dismissEmulatorDialogs() closes the actual
-          // confirmed cause - see its own comment.
-          this.dismissEmulatorDialogs();
+          // Re-running the same attach/observe logic used on mount is a
+          // cheap, safe way to keep the canvas correctly placed and sized
+          // after a build (re-finds the element fresh rather than trusting
+          // a reference that may be stale; re-attaching an already-attached
+          // element or re-observing an already-observed one is a no-op).
           this.attachEmulator();
         });
       }, 0);
     },
-    // Manual escape hatch for the emulator preview intermittently vanishing.
-    // Re-parenting/re-styling the existing screen element (the same recovery
-    // dismissEmulatorDialogs()/attachEmulator()/checkAndFixEmulatorVisibility
-    // already do automatically) turned out not to be enough on its own -
-    // confirmed the DOM element can be present, correctly parented, and
-    // correctly styled while still showing nothing, meaning Javatari's own
-    // internal rendering had actually stopped, not just been hidden or
-    // misplaced. There's no supported way to restart only Javatari's
-    // internals from here (it's a page-embedded <script>, not something this
-    // app owns or can re-inject on its own), so this reloads the whole page
-    // instead - the one guaranteed way to get a fresh, working instance.
+    // Manual fallback if the emulator preview ever gets into a bad state
+    // this component's own logic doesn't recover from on its own (e.g. the
+    // WASM module itself crashing - see gopher2600-wasm's onAnimationFrame,
+    // which recovers panics in the render loop but not a fatal WASM trap).
+    // A full reload is the one guaranteed way to get a fresh instance.
     // Project data lives in localStorage and survives this; the compiled ROM
-    // (kept in memory by Javatari) and the Generated tab's own in-memory
-    // code ref don't, so the user needs to click "Update ROM" again
-    // afterward. Deliberately NOT done automatically here: if a bad ROM is
-    // itself what froze the emulator, auto-rebuilding it the moment the
-    // page comes back up would just re-trigger the same freeze immediately,
-    // soft-locking the user out of ever seeing a stable page to fix the
-    // project from.
+    // and the Generated tab's own in-memory code ref don't, so the user
+    // needs to click "Update ROM" again afterward. Deliberately NOT done
+    // automatically here: if a bad ROM is itself what crashed the emulator,
+    // auto-rebuilding it the moment the page comes back up would just
+    // re-trigger the same crash immediately, soft-locking the user out of
+    // ever seeing a stable page to fix the project from.
     handleRefreshEmulator() {
       window.location.reload();
     },
     handleRomDownload() {
-      if (!window.Javatari?.compiledResult) {
+      if (!this.compiledRomBytes) {
         this.errorStorage.value =
           'There is no compiled ROM yet; use "Update ROM" first.';
         return;
       }
-      const blob = new Blob([Javatari.compiledResult.output], {type: 'application/octet-stream'});
+      const blob = new Blob([this.compiledRomBytes.output], {type: 'application/octet-stream'});
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
       link.download = 'compiled-rom.bin';
@@ -1083,7 +1042,7 @@ export default {
     // reachable in the desktop build at all (see isElectron above) - a
     // browser tab has no way to launch a local program.
     async handleTestInStella() {
-      if (!window.Javatari?.compiledResult) {
+      if (!this.compiledRomBytes) {
         this.errorStorage.value = 'There is no compiled ROM yet; use "Update ROM" first.';
         return;
       }
@@ -1093,7 +1052,7 @@ export default {
       }
       this.launchingStella = true;
       try {
-        const result = await window.electronAPI.launchStella(this.stellaPathStorage, Javatari.compiledResult.output);
+        const result = await window.electronAPI.launchStella(this.stellaPathStorage, this.compiledRomBytes.output);
         if (!result.success) {
           this.errorStorage.value = `Couldn't launch Stella: ${result.error}`;
         }
@@ -1101,10 +1060,51 @@ export default {
         this.launchingStella = false;
       }
     },
+    // Front-panel switches - Gopher2600 (unlike Javatari) draws no
+    // console-panel graphic of its own, so these are real UI, wired
+    // directly to gopher2600-wasm's exposed API (tools/gopher2600-wasm/main.go).
+    handleTogglePower(poweredOn) {
+      this.emulatorPoweredOn = poweredOn;
+      safeWithGopher2600((gopher2600) => {
+        if (poweredOn) {
+          gopher2600.powerOn();
+          // A fresh VCS resets every switch to hardware defaults - restore
+          // whatever position the UI currently shows for the persistent
+          // (non-momentary) ones.
+          gopher2600.setColorMode(this.emulatorColorMode);
+          gopher2600.setDifficulty('left', this.emulatorLeftDifficultyPro);
+          gopher2600.setDifficulty('right', this.emulatorRightDifficultyPro);
+        } else {
+          gopher2600.powerOff();
+        }
+      });
+    },
+    handlePressReset() {
+      safeWithGopher2600((gopher2600) => gopher2600.pressReset());
+    },
+    handleReleaseReset() {
+      safeWithGopher2600((gopher2600) => gopher2600.releaseReset());
+    },
+    handlePressSelect() {
+      safeWithGopher2600((gopher2600) => gopher2600.pressSelect());
+    },
+    handleReleaseSelect() {
+      safeWithGopher2600((gopher2600) => gopher2600.releaseSelect());
+    },
+    handleToggleColorMode(color) {
+      this.emulatorColorMode = color;
+      safeWithGopher2600((gopher2600) => gopher2600.setColorMode(color));
+    },
+    handleToggleDifficulty(port, pro) {
+      if (port === 'left') this.emulatorLeftDifficultyPro = pro;
+      else this.emulatorRightDifficultyPro = pro;
+      safeWithGopher2600((gopher2600) => gopher2600.setDifficulty(port, pro));
+    },
   },
 };
 </script>
-<!-- Unscoped: #javatari-screen is injected by Javatari at runtime, so it never
+<!-- Unscoped: #gopher2600-screen lives directly in public/index.html and is
+     moved into this component's DOM by attachEmulator(), so it never
      carries this component's scope attribute. -->
 <style>
 /* The app's own default font, as a custom property so switching it later
@@ -1560,28 +1560,29 @@ html {
   min-height: 0;
 }
 
-#javatari-target-container {
+#gopher2600-target-container {
   overflow: hidden;
   /* This sits inside .emulator-drawer-inner's flex column, at a fixed
      JS-computed height (see App.vue's own updateEmulatorScale) - without
      this, once the ROM capacity bank-contents text below it (see
      .rom-capacity-detail) grew long enough after a build that everything in
      the column no longer fit, the flex column's own default flex-shrink: 1
-     silently compressed this container below its real height instead of
-     leaving it alone, clipping the bottom of the emulator (Javatari's own
-     console-panel graphic) behind whatever sits right after it - the
-     Update ROM/Get generated ROM buttons - instead of showing it. That text
-     block already has its own overflow-y: auto (see its own flex: 1 1 auto)
-     specifically to absorb space shortages like this on its own, so nothing
-     above it - this container, the buttons, the summary text - should ever
-     need to shrink at all.
+     would silently compress this container below its real height instead
+     of leaving it alone, clipping the bottom of the emulator canvas behind
+     whatever sits right after it - the panel switches/Update ROM/Get
+     generated ROM buttons - instead of showing it. That text block already
+     has its own overflow-y: auto (see its own flex: 1 1 auto) specifically
+     to absorb space shortages like this on its own, so nothing above it -
+     this container, the buttons, the summary text - should ever need to
+     shrink at all.
   */
   flex-shrink: 0;
 }
 
-#javatari-target-container > #javatari-screen {
+#gopher2600-target-container > #gopher2600-screen {
   transform: scale(var(--emulator-scale, 1));
   transform-origin: top left;
+  image-rendering: pixelated;
 }
 
 
@@ -2066,7 +2067,7 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
   box-sizing: border-box;
   /* The "Refresh emulator"/"Update ROM"/"Get generated ROM" buttons are all
      "block" (100% width of this container), which previously ran them
-     flush edge to edge with no breathing room. #javatari-target-container
+     flush edge to edge with no breathing room. #gopher2600-target-container
      (the emulator screen itself) also ends up very slightly narrower as a
      result, rather than compensating it back out with its own negative
      margin - that container's own width feeds a live ResizeObserver-driven
@@ -2079,8 +2080,9 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
 /* "Update ROM"/"Get generated ROM" side by side in one row (used to each be
    a separate "block" full-width v-btn, stacked) - each sized to its own
    label's natural width (not stretched to fill/split the row) and the pair
-   centered as a group. */
-.rom-buttons-row {
+   centered as a group. Front-panel switches use the same layout. */
+.rom-buttons-row,
+.panel-switches-row {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;

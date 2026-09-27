@@ -144,6 +144,18 @@ export const USER_VARIABLE_LETTERS_WITHOUT_SUPERCHIP =
 export const SUPERCHIP_VAR_START = 12;
 export const SUPERCHIP_VAR_END = 43;
 
+// DPC+'s own always-on bonus RAM pool - 9 plain zero-page bytes (var0-var8),
+// declared unconditionally by the real compiler's DPCplusbB.h include
+// (public/bb19/includes/DPCplusbB.h:157-165) purely because DPC+'s own
+// kernel needs less zero-page RAM for itself than the standard kernel does,
+// leaving these free. Completely unrelated to Superchip RAM (a different
+// chip, a different address space, and mutually exclusive with DPC+ in
+// practice - see Configuration.vue's own enableSuperchip=false-on-DPC+
+// logic) - this pool exists on every DPC+ build regardless of any toggle,
+// the same way SYSTEM_VARIABLES' own dims always exist regardless of
+// Superchip, just routed through routeDevVar's competitive pool instead.
+export const DPCPLUS_VAR_COUNT = 9;
+
 // text12b.asm (see generators/bbasic/text-minikernel.js) uses the bare
 // single-letter symbol "B" as its own scratch byte ("sta B" / "ldx B",
 // confirmed 5 times in its always-active text-drawing routine, once per
@@ -1116,7 +1128,9 @@ Blockly.BBasic.init = function(workspace) {
   const configurationStorage = useConfigurationStorage();
   const config = (configurationStorage && configurationStorage.value) || {};
   const superchipVarBudget = SUPERCHIP_VAR_END - SUPERCHIP_VAR_START + 1;
+  const dpcPlusVarBudget = config.kernel === 'dpcplus' ? DPCPLUS_VAR_COUNT : 0;
   this.superchipVars = [];
+  this.dpcPlusVars = [];
   // Reserving the SAME canonical dev var twice (e.g. ROM noise and rainbow
   // colors both reserve romNoiseFlagsVarName's shared flags byte - see
   // generators/bbasic/sprites.js's own "one shared flags byte" comment) has
@@ -1146,6 +1160,8 @@ Blockly.BBasic.init = function(workspace) {
     routedDevVarNames.add(name);
     if (config.enableSuperchip && this.superchipVars.length < superchipVarBudget) {
       this.superchipVars.push(name);
+    } else if (this.dpcPlusVars.length < dpcPlusVarBudget) {
+      this.dpcPlusVars.push(name);
     } else {
       defvars.push(name);
     }
@@ -1742,11 +1758,23 @@ Blockly.BBasic.init = function(workspace) {
     ({name, slot: availableLetters[i], description: this.devVarDescriptions[name], isUserVariable: this.userVarNames.has(name)}));
   this.superchipVarAssignments = this.superchipVars.map((name, i) =>
     ({name, slot: `var${SUPERCHIP_VAR_START + i}`, description: this.devVarDescriptions[name], isUserVariable: this.userVarNames.has(name)}));
+  this.dpcPlusVarsUsed = this.dpcPlusVars.length;
+  this.dpcPlusVarsAvailable = dpcPlusVarBudget;
+  this.dpcPlusVarAssignments = this.dpcPlusVars.map((name, i) =>
+    ({name, slot: `var${i}`, description: this.devVarDescriptions[name], isUserVariable: this.userVarNames.has(name)}));
   if (defvars.length) {
     if (defvars.length > availableLetters.length) {
-      throw new Error(`Too many variables: this project defines ${defvars.length + this.superchipVars.length}, ` +
-        `but only ${availableLetters.length + (config.enableSuperchip ? superchipVarBudget : 0)} are available` +
-        `${config.enableSuperchip ? '' : ' (enable Superchip RAM on the Options tab to unlock more)'}.`);
+      const totalDefined = defvars.length + this.superchipVars.length + this.dpcPlusVars.length;
+      const totalAvailable = availableLetters.length +
+        (config.enableSuperchip ? superchipVarBudget : 0) + dpcPlusVarBudget;
+      // DPC+'s bonus pool has no toggle to suggest enabling (it's already
+      // always on), and Superchip is never available alongside DPC+ at all
+      // (see Configuration.vue) - the hint only makes sense for the
+      // standard kernel with Superchip still off.
+      const hint = (!config.enableSuperchip && config.kernel !== 'dpcplus') ?
+        ' (enable Superchip RAM on the Options tab to unlock more)' : '';
+      throw new Error(`Too many variables: this project defines ${totalDefined}, ` +
+        `but only ${totalAvailable} are available${hint}.`);
     }
     // Configuration.vue's own "Show reserved variable comments" toggle
     // (default on) - devVarDescriptions itself is always populated
@@ -1909,11 +1937,25 @@ Blockly.BBasic.usedRelocationBankNumbers = function() {
     ...Object.values(banks.musicBanks || {}),
     ...Object.values(banks.subroutineBanks || {}),
     ...Object.values(banks.functionBanks || {}),
-  ].filter((bank) => bank !== 1));
+  ].filter((bank) => bank !== Blockly.BBasic.primaryBank()));
 };
 
-// Every event defaults to bank 1 (the only bank this app used before
-// bank-switching support existed) unless THIS BUILD's own relocation
+// The bank every unrelocated event/graphics/subroutine/function/data-table
+// physically compiles into, and the bank RELOCATABLE_EVENTS' own fixed
+// template labels (fullgameloop, main) live in - bank 2 for DPC+ (see
+// generateDpcPlusBankPreamble's own comment: DPC+ pushes the entire
+// commongamelogic/main-loop body into bank 2, keeping bank 1 down to a
+// single goto), bank 1 for every other kernel. hooks/rom.js's own
+// primaryBankFor is the same concept, kept separate since that file can't
+// import from this one.
+Blockly.BBasic.primaryBank = function() {
+  const configurationStorage = useConfigurationStorage();
+  const config = (configurationStorage && configurationStorage.value) || {};
+  return config.kernel === 'dpcplus' ? 2 : 1;
+};
+
+// Every event defaults to the primary bank (the only bank this app used
+// before bank-switching support existed) unless THIS BUILD's own relocation
 // decisions (see hooks/relocation-banks.js - deliberately not persisted
 // across builds, remade from scratch every time) have moved it elsewhere.
 // This is intentionally the only place that reads eventBanks, so every other
@@ -1921,7 +1963,7 @@ Blockly.BBasic.usedRelocationBankNumbers = function() {
 // strategy evolves.
 Blockly.BBasic.getEventBank = function(eventName) {
   const eventBanks = getRelocationBanks().eventBanks || {};
-  return eventBanks[eventName] || 1;
+  return eventBanks[eventName] || Blockly.BBasic.primaryBank();
 };
 
 // Same idea as getEventBank, for user-defined subroutines (see
@@ -1930,7 +1972,7 @@ Blockly.BBasic.getEventBank = function(eventName) {
 // rather than fixed like the event names.
 Blockly.BBasic.getSubroutineBank = function(name) {
   const subroutineBanks = getRelocationBanks().subroutineBanks || {};
-  return subroutineBanks[name] || 1;
+  return subroutineBanks[name] || Blockly.BBasic.primaryBank();
 };
 
 // Every subroutine name currently defined - dynamic (depends on how many
@@ -1954,7 +1996,7 @@ Blockly.BBasic.estimateSubroutineSize = function(name) {
 // an ordinary subroutine can be.
 Blockly.BBasic.getFunctionBank = function(name) {
   const functionBanks = getRelocationBanks().functionBanks || {};
-  return functionBanks[name] || 1;
+  return functionBanks[name] || Blockly.BBasic.primaryBank();
 };
 
 // Every function name currently defined - dynamic, same reasoning as
@@ -2031,7 +2073,7 @@ const SUBROUTINE_EVENT_NAME_PREFIX = 'subroutine_';
 const FUNCTION_EVENT_NAME_PREFIX = 'function_';
 Blockly.BBasic.getCurrentBank = function() {
   const eventName = Blockly.BBasic.currentEventName;
-  if (!eventName) return 1;
+  if (!eventName) return Blockly.BBasic.primaryBank();
   if (eventName.startsWith(FUNCTION_EVENT_NAME_PREFIX)) {
     return Blockly.BBasic.getFunctionBank(eventName.slice(FUNCTION_EVENT_NAME_PREFIX.length));
   }
@@ -2060,7 +2102,7 @@ Blockly.BBasic.bankJumpSuffix = function(fromBank, toBank) {
 // project content, not fixed like the event names.
 Blockly.BBasic.graphicsUnitBank = function(unitKey) {
   const graphicsBanks = getRelocationBanks().graphicsBanks || {};
-  return graphicsBanks[unitKey] || 1;
+  return graphicsBanks[unitKey] || Blockly.BBasic.primaryBank();
 };
 
 // Backgrounds and animations are each a single inline call site immediately
@@ -2077,7 +2119,7 @@ Blockly.BBasic.graphicsUnitBank = function(unitKey) {
 Blockly.BBasic.wrapRelocatableGraphics = function(unitKey, payload) {
   const bank = Blockly.BBasic.graphicsUnitBank(unitKey);
   Blockly.BBasic.relocatableGraphicsUnits[unitKey] = {bank, payload};
-  if (bank === 1) return payload;
+  if (bank === Blockly.BBasic.primaryBank()) return payload;
 
   const entryLabel = `${unitKey}_reloc_entry`;
   const returnLabel = `${unitKey}_reloc_return`;
@@ -2111,13 +2153,13 @@ Blockly.BBasic.getGraphicsUnitKeys = function() {
 // generators/bbasic/music.js for the one call site.
 Blockly.BBasic.musicUnitBank = function(unitKey) {
   const musicBanks = getRelocationBanks().musicBanks || {};
-  return musicBanks[unitKey] || 1;
+  return musicBanks[unitKey] || Blockly.BBasic.primaryBank();
 };
 
 Blockly.BBasic.wrapRelocatableMusic = function(unitKey, payload) {
   const bank = Blockly.BBasic.musicUnitBank(unitKey);
   Blockly.BBasic.relocatableMusicUnits[unitKey] = {bank, payload};
-  if (bank === 1) return payload;
+  if (bank === Blockly.BBasic.primaryBank()) return payload;
 
   const entryLabel = `${unitKey}_reloc_entry`;
   const returnLabel = `${unitKey}_reloc_return`;
@@ -2185,7 +2227,8 @@ Blockly.BBasic.getDataTableBankUsage = function() {
 const RELOCATABLE_EVENTS = {
   title_start: {
     loop: false,
-    entryFallthroughBank: () => 1, // precedes it: the fixed "fullgameloop" label
+    // precedes it: the fixed "fullgameloop" label, always in the primary bank
+    entryFallthroughBank: () => Blockly.BBasic.primaryBank(),
     exit: {label: 'title_update_begin', bank: () => Blockly.BBasic.getEventBank('title_update')},
   },
   title_update: {
@@ -2196,7 +2239,8 @@ const RELOCATABLE_EVENTS = {
   gameplay_start: {
     loop: false,
     entryFallthroughBank: () => Blockly.BBasic.getEventBank('title_update'),
-    exit: {label: 'main', bank: () => 1}, // fixed, always bank 1
+    // fixed, always the primary bank
+    exit: {label: 'main', bank: () => Blockly.BBasic.primaryBank()},
   },
   gameover_start: {
     loop: false,
@@ -2206,7 +2250,8 @@ const RELOCATABLE_EVENTS = {
   gameover_update: {
     loop: false,
     entryFallthroughBank: () => Blockly.BBasic.getEventBank('gameover_start'),
-    exit: {label: 'fullgameloop', bank: () => 1}, // fixed, always bank 1
+    // fixed, always the primary bank
+    exit: {label: 'fullgameloop', bank: () => Blockly.BBasic.primaryBank()},
   },
 };
 
@@ -2241,7 +2286,7 @@ Blockly.BBasic.generateRelocatableEvent = function(eventName) {
     Blockly.BBasic.generateGameLoopEvent(eventName) :
     Blockly.BBasic.generateGameEvent(eventName);
 
-  if (bank === 1) {
+  if (bank === Blockly.BBasic.primaryBank()) {
     return {inlineEvent: generate(), bank, body: ''};
   }
 
@@ -2278,9 +2323,9 @@ Blockly.BBasic.generateRelocatedSections = function(eventResults) {
   const graphicsEntries = Object.entries(graphicsUnits);
   const musicEntries = Object.entries(Blockly.BBasic.relocatableMusicUnits);
   const subroutineEntries = Object.entries(Blockly.BBasic.subroutines)
-      .filter(([name]) => Blockly.BBasic.getSubroutineBank(name) !== 1);
+      .filter(([name]) => Blockly.BBasic.getSubroutineBank(name) !== Blockly.BBasic.primaryBank());
   const functionEntries = Object.entries(Blockly.BBasic.functions)
-      .filter(([name]) => Blockly.BBasic.getFunctionBank(name) !== 1);
+      .filter(([name]) => Blockly.BBasic.getFunctionBank(name) !== Blockly.BBasic.primaryBank());
 
   // The single HIGHEST bank the chosen ROM size promises always needs its
   // own "bank N ... bank 1" section, even with nothing relocated into it -
@@ -2327,9 +2372,18 @@ Blockly.BBasic.generateRelocatedSections = function(eventResults) {
   // unit fit comfortably otherwise.
   const configurationStorage = useConfigurationStorage();
   const config = (configurationStorage && configurationStorage.value) || {};
-  const maxBanks = BANK_COUNT_BY_ROMSIZE_MINI[config.romSize] || 0;
+  const isDpcPlus = config.kernel === 'dpcplus';
+  const maxBanks = BANK_COUNT_BY_ROMSIZE_MINI[isDpcPlus ? 'dpcplus' : config.romSize] || 0;
   const everyDeclaredBank =
     maxBanks > 1 && !Blockly.BBasic.isTextMinikernelActive() ? [maxBanks] : [];
+  // DPC+ reserves bank 2 for the whole commongamelogic/main-loop body (see
+  // generateDpcPlusBankPreamble's own comment) - it's already declared once
+  // there, so treating it as "the primary bank" here too (same role bank 1
+  // plays for every other kernel) keeps this function from declaring it a
+  // SECOND time as an empty gap-fill stub, which is exactly the "same bank
+  // declared twice, non-contiguously" corruption documented above and below.
+  const primaryBank = isDpcPlus ? 2 : 1;
+  const minGapFillBank = isDpcPlus ? 3 : 2;
 
   // Numerically sorted, not left in whatever order events/graphics/music/
   // subroutines happen to appear in (a plain Set preserves insertion order,
@@ -2349,7 +2403,7 @@ Blockly.BBasic.generateRelocatedSections = function(eventResults) {
     ...subroutineEntries.map(([name]) => Blockly.BBasic.getSubroutineBank(name)),
     ...functionEntries.map(([name]) => Blockly.BBasic.getFunctionBank(name)),
     ...everyDeclaredBank,
-  ])].filter((bank) => bank !== 1);
+  ])].filter((bank) => bank !== primaryBank);
 
   // Ascending, CONTIGUOUS order matters, not just ascending - the comment
   // above already covers ordering; this covers gaps. Confirmed directly as
@@ -2377,18 +2431,18 @@ Blockly.BBasic.generateRelocatedSections = function(eventResults) {
   // entry instead, so a large project's real content never gets padded any
   // higher than it already needs to reach.
   const highestBankNeeded = banksBeforeGapFill.length ? Math.max(...banksBeforeGapFill) : 0;
-  const gapFillBanks = highestBankNeeded > 1 ?
-    Array.from({length: highestBankNeeded - 1}, (_, i) => i + 2) : [];
+  const gapFillBanks = highestBankNeeded >= minGapFillBank ?
+    Array.from({length: highestBankNeeded - minGapFillBank + 1}, (_, i) => i + minGapFillBank) : [];
   const banks = [...new Set([...banksBeforeGapFill, ...gapFillBanks])].sort((a, b) => a - b);
 
   return banks.map((bank) => {
     const eventBodies = eventResults.filter((r) => r.bank === bank).map((r) => r.body).filter(Boolean);
     const graphicsBodies = graphicsEntries
         .filter(([, unit]) => unit.bank === bank)
-        .map(([key, unit]) => `${key}_reloc_entry\n${unit.payload}\n goto ${key}_reloc_return bank1`);
+        .map(([key, unit]) => `${key}_reloc_entry\n${unit.payload}\n goto ${key}_reloc_return bank${Blockly.BBasic.primaryBank()}`);
     const musicBodies = musicEntries
         .filter(([, unit]) => unit.bank === bank)
-        .map(([key, unit]) => `${key}_reloc_entry\n${unit.payload}\n goto ${key}_reloc_return bank1`);
+        .map(([key, unit]) => `${key}_reloc_entry\n${unit.payload}\n goto ${key}_reloc_return bank${Blockly.BBasic.primaryBank()}`);
     const subroutineBodies = subroutineEntries
         .filter(([name]) => Blockly.BBasic.getSubroutineBank(name) === bank)
         .map(([name, body]) => generateSubroutineBody(name, body));
@@ -2399,8 +2453,35 @@ Blockly.BBasic.generateRelocatedSections = function(eventResults) {
     const textOffsetTablesForBank = generateTextOffsetTables(Blockly, bank);
     const textStaticOffsetTablesForBank = generateTextStaticOffsetTables(Blockly, bank);
     const textRow2OffsetsTableForBank = generateTextRow2OffsetsTable(Blockly, bank);
+    // Always a literal "bank 1" here, never Blockly.BBasic.primaryBank() -
+    // confirmed directly against the real compiler source (statements.c's
+    // newbank()): "if (bankno == 1) return;" as its very first line, before
+    // touching anything else, including the global `bank` state newbank()
+    // would otherwise update. "bank 1" is a genuine no-op for every kernel,
+    // which is exactly why it's always been safe to sprinkle between
+    // sections as a neutral closer - it costs nothing and touches nothing.
+    // Using primaryBank() here for DPC+ (bank 2) very much isn't a no-op:
+    // confirmed directly as a real bug - it re-triggered newbank(2)'s own
+    // real, non-trivial side effects (the ECHO/ORG/footer boilerplate
+    // generateDpcPlusBankPreamble's own goto already triggered once) every
+    // single time a relocated section closed, corrupting the compiler's
+    // OWN per-bank bookkeeping the same "declared twice, non-contiguously"
+    // way documented above (surfacing as bank 1's own reserved footer being
+    // reached at a wildly wrong, ever-growing address). Leaving this as
+    // "bank 1" also means the compiler's own global `bank` state naturally
+    // stays at whatever the LAST real "bank N" tag left it at (matching a
+    // real, working DPC+ project's own natural shape) - no special-casing
+    // needed for the final section either.
+    // Harmony cart fix (confirmed against the real bB docs' own "Harmony
+    // Cart Fix" section): "put temp1=temp1 right after each bank
+    // declaration." generateDpcPlusBankPreamble's own "bank 2" already gets
+    // this; every OTHER real (non-1, non-no-op) bank declaration a DPC+
+    // build emits - which only ever happens here, for relocated content -
+    // needs the same fix, or the Harmony cart's own bankswitch-detection can
+    // misfire on real hardware.
+    const harmonyCartFix = isDpcPlus ? '\n temp1=temp1' : '';
     return [
-      ` bank ${bank}`,
+      ` bank ${bank}${harmonyCartFix}`,
       ...eventBodies,
       ...graphicsBodies,
       ...musicBodies,
@@ -2482,7 +2563,7 @@ Blockly.BBasic.finish = function(code) {
   // extra trackDataTableBank entries those calls read from.
   Blockly.BBasic.linkDataTablesToBackgrounds();
   const generatedAnimations = Blockly.BBasic.generateAnimations();
-  const generatedDataTables = Blockly.BBasic.generateDataTables(1);
+  const generatedDataTables = Blockly.BBasic.generateDataTables(Blockly.BBasic.primaryBank());
   const generatedRomNoiseChecks = generateRomNoiseChecks(Blockly);
   const generatedRainbowColorGraphics = generateRainbowColorGraphics(Blockly);
   const generatedRainbowColorChecks = generateRainbowColorChecks(Blockly);
@@ -2490,22 +2571,24 @@ Blockly.BBasic.finish = function(code) {
   const generatedSeekChecks = generateSeekChecks(Blockly);
   const generatedInertiaChecks = generateInertiaChecks(Blockly);
   const generatedShakeScreenChecks = generateShakeScreenChecks(Blockly);
+  const generatedDpcPlusColorPriming = Blockly.BBasic.generateDpcPlusColorPriming();
+  const generatedDpcPlusBankPreamble = Blockly.BBasic.generateDpcPlusBankPreamble();
   // Bank 1's own copy of the Text Minikernel's "show by id" lookup tables
   // (see generateTextOffsetTables' own comment in bbasic/text-scroll.js) -
   // each relocated bank gets its own copy directly inside
   // generateRelocatedSections above instead, alongside that bank's own data
   // tables.
-  const generatedTextOffsetTables = generateTextOffsetTables(Blockly, 1);
+  const generatedTextOffsetTables = generateTextOffsetTables(Blockly, Blockly.BBasic.primaryBank());
   // Same "bank 1's own copy here, each relocated bank gets its own copy in
   // generateRelocatedSections" reasoning, for "Show text with ID"'s own
   // static-offset tables (see their own comment in
   // generators/bbasic/text-minikernel.js) instead of the scroll ones.
-  const generatedTextStaticOffsetTables = generateTextStaticOffsetTables(Blockly, 1);
+  const generatedTextStaticOffsetTables = generateTextStaticOffsetTables(Blockly, Blockly.BBasic.primaryBank());
   // Same "bank 1's own copy here, each relocated bank gets its own copy in
   // generateRelocatedSections" reasoning, for "Show text row 2 ID"'s own
   // parallel offset table (see generateTextRow2OffsetsTable's own comment in
   // generators/bbasic/text-minikernel.js).
-  const generatedTextRow2OffsetsTable = generateTextRow2OffsetsTable(Blockly, 1);
+  const generatedTextRow2OffsetsTable = generateTextRow2OffsetsTable(Blockly, Blockly.BBasic.primaryBank());
   // Same "bank 1's own copy here, each relocated bank gets its own copy in
   // generateRelocatedSections" reasoning as generatedTextOffsetTables just
   // above.
@@ -2602,7 +2685,8 @@ Blockly.BBasic.finish = function(code) {
   return handlebarsTemplate({generatedBody, generatedBackgrounds,
     generatedAnimations, generatedDataTables, generatedRomNoiseChecks,
     generatedRainbowColorGraphics, generatedRainbowColorChecks, generatedMissileFireChecks,
-    generatedSeekChecks, generatedInertiaChecks, generatedShakeScreenChecks,
+    generatedSeekChecks, generatedInertiaChecks, generatedShakeScreenChecks, generatedDpcPlusColorPriming,
+    generatedDpcPlusBankPreamble,
     generatedTextOffsetTables, generatedTextStaticOffsetTables, generatedTextRow2OffsetsTable, generatedJoyDir8Table,
     generatedSubroutines, generatedFunctions, generatedRelocatedEvents, generatedTextMinikernel,
     systemStartEvent, titleStartEvent, titleUpdateEvent, gamePlayStartEvent,
@@ -2688,7 +2772,8 @@ Blockly.BBasic.generateRunOnceEdgeReset = function() {
 // all, same as the old inline version being empty in that case.
 Blockly.BBasic.generateRunOnceEdgeResetCall = function() {
   if (!this.subroutines[RUN_ONCE_EDGE_RESET_NAME]) return '';
-  const suffix = Blockly.BBasic.bankJumpSuffix(1, Blockly.BBasic.getSubroutineBank(RUN_ONCE_EDGE_RESET_NAME));
+  const suffix = Blockly.BBasic.bankJumpSuffix(
+      Blockly.BBasic.primaryBank(), Blockly.BBasic.getSubroutineBank(RUN_ONCE_EDGE_RESET_NAME));
   return ` gosub ${RUN_ONCE_EDGE_RESET_NAME}${suffix}`;
 };
 
@@ -2981,7 +3066,8 @@ Blockly.BBasic.generateGameLoopEvent = function(eventName) {
   return this.generateGameEvent(eventName, (eventName, eventCode) => {
     const innerCode = eventCode.join('\n\n');
     if (!innerCode.trim()) return '';
-    const suffix = Blockly.BBasic.bankJumpSuffix(Blockly.BBasic.getEventBank(eventName), 1);
+    const suffix = Blockly.BBasic.bankJumpSuffix(
+        Blockly.BBasic.getEventBank(eventName), Blockly.BBasic.primaryBank());
     // A "Draw title screen" block anywhere in this event's own body (see
     // generators/bbasic/titlescreen.js - its own gosub target, "_titlescreen_
     // system", is a reliable textual signature to check for here rather than
@@ -3082,6 +3168,11 @@ Blockly.BBasic.backgroundRealColorRawTarget = function() {
 Blockly.BBasic.usePlayfieldRowColors = function() {
   const configurationStorage = useConfigurationStorage();
   const config = (configurationStorage && configurationStorage.value) || {};
+  // config.enablePfColors is the Standard-kernel-only toggle (Configuration.
+  // vue hides it under DPC+, replaced by the separate enableDpcPlusPfColors
+  // toggle/DF4FRACINC mechanism - see generateDpcPlusColorConfiguration) -
+  // guarded here too in case a project switched kernels with it still set.
+  if (config.kernel === 'dpcplus') return false;
   return config.enablePfColors ?? false;
 };
 
@@ -3162,6 +3253,59 @@ Blockly.BBasic.generateMuteAudio = function() {
   return ' AUDV0 = 0\n AUDV1 = 0';
 };
 
+// Spliced into bbasic.bb.hbs's commongamelogic, right before its own
+// "return" - every real drawscreen call site in this codebase (the main
+// loop template, generateEventBody's own per-event bodies, "every N
+// frames"' own drawscreen) is always immediately preceded by
+// "gosub commongamelogic", so this runs right before every one of them
+// without needing to touch each call site individually. DPC+'s per-row
+// color fetchers (DF4/DF6) need a throwaway "priming read" every frame or
+// their first real value gets read twice, duplicating the top row/line -
+// confirmed via a real DPC+ example hitting this exact bug and working
+// around it by hand with these same two lines. Users should never have to
+// know about this hardware quirk themselves.
+Blockly.BBasic.generateDpcPlusColorPriming = function() {
+  const configurationStorage = useConfigurationStorage();
+  const config = (configurationStorage && configurationStorage.value) || {};
+  if (config.kernel !== 'dpcplus') return '';
+  const lines = [];
+  if (config.enableDpcPlusPfColors) lines.push('       lda DF4FRACDATA');
+  if (config.enableDpcPlusBkColors) lines.push('       lda DF6FRACDATA');
+  if (!lines.length) return '';
+  return [' asm', ...lines, 'end'].join('\n') + '\n';
+};
+
+// DPC+ only: the real DPC+ header/score-table/startup/kernel driver (all
+// pulled in unconditionally by DPCplus.inc BEFORE this project's own
+// generated code even starts - see UPSTREAM_CHANGES.md) already consumes
+// nearly all of bank 1 on its own - confirmed against the real bB docs
+// (randomterrain.com's batari Basic Commands page, DPC+ Kernel section):
+// "The DPC+ kernel goes in bank 1, so there's very little free room there
+// ... There are less than 100 bytes free to use in bank 1 ... about the
+// only code you should have in bank 1 is a goto that jumps to bank 2."
+// Every OTHER kernel this app supports treats bank 1 as a normal, roomy
+// bank (see RELOCATABLE_EVENT_NAMES/generateRelocatedSections - only
+// individual events/graphics/etc. get relocated out of it, never the bulk
+// commongamelogic/main-loop/data-table body this template always emits),
+// which is exactly backwards for DPC+ - so this unconditionally pushes that
+// ENTIRE rest of the template into bank 2 instead, the same
+// "goto label bank2 / bank 2 / temp1=temp1 / label" shape the real docs'
+// own DPC+ template uses (temp1=temp1 works around a real Harmony cart
+// bankswitch-detection bug the docs call out by name). hooks/rom.js's own
+// relocation target range is shifted to start at bank 3 instead of 2 to
+// match (see its own bankSizeKeyFor-gated minRelocationBank), since bank 2
+// is now permanently spoken for by this, not part of the shared pool
+// individual events/graphics compete for.
+Blockly.BBasic.generateDpcPlusBankPreamble = function() {
+  const configurationStorage = useConfigurationStorage();
+  const config = (configurationStorage && configurationStorage.value) || {};
+  if (config.kernel !== 'dpcplus') return '';
+  return ' goto __dpcplus_mainbody_entry bank2\n\n' +
+    ' bank 2\n' +
+    ' temp1=temp1\n\n' +
+    '__dpcplus_mainbody_entry\n';
+};
+
 // Per-frame decrement for channnel0duration/channnel1duration (see
 // SYSTEM_VARIABLES' own comment and this.channelDurationUsed's own pre-scan
 // in init()) - a no-op unless a "Play sound" block or music is actually
@@ -3219,7 +3363,23 @@ const BANKSWITCHED_ROM_SIZES = ['8k', '16k', '32k', '64k'];
 // generateRelocatedSections needs these to always declare every bank the
 // chosen ROM size promises, not just the ones something actually got
 // relocated into (see its own comment for why).
-const BANK_COUNT_BY_ROMSIZE_MINI = {'8k': 2, '16k': 4, '32k': 8, '64k': 16};
+// 'dpcplus' key: see BANK_COUNT_BY_ROMSIZE's own comment in hooks/rom.js -
+// DPC+ fixes exactly 6 addressable banks (1-6). The other two 4K regions of
+// the 32KB ROM (confirmed directly against the real batari Basic docs:
+// randomterrain.com's own DPC+ Kernel section, "4K bB system, 20K of your
+// basic code, 4K graphics data, and 4K ARM code = 32K binary" - and against
+// gopher2600's own DPC+ mapper source, hardware/memory/cartridge/dpcplus/
+// dpcplus.go's driverSize=3072/dataSize=4096/freqSize=1024 fixed-region
+// constants: 3072+4096+1024=8192 bytes reserved, leaving exactly
+// 32768-8192=24576=6*4096 for addressable banks) are the graphics bank and a
+// SEPARATE ARM-driver bank - two distinct 4K regions, not one combined 4K
+// region as an earlier (incorrect) revision of this constant assumed.
+// Treating bank 7 as real and addressable overflowed DASM's own bank
+// layout (7*4096 + 8192 = 36864 > 32768), corrupting whatever landed at the
+// boundary - confirmed directly: the compiled ROM's own 6507 program hit a
+// genuine CPU JAM (illegal-opcode hardware halt) a few hundred bytes into
+// what should have been bank 1's own tiny "goto bank2" stub.
+const BANK_COUNT_BY_ROMSIZE_MINI = {'8k': 2, '16k': 4, '32k': 8, '64k': 16, 'dpcplus': 6};
 
 // Whether to inline calls to the random number generator ("set optimization
 // inlinerand") instead of calling a shared routine. The docs describe this
@@ -3401,45 +3561,57 @@ Blockly.BBasic.generateConfiguration = function() {
   // keeps the Player 1 toggle itself in sync with this same rule (forced on
   // and disabled) whenever the Player 0 one is on, but this check exists
   // independently in case the two ever desync (e.g. an old saved project).
-  const needsPlayerColors = rainbowColorNeedsPlayerColors(this.rainbowColorUsedFor) || this.useSpriteColorsFor('player0');
-  if (needsPlayerColors) kernelOptions.push('playercolors');
-  if (needsPlayerColors || rainbowColorNeedsPlayer1Colors(this.rainbowColorUsedFor) || this.useSpriteColorsFor('player1')) {
-    kernelOptions.push('player1colors');
+  // None of playercolors/player1colors/pfcolors/no_blank_lines/
+  // ball_blank_lines are confirmed valid under DPC+ (its own kernel_
+  // options validation table is separate from the standard kernel's, and
+  // "set kernel DPC+" already fixes DPC+'s bankswitch scheme on its own -
+  // see generateRomSize) - skip the whole kernel_options line for a DPC+
+  // build rather than risk emitting an invalid combination. Per-row
+  // playfield/background colors get their own DPC+-specific handling (see
+  // generateDpcPlusColorConfiguration) instead of reusing this line.
+  let ballBlankLinesConfigurationCode = '';
+  let kernelOptionsConfigurationCode = '';
+  if (config.kernel !== 'dpcplus') {
+    const needsPlayerColors = rainbowColorNeedsPlayerColors(this.rainbowColorUsedFor) || this.useSpriteColorsFor('player0');
+    if (needsPlayerColors) kernelOptions.push('playercolors');
+    if (needsPlayerColors || rainbowColorNeedsPlayer1Colors(this.rainbowColorUsedFor) || this.useSpriteColorsFor('player1')) {
+      kernelOptions.push('player1colors');
+    }
+    const usePfColorsOption = this.needsPlayfieldColorTable();
+    if (usePfColorsOption) kernelOptions.push('pfcolors');
+    // ball_blank_lines is NOT a real batari Basic kernel_options value -
+    // 2600basic.wasm validates "set kernel_options" against an embedded
+    // combination table (see the big comment above) and rejects anything
+    // not on it outright ("Options unknown or invalid"), confirmed by a
+    // real failed build. Defined as a plain "const" instead (same mechanism
+    // pfresConfigurationCode/pfRowHeightConfigurationCode below already use
+    // for their std_kernel.asm-only ifconst symbols that also aren't real
+    // kernel_options entries) - DASM's "ifconst" in std_kernel.asm sees any
+    // assigned symbol, not just ones that came from a "set kernel_options"
+    // line.
+    //
+    // Unlike an earlier version of this feature, ball_blank_lines does NOT
+    // try to reimplement no_blank_lines' gap-elimination mechanism (a
+    // hand-duplicated copy of std_kernel.asm's altkernel2/lastkernelline
+    // under a separate symbol did not actually work when tested against a
+    // real build) - it reuses the REAL, proven no_blank_lines path by
+    // emitting a genuine "no_blank_lines" on the kernel_options line
+    // alongside its const, going through 2600basic.wasm's full handling
+    // rather than a hand-rolled substitute. std_kernel.asm's "ifconst
+    // ball_blank_lines" only swaps out the ONE per-scanline filler slot
+    // stock no_blank_lines sacrifices to missile0, retargeting it at the
+    // ball instead - see the comment in that file right where it's
+    // consumed. Only emitted with pfcolors off (the Configuration.vue
+    // switch is disabled/forced off otherwise, but this is checked again
+    // here in case an old saved project has both set).
+    ballBlankLinesConfigurationCode = (config.enableBallBlankLines && !usePfColorsOption) ?
+      'const ball_blank_lines = 1' : '';
+    if (ballBlankLinesConfigurationCode || !this.effectiveShowBlankLines()) {
+      kernelOptions.push('no_blank_lines');
+    }
+    kernelOptionsConfigurationCode = kernelOptions.length ?
+      `set kernel_options ${kernelOptions.join(' ')}` : '';
   }
-  const usePfColorsOption = this.needsPlayfieldColorTable();
-  if (usePfColorsOption) kernelOptions.push('pfcolors');
-  // ball_blank_lines is NOT a real batari Basic kernel_options value -
-  // 2600basic.wasm validates "set kernel_options" against an embedded
-  // combination table (see the big comment above) and rejects anything
-  // not on it outright ("Options unknown or invalid"), confirmed by a
-  // real failed build. Defined as a plain "const" instead (same mechanism
-  // pfresConfigurationCode/pfRowHeightConfigurationCode below already use
-  // for their std_kernel.asm-only ifconst symbols that also aren't real
-  // kernel_options entries) - DASM's "ifconst" in std_kernel.asm sees any
-  // assigned symbol, not just ones that came from a "set kernel_options"
-  // line.
-  //
-  // Unlike an earlier version of this feature, ball_blank_lines does NOT
-  // try to reimplement no_blank_lines' gap-elimination mechanism (a
-  // hand-duplicated copy of std_kernel.asm's altkernel2/lastkernelline
-  // under a separate symbol did not actually work when tested against a
-  // real build) - it reuses the REAL, proven no_blank_lines path by
-  // emitting a genuine "no_blank_lines" on the kernel_options line
-  // alongside its const, going through 2600basic.wasm's full handling
-  // rather than a hand-rolled substitute. std_kernel.asm's "ifconst
-  // ball_blank_lines" only swaps out the ONE per-scanline filler slot
-  // stock no_blank_lines sacrifices to missile0, retargeting it at the
-  // ball instead - see the comment in that file right where it's
-  // consumed. Only emitted with pfcolors off (the Configuration.vue
-  // switch is disabled/forced off otherwise, but this is checked again
-  // here in case an old saved project has both set).
-  const ballBlankLinesConfigurationCode = (config.enableBallBlankLines && !usePfColorsOption) ?
-    'const ball_blank_lines = 1' : '';
-  if (ballBlankLinesConfigurationCode || !this.effectiveShowBlankLines()) {
-    kernelOptions.push('no_blank_lines');
-  }
-  const kernelOptionsConfigurationCode = kernelOptions.length ?
-    `set kernel_options ${kernelOptions.join(' ')}` : '';
   // "noscore" is a compile-time ifconst gate in the standard kernel - it
   // decides whether the score-digit-drawing assembly is even assembled into
   // the ROM at all, nothing runtime can override it after the fact. The Text
@@ -3585,7 +3757,12 @@ Blockly.BBasic.generateConfiguration = function() {
   // pfres raises the playfield's vertical resolution above the standard
   // kernel's default; it requires the extra RAM Superchip provides (see
   // generateRomSize), and is a single ROM-wide setting, not per-background.
-  const pfresConfigurationCode = (enableSuperchip && pfres) ? `const pfres = ${pfres}` : '';
+  // Meaningless under DPC+ (Superchip is a Standard-kernel-only extra-RAM
+  // scheme, mutually exclusive with DPC+'s own) - Configuration.vue already
+  // forces enableSuperchip off when the kernel is DPC+, guarded again here
+  // in case an old saved project has it stale.
+  const pfresConfigurationCode = (config.kernel !== 'dpcplus' && enableSuperchip && pfres) ?
+    `const pfres = ${pfres}` : '';
   // "pfrowheight" overrides the kernel's own row-height calculation (see
   // std_kernel.asm/std_kernel_vertical_reflect.asm's own "ifconst
   // pfrowheight ... else ... lda #(96/pfres)+2" fallback) directly, in
@@ -3597,7 +3774,10 @@ Blockly.BBasic.generateConfiguration = function() {
   // applies). pfRowDivisorFor in utils/playfield-coords.js mirrors this
   // same precedence for the sprite/playfield coordinate conversion blocks,
   // so they stay in sync with whatever the kernel actually draws.
-  const pfRowHeightConfigurationCode = (enablePfRowHeight && pfrowheight) ? `const pfrowheight = ${pfrowheight}` : '';
+  // Same DPC+ guard as pfresConfigurationCode above - pfrowheight is also
+  // a std_kernel.asm-only ifconst symbol.
+  const pfRowHeightConfigurationCode = (config.kernel !== 'dpcplus' && enablePfRowHeight && pfrowheight) ?
+    `const pfrowheight = ${pfrowheight}` : '';
   // Unlike kernel_options, "set optimization" lines can't be combined on one
   // line - each option needs its own "set optimization X" statement.
   const optimizationLines = [];
@@ -3631,9 +3811,19 @@ Blockly.BBasic.generateConfiguration = function() {
 
 const SUPPORTED_ROM_SIZES = ['2k', '4k', '8k', '16k', '32k', '64k'];
 
+// "set kernel DPC+" is a real batari Basic directive, not something this
+// app constructs - the real compiler's own parser reacts to it directly
+// (statements.c's "set kernel" handling: calling create_includes(
+// "DPCplus.inc") to swap its include manifest, setting its internal
+// bs=28 kernel-scheme flag every DPC+-specific compiler branch checks,
+// and auto-declaring bankswitch_hotspot/bankswitch/bs_mask/last_bank
+// itself) - so unlike Standard, DPC+ needs no "set romsize"/Superchip
+// line at all; the compiler fixes its own fixed 8-bank (0-7) scheme the
+// moment it sees this directive.
 Blockly.BBasic.generateRomSize = function() {
   const configurationStorage = useConfigurationStorage();
   const config = (configurationStorage && configurationStorage.value) || {};
+  if (config.kernel === 'dpcplus') return 'set kernel DPC+';
   const romSize = SUPPORTED_ROM_SIZES.includes(config.romSize) ? config.romSize : '4k';
   // Superchip RAM (needed for pfres above the standard kernel's default) is
   // enabled by appending SC to the rom size, e.g. "set romsize 8kSC".
@@ -3656,7 +3846,7 @@ Blockly.BBasic.generateSystemDims = function() {
           (showVariableComments ? `  ; ${description}` : ''))
       .join('\n');
   return systemDims + this.generateTextMinikernelDims() + this.generateEnvelopeDims() +
-    this.generateScoreBkColorRuntimeDims() + this.generateSuperchipVarDims();
+    this.generateScoreBkColorRuntimeDims() + this.generateSuperchipVarDims() + this.generateDpcPlusVarDims();
 };
 
 // Declares whichever dev/user vars init()'s routeDevVar placed into
@@ -3678,6 +3868,26 @@ Blockly.BBasic.generateSuperchipVarDims = function() {
         const description = showVariableComments && this.devVarDescriptions[name];
         const commentSuffix = description ? `  ; ${description}` : '';
         return ` dim ${name} = var${SUPERCHIP_VAR_START + i}${commentSuffix}`;
+      })
+      .join('\n');
+};
+
+// Declares whichever dev/user vars init()'s routeDevVar placed into
+// this.dpcPlusVars instead of the letter pool (see DPCPLUS_VAR_COUNT's own
+// comment and routeDevVar in init()) - empty (a no-op) unless kernel is
+// DPC+, since that routing only happens then. Same splice point as
+// generateSuperchipVarDims (mutually exclusive with it in practice - DPC+
+// and Superchip never both apply to the same build).
+Blockly.BBasic.generateDpcPlusVarDims = function() {
+  if (!this.dpcPlusVars || !this.dpcPlusVars.length) return '';
+  const configurationStorage = useConfigurationStorage();
+  const config = (configurationStorage && configurationStorage.value) || {};
+  const showVariableComments = config.showVariableComments ?? true;
+  return '\n' + this.dpcPlusVars
+      .map((name, i) => {
+        const description = showVariableComments && this.devVarDescriptions[name];
+        const commentSuffix = description ? `  ; ${description}` : '';
+        return ` dim ${name} = var${i}${commentSuffix}`;
       })
       .join('\n');
 };
@@ -3742,15 +3952,50 @@ Blockly.BBasic.generateBackgrounds = function() {
       ` playfieldrealcolor = ${colorByteToBBasic(resolved[0])}\n`;
   };
 
+  // DPC+'s own real compiler support for "pfcolors:" (confirmed: a genuine
+  // dedicated code path in the real batari Basic compiler, not shared with
+  // the standard kernel's) reads a table sized to exactly match the
+  // playfield's own row count, via its own DFxFRACINC-driven fetcher - none
+  // of buildPfcolors' own 12th-row padding/COLUPF-top-row workaround above
+  // applies here, since that's specifically a standard-kernel row-table
+  // implementation quirk (confirmed by testing against std_kernel.asm's own
+  // pfcolortable read), not something inherent to the "pfcolors:" block
+  // syntax itself.
+  const configurationStorage = useConfigurationStorage();
+  const useDpcPlusPfColors = (configurationStorage && configurationStorage.value &&
+    configurationStorage.value.kernel === 'dpcplus' && configurationStorage.value.enableDpcPlusPfColors) || false;
+  const buildDpcPlusPfcolors = (pixels, rowColors) => {
+    const rows = pixels.map((_, i) =>
+      '  ' + colorByteToBBasic((rowColors && rowColors[i] != null) ? rowColors[i] : DEFAULT_ROW_COLOR));
+    return ' pfcolors:\n' + rows.join('\n') + '\nend\n';
+  };
+  // Per explicit decision: this app has no separate per-row BACKGROUND
+  // color data yet, only the playfield's own rowColors (above) - reusing
+  // that same data for bkcolors (background mirrors whatever per-row
+  // playfield colors are set to) rather than building a whole second
+  // color-editing UI as part of this phase. A real independent bkcolors
+  // data set is a reasonable follow-up if this reuse turns out to be too
+  // limiting in practice.
+  const useDpcPlusBkColors = (configurationStorage && configurationStorage.value &&
+    configurationStorage.value.kernel === 'dpcplus' && configurationStorage.value.enableDpcPlusBkColors) || false;
+  const buildDpcPlusBkcolors = (pixels, rowColors) => {
+    const rows = pixels.map((_, i) =>
+      '  ' + colorByteToBBasic((rowColors && rowColors[i] != null) ? rowColors[i] : DEFAULT_ROW_COLOR));
+    return ' bkcolors:\n' + rows.join('\n') + '\nend\n';
+  };
+
   return backgrounds.map(({id, pixels, rowColors}) => {
     const endLabel = `background${id}end`;
-    const pfcolorsBlock = usePfColors ? buildPfcolors(pixels, rowColors) : '';
+    const pfcolorsBlock = usePfColors ? buildPfcolors(pixels, rowColors) :
+      (useDpcPlusPfColors ? buildDpcPlusPfcolors(pixels, rowColors) : '');
+    const bkcolorsBlock = useDpcPlusBkColors ? buildDpcPlusBkcolors(pixels, rowColors) : '';
     const payloadLines = [
       ' playfield:',
       convertPlayfield(matrixToPlayfield(pixels)),
       'end',
     ];
     if (pfcolorsBlock) payloadLines.push(pfcolorsBlock.replace(/\n$/, ''));
+    if (bkcolorsBlock) payloadLines.push(bkcolorsBlock.replace(/\n$/, ''));
     const payload = payloadLines.join('\n');
     // Only the graphics payload itself is relocatable - the guard above and
     // the endLabel below stay inline in bank 1 no matter what, since a
@@ -3831,7 +4076,7 @@ Blockly.BBasic.generateDataTables = function(bank) {
       .filter((table) => table.values && table.values.length)
       .filter((table) => {
         const usage = Blockly.BBasic.dataTableBankUsage[table.id];
-        return usage ? usage.has(bank) : bank === 1;
+        return usage ? usage.has(bank) : bank === Blockly.BBasic.primaryBank();
       })
       .map((table) => {
         const name = dataTableSymbolName(table, bank);
@@ -3886,7 +4131,7 @@ const generateSubroutineBody = (name, body) => Blockly.BBasic.normalizeIndents([
 // bank-sensitive.
 Blockly.BBasic.generateSubroutines = function() {
   return Object.entries(Blockly.BBasic.subroutines)
-      .filter(([name]) => Blockly.BBasic.getSubroutineBank(name) === 1)
+      .filter(([name]) => Blockly.BBasic.getSubroutineBank(name) === Blockly.BBasic.primaryBank())
       .map(([name, body]) => generateSubroutineBody(name, body))
       .join('\n\n');
 };
@@ -3953,7 +4198,7 @@ const generateFunctionBody = (name, body) =>
 // subroutine.
 Blockly.BBasic.generateFunctions = function() {
   return Object.entries(Blockly.BBasic.functions)
-      .filter(([name]) => Blockly.BBasic.getFunctionBank(name) === 1)
+      .filter(([name]) => Blockly.BBasic.getFunctionBank(name) === Blockly.BBasic.primaryBank())
       .map(([name, body]) => generateFunctionBody(name, body))
       .join('\n\n');
 };

@@ -831,6 +831,37 @@ Blockly.defineBlocksWithJsonArray([
       'becomes true, same as "Fade color to". Triggering it again while already shaking restarts the ' +
       'countdown at the new frame count, rather than stacking.',
   },
+  // DPC+ only (see blockly-toolbox.xml.hbs's own {{#if kernelIsDpcPlus}}
+  // gate) - the standard kernel derives its playfield row height from
+  // pfres/pfrowheight, both compile-time constants with no DPC+ equivalent;
+  // DPC+ instead reads it every frame from a runtime register (DFxFRACINC)
+  // that nothing initializes on its own (confirmed: no default anywhere in
+  // DPCplus_kernel.asm's startup) - so a project with no block like this
+  // one anywhere would render its playfield at whatever height happens to
+  // be left in uninitialized RAM. See generators/bbasic/background.js's
+  // generateDpcPlusRowHeight for the actual DFxFRACINC math.
+  {
+    'type': `background_set_dpc_plus_row_height`,
+    'message0': `${BACKGROUND_ICON} Set playfield row height to %1 scanlines`,
+    'args0': [
+      {
+        'type': 'input_value',
+        'name': 'SCANLINES',
+        'check': 'Number',
+      },
+    ],
+    'inputsInline': true,
+    'previousStatement': null,
+    'nextStatement': null,
+    'colour': BACKGROUND_COLOR,
+    'tooltip': 'DPC+ only: sets how many scanlines tall each playfield row is drawn - unlike the ' +
+      'standard kernel, DPC+ has no built-in default for this, so a block like this needs to run ' +
+      'somewhere (once at startup is enough) or the playfield renders at whatever height happens to ' +
+      'be left in RAM. Also controls per-row playfield/background color resolution if either is ' +
+      'enabled (Options tab) - they stay locked to this same row height. Running this again with a ' +
+      'different value re-flows every row live, which is exactly how DPC+ projects implement things ' +
+      'like a title screen with different proportions than the main game.',
+  },
 ]);
 
 // Fires once, the moment a matching background_fade_to block (same

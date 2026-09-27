@@ -78,7 +78,14 @@ export const TEXT_SCROLL_CURSOR_HIDDEN_BIT = 1;
 // BANK_COUNT_BY_ROMSIZE rather than imported, to avoid pulling that module's
 // heavy compiler chain into every generator file (same reasoning as
 // bbasic.js's own BANKSWITCHED_ROM_SIZES duplicate).
-const KERNEL_BANK_BY_ROMSIZE = {'8k': 2, '16k': 4, '32k': 8, '64k': 16};
+// 'dpcplus' key: DPC+'s own "jsr minikernel" hook (confirmed present in
+// DPCplus_kernel.asm, same plain same-bank call) has the identical
+// same-bank constraint - DPC+ fixes exactly 6 addressable banks
+// (bB-source-numbered 1-6 - see BANK_COUNT_BY_ROMSIZE's own comment in
+// hooks/rom.js for the full derivation/evidence). The other two 4K regions
+// of the 32KB ROM are the graphics bank and a separate ARM-driver bank,
+// neither addressable via a bBasic "bank N" tag.
+const KERNEL_BANK_BY_ROMSIZE = {'8k': 2, '16k': 4, '32k': 8, '64k': 16, 'dpcplus': 6};
 
 // Resolves a literal "math_number" field's own text to a real JS number, or
 // null if it isn't one of the literal forms that block's own field
@@ -191,7 +198,7 @@ export const trackTextStaticOffsetUsage = (Blockly, bank) => {
 export const generateTextStaticOffsetTables = (Blockly, bank) => {
   if (!Blockly.BBasic.isTextMultiRowUsed()) return '';
   const usage = Blockly.BBasic.dataTableBankUsage[TEXT_STATIC_OFFSET_TABLE_ID];
-  if (!(usage ? usage.has(bank) : bank === 1)) return '';
+  if (!(usage ? usage.has(bank) : bank === Blockly.BBasic.primaryBank())) return '';
   const layout = getStaticMessageLayout();
   const offsets = layout.map((entry) => `${entry.offset}`).join(', ');
   const hasRow2Bytes = layout.map((entry) => (entry.wrapToLine2 && entry.lineCount >= 2 ? 1 : 0)).join(', ');
@@ -257,7 +264,7 @@ const ensureTextRow2Pairs = (Blockly) => {
 export const generateTextRow2OffsetsTable = (Blockly, bank) => {
   if (!Blockly.BBasic.textShowByIdRow2Used) return '';
   const usage = Blockly.BBasic.dataTableBankUsage[TEXT_ROW2_OFFSET_TABLE_ID];
-  if (!(usage ? usage.has(bank) : bank === 1)) return '';
+  if (!(usage ? usage.has(bank) : bank === Blockly.BBasic.primaryBank())) return '';
   const offsets = ensureTextRow2Pairs(Blockly);
   const tableName = bankSuffixedTableName('text_row2_offsets', bank);
   return ` data ${tableName}\n  ${offsets.join(', ')}\nend`;
@@ -1241,7 +1248,7 @@ export default (Blockly) => {
 
     const configurationStorage = useConfigurationStorage();
     const config = (configurationStorage && configurationStorage.value) || {};
-    const kernelBank = KERNEL_BANK_BY_ROMSIZE[config.romSize];
+    const kernelBank = KERNEL_BANK_BY_ROMSIZE[config.kernel === 'dpcplus' ? 'dpcplus' : config.romSize];
     if (!kernelBank) return block;
 
     // 2600basic's own per-bank bookkeeping (the space-left tracking that
@@ -1268,11 +1275,20 @@ export default (Blockly) => {
     // until a project's bank 1 overflow was small enough to be fixed by
     // relocating into exactly such a bank.
     const usedBanks = Blockly.BBasic.usedRelocationBankNumbers();
+    const primaryBank = Blockly.BBasic.primaryBank();
+    // DPC+ only (primaryBank is 2 only for DPC+, 1 for every other kernel) -
+    // see generateRelocatedSections' own identical "Harmony cart fix"
+    // comment in bbasic.js for the real docs citation.
+    const harmonyCartFix = primaryBank === 2 ? '\n temp1=temp1' : '';
     const skippedBankPlaceholders = [];
-    for (let bank = 2; bank < kernelBank; bank++) {
-      if (!usedBanks.has(bank)) skippedBankPlaceholders.push(` bank ${bank}\n bank 1`);
+    // Closing tag is always a literal "bank 1", never primaryBank() - see
+    // generateRelocatedSections' own identical comment (statements.c's
+    // newbank() treats "bank 1" as a genuine no-op, but bank 2 has real
+    // side effects for DPC+ that a bare closer must never re-trigger).
+    for (let bank = primaryBank + 1; bank < kernelBank; bank++) {
+      if (!usedBanks.has(bank)) skippedBankPlaceholders.push(` bank ${bank}${harmonyCartFix}\n bank 1`);
     }
 
-    return `${skippedBankPlaceholders.join('\n')}\n bank ${kernelBank}\n${block}\n bank 1`;
+    return `${skippedBankPlaceholders.join('\n')}\n bank ${kernelBank}${harmonyCartFix}\n${block}\n bank 1`;
   };
 };

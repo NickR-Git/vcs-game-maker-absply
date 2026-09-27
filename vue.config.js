@@ -37,12 +37,13 @@ module.exports = {
       maskIcon: null,
       msTileImage: 'icons/mstile-150x150.png',
     },
-    // The bundled toolchain (bb19/*.wasm, ~1.5MB total) and javatari.js
-    // (~650KB) rarely change between releases - precaching them means a
-    // repeat visit (or an offline one) skips re-downloading the whole
-    // toolchain, at the cost of the service worker needing an update
-    // whenever those assets do change (workbox's default revisioning
-    // handles that automatically via content hashing).
+    // The bundled toolchain (bb19/*.wasm, ~1.5MB total) and the preview
+    // emulator (gopher2600.wasm + wasm_exec.js, ~16MB - see
+    // tools/gopher2600-wasm) rarely change between releases - precaching
+    // them means a repeat visit (or an offline one) skips re-downloading
+    // the whole toolchain, at the cost of the service worker needing an
+    // update whenever those assets do change (workbox's default
+    // revisioning handles that automatically via content hashing).
     workboxOptions: {
       exclude: [/\.map$/, /manifest\.json$/],
     },

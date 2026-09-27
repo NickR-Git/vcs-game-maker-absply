@@ -22,6 +22,22 @@ const fetchWasm = async (path) => {
   return wasmCache[path];
 };
 
+// Encodes a "byte string" (one JS char code 0-255 per original file byte -
+// how includes-manifest.json's content, and every real file on disk read
+// via a byte-preserving codec, represents itself once loaded into memory)
+// back into the exact original bytes. NOT the same as `TextEncoder`, which
+// assumes `content` is real Unicode text and UTF-8-encodes it - lossy for
+// anything that isn't valid UTF-8, which binary includes like DPCplus.arm
+// or custom2.bin (arbitrary ARM machine code) generally aren't. Every
+// include this app ships is either plain ASCII (where the two encoders
+// agree byte-for-byte) or one of these binary files, so this is safe
+// everywhere `buildTree` uses it.
+const toBytes = (content) => {
+  const bytes = new Uint8Array(content.length);
+  for (let i = 0; i < content.length; i++) bytes[i] = content.charCodeAt(i) & 0xFF;
+  return bytes;
+};
+
 // Builds a nested Directory tree from a flat {"a/b/c.asm": content} map -
 // paths containing "/" need real intermediate Directory inodes for
 // path_open to walk them the way 2600basic.wasm/dasm.wasm expect.
@@ -38,7 +54,7 @@ const buildTree = (files) => {
       }
       level = sub.contents;
     }
-    level.set(parts[parts.length - 1], new File(new TextEncoder().encode(content)));
+    level.set(parts[parts.length - 1], new File(toBytes(content)));
   });
   return root;
 };
@@ -302,6 +318,16 @@ const assemble = async (mainAsmContent, workDir, log) => {
     const err = prepareException('Errors while assembling.', errors, annotated);
     err.partialOutput = partialOutput;
     err.partialSymbolmap = partialSymbolmap;
+    // DASM's stdout (r.stdout) still holds every `echo` a bBasic kernel
+    // emitted before the fatal error - including the per-bank "bytes of ROM
+    // space left" self-report the bankswitch footer/DPC+ score-table code
+    // prints via ECHO1 (see std_kernel.asm/score_graphics.asm) - a much more
+    // direct "is bank 1 itself over capacity" signal than re-deriving it from
+    // a partial symbol table. hooks/rom.js's isOverflowError retry loop reads
+    // this to tell "bank 1's own fixed content doesn't fit" apart from "some
+    // OTHER bank is too full", which look identical in the thrown error
+    // message alone.
+    err.dasmStdout = r.stdout;
     throw err;
   }
   if (!output || !symText) {
@@ -314,6 +340,7 @@ const assemble = async (mainAsmContent, workDir, log) => {
         [{line: 0, msg: 'No symbol table generated, maybe segment overflow?'}]);
     err.partialOutput = partialOutput;
     err.partialSymbolmap = partialSymbolmap;
+    err.dasmStdout = r.stdout;
     throw err;
   }
   const symbolmap = parseSymbolmap(symText);

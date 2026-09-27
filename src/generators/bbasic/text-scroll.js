@@ -500,7 +500,7 @@ export const trackTextByIdScrollUsage = (Blockly, bank) => {
 export const generateTextOffsetTables = (Blockly, bank) => {
   if (!Blockly.BBasic.isTextMinikernelActive()) return '';
   const usage = Blockly.BBasic.dataTableBankUsage[TEXT_OFFSET_TABLE_ID];
-  if (!(usage ? usage.has(bank) : bank === 1)) return '';
+  if (!(usage ? usage.has(bank) : bank === Blockly.BBasic.primaryBank())) return '';
   const layout = getNamedScrollLayout();
   const offsets = layout.map((entry) => `${entry.offset}`).join(', ');
   const maxOffsets = layout.map((entry) => `${entry.maxOffset}`).join(', ');
