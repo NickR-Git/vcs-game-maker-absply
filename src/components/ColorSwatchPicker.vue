@@ -3,6 +3,7 @@
     <template v-slot:activator="{ on, attrs }">
       <div
         class="color-swatch-picker-dot"
+        :class="{'color-swatch-picker-dot-square': square}"
         :style="{backgroundColor: swatchColor}"
         :title="title"
         v-bind="attrs"
@@ -45,6 +46,12 @@ export default defineComponent({
     allowClear: {type: Boolean, default: true},
     clearLabel: {type: String, default: 'Use automatic color'},
     title: {type: String, default: 'Click to change color'},
+    // Matches the Quick colors bar's .quick-color-swatch look (square
+    // corners, thicker border) instead of this component's default rounded
+    // dot - see .color-swatch-picker-dot-square below. A single shared prop
+    // instead of every caller (Text/Score/Title tab background color
+    // pickers) each hand-rolling the same deep-selector CSS override.
+    square: {type: Boolean, default: false},
   },
   setup(props) {
     const swatchColor = computed(() => (props.value != null ? colorByteToCss(props.value) : props.fallbackColor));
@@ -64,6 +71,16 @@ export default defineComponent({
 .color-swatch-picker-dot:hover {
   outline: 2px solid #1976d2;
   outline-offset: -2px;
+}
+
+/* Matches the Quick colors bar's .quick-color-swatch size/border exactly
+   (see components/QuickColorPalette.vue) - hover styling above already
+   matches without needing an override here. */
+.color-swatch-picker-dot-square {
+  width: 18px;
+  height: 18px;
+  border-radius: 0;
+  border: 1px solid rgba(0, 0, 0, 0.4);
 }
 
 .palette-card {

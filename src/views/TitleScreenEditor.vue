@@ -108,8 +108,10 @@
               </v-menu>
             </div>
           </template>
+          <template v-slot:below-tools>
+            <quick-color-palette v-model="selectedQuickColor" :active-editor="effectiveFrameEditor" />
+          </template>
         </graphic-editor-toolbar>
-        <quick-color-palette v-model="selectedQuickColor" />
 
         <v-list class="titlescreen-list">
           <v-list-item
@@ -158,6 +160,7 @@
                     <color-swatch-picker
                       :value="screen.backgroundColor || 0"
                       :allow-clear="false"
+                      square
                       title="Click to set this title screen page's background color"
                       @input="(byte) => handleSetBackgroundColor(screen, byte)"
                     />

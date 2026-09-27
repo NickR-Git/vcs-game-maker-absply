@@ -12,6 +12,7 @@
           :value="scoreBkColorSwatchValue"
           :fallback-color="backgroundPreviewColor"
           clear-label="Use background color"
+          square
           title="Click to set the score row's background color"
           @input="(byte) => (scoreBkColor = byte === null ? 'background' : byte)"
         />

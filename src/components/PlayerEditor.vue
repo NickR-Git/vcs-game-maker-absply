@@ -97,8 +97,10 @@
               </v-menu>
             </div>
           </template>
+          <template v-if="spriteColorsEnabled" v-slot:below-tools>
+            <quick-color-palette v-model="selectedQuickColor" :active-editor="effectiveFrameEditor" />
+          </template>
         </graphic-editor-toolbar>
-        <quick-color-palette v-if="spriteColorsEnabled" v-model="selectedQuickColor" />
         <v-list class="animation-list">
           <v-list-item
             class="entry-list-item"

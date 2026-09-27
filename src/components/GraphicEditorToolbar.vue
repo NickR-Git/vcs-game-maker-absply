@@ -12,53 +12,58 @@
     :style="bleedStyle"
     @click.stop
   >
-    <slot name="before-tools" />
-    <v-divider class="get-outer-divider" vertical />
-    <div class="get-tools">
-      <v-btn-toggle :value="activeTool" borderless>
-        <v-btn
-          icon
-          small
-          title="Eraser"
-          value="eraser"
-          :disabled="!activeEditor"
-          @click="setTool('eraser')"
-        >
-          <v-icon>mdi-eraser</v-icon>
+    <div class="graphic-editor-toolbar-row">
+      <slot name="before-tools" />
+      <v-divider class="get-outer-divider" vertical />
+      <div class="get-tools">
+        <v-btn-toggle :value="activeTool" borderless>
+          <v-btn
+            icon
+            small
+            title="Eraser"
+            value="eraser"
+            :disabled="!activeEditor"
+            @click="setTool('eraser')"
+          >
+            <v-icon>mdi-eraser</v-icon>
+          </v-btn>
+          <v-btn
+            icon
+            small
+            title="Pencil"
+            value="pencil"
+            :disabled="!activeEditor"
+            @click="setTool('pencil')"
+          >
+            <v-icon>mdi-pencil</v-icon>
+          </v-btn>
+        </v-btn-toggle>
+        <v-divider class="get-inner-divider" vertical />
+        <v-btn icon small title="Undo" :disabled="!activeEditor && !hasPendingQuickColorUndo" @click="handleUndo">
+          <v-icon>mdi-undo</v-icon>
         </v-btn>
-        <v-btn
-          icon
-          small
-          title="Pencil"
-          value="pencil"
-          :disabled="!activeEditor"
-          @click="setTool('pencil')"
-        >
-          <v-icon>mdi-pencil</v-icon>
+        <v-btn icon small title="Redo" :disabled="!activeEditor" @click="() => activeEditor.redo()">
+          <v-icon>mdi-redo</v-icon>
         </v-btn>
-      </v-btn-toggle>
-      <v-divider class="get-inner-divider" vertical />
-      <v-btn icon small title="Undo" :disabled="!activeEditor" @click="() => activeEditor.undo()">
-        <v-icon>mdi-undo</v-icon>
-      </v-btn>
-      <v-btn icon small title="Redo" :disabled="!activeEditor" @click="() => activeEditor.redo()">
-        <v-icon>mdi-redo</v-icon>
-      </v-btn>
-      <v-divider class="get-inner-divider" vertical />
-      <v-btn icon small title="Export to image" :disabled="!activeEditor" @click="() => activeEditor.handleExportImage()">
-        <v-icon>mdi-export</v-icon>
-      </v-btn>
-      <v-btn icon small title="Import from image" :disabled="!activeEditor" @click="() => activeEditor.handleImportImage()">
-        <v-icon>mdi-import</v-icon>
-      </v-btn>
+        <v-divider class="get-inner-divider" vertical />
+        <v-btn icon small title="Export to image" :disabled="!activeEditor" @click="() => activeEditor.handleExportImage()">
+          <v-icon>mdi-export</v-icon>
+        </v-btn>
+        <v-btn icon small title="Import from image" :disabled="!activeEditor" @click="() => activeEditor.handleImportImage()">
+          <v-icon>mdi-import</v-icon>
+        </v-btn>
+      </div>
+      <template v-if="$slots['after-tools']">
+        <v-divider class="get-inner-divider" vertical />
+        <slot name="after-tools" />
+      </template>
     </div>
-    <template v-if="$slots['after-tools']">
-      <v-divider class="get-inner-divider" vertical />
-      <slot name="after-tools" />
-    </template>
+    <slot name="below-tools" />
   </div>
 </template>
 <script>
+import {tryUndoQuickColorDeletion, usePendingQuickColorDeletion} from '../hooks/quick-color-undo';
+
 // The single toolbar shared across every tab with a graphic editor
 // (PlayerEditor/BackgroundEditor/TitleScreenEditor/ScoreFontEditor/
 // TextFontEditor) - previously duplicated near-verbatim in all five (same
@@ -116,6 +121,14 @@ export default {
         paddingRight: `${this.bleed}px`,
       };
     },
+    // Whether the Undo button below has a quick color deletion it could
+    // still restore (see hooks/quick-color-undo.js) - read here (not just
+    // inline in the template) so the button stays enabled even with no
+    // activeEditor at all, e.g. a color deleted before any card/frame was
+    // ever selected.
+    hasPendingQuickColorUndo() {
+      return usePendingQuickColorDeletion().value;
+    },
   },
   mounted() {
     // closest() (not querySelector, which only searches DESCENDANTS) since
@@ -137,6 +150,15 @@ export default {
     setTool(tool) {
       if (this.activeEditor) this.activeEditor.setTool(tool);
     },
+    // Tries the pending quick color deletion first (see
+    // hooks/quick-color-undo.js) - only actually restores it if nothing's
+    // been drawn on the SAME frame that was focused when it was deleted
+    // since, falling through to this frame's normal pixel undo either
+    // way otherwise.
+    handleUndo() {
+      if (tryUndoQuickColorDeletion(this.activeEditor)) return;
+      if (this.activeEditor) this.activeEditor.undo();
+    },
   },
 };
 </script>
@@ -144,10 +166,13 @@ export default {
 /* Sticks to the top of the tab's scrolling ancestor (.editor-container
    - see mounted()'s comment) as everything below it scrolls past, same
    position: sticky pattern every consuming tab used to implement by hand.
-   background so scrolled-under content doesn't show through while pinned. */
+   background so scrolled-under content doesn't show through while pinned.
+   A "below-tools" slot (e.g. the Quick colors bar - see BackgroundEditor.vue/
+   PlayerEditor.vue/TitleScreenEditor.vue) stacks underneath the icon row
+   inside this same pinned block, so it stays pinned too without needing
+   separate sticky offset math - the icon row itself moved into a nested
+   flex row below so this outer element can stack children vertically. */
 .graphic-editor-toolbar {
-  display: flex;
-  align-items: center;
   position: sticky;
   top: 0;
   z-index: 2;
@@ -155,6 +180,11 @@ export default {
   padding-top: 4px;
   padding-bottom: 4px;
   transition: padding 0.15s ease;
+}
+
+.graphic-editor-toolbar-row {
+  display: flex;
+  align-items: center;
 }
 
 /* "Soft Colors" (see App.vue's desaturate-app-colors class/comment) -

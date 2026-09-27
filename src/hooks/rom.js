@@ -11,6 +11,7 @@ import BlocklyBB, {RELOCATABLE_EVENT_NAMES, SYSTEM_VARIABLES} from '../generator
 import {processPlayerAnimationsStorageDefaults} from '../generators/bbasic/sprites';
 import {getExtendedScoreGraphics, getTextMinikernelSiblingFiles} from '../generators/bbasic/text-minikernel-files';
 import {getTitleScreenSiblingFiles} from '../generators/bbasic/titlescreen-files';
+import {TITLE_SCREEN_SUBROUTINE_NAME} from '../generators/bbasic/titlescreen';
 import {processBackgroundStorageDefaults} from '../blocks/background';
 import {findSongById} from '../blocks/music';
 import {buildScoreFontOverride, SQUISH_SCORE_FONT} from '../utils/score-font';
@@ -26,7 +27,7 @@ import {appendCompileLog, clearCompileLog, useBackgroundsStorage, useConfigurati
 import {getRelocationBanks, resetRelocationBanks, setRelocationBank,
   recordSuccessfulRelocationBanks, seedRelocationBanksFromLastSuccess} from './relocation-banks';
 import {markRomUpToDate, markRomOutdated, useRomOutdated, useHasCompiledRom,
-  useCompiledRomBytes, setCompiledRomBytes} from './rom-status';
+  useCompiledRomBytes, setCompiledRomBytes, recordLoadedRomForRecovery} from './rom-status';
 import {withGopher2600} from './emulator';
 import {setRomCapacity, useRomCapacity} from './rom-capacity';
 
@@ -1059,6 +1060,7 @@ const buildRomInner = async () => {
           gopher2600.setKeypadMode('left', !!BlocklyBB.keypad0Used);
           gopher2600.setKeypadMode('right', !!BlocklyBB.keypad1Used);
         });
+        recordLoadedRomForRecovery(compiledResult.output);
       } catch (previewError) {
         console.error('gopher2600-wasm: failed to load the compiled ROM into the preview emulator ' +
           '(the ROM itself compiled successfully) - try "Refresh emulator":', previewError);
@@ -1455,21 +1457,71 @@ export const buildTitleScreenPreviewRom = async (screenId) => {
   }
   buildInProgress.value = true;
   const errorStorage = useErrorStorage();
+  const configurationStorage = useConfigurationStorage();
   try {
     clearCompileLog();
     appendCompileLog(`Building a preview of Title Screen ${screenId}...`, 'stage');
     // Starts every preview from a clean slate rather than whatever
     // relocation state the last REAL build (or a previous preview) happened
-    // to leave behind - this synthetic program is always small enough to
-    // need none of it, and resetRelocationBanks()'s effect is purely an
+    // to leave behind - resetRelocationBanks()'s effect is purely an
     // in-memory working set for whichever build is currently running, not
     // anything that needs to be restored again afterward for the real
     // project's next build to behave correctly (that build resets it
     // again itself, the same first step buildRomInner() above always takes).
     resetRelocationBanks();
+    // Gives the Titlescreen Kernel a bank to itself, matching the
+    // Titlescreen Kernel's documentation ("make sure that the minikernel
+    // has the bank fully to itself" - its troubleshooting section). Pinning
+    // _titlescreen_system to bank 2 alone isn't enough, though - confirmed
+    // directly (raw main.asm inspection) that the trailing "bank 1"
+    // statement generateRelocatedSections emits after a relocated section
+    // is silently a no-op once a LATER bank has already been opened (DASM
+    // only supports moving forward through banks, never back to one already
+    // closed) - so everything compiled after it (the standard kernel's
+    // always-appended files: pf_drawing/pf_scrolling/std_routines/
+    // score_graphics/the footer) stayed stuck in bank 2 right alongside
+    // _titlescreen_system instead of correctly landing back in bank 1,
+    // exactly the entanglement the Kernel's docs warn about. Also
+    // relocating gameover_start - a real event this synthetic program
+    // already has, entered only via "Change state to Gameover" (never used
+    // here, so nothing actually calls it - genuinely inert) - to bank 3
+    // gives the file a bank AFTER the title screen's, so bank 2 closes via
+    // a real forward transition (confirmed working) instead of being the
+    // last bank in the file, and the standard kernel's trailing files land
+    // in bank 3 instead of bank 2. gameover_start's exit already cross-
+    // bank-jumps to wherever gameover_update ends up (still bank 1), the
+    // same mechanism every other relocated event already relies on.
+    setRelocationBank('subroutineBanks', TITLE_SCREEN_SUBROUTINE_NAME, 2);
+    setRelocationBank('eventBanks', 'gameover_start', 3);
     let code;
     try {
       code = regenerateCode(buildTitleScreenPreviewXml(screenId));
+      // Left as the project's configured ROM size (Configuration.vue)
+      // whenever it already has room for banks 1/2/3 above (bankswitched,
+      // 16k or bigger) - confirmed directly as a real bug to override it
+      // unconditionally: the generator's bank bookkeeping (which banks
+      // must exist, reserved-bank placement, etc.) reads the REAL
+      // configured romSize DURING regenerateCode() above, so forcing a
+      // DIFFERENT value into the text afterward left the generator's
+      // internal assumptions and the final "set romsize" text disagreeing -
+      // surfaced as nonsensical bank numbers/addresses (e.g. "bank10" at a
+      // $15000+ address) once the project's real setting was something
+      // other than what this used to force it to. Only bumped up (and
+      // ONLY the text, since this throwaway preview never gets saved/
+      // exported, so nothing depends on it matching the project's real
+      // cartridge size) when the project's setting genuinely doesn't have
+      // room for the title screen kernel's bank at all (2k/4k/8k - not
+      // bankswitched, or bankswitched with fewer than 3 banks) - \r?
+      // before the end anchor is required, not optional tidiness -
+      // bbasic.bb.hbs (the template this line comes from) is saved with
+      // CRLF line endings, so without it \S+$ silently fails to match at
+      // all (confirmed directly against a plain "\n" test string, which
+      // matched fine, vs the real "\r\n" content, which didn't).
+      const config = configurationStorage.value || {};
+      if ((BANK_COUNT_BY_ROMSIZE[config.romSize] || 0) < 3) {
+        code = code.replace(/^(\s*set romsize )(\S+)(\r?)$/m,
+            (full, prefix, value, cr) => `${prefix}16k${/SC$/i.test(value) ? 'SC' : ''}${cr}`);
+      }
     } catch (e) {
       appendCompileLog('Failed to generate the preview bBasic code.', 'error');
       showError(errorStorage, 'Error while generating title screen preview code', code, e);
@@ -1477,12 +1529,21 @@ export const buildTitleScreenPreviewRom = async (screenId) => {
     }
     try {
       errorStorage.value = '';
-      // No text minikernel/score font override siblings here (see
+      // No text minikernel/custom score font override siblings here (see
       // buildRomInner's much longer equivalent block above) - this
-      // synthetic program has no text/score blocks at all, so
-      // BlocklyBB.isTextMinikernelActive() is always false for it regardless
-      // of what the real project uses. Only the Title Screen Kernel's
-      // siblings are ever actually needed.
+      // synthetic program has no text/score blocks at all, so BlocklyBB.
+      // isTextMinikernelActive() is always false for it regardless of what
+      // the real project uses, and there's no user-edited score font to
+      // splice in - bB's stock score_graphics.asm is left as-is rather
+      // than overridden with getExtendedScoreGraphics() the way
+      // buildRomInner's default path does. An earlier version of this
+      // forced the extended file unconditionally, on the theory that the
+      // stock file didn't fit this toolchain's bank layout - confirmed
+      // directly (by line count) as the wrong fix instead: the extended
+      // file is 2924 lines against the stock file's 207, adding many more
+      // ALWAYS-compiled symbol tables (hex/dollar/pound/etc.) regardless of
+      // which font is selected, not just the chosen font's digits - real
+      // extra ROM bytes that made bank 3's overflow worse, not better.
       const siblingFiles = {};
       if (BlocklyBB.titleScreenUsedKernelKeys) {
         Object.assign(siblingFiles, await getTitleScreenSiblingFiles(BlocklyBB.titleScreenUsedKernelKeys));
@@ -1501,6 +1562,7 @@ export const buildTitleScreenPreviewRom = async (screenId) => {
           gopher2600.setKeypadMode('left', false);
           gopher2600.setKeypadMode('right', false);
         });
+        recordLoadedRomForRecovery(compiledResult.output);
       } catch (previewError) {
         console.error('gopher2600-wasm: failed to load the title screen preview ROM into the emulator ' +
           '(the ROM itself compiled successfully) - try "Refresh emulator":', previewError);

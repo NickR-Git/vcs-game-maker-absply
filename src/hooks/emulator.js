@@ -1,28 +1,35 @@
 'use strict';
 
-import {useCompiledRomBytes} from './rom-status';
+import {useLastLoadedRomBytes} from './rom-status';
 
 // public/index.html's own loadGopher2600Wasm() fires this every time a
-// window.gopher2600 instance becomes ready - both the real first page load
-// (nothing to restore yet, useCompiledRomBytes().value is still null then)
-// and every automatic reinstantiation after a fatal WASM trap (see that
-// function's own comment on why a crash can't be recovered from inside the
-// dead instance itself). A fresh instance boots with no ROM attached, so
-// without this, "Reset"/every other panel switch stayed visibly dead after
-// a crash even though the auto-recovery had already silently replaced
-// window.gopher2600 with a working instance underneath - confirmed
-// directly as a real reported symptom ("hitting reset doesn't fix the
-// issue"). BlocklyBB.keypad0Used/keypad1Used (see hooks/rom.js's own
-// loadRom call) aren't re-applied here - they're a property of the
-// CURRENT workspace's compiled code, not of the ROM bytes themselves, and
-// re-deriving them here would need the whole compile pipeline re-run; the
-// keypad mode a fresh instance boots with (off) matches a real console
-// being power-cycled anyway, and the next real "Update ROM" click
-// reapplies it correctly regardless.
+// window.gopher2600 instance becomes ready - the real first page load
+// (nothing to restore yet, unless a previous page load in this same tab
+// session left something behind - see rom-status.js's sessionStorage
+// restore, which runs before this listener can ever fire), every automatic
+// reinstantiation after a fatal WASM trap (see that function's own comment
+// on why a crash can't be recovered from inside the dead instance itself),
+// and a real full page reload (App.vue's handleRefreshEmulator). A fresh
+// instance boots with no ROM attached, so without this, "Reset"/every other
+// panel switch stayed visibly dead after a crash even though the
+// auto-recovery had already silently replaced window.gopher2600 with a
+// working instance underneath - confirmed directly as a real reported
+// symptom ("hitting reset doesn't fix the issue"). Reads whatever was last
+// successfully loaded, from either a real "Update ROM" build or a Title
+// Screen preview build, not just the real build's compiledRomBytes -
+// otherwise a page reload while a preview was showing came back up blank
+// instead of showing what was actually on screen a moment ago.
+// BlocklyBB.keypad0Used/keypad1Used (see hooks/rom.js's own loadRom call)
+// aren't re-applied here - they're a property of the CURRENT workspace's
+// compiled code, not of the ROM bytes themselves, and re-deriving them here
+// would need the whole compile pipeline re-run; the keypad mode a fresh
+// instance boots with (off) matches a real console being power-cycled
+// anyway, and the next real "Update ROM" click reapplies it correctly
+// regardless.
 window.addEventListener('gopher2600-ready', () => {
-  const compiledRomBytes = useCompiledRomBytes();
-  if (!compiledRomBytes.value) return;
-  withGopher2600((gopher2600) => gopher2600.loadRom(compiledRomBytes.value.output));
+  const lastLoadedRomBytes = useLastLoadedRomBytes();
+  if (!lastLoadedRomBytes.value) return;
+  withGopher2600((gopher2600) => gopher2600.loadRom(lastLoadedRomBytes.value));
 });
 
 // Waits for tools/gopher2600-wasm's window.gopher2600 API to exist - its WASM

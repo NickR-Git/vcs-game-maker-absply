@@ -151,7 +151,7 @@ import {defineComponent, reactive, computed, onMounted} from '@vue/composition-a
 import {saveAs} from 'file-saver';
 import YAML from 'yaml';
 
-import {appendCompileLog, useBackgroundsStorage, useConfigurationStorage, useDataTablesStorage, usePlayerAnimationsStorage, useProjectAutoIncrementVersionStorage, useScoreFontStorage, useSongsStorage, useSoundEffectsStorage, useSquishCustomScoreFontStorage, useTextFontStorage, useTextStringsStorage, useWorkspaceStorage} from '../hooks/project';
+import {appendCompileLog, useBackgroundsStorage, useConfigurationStorage, useDataTablesStorage, usePlayerAnimationsStorage, useProjectAutoIncrementVersionStorage, useScoreFontStorage, useSongsStorage, useSoundEffectsStorage, useSquishCustomScoreFontStorage, useTextFontStorage, useTextStringsStorage, useTitleScreenStorage, useWorkspaceStorage} from '../hooks/project';
 import {combineLegacyPlayerAnimations, remapPlayer1AnimationIndexesInWorkspaceXml} from '../hooks/migrate-player-animations';
 import {migrateLegacyPlayerBlocksInWorkspaceXml} from '../hooks/migrate-player-blocks';
 import {migrateLegacyBounceBlocksInWorkspaceXml} from '../hooks/migrate-bounce-blocks';
@@ -240,6 +240,7 @@ export default defineComponent({
     const textFontStorage = useTextFontStorage();
     const soundEffectsStorage = useSoundEffectsStorage();
     const songsStorage = useSongsStorage();
+    const titleScreenStorage = useTitleScreenStorage();
 
     // Kept directly on the same configuration bag every other project-wide
     // setting already lives in (scoreBkColor, textBkColor, etc. - see
@@ -318,8 +319,8 @@ export default defineComponent({
 
     return {data, router, backgroundsStorage, playerAnimationsStorage,
       workspaceStorage, configurationStorage, scoreFontStorage, squishCustomScoreFontStorage, dataTablesStorage,
-      textStringsStorage, textFontStorage, soundEffectsStorage, songsStorage, projectTitle, projectDescription,
-      projectDeveloper, projectVersion, projectAutoIncrementVersion, projectWebsite, projectEmail};
+      textStringsStorage, textFontStorage, soundEffectsStorage, songsStorage, titleScreenStorage, projectTitle,
+      projectDescription, projectDeveloper, projectVersion, projectAutoIncrementVersion, projectWebsite, projectEmail};
   },
   methods: {
     // Bumps the last dot-separated segment of the version string (e.g.
@@ -385,6 +386,23 @@ export default defineComponent({
         cursor: this.textFontStorage.cursor ? matrixToPlayfield(this.textFontStorage.cursor) : undefined,
       };
 
+      // Was never wired into save/load at all, same gap "songs" fell into
+      // (see that comment below) - a saved .vcsgm silently dropped every
+      // Title tab page/graphic, confirmed as a real reported bug. Only
+      // bitmap-type cards (48x1/48x2/96x2) have frames at all - space/
+      // player/score cards pass through untouched, same reasoning
+      // preparePlayerSave's frame mapping doesn't need for THOSE types.
+      const titleScreen = !this.titleScreenStorage ? null : {
+        ...this.titleScreenStorage,
+        screens: this.titleScreenStorage.screens.map((screen) => ({
+          ...screen,
+          cards: (screen.cards || []).map((card) => !card.frames ? card : ({
+            ...card,
+            frames: card.frames.map((frame) => ({...frame, pixels: matrixToPlayfield(frame.pixels)})),
+          })),
+        })),
+      };
+
       const projectYaml = YAML.stringify({
         'type': FORMAT_TYPE,
         'format-version': FORMAT_VERSION,
@@ -401,6 +419,7 @@ export default defineComponent({
         'blockly-workspace': this.workspaceStorage,
         'player-animations': playerAnimations,
         backgrounds,
+        'title-screen': titleScreen,
         'score-font': scoreFont,
         'squish-custom-score-font': squishCustomScoreFont,
         'data-tables': this.dataTablesStorage,
@@ -826,6 +845,20 @@ export default defineComponent({
         this.backgroundsStorage = backgrounds;
       }
 
+      if (project['title-screen']) {
+        const titleScreen = {
+          ...project['title-screen'],
+          screens: project['title-screen'].screens.map((screen) => ({
+            ...screen,
+            cards: (screen.cards || []).map((card) => !card.frames ? card : ({
+              ...card,
+              frames: card.frames.map((frame) => ({...frame, pixels: playfieldToMatrix(frame.pixels)})),
+            })),
+          })),
+        };
+        this.titleScreenStorage = titleScreen;
+      }
+
       if (project.configuration) {
         this.configurationStorage = project.configuration;
       }
@@ -874,6 +907,7 @@ export default defineComponent({
       this.workspaceStorage = null;
       this.playerAnimationsStorage = null;
       this.backgroundsStorage = null;
+      this.titleScreenStorage = null;
       this.scoreFontStorage = null;
       this.squishCustomScoreFontStorage = null;
       this.dataTablesStorage = null;

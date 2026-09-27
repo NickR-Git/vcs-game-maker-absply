@@ -1027,13 +1027,25 @@ export default {
     // WASM module itself crashing - see gopher2600-wasm's onAnimationFrame,
     // which recovers panics in the render loop but not a fatal WASM trap).
     // A full reload is the one guaranteed way to get a fresh instance.
-    // Project data lives in localStorage and survives this; the compiled ROM
-    // and the Generated tab's in-memory code ref don't, so the user
-    // needs to click "Update ROM" again afterward. Deliberately NOT done
-    // automatically here: if a bad ROM is itself what crashed the emulator,
-    // auto-rebuilding it the moment the page comes back up would just
-    // re-trigger the same crash immediately, soft-locking the user out of
-    // ever seeing a stable page to fix the project from.
+    // Project data lives in localStorage and survives this. Whatever ROM
+    // was actually showing on screen (a real "Update ROM" build or a Title
+    // Screen preview build) survives too - see rom-status.js's
+    // recordLoadedRomForRecovery/sessionStorage restore, and emulator.js's
+    // 'gopher2600-ready' listener that re-flashes it into the fresh
+    // instance - so the emulator picks back up showing the same graphics
+    // instead of coming back up blank. Only the Generated tab's in-memory
+    // code ref and the real build's Save ROM/Test in Stella state
+    // (compiledRomBytes/hasCompiledRom - deliberately NOT persisted, since
+    // after a reload there's no way to tell whether the last thing shown
+    // was a real build or a synthetic preview) don't survive, so the user
+    // needs to click "Update ROM" again to re-enable those specifically.
+    // Re-flashing the same already-successfully-loaded bytes here (rather
+    // than auto-rebuilding) is deliberate: if a bad ROM's RUNTIME behavior
+    // is itself what crashed the emulator, re-running the compiler the
+    // moment the page comes back up would risk re-triggering the same crash
+    // immediately, soft-locking the user out of ever seeing a stable page
+    // to fix the project from - reloading known-good bytes into a fresh
+    // instance carries no such risk.
     handleRefreshEmulator() {
       window.location.reload();
     },
@@ -1134,7 +1146,7 @@ export default {
    override without !important would otherwise just lose a specificity tie
    to a same-specificity rule that happens to be loaded after this one). */
 .desaturate-app-colors .theme--light.v-card {
-  background-color: #ebebeb !important;
+  background-color: #e6e6e6 !important;
 }
 
 .desaturate-app-colors.v-application,

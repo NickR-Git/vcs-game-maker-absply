@@ -21,9 +21,12 @@
         :class="{
           'quick-color-swatch-selected': value === byte,
           'quick-color-swatch-delete-armed': isAltHeld && hoveredByte === byte,
+          ...dragCardClass(quickIndex),
         }"
         :style="{backgroundColor: cssColor(byte)}"
-        :title="`${bbasicLiteral(byte)} — click to select for painting row colors, alt-click to remove`"
+        :title="`${bbasicLiteral(byte)} — click to select for painting row colors, drag to reorder, alt-click to remove`"
+        v-bind="dragAttrs()"
+        v-on="{...dragHandleListeners(quickIndex), ...dragTargetListeners(quickIndex)}"
         @click="(event) => handleClickSwatch(byte, event)"
         @mouseenter="hoveredByte = byte"
         @mouseleave="hoveredByte = null"
@@ -65,6 +68,8 @@
 import {computed, defineComponent, onMounted, onUnmounted, ref} from '@vue/composition-api';
 
 import {useCollapsedIds} from '../hooks/collapse';
+import {useDragReorder} from '../hooks/drag-reorder';
+import {recordQuickColorDeletion} from '../hooks/quick-color-undo';
 import {useColorPaletteStorage} from '../hooks/project';
 import {colorByteToBBasic, colorByteToCss, NTSC_COLORS} from '../utils/palette';
 
@@ -95,6 +100,13 @@ export default defineComponent({
   name: 'QuickColorPalette',
   props: {
     value: {type: Number, default: null},
+    // The currently focused frame's pixel editor instance, if any (same
+    // value each tab already passes to GraphicEditorToolbar's
+    // active-editor prop) - only used to snapshot its undo history length
+    // at the moment a swatch is deleted, so the toolbar's Undo button can
+    // later tell whether that same frame has been drawn on since (see
+    // hooks/quick-color-undo.js).
+    activeEditor: {type: Object, default: null},
   },
   setup(props, {emit}) {
     const paletteStorage = useColorPaletteStorage();
@@ -104,9 +116,26 @@ export default defineComponent({
       paletteStorage.value = [...palette.value, byte];
     };
     const handleRemoveColor = (byte) => {
-      paletteStorage.value = palette.value.filter((existing) => existing !== byte);
+      const index = palette.value.indexOf(byte);
+      if (index === -1) return;
+      paletteStorage.value = palette.value.filter((existing, i) => i !== index);
       if (props.value === byte) emit('input', null);
+      recordQuickColorDeletion({
+        byte, index, paletteStorage,
+        undoStackLength: props.activeEditor && props.activeEditor.editor && props.activeEditor.editor.history ?
+          props.activeEditor.editor.history.undoStack.length : null,
+      });
     };
+
+    // Drag a swatch onto another to move it there - same hook every other
+    // reorderable list in this app uses (see hooks/drag-reorder.js), writing
+    // straight back to the shared palette storage so the new order is
+    // immediately visible on every tab this component appears on, same as
+    // adding/removing a color already is.
+    const {dragAttrs, dragCardClass, dragHandleListeners, dragTargetListeners} =
+      useDragReorder(() => palette.value, (next) => {
+        paletteStorage.value = next;
+      });
 
     const {isCollapsed, toggleCollapsed: toggleCollapsedEntry} = useCollapsedIds('player-quick-colors');
     const collapsed = computed(() => isCollapsed(COLLAPSE_ENTRY));
@@ -156,6 +185,7 @@ export default defineComponent({
 
     return {
       palette, handleAddColor, handleRemoveColor,
+      dragAttrs, dragCardClass, dragHandleListeners, dragTargetListeners,
       collapsed, toggleCollapsed,
       isAltHeld, hoveredByte, handleClickSwatch,
       ntscPalette: NTSC_COLORS, cssColor: colorByteToCss, bbasicLiteral: colorByteToBBasic,
@@ -209,6 +239,21 @@ export default defineComponent({
 .quick-color-swatch:hover {
   outline: 2px solid #1976d2;
   outline-offset: -2px;
+}
+
+/* Same hooks/drag-reorder.js classes every other reorderable list in this
+   app uses, styled for a horizontally-wrapping row of swatches instead of a
+   vertical stack of cards - a left border (this list's drop target always
+   lands BEFORE the swatch it's dropped on, same as the shared hook's other
+   callers) reads as "insert here" the way a top border does for a card
+   list, without eating into this tiny swatch's visible color square the
+   way shrinking it to fit an outline would. */
+.quick-color-swatch.drag-reorder-dragging {
+  opacity: 0.4;
+}
+
+.quick-color-swatch.drag-reorder-over {
+  border-left: 3px solid var(--v-primary-base, #1976d2);
 }
 
 /* The currently-armed color - a visibly bolder/thicker outline than the

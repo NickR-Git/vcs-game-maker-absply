@@ -61,6 +61,7 @@ import {isMatrixEqual} from '../utils/array';
 import {getDateInfix} from '../utils/date';
 import {loadImageFromFile, openFileDialog} from '../utils/file';
 import {createResizedCanvas} from '../utils/image';
+import {usePixelTool} from '../hooks/pixel-tool';
 import {resizePixelMatrixHeight} from '../utils/pixels';
 
 export default {
@@ -101,14 +102,24 @@ export default {
     return {
       pencil: new Pencil(this.fgColor),
       eraser: new Pencil(this.bgColor),
-
-      // 'pencil' or 'eraser' - which tool is currently active. Read
-      // externally by GraphicEditorToolbar.vue (its own activeTool
-      // computed) to highlight the right one on the shared toolbar, and set
-      // externally via setTool() below - this instance no longer renders
-      // its own Eraser/Pencil buttons at all (see setTool's own comment).
-      toggledTool: 'pencil',
     };
+  },
+  computed: {
+    // 'pencil' or 'eraser' - which tool is currently active, shared across
+    // every PixelEditor.vue instance (see hooks/pixel-tool.js's comment
+    // for why this moved out of per-instance data()). Read externally by
+    // GraphicEditorToolbar.vue's activeTool computed to highlight the
+    // right one on the shared toolbar, and set externally via setTool()
+    // below - this instance no longer renders its Eraser/Pencil buttons
+    // at all (see setTool's comment).
+    toggledTool: {
+      get() {
+        return usePixelTool().value;
+      },
+      set(value) {
+        usePixelTool().value = value;
+      },
+    },
   },
   mounted() {
     this.initEditor(this.value.length, this.value);
@@ -122,6 +133,18 @@ export default {
     this.teardownGridOverlay();
   },
   watch: {
+    // Keeps THIS instance's underlying editor.tool object (a real
+    // Pencil, colored with this instance's fgColor/bgColor - see
+    // data()) in sync with the shared toggledTool (hooks/pixel-tool.js) at
+    // all times, not just at construction - without this, an already-
+    // mounted-but-not-currently-focused instance (e.g. a different card's
+    // frame) kept whatever tool object it was built or last explicitly
+    // setTool()'d with, so clicking Eraser on frame A then clicking INTO
+    // frame B still drew with frame B's stale Pencil until Eraser was
+    // clicked again there too - exactly the bug being fixed here.
+    toggledTool(toolName) {
+      if (this.editor) this.editor.tool = toolName === 'eraser' ? this.eraser : this.pencil;
+    },
     // Recolor the existing pixels when the row colors change (e.g. the user
     // picks a new color in the strip) without disturbing the drawn shape.
     rowColors() {
@@ -436,7 +459,13 @@ export default {
     initEditor(rowCount, pixelMatrix) {
       const canvas = this.$refs.editor;
       const history = this.editor ? this.editor.history : undefined;
-      this.editor = new PixelEditor(canvas, this.width, rowCount, this.pencil, history);
+      // Starts already matching the shared toggledTool (see
+      // hooks/pixel-tool.js) instead of hardcoding Pencil - without this, a
+      // freshly built/resized editor's underlying tool object silently
+      // stayed Pencil even while Eraser showed selected on the shared
+      // toolbar, until setTool() was called again to actually apply it.
+      const initialTool = this.toggledTool === 'eraser' ? this.eraser : this.pencil;
+      this.editor = new PixelEditor(canvas, this.width, rowCount, initialTool, history);
       this.setPixels(pixelMatrix);
       this.handleMouse();
       // Row count (this.editor.height) is what the grid overlay actually

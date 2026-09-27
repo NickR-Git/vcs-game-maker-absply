@@ -16,6 +16,7 @@
           <color-swatch-picker
             :value="textBkColor"
             :allow-clear="false"
+            square
             title="Click to set the Text Minikernel's message background color"
             @input="(byte) => (textBkColor = byte)"
           />

@@ -106,8 +106,10 @@
               </v-menu>
             </div>
           </template>
+          <template v-if="pfColorsEnabled" v-slot:below-tools>
+            <quick-color-palette v-model="selectedQuickColor" :active-editor="effectiveEditor" />
+          </template>
         </graphic-editor-toolbar>
-        <quick-color-palette v-if="pfColorsEnabled" v-model="selectedQuickColor" />
         <v-list
           class="background-list"
           :style="{gridTemplateColumns: `repeat(auto-fill, calc(${editorWidth} + 24px))`}"

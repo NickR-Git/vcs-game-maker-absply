@@ -654,7 +654,7 @@ const generateTitleScreenAnimationChecks = (Blockly, cardAnimationByRef) => {
   }).join('\n\n') + '\n';
 };
 
-const TITLE_SCREEN_SUBROUTINE_NAME = '_titlescreen_system';
+export const TITLE_SCREEN_SUBROUTINE_NAME = '_titlescreen_system';
 
 // Called from bbasic.js's  init(), right after reserveDevVar hands out
 // selectedIdVarName - same timing/reasoning as generators/bbasic/input.js's
