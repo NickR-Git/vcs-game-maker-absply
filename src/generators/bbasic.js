@@ -35,6 +35,8 @@ import {canonicalDistanceVarName, distancePointVarName} from '../utils/distance'
 import {superchipRwFreeCount} from '../utils/playfield-coords';
 import {keypadKeyVarName} from '../utils/keypad';
 import {registerTitleScreenSubroutine} from './bbasic/titlescreen';
+import {resolveAnimatedTitleScreenCardRefs, titleCardFrameCounterVarName,
+  titleCardScrollOffsetVarName} from '../blocks/titlescreen';
 import {registerKeypadPollSubroutine, generateJoystickDirection8Table,
   reserveJoystickDirection8DevVars, generateJoystickDirection8Checks,
   reserveJoystickButtonDevVars, reserveJoystickDoubleTapDevVars,
@@ -1320,6 +1322,28 @@ Blockly.BBasic.init = function(workspace) {
   if (this.titleScreenDrawUsed) {
     this.titleScreenSelectedIdVarName = reserveDevVar(
         'titleScreenSelectedId', undefined, 'Which Title Screen page to draw next');
+
+    // Every animated Title Screen card (more than one frame - see
+    // isCardAnimated's own comment in blocks/titlescreen.js) needs a
+    // duration-tick counter dev var reserved here, by "screenId:cardId" ref
+    // (not by resolved kernel slot key, which registerTitleScreenSubroutine
+    // doesn't compute until later - see titleCardFrameCounterVarName's own
+    // comment). Cards also targeted by a "Set title screen scroll position"
+    // block get a second, scroll-offset var too - titleScreenScrollTargetRefs
+    // is stashed here (not just used locally) so registerTitleScreenSubroutine
+    // and titlescreen_scroll_set's own generator (both run later) know which
+    // refs actually got one, without re-scanning the workspace themselves.
+    this.titleScreenScrollTargetRefs = new Set(workspace.getAllBlocks(false)
+        .filter((block) => block.type === 'titlescreen_scroll_set')
+        .map((block) => block.getFieldValue('CARD')));
+    resolveAnimatedTitleScreenCardRefs().forEach((ref) => {
+      reserveDevVar(titleCardFrameCounterVarName(ref), undefined,
+          'title screen card animation: duration-tick counter');
+      if (this.titleScreenScrollTargetRefs.has(ref)) {
+        reserveDevVar(titleCardScrollOffsetVarName(ref), undefined,
+            'title screen card animation: scroll offset within the current frame');
+      }
+    });
   }
 
   // Same bucket again, for "Background get pixel" blocks'  X/Y scratch
@@ -2560,6 +2584,12 @@ Blockly.BBasic.finish = function(code) {
   const generatedAnimations = Blockly.BBasic.generateAnimations();
   const generatedDataTables = Blockly.BBasic.generateDataTables(1);
   const generatedRomNoiseChecks = generateRomNoiseChecks(Blockly);
+  // Built earlier, during init() (see registerTitleScreenSubroutine in
+  // generators/bbasic/titlescreen.js) - not a generate*() call here like
+  // its neighbors, since it needs cardAnimationByRef (kernel slot keys,
+  // frame heights/durations), which only exists in that function's own
+  // scope. Empty string when no Title Screen card is actually animated.
+  const generatedTitleScreenAnimationChecks = Blockly.BBasic.titleScreenAnimationChecks || '';
   const generatedRainbowColorGraphics = generateRainbowColorGraphics(Blockly);
   const generatedRainbowColorChecks = generateRainbowColorChecks(Blockly);
   const generatedMissileFireChecks = generateMissileFireChecks(Blockly);
@@ -2676,7 +2706,7 @@ Blockly.BBasic.finish = function(code) {
   const generatedBody = definitions.filter((definition) => definition.trim() !== '').join('\n\n') +
     '\n\n\n' + code;
   return handlebarsTemplate({generatedBody, generatedBackgrounds,
-    generatedAnimations, generatedDataTables, generatedRomNoiseChecks,
+    generatedAnimations, generatedDataTables, generatedRomNoiseChecks, generatedTitleScreenAnimationChecks,
     generatedRainbowColorGraphics, generatedRainbowColorChecks, generatedMissileFireChecks,
     generatedSeekChecks, generatedInertiaChecks, generatedShakeScreenChecks,
     generatedTextOffsetTables, generatedTextStaticOffsetTables, generatedTextRow2OffsetsTable, generatedJoyDir8Table,

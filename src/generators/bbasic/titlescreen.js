@@ -1,7 +1,8 @@
 'use strict';
 
 import {TITLE_SCREEN_KERNEL_TYPES, MAX_KERNEL_COPIES_PER_TYPE,
-  processTitleScreenStorageDefaults} from '../../blocks/titlescreen';
+  processTitleScreenStorageDefaults, isCardAnimated,
+  titleCardFrameCounterVarName, titleCardScrollOffsetVarName} from '../../blocks/titlescreen';
 import {useTitleScreenStorage, usePlayerAnimationsStorage,
   useConfigurationStorage} from '../../hooks/project';
 import {processPlayerAnimationsStorageDefaults} from './sprites';
@@ -29,18 +30,36 @@ const toHexByte = (n) => `$${(n & 0xff).toString(16).padStart(2, '0')}`;
 // One card's  image data block, in the exact format the Titlescreen
 // Kernel's own *_image.asm files use (see public/bb19/titlescreen/ - this
 // mirrors 48x1_N_image.asm/48x2_N_image.asm/96x2_N_image.asm exactly,
-// generated instead of hand-edited). window defaults to the full image
-// height (the whole image shown, no scrolling) unless the card has its own
-// scrollWindow set smaller - see card.scrollWindow's  comment in
-// blocks/titlescreen.js for the runtime scroll-index byte this also
-// declares in that case (bmp_${key}_index, read directly by the kernel's
-// own per-copy asm via "ifconst").
+// generated instead of hand-edited), extended to stack every one of the
+// card's own animation frames (see cardFrameHeight/isCardAnimated's own
+// comment in blocks/titlescreen.js) into one tall image, frame 0's rows
+// first - the exact same "flatten every frame into one tall table, height
+// rows apart per frame" approach buildPlayerDataAsm below already uses for
+// the "player" minikernel's own animation frames, just applied to a real
+// bitmap card's pixel/row-color data instead of GRP0/GRP1 bytes. window
+// defaults to one frame's height (the whole current frame shown, no
+// scrolling) unless the card has its own scrollWindow set smaller - see
+// card.scrollWindow's  comment in blocks/titlescreen.js for the runtime
+// scroll-offset byte this also declares in that case (bmp_${key}_index,
+// read directly by the kernel's  own per-copy asm via "ifconst").
 const buildCardDataAsm = (card, key, typeInfo) => {
   const {blockCount, doubleLine, hasRowColors} = typeInfo;
-  const rows = card.pixels && card.pixels.length ? card.pixels : [new Array(typeInfo.width).fill(0)];
+  const frames = card.frames && card.frames.length ? card.frames :
+    [{pixels: [new Array(typeInfo.width).fill(0)]}];
+  const frameHeight = (frames[0].pixels && frames[0].pixels.length) || 1;
+  // Every frame is padded/truncated to the FIRST frame's  height (same
+  // "frames must be a uniform height" convention buildPlayerDataAsm/
+  // resolvePlayerSlotFrames below already enforce) - the editor's own
+  // "Resize all frames" tool is the only way frames ever change height, so
+  // this only ever actually trims/pads a hand-edited/imported project file
+  // that skipped that tool.
+  const rows = frames.flatMap((frame) => {
+    const framePixels = frame.pixels || [];
+    return Array.from({length: frameHeight}, (_, i) => framePixels[i] || new Array(typeInfo.width).fill(0));
+  });
   const height = rows.length;
   const scrollWindow = Number(card.scrollWindow) || 0;
-  const windowHeight = (scrollWindow > 0 && scrollWindow < height) ? scrollWindow : height;
+  const windowHeight = (scrollWindow > 0 && scrollWindow < frameHeight) ? scrollWindow : frameHeight;
   // The kernel reads each column-block's  bytes bottom-to-top (same
   // reasoning as the row-colors list just below) - without reversing here
   // too, the image drew upside down: pixel rows and row colors both come
@@ -57,13 +76,16 @@ const buildCardDataAsm = (card, key, typeInfo) => {
   ];
 
   // A real, writable RAM byte (not a compile-time constant, same reasoning
-  // as titlescreencolor - see registerTitleScreenSubroutine's  comment)
-  // - only declared when this card is actually scrolling (window smaller
-  // than the full image), matching the per-copy kernel file's own
-  // "ifconst bmp_TYPE_N_index" check, which skips the extra subtraction
-  // entirely when a card never scrolls. Referenced directly by name (no
-  // "dim" needed) from the "Set title screen scroll position" block's own
-  // generator, the same way titlescreen_draw already references
+  // as titlescreencolor - see registerTitleScreenSubroutine's  comment) -
+  // only declared when this card actually needs one: either it's scrolling
+  // (window smaller than one frame) or it's animated (more than one frame,
+  // always needing an index to switch between them - see
+  // generateTitleScreenAnimationChecks below) - matching the per-copy
+  // kernel file's own "ifconst bmp_TYPE_N_index" check, which skips the
+  // extra subtraction entirely when a card never needs one at all.
+  // Referenced directly by name (no "dim" needed) from the "Set title
+  // screen scroll position" block's own generator and the animation checks
+  // below, the same way titlescreen_draw already references
   // titlescreencolor directly.
   if (windowHeight < height) {
     lines.push(
@@ -76,7 +98,13 @@ const buildCardDataAsm = (card, key, typeInfo) => {
     // The color list is read bottom-to-top by the kernel (see e.g.
     // 48x2_1_image.asm's own "in reverse order" comment) - reversed here
     // so the UI's  top-to-bottom row color list doesn't need to think
-    // about that.
+    // about that. Stacked the same frame-0-first order as the pixel rows
+    // above, one frame's own rowColors (padded/truncated to frameHeight,
+    // same as pixels) right after the previous frame's.
+    const rowColors = frames.flatMap((frame) => {
+      const frameColors = frame.rowColors || [];
+      return Array.from({length: frameHeight}, (_, i) => frameColors[i] ?? 0);
+    });
     lines.push(
         `   if >. != >[.+(bmp_${key}_height)]`,
         '      align 256',
@@ -84,12 +112,14 @@ const buildCardDataAsm = (card, key, typeInfo) => {
         ' BYTE 0 ; leave this here!',
         '',
         `bmp_${key}_colors`,
-        ...[...(card.rowColors || [])].reverse().map((color) => `\tBYTE ${toHexByte(color)}`),
+        ...[...rowColors].reverse().map((color) => `\tBYTE ${toHexByte(color)}`),
     );
   }
 
   if (!doubleLine) {
-    // 48x1 only - a single fixed color for the whole image, no per-row list.
+    // 48x1 only - a single fixed color for the whole card (every frame,
+    // not per-frame - see cardFrameHeight's own comment in
+    // blocks/titlescreen.js for why), no per-row list.
     lines.push(
         `bmp_${key}_color`,
         `\t.byte ${toHexByte(card.color || 0)}`,
@@ -121,7 +151,7 @@ const buildCardDataAsm = (card, key, typeInfo) => {
     );
   }
 
-  return lines.join('\n');
+  return {code: lines.join('\n'), frameHeight, frameCount: frames.length, frameDurations: frames.map((f) => f.duration || 1)};
 };
 
 // Resolves a "player" card's  player0Animation/player1Animation field
@@ -269,6 +299,15 @@ const assignKernelSlots = (screens) => {
   // the screen+card the user picked from its  dropdown, not which
   // physical kernel copy that resolved to this build.
   const cardSlotsByRef = {};
+  // Same "screenId:cardId" keying as cardSlotsByRef above, but only for
+  // cards with more than one animation frame - read by
+  // generateTitleScreenAnimationChecks below (via registerTitleScreenSubroutine)
+  // to build each animated card's own per-frame duration-counter/index-write
+  // code, and by the "Set title screen scroll position" block's own
+  // generator, to know whether it needs to write to that card's dedicated
+  // scroll-offset var (see reserveTitleScreenAnimationDevVars in
+  // generators/bbasic.js) instead of straight to bmp_${key}_index.
+  const cardAnimationByRef = {};
 
   screens.forEach((screen) => {
     const layoutLines = [];
@@ -308,8 +347,13 @@ const assignKernelSlots = (screens) => {
       const key = `${card.type}_${slot}`;
       usedKernelKeys.add(key);
       layoutLines.push(` draw_${key}`);
-      dataBlocks.push(buildCardDataAsm(card, key, typeInfo));
-      cardSlotsByRef[`${screen.id}:${card.id}`] = key;
+      const {code, frameHeight, frameCount, frameDurations} = buildCardDataAsm(card, key, typeInfo);
+      dataBlocks.push(code);
+      const ref = `${screen.id}:${card.id}`;
+      cardSlotsByRef[ref] = key;
+      if (isCardAnimated(card)) {
+        cardAnimationByRef[ref] = {key, frameHeight, frameCount, frameDurations};
+      }
     });
 
     screenPlans.push({
@@ -320,7 +364,8 @@ const assignKernelSlots = (screens) => {
     });
   });
 
-  return {usedKernelKeys, dataBlocks, screenPlans, cardSlotsByRef, hasPlayerCard, playerHeights, hasScoreCard};
+  return {usedKernelKeys, dataBlocks, screenPlans, cardSlotsByRef, cardAnimationByRef,
+    hasPlayerCard, playerHeights, hasScoreCard};
 };
 
 // Every internal label the driver body below defines gets an "@" prefix -
@@ -539,6 +584,78 @@ const buildDriverAsm = (selectedIdVarName, screenPlans, usedKernelKeys, hasPlaye
   return lines.join('\n');
 };
 
+// Per-frame code for every animated card (more than one frame - see
+// isCardAnimated's own comment in blocks/titlescreen.js), spliced into
+// commongamelogic (see generators/bbasic.bb.hbs's own
+// generatedTitleScreenAnimationChecks placement, right alongside the
+// background-fade/seek/etc. checks) so playback advances every real frame
+// regardless of where the project's own "Draw title screen" block happens
+// to sit - background_fade_to hit a real bug from NOT doing this (stalling
+// when triggered from inside an "if", since a trigger's own code only
+// re-runs while that condition holds - see emitColorFadeTrigger's own
+// comment in generators/bbasic/background.js), so this follows that same
+// "always-run check, not tied to the trigger's own placement" shape from
+// the start instead of risking the same class of bug.
+//
+// Each card's own counter (titleCardFrameCounterVarName) ticks up once per
+// real frame and wraps at the animation's total duration (sum of every
+// frame's own duration), exactly like a Player sprite's own player0frame
+// (see processAnimation's own stateMachine/frameLimit in generators/
+// bbasic.js) - reusing that same proven cumulative-duration-threshold
+// approach, just landing on a plain NUMBER (temp1, this card's resolved
+// frame index) instead of jumping into inline per-frame graphic code the
+// way sprites need to (a title card's graphic data is already a plain
+// data table, nothing to jump into). temp1 is safe as scratch here the same
+// way it already is everywhere else in this codebase (see e.g.
+// sprite_player_set's own width-conversion branch in this same file's
+// sibling generators/bbasic/sprites.js) - written and consumed within this
+// one uninterrupted block, never left live across a drawscreen call.
+//
+// The final index write optionally adds this card's own scroll-offset var
+// (only for cards actually targeted by a "Set title screen scroll position"
+// block - see titleScreenScrollTargetRefs' own comment at its bbasic.js
+// call site) - bmp_${key}_index already means "row offset from the top of
+// the FULL stacked image" (see buildCardDataAsm's own comment), and frame
+// index * frameHeight already lands exactly on that frame's own first row
+// in that same stacked table, so adding a small scroll offset on top slides
+// the visible window WITHIN whichever frame is currently showing, without
+// the two ever needing to know about each other beyond this one shared sum.
+const generateTitleScreenAnimationChecks = (Blockly, cardAnimationByRef) => {
+  const refs = Object.keys(cardAnimationByRef);
+  if (!refs.length) return '';
+  const scrollTargetRefs = Blockly.BBasic.titleScreenScrollTargetRefs || new Set();
+  const resolveVar = (canonicalName) =>
+    Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+  return refs.map((ref) => {
+    const {key, frameHeight, frameDurations} = cardAnimationByRef[ref];
+    const counterVar = resolveVar(titleCardFrameCounterVarName(ref));
+    const totalDuration = frameDurations.reduce((sum, duration) => sum + duration, 0) || frameDurations.length;
+    // Every line here needs a leading space - a bare column-0 line reads as
+    // a LABEL to the compiler, not a statement, confirmed as a real compile
+    // failure ("Unknown keyword: =") without it. Same convention
+    // generateRomNoiseChecks above already follows at this exact splice
+    // point (see its own comment on the identical "Unknown keyword: 0"
+    // failure it hit for the same reason).
+    const lines = [
+      ` ${counterVar} = ${counterVar} + 1`,
+      ` if ${counterVar} >= ${totalDuration} then ${counterVar} = 0`,
+      ' temp1 = 0',
+    ];
+    // One "if" per frame boundary except the last - once every earlier
+    // threshold has already fired, temp1 has naturally landed on the last
+    // frame's own index without needing its own redundant check.
+    let cumulative = 0;
+    frameDurations.forEach((duration, frameIndex) => {
+      cumulative += duration;
+      if (frameIndex === frameDurations.length - 1) return;
+      lines.push(` if ${counterVar} >= ${cumulative} then temp1 = ${frameIndex + 1}`);
+    });
+    const scrollTerm = scrollTargetRefs.has(ref) ? ` + ${resolveVar(titleCardScrollOffsetVarName(ref))}` : '';
+    lines.push(` bmp_${key}_index = temp1 * ${frameHeight}${scrollTerm}`);
+    return lines.join('\n');
+  }).join('\n\n') + '\n';
+};
+
 const TITLE_SCREEN_SUBROUTINE_NAME = '_titlescreen_system';
 
 // Called from bbasic.js's  init(), right after reserveDevVar hands out
@@ -552,8 +669,8 @@ const TITLE_SCREEN_SUBROUTINE_NAME = '_titlescreen_system';
 // Player animations already use.
 export const registerTitleScreenSubroutine = (Blockly, {selectedIdVarName}) => {
   const titleScreen = processTitleScreenStorageDefaults(useTitleScreenStorage());
-  const {usedKernelKeys, dataBlocks, screenPlans, cardSlotsByRef, hasPlayerCard, playerHeights, hasScoreCard} =
-    assignKernelSlots(titleScreen.screens);
+  const {usedKernelKeys, dataBlocks, screenPlans, cardSlotsByRef, cardAnimationByRef,
+    hasPlayerCard, playerHeights, hasScoreCard} = assignKernelSlots(titleScreen.screens);
 
   Blockly.BBasic.titleScreenUsedKernelKeys = usedKernelKeys;
   // Read back by the "Set title screen scroll position" block's own
@@ -566,6 +683,24 @@ export const registerTitleScreenSubroutine = (Blockly, {selectedIdVarName}) => {
   // anywhere in the project, matching titleScreenCardSlots' own "nothing to
   // reference yet" shape.
   Blockly.BBasic.titleScreenPlayerHeights = playerHeights;
+  // Builds every animated card's own per-frame duration-counter/index-write
+  // code (see generateTitleScreenAnimationChecks' own comment just below) -
+  // has to happen here, not in a separate function called later from
+  // bbasic.js's finish(), since cardAnimationByRef (frame heights/durations,
+  // resolved kernel slot keys) only exists in this function's own scope.
+  // titleScreenScrollTargetRefs was already computed and stashed by
+  // bbasic.js's own pre-scan, BEFORE this function runs (same "reserve/scan
+  // before any generator needs to resolve it" timing as every dev var
+  // pre-scan in this codebase) - see reserveDevVar's own call site there for
+  // titleCardFrameCounterVarName/titleCardScrollOffsetVarName.
+  Blockly.BBasic.titleScreenAnimationChecks = generateTitleScreenAnimationChecks(Blockly, cardAnimationByRef);
+  // Read back by "Set title screen scroll position" (see titlescreen_scroll_set
+  // below) - an animated card's index is owned by the per-frame check just
+  // built above (frame base + scroll offset, recombined every frame), so
+  // that block has to write to this card's own scroll-offset var instead of
+  // straight to bmp_${key}_index for one of these, or the two would fight
+  // over the same byte every frame.
+  Blockly.BBasic.titleScreenCardAnimations = cardAnimationByRef;
   const asmFiles = {'titlescreen_data.asm': dataBlocks.join('\n\n')};
   screenPlans.forEach((plan) => {
     asmFiles[`titlescreen_layout_${plan.id}.asm`] =
@@ -607,6 +742,20 @@ export default (Blockly) => {
     // it.
     if (!key) return 'rem No scrolling title screen graphic selected\n';
     const value = Blockly.BBasic.valueToCode(block, 'VALUE', Blockly.BBasic.ORDER_ASSIGNMENT) || '0';
+    // An animated card's bmp_${key}_index is owned by the per-frame
+    // animation check (generateTitleScreenAnimationChecks) - it recomputes
+    // "frame base + scroll offset" every frame, so this has to write to the
+    // scroll-offset var that check reads instead of straight to
+    // bmp_${key}_index, or the two would silently overwrite each other
+    // every frame (same class of bug two independent writers of the same
+    // register always risk - see collision.js's own comment on a similar
+    // fight elsewhere in this codebase).
+    const cardAnimation = Blockly.BBasic.titleScreenCardAnimations && Blockly.BBasic.titleScreenCardAnimations[ref];
+    if (cardAnimation) {
+      const scrollVar = Blockly.BBasic.nameDB_.getName(
+          titleCardScrollOffsetVarName(ref), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+      return `${scrollVar} = ${value}\n`;
+    }
     // bmp_${key}_index is a raw asm byte (see buildCardDataAsm's own
     // comment), referenced directly by name - no "dim" needed, the same way
     // titlescreen_draw already references titlescreencolor directly.

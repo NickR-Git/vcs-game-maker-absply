@@ -3,10 +3,101 @@
     <v-card class="editor-container" :ripple="false" @click="deselectCard">
       <v-card-title>{{ title }}</v-card-title>
       <v-card-text>
-        <div class="editor-toolbar-row">
-          <editor-zoom v-model="zoom" />
-          <pixel-grid-toggle v-model="showPixelGrid" />
-        </div>
+        <graphic-editor-toolbar :active-editor="effectiveFrameEditor">
+          <template v-slot:before-tools>
+            <editor-zoom v-model="zoom" />
+            <pixel-grid-toggle v-model="showPixelGrid" />
+          </template>
+          <template v-slot:after-tools>
+            <div class="text-center">
+              <v-menu
+                v-model="heightMenuVisible"
+                :close-on-content-click="false"
+                offset-x
+              >
+                <template v-slot:activator="{ on, attrs }">
+                  <v-btn
+                    text
+                    small
+                    class="unified-toolbar-height-btn"
+                    title="Set height"
+                    :disabled="!selectedAnimation"
+                    v-bind="attrs"
+                    v-on="on"
+                    @click="openHeightMenu"
+                  >
+                    <v-icon>mdi-human-male-height-variant</v-icon>
+                  </v-btn>
+                </template>
+
+                <v-card>
+                  <v-list>
+                    <v-list-item>
+                      <v-list-item-content>
+                        <v-list-item-title>Set height for every frame on this card</v-list-item-title>
+                      </v-list-item-content>
+                    </v-list-item>
+                  </v-list>
+
+                  <v-divider></v-divider>
+
+                  <v-list>
+                    <v-list-item>
+                      <v-list-item-action>
+
+                        <v-slider
+                          v-model="heightMenuValue"
+                          :min="1"
+                          :max="64"
+                          label="Height"
+                          class="align-center"
+                          style="width: 400px"
+                        >
+                          <template v-slot:append>
+                            <v-text-field
+                              v-model="heightMenuValue"
+                              class="mt-0 pt-0"
+                              type="number"
+                              style="width: 60px"
+                            ></v-text-field>
+                          </template>
+                        </v-slider>
+
+                      </v-list-item-action>
+                    </v-list-item>
+                  </v-list>
+
+                  <div class="unified-toolbar-scale-checkbox">
+                    <v-checkbox
+                      v-model="heightMenuScaleContents"
+                      label="Scale existing contents (nearest neighbor)"
+                      hide-details
+                      dense
+                    />
+                  </div>
+
+                  <v-card-actions>
+                    <v-spacer></v-spacer>
+
+                    <v-btn
+                      text
+                      @click="heightMenuVisible = false"
+                    >
+                      Cancel
+                    </v-btn>
+                    <v-btn
+                      color="primary"
+                      text
+                      @click="handleUnifiedSetHeight()"
+                    >
+                      Set height
+                    </v-btn>
+                  </v-card-actions>
+                </v-card>
+              </v-menu>
+            </div>
+          </template>
+        </graphic-editor-toolbar>
         <quick-color-palette v-if="spriteColorsEnabled" v-model="selectedQuickColor" />
         <v-list class="animation-list">
           <v-list-item
@@ -161,7 +252,11 @@
                   >
                     <div
                       class="pixel-editor-container"
-                      :class="{'pixel-editor-container-wide': zoom >= 1}"
+                      :class="{
+                        'pixel-editor-container-wide': zoom >= 1,
+                        'pixel-editor-container-active': frameHighlightState(animation, frame) === 'blue',
+                        'pixel-editor-container-active-grey': frameHighlightState(animation, frame) === 'grey',
+                      }"
                       :style="{width: frameEditorWidth(animation)}"
                     >
                       <v-text-field
@@ -172,6 +267,7 @@
                         @change="handleChildChange"
                       />
                       <pixel-editor
+                        :ref="pixelEditorRefKey(animation, frame)"
                         :width="8"
                         :height="frame.pixels.length || 1"
                         :aspectRatio="(8 / (frame.pixels.length || 1)) * 160/192 * (animation.previewWidthScale || 1)"
@@ -180,11 +276,11 @@
                         :rowColors="editorRowColors(frame)"
                         :name="name"
                         :showClearButton="true"
-                        :allowApplyToAllFrames="true"
                         :showGrid="showPixelGrid"
+                        :hideToolbar="true"
                         @input="handleChildChange"
                         @clear="() => handleClearRowColors(frame)"
-                        @resize-all-frames="(opts) => handleResizeAllFrames(animation, frame, opts)"
+                        @activate="(editorInstance) => setActiveFrame(editorInstance, animation.id, frame.id)"
                       >
                         <template v-if="spriteColorsEnabled" v-slot:sidebar>
                           <playfield-color-strip
@@ -194,28 +290,30 @@
                             @input="(colors) => handleRowColorsInput(frame, colors)"
                           />
                         </template>
+                        <template v-slot:toolbar-end>
+                          <v-btn
+                            icon
+                            small
+                            title="Copy this frame's image (and row colors, if any)"
+                            class="player-icon-btn-size"
+                            @click="() => handleCopyFrame(frame)"
+                          >
+                            <v-icon>mdi-content-copy</v-icon>
+                          </v-btn>
+                          <v-btn
+                            icon
+                            small
+                            :disabled="!copiedFrameData"
+                            title="Paste copied image (and row colors, if any) onto this frame"
+                            class="player-icon-btn-size"
+                            @click="() => handlePasteFrame(frame)"
+                          >
+                            <v-icon>mdi-content-paste</v-icon>
+                          </v-btn>
+                        </template>
                         <template v-slot:badge>
                           <div class="frame-number-badge">ID:{{ frameIndex + 1 }}</div>
                           <div class="frame-corner-toolbar">
-                            <v-btn
-                              icon
-                              small
-                              title="Copy this frame's image (and row colors, if any)"
-                              class="player-icon-btn-size"
-                              @click="() => handleCopyFrame(frame)"
-                            >
-                              <v-icon>mdi-content-copy</v-icon>
-                            </v-btn>
-                            <v-btn
-                              icon
-                              small
-                              :disabled="!copiedFrameData"
-                              title="Paste copied image (and row colors, if any) onto this frame"
-                              class="player-icon-btn-size"
-                              @click="() => handlePasteFrame(frame)"
-                            >
-                              <v-icon>mdi-content-paste</v-icon>
-                            </v-btn>
                             <v-btn
                               v-if="spriteColorsEnabled"
                               icon
@@ -315,6 +413,7 @@ import {computed, defineComponent, getCurrentInstance, ref} from '@vue/compositi
 import {chunk, max} from 'lodash';
 
 import EditorZoom from '../components/EditorZoom.vue';
+import GraphicEditorToolbar from '../components/GraphicEditorToolbar.vue';
 import PixelEditor from '../components/PixelEditor.vue';
 import PixelGridToggle from '../components/PixelGridToggle.vue';
 import PlayfieldColorStrip from '../components/PlayfieldColorStrip.vue';
@@ -374,9 +473,10 @@ const copiedFrameRowColors = ref(null);
 const copiedFrameData = ref(null);
 
 export default defineComponent({
-  components: {EditorZoom, PixelEditor, PixelGridToggle, PlayfieldColorStrip, QuickColorPalette},
+  components: {EditorZoom, GraphicEditorToolbar, PixelEditor, PixelGridToggle, PlayfieldColorStrip, QuickColorPalette},
   props: ['storageFactory', 'title', 'fgColor', 'name'],
   setup(props) {
+    const instance = getCurrentInstance();
     const zoom = useEditorZoom(props.name);
     // Shared across Player 0/1 AND the Background tab (see
     // PixelGridToggle.vue's  comment) - not per-player like zoom above.
@@ -453,13 +553,86 @@ export default defineComponent({
     // selectCard/selectedCardId/deselectCard pattern as MusicEditor.vue's
     // own song cards and the other tabs'  entry cards (see
     // MusicEditor.vue's  comment for the full reasoning): plain local
-    // component state, not persisted, not wired into anything else.
+    // component state, not persisted, not wired into anything else. Also
+    // drives the shared "Set height" tool below (see selectedAnimation's
+    // own comment).
     const selectedCardId = ref(null);
     const selectCard = (id) => {
       selectedCardId.value = id;
     };
     const deselectCard = () => {
       selectedCardId.value = null;
+    };
+
+    // Tracks whichever frame's own PixelEditor instance was last clicked
+    // into (see its "activate" event, emitted from PixelEditor.vue's
+    // handleActivate) - the single toolbar above (Eraser/Pencil/Undo/Redo/
+    // Export/Import) acts on THIS frame, since every card's own per-instance
+    // toolbar is now hidden (hideToolbar on the pixel-editor below) in favor
+    // of this one shared row. Holds the component instance itself (not just
+    // an id), so the toolbar's buttons can call straight into its exposed
+    // setTool/undo/redo/handleExportImage/handleImportImage methods.
+    // activeAnimationId/activeFrameId (plain ids, not the objects
+    // themselves) are what isFrameActive below compares against to draw the
+    // "you're editing this one" outline - frame ids are only unique WITHIN
+    // their own animation (see handleAddFrame's own getMaxId, scoped per
+    // animation), so both ids are needed together to identify one frame
+    // uniquely across the whole tab.
+    const activeFrameEditor = ref(null);
+    const activeAnimationId = ref(null);
+    const activeFrameId = ref(null);
+    const setActiveFrame = (editorInstance, animationId, frameId) => {
+      activeFrameEditor.value = editorInstance;
+      activeAnimationId.value = animationId;
+      activeFrameId.value = frameId;
+    };
+    const isFrameActive = (animation, frame) =>
+      activeAnimationId.value === animation.id && activeFrameId.value === frame.id;
+
+    // Whether the given frame's own outline should currently draw as the
+    // app's usual "selected" blue (its card is the one actually selected
+    // right now - see selectedAnimation below) or a neutral grey (it's
+    // still the frame the shared toolbar would act on - see
+    // effectiveFrameEditor below - but its card was deselected, e.g. by
+    // clicking outside every card) - confirmed as the wanted behavior
+    // directly: deselecting shouldn't erase which frame is "active" (the
+    // toolbar keeps acting on it), just stop implying that frame's whole
+    // CARD is still the selected one.
+    const frameHighlightState = (animation, frame) => {
+      if (!isFrameActive(animation, frame)) return null;
+      return selectedAnimation.value && selectedAnimation.value.id === animation.id ? 'blue' : 'grey';
+    };
+
+    // Unique per animation+frame (frame ids are only unique WITHIN their own
+    // animation - see handleAddFrame's own getMaxId) - used as this frame's
+    // own PixelEditor.vue $ref name (see the template) so effectiveFrameEditor
+    // (declared further below, once selectedAnimation itself exists) can
+    // resolve straight to its component instance.
+    const pixelEditorRefKey = (animation, frame) => `pixelEditor_${animation.id}_${frame.id}`;
+
+    // Same fields as PixelEditor.vue's own height-menu state, now living
+    // here instead, since the menu itself moved to this shared toolbar - and
+    // now always resizes every frame on the selected card together (see
+    // selectedAnimation's  comment), so there's no separate "apply to
+    // every frame" opt-in left to track.
+    const heightMenuVisible = ref(false);
+    const heightMenuValue = ref(0);
+    const heightMenuScaleContents = ref(false);
+    const openHeightMenu = () => {
+      if (!selectedAnimation.value) return;
+      heightMenuValue.value = selectedAnimation.value.frames[0].pixels.length;
+      heightMenuScaleContents.value = false;
+    };
+    const handleUnifiedSetHeight = () => {
+      const animation = selectedAnimation.value;
+      if (!animation) return;
+      heightMenuValue.value = Math.max(1, Math.min(64, heightMenuValue.value || 0));
+      animation.frames.forEach((frame) => {
+        frame.pixels = resizePixelMatrixHeight(frame.pixels, heightMenuValue.value, 8, heightMenuScaleContents.value);
+      });
+      handleChildChange();
+      instance.proxy.$forceUpdate();
+      heightMenuVisible.value = false;
     };
 
     const playerStorage = props.storageFactory();
@@ -513,6 +686,46 @@ export default defineComponent({
       state.value = state.value;
     };
 
+    // The card the shared "Set height" tool actually acts on - null (and the
+    // tool disabled) until a card is selected. Deliberately keyed off
+    // selectedCardId (the same "which card am I looking at" marker every
+    // other tab click already updates - see selectCard/deselectCard above),
+    // not activeFrame/activeFrameEditor (the last frame actually clicked
+    // INTO to draw/undo/etc.) - a resize is a whole-card action (every frame
+    // on the card is set to the same height together, no per-frame choice),
+    // so it should track the card the user is looking at, not risk staying
+    // pointed at a stale frame from a DIFFERENT card that was merely drawn
+    // on earlier and never explicitly deselected.
+    const selectedAnimation = computed(
+        () => state.value.animations.find((animation) => animation.id === selectedCardId.value) || null);
+
+    // What the shared toolbar (Eraser/Pencil/Undo/Redo/Export/Import) above
+    // actually acts on - the explicitly-clicked-into frame (activeFrameEditor)
+    // when it still belongs to the currently SELECTED animation, otherwise
+    // the selected animation's own first frame, resolved via its $ref.
+    // Without this fallback, the tools stayed disabled (and the "which frame"
+    // outline never appeared) until a graphic was clicked directly - reported
+    // as unexpected, since selecting a card (clicking its title/name field/
+    // anywhere else in it) already conveys "I'm working on this one" the same
+    // way every other per-card tool in this app already treats it. (Declared
+    // here, not alongside activeFrameEditor above, purely for readability -
+    // it reads selectedAnimation, so it makes more sense sitting next to it.)
+    const effectiveFrameEditor = computed(() => {
+      if (activeFrameEditor.value && selectedAnimation.value && activeAnimationId.value === selectedAnimation.value.id) {
+        return activeFrameEditor.value;
+      }
+      if (selectedAnimation.value && selectedAnimation.value.frames.length) {
+        const firstFrame = selectedAnimation.value.frames[0];
+        const refs = instance.proxy.$refs[pixelEditorRefKey(selectedAnimation.value, firstFrame)];
+        // Vue 2 returns an array for a ref name reused across a v-for
+        // iteration - not the case here (this key is unique per frame), but
+        // guarding it anyway costs nothing and avoids a subtle crash if that
+        // ever changes.
+        return Array.isArray(refs) ? refs[0] || null : refs || null;
+      }
+      return null;
+    });
+
     // Every card starts collapsed on every visit to this tab (see
     // collapseAll's  comment in hooks/collapse.js), not just ones never
     // expanded before.
@@ -528,8 +741,6 @@ export default defineComponent({
           handleChildChange();
         },
     );
-
-    const instance = getCurrentInstance();
 
     const handleAddFrame = (animation) => {
       const frames = animation.frames;
@@ -635,24 +846,6 @@ export default defineComponent({
     const handleDeleteFrame = (animation, frame) => {
       animation.frames = animation.frames.filter(({id}) => id != frame.id);
       console.info('Deleted ', frame);
-      handleChildChange();
-      instance.proxy.$forceUpdate();
-    };
-
-    // Applies the SAME resize (and "scale existing contents" choice) the
-    // triggering frame's  PixelEditor instance just used on itself, to
-    // every OTHER frame in the same animation - the triggering frame
-    // itself is skipped here since its  handleSetHeight already
-    // resized it locally (see PixelEditor.vue's  resize-all-frames
-    // comment); redoing it here too would just repeat the same work.
-    // Every OTHER frame's  PixelEditor instance picks up its new
-    // pixels via its own "value" watcher (see that component's own
-    // comment on why a watcher is needed there at all, not just a prop).
-    const handleResizeAllFrames = (animation, triggeringFrame, {height, scaleContents}) => {
-      animation.frames.forEach((frame) => {
-        if (frame.id === triggeringFrame.id) return;
-        frame.pixels = resizePixelMatrixHeight(frame.pixels, height, 8, scaleContents);
-      });
       handleChildChange();
       instance.proxy.$forceUpdate();
     };
@@ -801,7 +994,7 @@ export default defineComponent({
 
     return {selectedCardId, selectCard, deselectCard,
       state, handleChildChange,
-      handleAddFrame, handleDeleteFrame, handleResizeAllFrames,
+      handleAddFrame, handleDeleteFrame,
       handleImportAnimationFrames, replaceFramesOnImport, importMenuOpenAnimationId,
       handleAddAnimation, handleDeleteAnimation, handleSetPreviewScale,
       handleRowColorsInput, handleClearRowColors, editorRowColors, spriteColorsEnabled,
@@ -811,6 +1004,10 @@ export default defineComponent({
       isCollapsed, toggleCollapsed,
       dragAttrs, dragCardClass, dragHandleListeners, dragTargetListeners,
       zoom, showPixelGrid, editorWidth, frameEditorWidth,
+      activeFrameEditor, setActiveFrame, isFrameActive, frameHighlightState, selectedAnimation,
+      effectiveFrameEditor, pixelEditorRefKey,
+      heightMenuVisible, heightMenuValue, heightMenuScaleContents,
+      openHeightMenu, handleUnifiedSetHeight,
       props};
   },
 });
@@ -849,7 +1046,12 @@ export default defineComponent({
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-top: 12px;
+  /* Tighter than the 12px this used to match (BackgroundEditor.vue's own
+     .background-list) - the toolbar row directly above (unique to this
+     tab, added later) already has its own top/bottom padding, so the old
+     12px on top of that read as too much combined space before the first
+     card. */
+  margin-top: 4px;
 }
 
 /* overflow: visible added alongside the padding reset (see MusicEditor.vue's
@@ -1087,6 +1289,31 @@ export default defineComponent({
   flex-wrap: nowrap;
 }
 
+/* Marks which frame the shared toolbar above (Eraser/Pencil/Undo/Redo/
+   Export/Import/Set height) currently acts on (see isFrameActive's own
+   comment) - same border-color + outline treatment as every other tab's
+   own "-selected" card highlight (App.vue's shared .animation-card-
+   selected/.background-card-selected/etc. rule), reaching into THIS
+   frame's own PixelEditor.vue instance, which (unlike Background/Title's
+   own nested pixel editors) keeps its real outlined v-card border, since
+   nothing here strips it the way .pixel-editor-container >>> .v-card is
+   stripped on those other tabs. */
+.pixel-editor-container-active >>> .v-card {
+  border-color: var(--v-primary-base, #1976d2) !important;
+  outline: 2px solid var(--v-primary-base, #1976d2) !important;
+}
+
+/* frameHighlightState's own "grey" case - this frame is still what the
+   shared toolbar acts on (its card was just deselected, e.g. by clicking
+   outside every card), so the outline stays rather than disappearing
+   outright, but recolors to the same neutral grey every outlined card
+   border already uses at rest (App.vue's shared darkened outlined-card
+   border rule) instead of implying the whole card is still selected. */
+.pixel-editor-container-active-grey >>> .v-card {
+  border-color: rgba(0, 0, 0, 0.24) !important;
+  outline: 2px solid rgba(0, 0, 0, 0.24) !important;
+}
+
 /* Same icon/button sizing as the Player Sprite tab's  toolbar icons
    (PixelEditor.vue's .pixel-editor-tools rules) - size only, no colour
    changes, so .delete-icon-btn's red-on-hover convention is untouched.
@@ -1100,6 +1327,18 @@ export default defineComponent({
   margin: 0;
 }
 
+/* Vuetify's own disabled styling normally dims a button's icon color, but
+   the icon's own rest-state color elsewhere is forced with !important
+   (matching PixelEditor.vue's own toolbar icons), which also blocks
+   Vuetify's disabled color from ever showing through - confirmed as a real
+   reported bug (a disabled Paste button read as clickable, no different
+   from the enabled Copy button next to it). Opacity reaches it without
+   needing to fight that !important, same fix as PixelGridToggle.vue's own
+   identical rule. */
+.player-icon-btn-size.v-btn--disabled {
+  opacity: 0.35;
+}
+
 .player-icon-btn-size >>> .v-icon {
   font-size: 19px !important;
 }
@@ -1108,9 +1347,35 @@ export default defineComponent({
    their own inline layout - a flex row keeps them on one visual line and
    vertically centered against each other regardless of either one's own
    internal baseline/height quirks. */
-.editor-toolbar-row {
-  display: flex;
-  align-items: center;
+/* The "Set height" button passed into GraphicEditorToolbar.vue's own
+   "after-tools" slot - that component only owns the sticky bar itself and
+   the standard Eraser/Pencil/Undo/Redo/Export/Import icons (see its own
+   comment), not this tab-specific control, so its styling stays here.
+   Rendered as part of THIS component's own template (slot content keeps
+   its origin component's scoped attribute even once teleported into a
+   child's slot), so no ">>> ancestor-class" wrapper is needed to reach it
+   the way PixelEditor.vue's own per-card toolbar buttons need - just a
+   plain deep selector for the parts Vuetify itself renders internally
+   (the icon). */
+.unified-toolbar-height-btn {
+  width: auto;
+  min-width: 0;
+  padding: 0 2px;
+  font-size: 0.75rem;
+  color: rgba(0, 0, 0, 0.55);
+}
+
+.unified-toolbar-height-btn >>> .v-icon {
+  font-size: 16px;
+  margin-top: -1px;
+}
+
+/* Same reasoning/values as PixelEditor.vue's own .pixel-editor-scale-
+   checkbox - pulled up against the slider's list-item above it, with a
+   left inset matching that list-item's own default padding. */
+.unified-toolbar-scale-checkbox {
+  margin-top: -30px;
+  padding-left: 16px;
 }
 
 /* mdi-delete's  glyph reads visually smaller than mdi-content-copy/
@@ -1158,6 +1423,13 @@ export default defineComponent({
   vertical-align: middle;
   width: auto;
   margin-top: 16px;
+  /* A plain v-list-item's own default left padding/inline whitespace put
+     this ~32px from the last frame's graphic - pulled in to match the
+     Title tab's own equivalent gap (TitleScreenEditor.vue's
+     .titlescreen-add-frame-list-item, a plain 12px margin-left there since
+     that one's just a bare div, not a v-list-item with its own padding to
+     fight). */
+  margin-left: -20px;
 }
 
 /* Same circular style as "Add animation" below (and the Background tab's "+"

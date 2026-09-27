@@ -12,7 +12,7 @@ import {
   AUDC_APPROXIMATIONS, buildBuzzBuffer, buildDiv31Buffer, buildGatedBuzzBuffer, buildSquareBuffer, shiftClockFor,
 } from './sound-preview';
 import {DEFAULT_PATTERN_STEPS, DEFAULT_TEMPO, LENGTH_UNITS_PER_STEP} from '../blocks/music';
-import {DEFAULT_DIM_PERCENT, dimVolume} from '../generators/bbasic/soundfx';
+import {DEFAULT_DIM_PERCENT} from '../generators/bbasic/soundfx';
 import {DEFAULT_ARPEGGIO_DIVISION, DEFAULT_NOISE_PRIORITY} from '../blocks/soundfx';
 import {useDimSoundFxPercentStorage, useDimSoundFxStorage} from '../hooks/project';
 import {audcHasTunableNotes, noteAudv} from './music-notes';
@@ -28,6 +28,43 @@ const getAudioContext = () => {
     audioContext.resume();
   }
   return audioContext;
+};
+
+// Every note's own peak gain is individually capped at 0.3 (see peakGain in
+// playInstrumentHit below), but that only ever bounds ONE note on its own -
+// nothing stops several simultaneously-sounding notes/tracks from SUMMING
+// past 1.0 once they all reach context.destination together, which Web
+// Audio hard-clips rather than gracefully compressing. In practice this is
+// a genuinely RARE edge case, not a routine one: real hardware only has 2
+// audio channels, and 2 channels at 0.3 peak each only ever sum to 0.6 -
+// comfortably under 1.0 on its own. A single shared limiter still sits
+// between every note's own output and the real destination as a safety net
+// for whatever rare combination (DIM off, several overlapping arpeggio
+// segments, etc.) DOES push past that, but deliberately gentle - soft knee,
+// a moderate ratio, and slower attack/release than a "true" limiter would
+// use. An earlier, much more aggressive version of this (20:1 ratio, 0dB
+// hard knee, 1ms attack) was confirmed to be the wrong tool: on this buzzy/
+// square-wave source material (not smooth musical audio), driving a fast,
+// high-ratio compressor hard enough to react produced its own audible
+// pumping/distortion, including bleeding into whatever played right after
+// the transient that triggered it - reported as "popping...even on
+// different channels" and continuing to glitch on the very NEXT pattern
+// after a loud one, exactly the kind of carry-over a compressor's own
+// gain-reduction envelope recovering slowly would cause. Lazily created
+// alongside audioContext itself (one per AudioContext, same lifetime), not
+// per-call - every note/track routes through this SAME node.
+let masterLimiter = null;
+const getMasterDestination = (context) => {
+  if (!masterLimiter || masterLimiter.context !== context) {
+    masterLimiter = context.createDynamicsCompressor();
+    masterLimiter.threshold.setValueAtTime(-0.3, context.currentTime);
+    masterLimiter.knee.setValueAtTime(6, context.currentTime);
+    masterLimiter.ratio.setValueAtTime(4, context.currentTime);
+    masterLimiter.attack.setValueAtTime(0.01, context.currentTime);
+    masterLimiter.release.setValueAtTime(0.15, context.currentTime);
+    masterLimiter.connect(context.destination);
+  }
+  return masterLimiter;
 };
 
 // NTSC, matching the compiled ROM's  per-frame arpeggio timer (see
@@ -101,22 +138,24 @@ const arpeggioPitchVariants = (audf, arpeggioInterval) => {
 // hardest edge of the waveform enough to not pop.
 const CLICK_GUARD_SECONDS = 0.002;
 const buildGain = (context, {peakGain, peakVolume, startTime, seconds, envelope, envelopeAttack,
-  envelopeDecay, envelopeSustain, envelopeRelease, destination = context.destination}) => {
+  envelopeDecay, envelopeSustain, envelopeSustainLength, envelopeRelease, dimMultiplier = 1,
+  destination = getMasterDestination(context)}) => {
   const gainNode = context.createGain();
   let endValue;
   if (envelope) {
     const totalFrames = Math.max(1, Math.round(seconds * FRAMES_PER_SECOND));
     const curve = buildEnvelopeCurve({
-      attack: envelopeAttack, decay: envelopeDecay, sustainPercent: envelopeSustain, release: envelopeRelease,
+      attack: envelopeAttack, decay: envelopeDecay, sustainPercent: envelopeSustain,
+      sustainLength: envelopeSustainLength, release: envelopeRelease,
       peakVolume, totalFrames,
     });
     curve.forEach((step, i) => {
-      gainNode.gain.setValueAtTime(step / 15 * 0.3, startTime + i / FRAMES_PER_SECOND);
+      gainNode.gain.setValueAtTime(step / 15 * 0.3 * dimMultiplier, startTime + i / FRAMES_PER_SECOND);
     });
-    endValue = curve[curve.length - 1] / 15 * 0.3;
+    endValue = curve[curve.length - 1] / 15 * 0.3 * dimMultiplier;
   } else {
-    gainNode.gain.setValueAtTime(peakGain, startTime);
-    endValue = peakGain;
+    gainNode.gain.setValueAtTime(peakGain * dimMultiplier, startTime);
+    endValue = peakGain * dimMultiplier;
   }
   // Re-anchors at whatever level the note ends on, right at the start of the
   // guard window, so the ramp below only covers that last sliver instead of
@@ -130,6 +169,60 @@ const buildGain = (context, {peakGain, peakVolume, startTime, seconds, envelope,
   }
   gainNode.connect(destination);
   return gainNode;
+};
+
+// Rounds off the raw digital step at EVERY buffer boundary - not just a
+// note's overall start/end (buildGain's own CLICK_GUARD_SECONDS above), but
+// each individual segment within a note too. This matters because an
+// arpeggiating hit (see the while loop below) splices several DIFFERENT
+// pre-rendered buffers back-to-back, each built at its own phase's pitch -
+// buffer A's last sample and buffer B's first sample can differ by almost
+// the full waveform amplitude, an actual signal discontinuity no amount of
+// smoothing on the OUTER note-level gain (buildGain) can fix, since that
+// envelope stays constant/smoothly-curved straight through a flip - only
+// something touching the signal at the flip itself can. Confirmed as the
+// real remaining cause of a reported "popping" bug that persisted (just
+// less severe) even after fixing the activeSources leak below: audible on
+// every arpeggio flip, not just at a note's own edges, and on a plain
+// (non-arpeggio) note this also finally gives its START a fade-in to match
+// the fade-out it already had - previously an instant full-volume step,
+// the exact same discontinuity class as an arpeggio flip, just once per
+// note instead of several times.
+//
+// A separate, tiny gain node per segment (not just reusing/extending
+// buildGain's own note-level one) so this works independently of whatever
+// that outer envelope happens to be doing at this exact instant - stacking
+// two ramps that both reach 0 at the same edge (e.g. this fade's own
+// fade-out landing exactly on a plain note's own CLICK_GUARD_SECONDS
+// fade-out) just compounds smoothly, not a conflict.
+//
+// 3ms - short enough that several of these in a row (this can fire many
+// times per note, once per arpeggio flip, which can be as fast as every
+// ~16ms) don't add up to an audible wobble in the note's own volume, but
+// long enough to give a clean two-level square wave (AUDC 4/5/12/13 - "pure
+// tone") real headroom to round off - confirmed as a real reported gap: a
+// pop at 1ms was still clearly audible specifically on pure tone (no
+// arpeggio needed to hear it, just an ordinary short note), since a clean
+// periodic waveform makes ANY edge discontinuity far more perceptually
+// obvious than the exact same size jump is against a buzzy/noisy waveform's
+// own already-irregular signal (the same physical edge, just psycho-
+// acoustically masked for the buzzy types) - this fade is already applied
+// uniformly to every AUDC type here, not just pure tone, so widening it
+// helps all of them, pure tone most audibly.
+const EDGE_FADE_SECONDS = 0.003;
+const connectWithEdgeFade = (context, source, destination, segStartTime, segSeconds) => {
+  const fade = Math.min(EDGE_FADE_SECONDS, segSeconds / 2);
+  if (fade <= 0) {
+    source.connect(destination);
+    return;
+  }
+  const edgeGain = context.createGain();
+  edgeGain.gain.setValueAtTime(0, segStartTime);
+  edgeGain.gain.linearRampToValueAtTime(1, segStartTime + fade);
+  edgeGain.gain.setValueAtTime(1, segStartTime + segSeconds - fade);
+  edgeGain.gain.linearRampToValueAtTime(0, segStartTime + segSeconds);
+  source.connect(edgeGain);
+  edgeGain.connect(destination);
 };
 
 // Buffer-based waveforms (square/buzz/div31/gatedbuzz) are pure functions of
@@ -174,18 +267,29 @@ const buildBufferCached = (context, approximation, chipClockHz, seconds) => {
 // (untunable instruments), where there's no chosen pitch, just the
 // instrument's  characteristic sound. Returns null for a silent AUDC
 // (0/11) - no sources are created.
+// @param {number} [dimMultiplier] The "Dim SFX volume" percent (0-1, e.g.
+//     0.25 for 25%) as a continuous gain multiplier, applied AFTER the
+//     normal AUDV-to-gain conversion - deliberately NOT the same dimVolume()
+//     the compiled ROM uses (generators/bbasic/soundfx.js), which rounds the
+//     dimmed result back into a whole 0-15 AUDV step, since that's a real
+//     hardware constraint (AUDV IS a 4-bit register) that doesn't apply to
+//     this preview's own continuous Web Audio gain - routing the preview
+//     through that same rounding just threw away resolution for no reason
+//     (e.g. a 25% dim of AUDV 3 rounds to AUDV 1, an effective ~67% cut, not
+//     25%), confirmed as a real reported "not helpful" complaint.
 // @return {Array<AudioNode>} Every source scheduled (usually one, but an
 //     arpeggiating buffer-based hit schedules several short back-to-back
 //     segments instead - see below).
 const playInstrumentHit = (context, {audc, audf, audv, arpeggioSpeed, arpeggioInterval, arpeggioRange, startTime,
-  seconds, envelope, envelopeAttack, envelopeDecay, envelopeSustain, envelopeRelease,
-  destination}) => {
+  seconds, envelope, envelopeAttack, envelopeDecay, envelopeSustain, envelopeSustainLength, envelopeRelease,
+  dimMultiplier = 1, destination}) => {
   const approximation = AUDC_APPROXIMATIONS[`${audc}`];
   if (!approximation) return [];
 
   const peakGain = Math.min(1, Math.max(0, Number(audv) || 0) / 15) * 0.3;
   const gainNode = buildGain(context, {peakGain, peakVolume: audv, startTime, seconds, envelope,
-    envelopeAttack, envelopeDecay, envelopeSustain, envelopeRelease, destination});
+    envelopeAttack, envelopeDecay, envelopeSustain, envelopeSustainLength, envelopeRelease, dimMultiplier,
+    destination});
 
   const buildBuffer = (chipClockHz, segmentSeconds) =>
     buildBufferCached(context, approximation, chipClockHz, segmentSeconds);
@@ -193,9 +297,10 @@ const playInstrumentHit = (context, {audc, audf, audv, arpeggioSpeed, arpeggioIn
   if (!arpeggioSpeed) {
     const source = context.createBufferSource();
     source.buffer = buildBuffer(shiftClockFor(audf, {slowClock: approximation.slowClock}), seconds);
-    source.connect(gainNode);
+    connectWithEdgeFade(context, source, gainNode, startTime, seconds);
     source.start(startTime);
     source.stop(startTime + seconds);
+    pruneOnEnded(source);
     return [source];
   }
 
@@ -215,9 +320,10 @@ const playInstrumentHit = (context, {audc, audf, audv, arpeggioSpeed, arpeggioIn
     const chipClockHz = shiftClockFor(variants[sequence[phase % sequence.length]], {slowClock: approximation.slowClock});
     const source = context.createBufferSource();
     source.buffer = buildBuffer(chipClockHz, segmentSeconds);
-    source.connect(gainNode);
+    connectWithEdgeFade(context, source, gainNode, t, segmentSeconds);
     source.start(t);
     source.stop(t + segmentSeconds);
+    pruneOnEnded(source);
     sources.push(source);
     phase++;
     t += flipSeconds;
@@ -227,6 +333,30 @@ const playInstrumentHit = (context, {audc, audf, audv, arpeggioSpeed, arpeggioIn
 
 let activeSources = [];
 let stopTimer = null;
+
+// Drops a finished source from activeSources the moment it actually ends,
+// instead of leaving it there for the rest of the (possibly looping)
+// playback session - without this, activeSources only ever GREW, every
+// note of every pass appending to it and nothing ever removing anything
+// until Stop, since a looping pattern/sequence can run for an arbitrarily
+// long time (see schedulePattern's own comment on trackGain needing the
+// exact same "don't just keep piling up dead nodes forever" fix for the
+// exact same reason). Confirmed as the real cause of a reported bug
+// ("popping...occur[ring] more when patterns are played for a
+// second/third/etc time"): thousands of long-dead-but-still-referenced
+// AudioBufferSourceNodes (each holding onto its own AudioBuffer) piling up
+// over a session's worth of loop passes raises GC pressure over time,
+// which - per LOOP_RESCHEDULE_LEAD_SECONDS' own comment on this scheduler
+// being vulnerable to main-thread jank - is exactly the kind of thing that
+// makes the JS-timer-driven reschedule callbacks run late, and a late
+// reschedule is audible as exactly this kind of glitch. 'ended' fires
+// whether a source ran to its own natural stop() time or was cut short by
+// stopPatternPlayback's own explicit .stop() call, so this covers both.
+const pruneOnEnded = (source) => {
+  source.onended = () => {
+    activeSources = activeSources.filter((s) => s !== source);
+  };
+};
 
 // One entry per pattern currently scheduled to play, in order - {patternId,
 // startTime, endTime, unitSeconds} (all AudioContext-clock seconds/units, see
@@ -246,10 +376,12 @@ const unitSecondsForTempo = (tempo) => (30 / Math.max(1, Number(tempo) || 120)) 
 
 // One persistent GainNode per currently-scheduled track (pattern id + track
 // id - same key shape as MusicEditor.vue's  mutedTrackKey), routed
-// between that track's  notes and context.destination - see
-// schedulePattern, which creates/updates one of these per track instead of
-// connecting straight to context.destination the way previewPatternNote's
-// one-off click preview still does. Its whole reason to exist: a GainNode's
+// between that track's  notes and the shared master limiter
+// (getMasterDestination) - see schedulePattern, which creates/updates one
+// of these per track instead of connecting each note straight to the
+// limiter the way previewPatternNote's one-off click preview still does
+// (it has no track of its own to mute independently). Its whole reason to
+// exist: a GainNode's
 // own .gain.value is live - setting it takes effect immediately on whatever
 // audio is already flowing through it, unlike an individual note's own
 // gain envelope (see buildGain), which is baked in once at schedule time
@@ -344,9 +476,12 @@ export const previewPatternNote = ({audc, audf, audv, arpeggio, arpeggioDivision
   // Same "Dim SFX volume" Options-tab setting applied everywhere else this
   // note could be heard (pattern/song playback, the compiled ROM) - without
   // this, a click-to-place preview would sound louder than the note
-  // actually plays back everywhere else.
-  const dimmedAudv = useDimSoundFxStorage().value ?
-    dimVolume(audv, useDimSoundFxPercentStorage(DEFAULT_DIM_PERCENT).value) : audv;
+  // actually plays back everywhere else. A continuous gain multiplier here
+  // (see playInstrumentHit's own dimMultiplier comment), not dimVolume()'s
+  // AUDV-rounded version - that rounding is a real compiled-ROM hardware
+  // constraint that doesn't apply to this preview's own Web Audio gain.
+  const dimMultiplier = useDimSoundFxStorage().value ?
+    (Number(useDimSoundFxPercentStorage(DEFAULT_DIM_PERCENT).value) || 0) / 100 : 1;
   const startTime = context.currentTime;
   const seconds = 0.18;
 
@@ -362,7 +497,7 @@ export const previewPatternNote = ({audc, audf, audv, arpeggio, arpeggioDivision
   const resolvedArpeggioRange = arpeggio ? Number(arpeggioRange) || 0 : 0;
 
   playInstrumentHit(context, {
-    audc, audf, audv: dimmedAudv, startTime, seconds,
+    audc, audf, audv, startTime, seconds, dimMultiplier,
     arpeggioSpeed, arpeggioInterval: resolvedArpeggioInterval, arpeggioRange: resolvedArpeggioRange,
   });
 };
@@ -452,7 +587,7 @@ const schedulePattern = (context, pattern, soundEffects, startTime, tempo, isTra
     let trackGain = trackMuteGains.get(trackKey);
     if (!trackGain) {
       trackGain = context.createGain();
-      trackGain.connect(context.destination);
+      trackGain.connect(getMasterDestination(context));
       trackMuteGains.set(trackKey, trackGain);
     }
     trackGain.gain.value = isTrackMuted(pattern, track) ? 0 : 1;
@@ -491,19 +626,23 @@ const schedulePattern = (context, pattern, soundEffects, startTime, tempo, isTra
       maxEndUnits = Math.max(maxEndUnits, note.step + note.length);
       const audf = isTunable && note.midi !== 'hit' ? note.audf : soundEffect.audf;
       // Per-note override (see the Music tab's  piano-roll volume row),
-      // falling back to the instrument's  preset - same DIM-scaling
-      // applied either way, just to whichever value is actually in effect.
-      const audv = dimSoundFx.value ?
-        dimVolume(noteAudv(note, soundEffect), dimSoundFxPercent.value) :
-        noteAudv(note, soundEffect);
+      // falling back to the instrument's  preset. DIM is applied as a
+      // continuous gain multiplier (see playInstrumentHit's own
+      // dimMultiplier comment) rather than pre-rounding audv through
+      // dimVolume() - that rounding is a real compiled-ROM AUDV-is-a-4-bit-
+      // register constraint that doesn't apply to this preview's own
+      // continuous Web Audio gain.
+      const audv = noteAudv(note, soundEffect);
+      const dimMultiplier = dimSoundFx.value ? (Number(dimSoundFxPercent.value) || 0) / 100 : 1;
       notesByChannel[channel].push({
         startUnits: note.step, endUnits: note.step + note.length,
         priority: Number(soundEffect.priority) || DEFAULT_NOISE_PRIORITY,
-        trackGain, audc: soundEffect.audc, audf, audv, arpeggioSpeed, arpeggioInterval, arpeggioRange,
+        trackGain, audc: soundEffect.audc, audf, audv, dimMultiplier, arpeggioSpeed, arpeggioInterval, arpeggioRange,
         envelope: !!soundEffect.envelope,
         envelopeAttack: soundEffect.envelopeAttack,
         envelopeDecay: soundEffect.envelopeDecay,
         envelopeSustain: soundEffect.envelopeSustain,
+        envelopeSustainLength: soundEffect.envelopeSustainLength,
         envelopeRelease: soundEffect.envelopeRelease,
       });
     });
@@ -519,12 +658,13 @@ const schedulePattern = (context, pattern, soundEffects, startTime, tempo, isTra
     const audibleStartUnits = Math.max(segStartUnits, startUnits);
     if (audibleStartUnits >= segEndUnits) return;
     activeSources.push(...playInstrumentHit(context, {
-      audc: note.audc, audf: note.audf, audv: note.audv,
+      audc: note.audc, audf: note.audf, audv: note.audv, dimMultiplier: note.dimMultiplier,
       arpeggioSpeed: note.arpeggioSpeed, arpeggioInterval: note.arpeggioInterval, arpeggioRange: note.arpeggioRange,
       startTime: startTime + (audibleStartUnits - startUnits) * unitSeconds,
       seconds: (segEndUnits - audibleStartUnits) * unitSeconds,
       envelope: note.envelope, envelopeAttack: note.envelopeAttack, envelopeDecay: note.envelopeDecay,
-      envelopeSustain: note.envelopeSustain, envelopeRelease: note.envelopeRelease,
+      envelopeSustain: note.envelopeSustain, envelopeSustainLength: note.envelopeSustainLength,
+      envelopeRelease: note.envelopeRelease,
       destination: note.trackGain,
     }));
   };

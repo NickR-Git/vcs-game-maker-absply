@@ -16,17 +16,21 @@
       <p class="v-messages theme--light v-messages__message">
         Edit the Text Minikernel's character set below. Each character is a fixed 4x5 pixel shape.
       </p>
-      <div class="text-font-controls-row">
-        <editor-zoom v-model="zoom" class="text-font-zoom" />
-        <v-switch
-          v-model="showInGamePreview"
-          label="Preview as in-game"
-          title="The kernel actually draws a blank scanline between each row of a glyph's pixels - toggle this to see glyphs that way instead of as a plain, solid pixel grid. Read-only: switch back to Off to keep editing."
-          hide-details
-          dense
-          class="text-font-preview-switch"
-        />
-      </div>
+      <graphic-editor-toolbar class="text-font-controls-row" :active-editor="activeEditor" :bleed="32">
+        <template v-slot:before-tools>
+          <editor-zoom v-model="zoom" class="text-font-zoom" />
+        </template>
+        <template v-slot:after-tools>
+          <v-switch
+            v-model="showInGamePreview"
+            label="Preview as in-game"
+            title="The kernel actually draws a blank scanline between each row of a glyph's pixels - toggle this to see glyphs that way instead of as a plain, solid pixel grid. Read-only: switch back to Off to keep editing."
+            hide-details
+            dense
+            class="text-font-preview-switch"
+          />
+        </template>
+      </graphic-editor-toolbar>
       <p v-if="!ready" class="v-messages theme--light v-messages__message">Loading default glyphs...</p>
       <template v-else>
         <!-- Only shown once the Text tab's own "Show a blinking scroll
@@ -42,7 +46,10 @@
             :style="{width: cursorGlyphWidth}"
           >
             <div class="glyph-label">Cursor</div>
-            <div class="glyph-editor">
+            <div
+              class="glyph-editor"
+              :class="{'glyph-editor-active': activeEditorKey === 'cursor'}"
+            >
               <pixel-editor
                 v-if="!showInGamePreview"
                 :key="resetToken"
@@ -54,7 +61,9 @@
                 :showClearButton="true"
                 name="text-font-cursor"
                 :allowChangingHeight="false"
+                :hideToolbar="true"
                 @input="handleChange"
+                @activate="(editorInstance) => setActiveEditor(editorInstance, 'cursor')"
               />
               <!-- Same read-only, blank-scanline-interlaced preview as a
                    real glyph's own (see interlacedPreviewRows below) - the
@@ -90,7 +99,10 @@
             :key="index"
           >
             <div class="glyph-label">{{ glyphLabel(TEXT_GLYPH_ORDER[index].char) }}</div>
-            <div class="glyph-editor">
+            <div
+              class="glyph-editor"
+              :class="{'glyph-editor-active': activeEditorKey === index}"
+            >
               <pixel-editor
                 v-if="!showInGamePreview"
                 :key="resetToken"
@@ -102,13 +114,36 @@
                 :showClearButton="true"
                 :name="'text-font-glyph-' + index"
                 :allowChangingHeight="false"
+                :hideToolbar="true"
                 @input="handleChange"
+                @activate="(editorInstance) => setActiveEditor(editorInstance, index)"
               >
                 <template v-slot:badge>
                   <div
                     class="glyph-id-badge"
                     title="This glyph's index (0-50) - its byte offset into the compiled glyph table is this number times 5."
                   >ID:{{ index }}</div>
+                </template>
+                <template v-slot:toolbar-end>
+                  <v-btn
+                    icon
+                    small
+                    title="Copy this glyph's image"
+                    class="glyph-icon-btn-size"
+                    @click="() => handleCopyGlyph(index)"
+                  >
+                    <v-icon>mdi-content-copy</v-icon>
+                  </v-btn>
+                  <v-btn
+                    icon
+                    small
+                    :disabled="!copiedGlyphData"
+                    title="Paste copied image onto this glyph"
+                    class="glyph-icon-btn-size"
+                    @click="() => handlePasteGlyph(index)"
+                  >
+                    <v-icon>mdi-content-paste</v-icon>
+                  </v-btn>
                 </template>
               </pixel-editor>
               <!-- Read-only in-game preview - a blank scanline drawn between
@@ -154,6 +189,7 @@
 import {computed, defineComponent, onMounted, ref} from '@vue/composition-api';
 
 import EditorZoom from './EditorZoom.vue';
+import GraphicEditorToolbar from './GraphicEditorToolbar.vue';
 import PixelEditor from './PixelEditor.vue';
 import {useCollapsedIds} from '../hooks/collapse';
 import {useConfigurationStorage, useTextFontStorage} from '../hooks/project';
@@ -199,8 +235,13 @@ const buildBlankRow = () => new Array(TEXT_GLYPH_WIDTH).fill(0);
 // it can never collide with an actual text message's  id.
 const CARD_ENTRY = {id: 'glyphs'};
 
+// Same "module-scope ref, not per-instance state" reasoning as
+// PlayerEditor.vue's own copiedFrameData - a copied glyph survives
+// navigating away from this tab and back.
+const copiedGlyphData = ref(null);
+
 export default defineComponent({
-  components: {EditorZoom, PixelEditor},
+  components: {EditorZoom, GraphicEditorToolbar, PixelEditor},
   setup() {
     const textFontStorage = useTextFontStorage();
     const configurationStorage = useConfigurationStorage();
@@ -251,6 +292,23 @@ export default defineComponent({
       }
     });
 
+    // Tracks whichever glyph's own PixelEditor instance was last clicked
+    // into (see its "activate" event, emitted from PixelEditor.vue's
+    // handleActivate) - the single toolbar above (Eraser/Pencil/Undo/Redo/
+    // Export/Import) acts on THIS glyph, since every glyph's own
+    // per-instance toolbar is now hidden (hideToolbar on the pixel-editor
+    // above) in favor of this one shared row. activeEditorKey is either a
+    // glyph's numeric index or the literal string 'cursor' - same reasoning
+    // as ScoreFontEditor.vue's own activeEditor/activeEditorIndex (no
+    // card-selection fallback needed, since there's no way to "select" a
+    // glyph other than clicking directly into its own PixelEditor card).
+    const activeEditor = ref(null);
+    const activeEditorKey = ref(null);
+    const setActiveEditor = (editorInstance, key) => {
+      activeEditor.value = editorInstance;
+      activeEditorKey.value = key;
+    };
+
     const state = computed({
       get() {
         if (!defaultGlyphs.value) return {glyphs: [], cursor: DEFAULT_TEXT_CURSOR};
@@ -277,6 +335,23 @@ export default defineComponent({
       state.value = state.value;
     };
 
+    // Same "whole image" copy/paste pair as ScoreFontEditor.vue's own
+    // handleCopyDigit/handlePasteDigit.
+    const handleCopyGlyph = (index) => {
+      copiedGlyphData.value = structuredClone(state.value.glyphs[index]);
+    };
+    const handlePasteGlyph = (index) => {
+      if (!copiedGlyphData.value) return;
+      state.value.glyphs[index] = structuredClone(copiedGlyphData.value);
+      handleChange();
+      // PixelEditor only reads its "value" prop once, on mount (see
+      // resetToken's own comment right below) - pasting writes the new
+      // pixels from OUTSIDE the target glyph's own editor instance, so
+      // without this it wouldn't actually show up until something else
+      // happened to force that glyph to remount.
+      resetToken.value++;
+    };
+
     // The space glyph's  char (' ') renders as empty, collapsed text -
     // without a visible stand-in, its label div has no content at all,
     // leaving it (and it alone) shorter than every other glyph's own
@@ -300,6 +375,8 @@ export default defineComponent({
       zoom, glyphWidth, cursorGlyphWidth, isCollapsed, toggleCollapsed, cardEntry: CARD_ENTRY,
       showInGamePreview, interlacedPreviewRows, enableTextScrollCursor,
       TEXT_GLYPH_ORDER, TEXT_GLYPH_WIDTH, TEXT_GLYPH_HEIGHT, TEXT_CURSOR_WIDTH, TEXT_CURSOR_HEIGHT, PIXEL_ASPECT,
+      activeEditor, activeEditorKey, setActiveEditor,
+      copiedGlyphData, handleCopyGlyph, handlePasteGlyph,
     };
   },
 });
@@ -333,9 +410,13 @@ export default defineComponent({
   padding-top: 0;
 }
 
+/* Attribute passthrough onto GraphicEditorToolbar.vue's own root (see
+   ScoreFontEditor.vue's identical comment) - :bleed="32" (set in the
+   template) handles reaching TextEditor.vue's own real scrolling edge two
+   padded levels up (this card's own .text-font-card-text AND TextEditor.
+   vue's own outer v-card-text around this whole card); this class just
+   keeps the row's own internal layout/spacing. */
 .text-font-controls-row {
-  display: flex;
-  align-items: center;
   gap: 16px;
   margin-bottom: 8px;
 }
@@ -352,6 +433,15 @@ export default defineComponent({
   flex: 0 0 auto;
   margin-top: 0 !important;
   padding-top: 0 !important;
+}
+
+/* Marks which glyph the shared toolbar above currently acts on - same
+   border-color + outline treatment as every other tab's own "-selected"
+   card highlight (App.vue's shared outlined-card border rule) and
+   PlayerEditor.vue's own identical per-frame highlight. */
+.glyph-editor-active >>> .v-card {
+  border-color: var(--v-primary-base, #1976d2) !important;
+  outline: 2px solid var(--v-primary-base, #1976d2) !important;
 }
 
 .cursor-glyph-section {
@@ -408,6 +498,26 @@ export default defineComponent({
   /* Pulls it up out of v-card-text's default 16px top padding, same reason
      as .frame-number-badge's own identical margin-top. */
   margin-top: -8px;
+}
+
+/* Same sizing as PlayerEditor.vue's own .player-icon-btn-size - the
+   Copy/Paste buttons under each glyph's graphic. */
+.glyph-icon-btn-size {
+  min-width: 0;
+  height: 26px !important;
+  width: 26px !important;
+  margin: 0;
+}
+
+.glyph-icon-btn-size >>> .v-icon {
+  font-size: 19px !important;
+}
+
+/* Same fix as PlayerEditor.vue's identical rule - without it, a disabled
+   Paste button read as clickable, no different from the enabled Copy
+   button next to it. */
+.glyph-icon-btn-size.v-btn--disabled {
+  opacity: 0.35;
 }
 
 /* Matches PixelEditor.vue's  outlined v-card shape/width - kept a plain

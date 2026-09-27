@@ -74,6 +74,18 @@ export default {
   color: rgba(0, 0, 0, 0.87) !important;
 }
 
+/* Vuetify's own disabled styling normally dims a button's icon/text color,
+   but the rest-state rule above forces that same color with !important (so
+   it doesn't flicker between Vuetify's default grey and this component's
+   own rest grey before JS ever sets an active/hover state) - which also
+   blocks Vuetify's disabled color from ever showing through. Dimming via
+   opacity instead reaches both the mdi-grid icon AND the plain-text "XY"
+   variant (including its box border, drawn in currentColor) the same way,
+   without needing to fight that !important. */
+.pixel-grid-toggle-btn.v-btn--disabled {
+  opacity: 0.35;
+}
+
 .pixel-grid-toggle-btn-active >>> .v-icon,
 .pixel-grid-toggle-btn-active .pixel-grid-toggle-label {
   color: #1976d2 !important;

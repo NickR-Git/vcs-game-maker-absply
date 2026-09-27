@@ -64,6 +64,77 @@ const DEFAULT_TITLE_SCREEN_CARD_HEIGHT = 20;
 export const blankTitleScreenPixels = (width) =>
   Array.from({length: DEFAULT_TITLE_SCREEN_CARD_HEIGHT}, () => new Array(width).fill(0));
 
+// A bitmap card's own frame list - {id, duration, pixels, rowColors} per
+// frame, same shape as a Player sprite's own animation.frames (see
+// DEFAULT_SPRITES in generators/bbasic/sprites.js) so the Title tab's own
+// editor UI can reuse that exact same frame-list pattern (TitleScreenEditor.vue
+// mirrors PlayerEditor.vue's own add/delete/copy/paste/set-height frame
+// controls). duration is in real frame ticks, same unit a sprite animation's
+// own frame.duration already uses - more than one frame plays back
+// automatically (see generateTitleScreenAnimationChecks in generators/
+// bbasic/titlescreen.js), no trigger block needed. card.color (48x1 cards
+// only - see TITLE_SCREEN_KERNEL_TYPES' own hasRowColors) stays a per-CARD
+// field, not per-frame - the 48x1 kernel's own per-copy asm only ever reads
+// one fixed color byte, not an indexed table the way hasRowColors types do,
+// so every frame of an animated 48x1 card always shows in the same color.
+export const cardFrameHeight = (card) =>
+  (card.frames && card.frames[0] && card.frames[0].pixels && card.frames[0].pixels.length) || 1;
+
+// More than one frame means this card plays back automatically (see
+// generateTitleScreenAnimationChecks' own comment in generators/bbasic/
+// titlescreen.js) - read by both the editor (to gate frame-count-dependent
+// UI) and the generator's own pre-scan (bbasic.js's init(), to know which
+// cards need a duration-counter dev var reserved at all).
+export const isCardAnimated = (card) => !!(card.frames && card.frames.length > 1);
+
+// Dev var names for an animated card's own runtime state (see
+// generateTitleScreenAnimationChecks' own comment in generators/bbasic/
+// titlescreen.js) - keyed by "screenId:cardId" (ref), NOT by resolved
+// kernel slot key, since slot assignment doesn't happen until
+// registerTitleScreenSubroutine runs, well after these have to be reserved
+// (bbasic.js's init(), same "reserve before any generator needs to resolve
+// it" timing every other dev var pre-scan in this codebase already follows).
+// titleCardFrameCounterVarName is reserved for EVERY animated card
+// (drives its automatic playback); titleCardScrollOffsetVarName only for
+// ones ALSO targeted by a "Set title screen scroll position" block.
+const sanitizeCardRef = (ref) => ref.replace(':', '_');
+export const titleCardFrameCounterVarName = (ref) => `titleCardFrame_${sanitizeCardRef(ref)}`;
+export const titleCardScrollOffsetVarName = (ref) => `titleCardScroll_${sanitizeCardRef(ref)}`;
+
+// Every animated card, across every screen, as "screenId:cardId" refs - see
+// titleCardFrameCounterVarName's own comment for why this is resolved by
+// ref rather than waiting for kernel slot assignment.
+export const resolveAnimatedTitleScreenCardRefs = () => {
+  const {screens} = processTitleScreenStorageDefaults(useTitleScreenStorage());
+  const refs = [];
+  screens.forEach((screen) => {
+    (screen.cards || []).forEach((card) => {
+      if (isCardAnimated(card)) refs.push(`${screen.id}:${card.id}`);
+    });
+  });
+  return refs;
+};
+
+// Migrates a pre-animation card (flat pixels/rowColors/color fields
+// directly on the card) into the one-frame array shape above - only bitmap
+// types (48x1/48x2/96x2) ever had those fields; "space"/"player"/"score"
+// cards pass through untouched. Idempotent (a card that already has
+// `frames` is returned as-is), so this is safe to run on every load, not
+// just once.
+const migrateCardFrames = (card) => {
+  if (Array.isArray(card.frames) || !TITLE_SCREEN_KERNEL_TYPES[card.type]) return card;
+  const {pixels, rowColors, ...rest} = card;
+  return {
+    ...rest,
+    frames: [{
+      id: 1,
+      duration: 10,
+      pixels: pixels || blankTitleScreenPixels(TITLE_SCREEN_KERNEL_TYPES[card.type].width),
+      ...(rowColors ? {rowColors} : {}),
+    }],
+  };
+};
+
 // One title-screen "page" - its  ordered card list and its own
 // background color, selectable independently by name from a "Draw title
 // screen" block's  dropdown (see generateTitleScreenOptions below and
@@ -103,7 +174,7 @@ export const processTitleScreenStorageDefaults = (storage) => {
         id: 1,
         name: 'Title Screen 1',
         backgroundColor: data.backgroundColor || 0,
-        cards: data.cards || [],
+        cards: (data.cards || []).map(migrateCardFrames),
       }],
     };
     storage.value = migrated;
@@ -112,6 +183,9 @@ export const processTitleScreenStorageDefaults = (storage) => {
   if (!data.screens.length) {
     data.screens.push(defaultTitleScreenScreen(1));
   }
+  data.screens.forEach((screen) => {
+    screen.cards = (screen.cards || []).map(migrateCardFrames);
+  });
   return data;
 };
 
@@ -155,12 +229,17 @@ Blockly.Blocks['titlescreen_draw'] = {
 };
 
 // Every card, across every screen, whose own "Window height (scrolling)"
-// field is set smaller than its full image height - only those actually
-// get a runtime scroll-position byte at all (see buildCardDataAsm's own
+// field is set smaller than one frame's height - only those actually get a
+// runtime scroll-offset byte at all (see buildCardDataAsm's own
 // "ifconst"-gated declaration), so a card that isn't scrolling has nothing
-// for this block to target. Value is "screenId:cardId" (a card's  id is
-// only unique within its screen - see handleAddCard's  getMaxId), parsed
-// back apart by the generator (see generators/bbasic/titlescreen.js's own
+// for this block to target. Compared against cardFrameHeight (one frame),
+// not the card's full stacked height - a card with multiple frames still
+// scrolls WITHIN whichever frame is currently showing (see
+// generateTitleScreenAnimationChecks' own comment in generators/bbasic/
+// titlescreen.js), not through its stacked frames, which already advance on
+// their own. Value is "screenId:cardId" (a card's own id is only unique
+// within its screen - see handleAddCard's own getMaxId), parsed back apart
+// by the generator (see generators/bbasic/titlescreen.js's own
 // titlescreen_scroll_set).
 const buildScrollableCardOptions = () => {
   try {
@@ -168,7 +247,7 @@ const buildScrollableCardOptions = () => {
     const options = [];
     screens.forEach((screen) => {
       (screen.cards || []).forEach((card) => {
-        const height = (card.pixels && card.pixels.length) || 0;
+        const height = cardFrameHeight(card);
         const scrollWindow = Number(card.scrollWindow) || 0;
         if (!(scrollWindow > 0 && scrollWindow < height)) return;
         const screenLabel = screen.name || `Title Screen ${screen.id}`;
@@ -195,9 +274,11 @@ Blockly.Blocks['titlescreen_scroll_set'] = {
     this.setNextStatement(true, null);
     this.setColour(TITLESCREEN_COLOR);
     this.setTooltip('Scrolls a Title Screen graphic that has its own "Window height" set ' +
-      'smaller than its full image - 0 shows the very top/first rows, increasing it scrolls ' +
-      'further down/through the image. Only graphics with scrolling enabled (Title Screen tab) ' +
-      'appear in the dropdown.');
+      'smaller than one frame\'s height - 0 shows the very top/first rows, increasing it scrolls ' +
+      'further down/through the frame. If the graphic has more than one animation frame, they ' +
+      'keep playing back automatically on their own schedule while this scrolls within whichever ' +
+      'frame is currently showing. Only graphics with scrolling enabled (Title Screen tab) appear ' +
+      'in the dropdown.');
   },
 };
 

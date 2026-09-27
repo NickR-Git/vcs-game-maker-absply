@@ -355,7 +355,30 @@ const buildCombinedPlayerVarBlocks = ({icon, colour}) => {
         {
           'type': 'field_dropdown',
           'name': 'VAR',
-          'options': buildPlayerVarOptionsFn((name) => [[FRAME_ICON + ' Frame', `${name}frame`]]),
+          // Custom-ordered (not buildPlayerVarOptionsFn's usual "base
+          // options, then extras appended at the end") so Height can sit
+          // between Y and Color, as requested, rather than trailing after
+          // Frame like every other get-only extra does.
+          'options': function() {
+            // eslint-disable-next-line no-invalid-this
+            const name = playerNameFromField(this.getSourceBlock());
+            return [
+              [HORIZONTAL_ICON + ' X', `${name}x`],
+              [VERTICAL_ICON + ' Y', `${name}y`],
+              // player0height/player1height are real batari Basic kernel
+              // variables (see sprite_player_rom_noise's own comment in
+              // generators/bbasic/sprites.js) - auto-set by the compiler to
+              // match whichever graphic frame is currently showing, exactly
+              // like player0frame already is, so this needs no new dev var
+              // or generator special-case, just another plain get-only
+              // option resolving straight to the real kernel symbol.
+              [HEIGHT_ICON + ' Height', `${name}height`],
+              [COLOR_ICON + ' Color', `${name}realcolor`],
+              [ANIMATION_ICON + ' Animation', `${name}animation`],
+              [MIRROR_ICON + ' Horizontal flip', `__${name}size_3_`],
+              [FRAME_ICON + ' Frame', `${name}frame`],
+            ];
+          },
         },
       ],
       'output': 'Number',

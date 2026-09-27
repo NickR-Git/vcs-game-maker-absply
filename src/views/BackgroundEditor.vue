@@ -3,19 +3,110 @@
     <v-card class="editor-container" :ripple="false" @click="deselectCard">
       <v-card-title>Backgrounds</v-card-title>
       <v-card-text>
-        <div class="editor-toolbar-row">
-          <editor-zoom v-model="zoom" />
-          <pixel-grid-toggle v-model="showPixelGrid" />
-          <pixel-grid-toggle
-            v-model="showPixelGridLabels"
-            :icon="null"
-            label="XY"
-            title-on="Hide pixel coordinates"
-            title-off="Show pixel coordinates"
-            :disabled="!showPixelGrid"
-            disabled-title="Turn on the pixel grid to show coordinates"
-          />
-        </div>
+        <graphic-editor-toolbar :active-editor="effectiveEditor">
+          <template v-slot:before-tools>
+            <editor-zoom v-model="zoom" />
+            <pixel-grid-toggle v-model="showPixelGrid" />
+            <pixel-grid-toggle
+              v-model="showPixelGridLabels"
+              :icon="null"
+              label="XY"
+              title-on="Hide pixel coordinates"
+              title-off="Show pixel coordinates"
+              :disabled="!showPixelGrid"
+              disabled-title="Turn on the pixel grid to show coordinates"
+            />
+          </template>
+          <template v-slot:after-tools>
+            <div class="text-center">
+              <v-menu
+                v-model="heightMenuVisible"
+                :close-on-content-click="false"
+                offset-x
+              >
+                <template v-slot:activator="{ on, attrs }">
+                  <v-btn
+                    text
+                    small
+                    class="unified-toolbar-height-btn"
+                    title="Set height"
+                    :disabled="!selectedBackground"
+                    v-bind="attrs"
+                    v-on="on"
+                    @click="openHeightMenu"
+                  >
+                    <v-icon>mdi-human-male-height-variant</v-icon>
+                  </v-btn>
+                </template>
+
+                <v-card>
+                  <v-list>
+                    <v-list-item>
+                      <v-list-item-content>
+                        <v-list-item-title>Set height for the selected background</v-list-item-title>
+                      </v-list-item-content>
+                    </v-list-item>
+                  </v-list>
+
+                  <v-divider></v-divider>
+
+                  <v-list>
+                    <v-list-item>
+                      <v-list-item-action>
+
+                        <v-slider
+                          v-model="heightMenuValue"
+                          :min="1"
+                          :max="64"
+                          label="Height"
+                          class="align-center"
+                          style="width: 400px"
+                        >
+                          <template v-slot:append>
+                            <v-text-field
+                              v-model="heightMenuValue"
+                              class="mt-0 pt-0"
+                              type="number"
+                              style="width: 60px"
+                            ></v-text-field>
+                          </template>
+                        </v-slider>
+
+                      </v-list-item-action>
+                    </v-list-item>
+                  </v-list>
+
+                  <div class="unified-toolbar-scale-checkbox">
+                    <v-checkbox
+                      v-model="heightMenuScaleContents"
+                      label="Scale existing contents (nearest neighbor)"
+                      hide-details
+                      dense
+                    />
+                  </div>
+
+                  <v-card-actions>
+                    <v-spacer></v-spacer>
+
+                    <v-btn
+                      text
+                      @click="heightMenuVisible = false"
+                    >
+                      Cancel
+                    </v-btn>
+                    <v-btn
+                      color="primary"
+                      text
+                      @click="handleUnifiedSetHeight()"
+                    >
+                      Set height
+                    </v-btn>
+                  </v-card-actions>
+                </v-card>
+              </v-menu>
+            </div>
+          </template>
+        </graphic-editor-toolbar>
         <quick-color-palette v-if="pfColorsEnabled" v-model="selectedQuickColor" />
         <v-list
           class="background-list"
@@ -63,25 +154,6 @@
                   />
 
                   <div class="background-corner-toolbar">
-                    <v-btn
-                      icon
-                      small
-                      title="Copy this background's image (and row colors, if any)"
-                      class="player-icon-btn-size"
-                      @click="() => handleCopyBackground(background)"
-                    >
-                      <v-icon>mdi-content-copy</v-icon>
-                    </v-btn>
-                    <v-btn
-                      icon
-                      small
-                      :disabled="!copiedBackgroundData"
-                      title="Paste copied image (and row colors, if any) onto this background"
-                      class="player-icon-btn-size"
-                      @click="() => handlePasteBackground(background)"
-                    >
-                      <v-icon>mdi-content-paste</v-icon>
-                    </v-btn>
                     <v-btn
                       v-if="pfColorsEnabled"
                       icon
@@ -145,6 +217,7 @@
                 <v-list-item-subtitle v-if="!isCollapsed(background)">
                   <div class="pixel-editor-container" :style="{width: editorWidth, maxWidth: editorWidth}">
                     <pixel-editor
+                      :ref="pixelEditorRefKey(background)"
                       :width="32"
                       :height="background.pixels.length"
                       name="background"
@@ -155,8 +228,10 @@
                       :showClearButton="true"
                       :showGrid="showPixelGrid"
                       :showCellIds="showPixelGridLabels"
+                      :hideToolbar="true"
                       @input="(pixels) => handleBackgroundPixelsInput(background, pixels)"
                       @clear="() => handleClearRowColors(background)"
+                      @activate="(editorInstance) => setActiveEditor(editorInstance, background.id)"
                     >
                       <template v-if="pfColorsEnabled" v-slot:sidebar>
                         <playfield-color-strip
@@ -165,6 +240,27 @@
                           :activeQuickColor="selectedQuickColor"
                           @input="(colors) => handleRowColorsInput(background, colors)"
                         />
+                      </template>
+                      <template v-slot:toolbar-end>
+                        <v-btn
+                          icon
+                          small
+                          title="Copy this background's image (and row colors, if any)"
+                          class="player-icon-btn-size"
+                          @click="() => handleCopyBackground(background)"
+                        >
+                          <v-icon>mdi-content-copy</v-icon>
+                        </v-btn>
+                        <v-btn
+                          icon
+                          small
+                          :disabled="!copiedBackgroundData"
+                          title="Paste copied image (and row colors, if any) onto this background"
+                          class="player-icon-btn-size"
+                          @click="() => handlePasteBackground(background)"
+                        >
+                          <v-icon>mdi-content-paste</v-icon>
+                        </v-btn>
                       </template>
                     </pixel-editor>
                   </div>
@@ -197,6 +293,7 @@ import {max} from 'lodash';
 import {useCollapsedIds} from '../hooks/collapse';
 import {CSS_CLASS_DRAGGING} from '../hooks/drag-reorder';
 import EditorZoom from '../components/EditorZoom.vue';
+import GraphicEditorToolbar from '../components/GraphicEditorToolbar.vue';
 import PixelEditor from '../components/PixelEditor.vue';
 import PixelGridToggle from '../components/PixelGridToggle.vue';
 import PlayfieldColorStrip from '../components/PlayfieldColorStrip.vue';
@@ -205,6 +302,7 @@ import {useBackgroundsStorage, useColorPaletteStorage, useConfigurationStorage,
   usePixelGridOverlayStorage, usePixelGridLabelsStorage} from '../hooks/project';
 import {useEditorZoom} from '../hooks/zoom';
 import {colorByteToCss} from '../utils/palette';
+import {resizePixelMatrixHeight} from '../utils/pixels';
 import {DEFAULT_BACKGROUNDS, DEFAULT_ROW_COLOR, effectiveBackgroundRows,
   processBackgroundStorageDefaults} from '../blocks/background';
 
@@ -230,8 +328,9 @@ const copiedBackgroundRowColors = ref(null);
 const copiedBackgroundData = ref(null);
 
 export default defineComponent({
-  components: {EditorZoom, PixelEditor, PixelGridToggle, PlayfieldColorStrip, QuickColorPalette},
+  components: {EditorZoom, GraphicEditorToolbar, PixelEditor, PixelGridToggle, PlayfieldColorStrip, QuickColorPalette},
   setup() {
+    const instance = getCurrentInstance();
     const backgroundsStorage = useBackgroundsStorage();
     const configurationStorage = useConfigurationStorage();
     const zoom = useEditorZoom('background');
@@ -294,6 +393,29 @@ export default defineComponent({
       selectedCardId.value = null;
     };
 
+    // Tracks whichever background's own PixelEditor instance was last
+    // clicked into (see its "activate" event, emitted from PixelEditor.vue's
+    // handleActivate) - the single toolbar above (Eraser/Pencil/Undo/Redo/
+    // Export/Import) acts on THIS editor, since every card's own
+    // per-instance toolbar is now hidden (hideToolbar on the pixel-editor
+    // below) in favor of this one shared row. Same mechanism as
+    // PlayerEditor.vue's own activeFrameEditor/setActiveFrame.
+    // activeBackgroundId is what effectiveEditor below compares against
+    // selectedBackground to decide whether this explicit click still
+    // "wins" over the selected card's own fallback editor.
+    const activeEditor = ref(null);
+    const activeBackgroundId = ref(null);
+    const setActiveEditor = (editorInstance, backgroundId) => {
+      activeEditor.value = editorInstance;
+      activeBackgroundId.value = backgroundId;
+    };
+
+    // Unique per background - used as its own PixelEditor.vue $ref name (see
+    // the template) so effectiveEditor (declared further below, once
+    // selectedBackground itself exists) can resolve straight to its
+    // component instance.
+    const pixelEditorRefKey = (background) => `pixelEditor_${background.id}`;
+
     const state = computed({
       get() {
         try {
@@ -313,6 +435,67 @@ export default defineComponent({
 
     const handleChildChange = () => {
       state.value = state.value;
+    };
+
+    // The card the shared "Set height" tool acts on - null (and the tool
+    // disabled) until a card is selected. Same reasoning as PlayerEditor.
+    // vue's own selectedAnimation: keyed off selectedCardId (the card the
+    // user is actually looking at), not activeEditor (the last editor
+    // clicked INTO to draw/undo/etc.), so it can't stay pointed at a stale
+    // background from a different card that was merely drawn on earlier.
+    const selectedBackground = computed(
+        () => state.value.backgrounds.find((background) => background.id === selectedCardId.value) || null);
+
+    // What the shared toolbar (Eraser/Pencil/Undo/Redo/Export/Import) above
+    // actually acts on - the explicitly-clicked-into editor (activeEditor)
+    // when it still belongs to the currently SELECTED background, otherwise
+    // the selected background's own editor, resolved via its $ref. Without
+    // this fallback, the tools stayed disabled (and no editor was targeted
+    // at all) until a graphic was clicked directly - reported as unexpected,
+    // since selecting a card (clicking its title/name field/anywhere else in
+    // it) already conveys "I'm working on this one" the same way every other
+    // per-card tool in this app already treats it. Same reasoning/shape as
+    // PlayerEditor.vue's own effectiveFrameEditor. Declared here (not
+    // alongside activeEditor above) purely for readability - it reads
+    // selectedBackground, so it makes more sense sitting next to it.
+    const effectiveEditor = computed(() => {
+      if (activeEditor.value && selectedBackground.value && activeBackgroundId.value === selectedBackground.value.id) {
+        return activeEditor.value;
+      }
+      if (selectedBackground.value) {
+        const refs = instance.proxy.$refs[pixelEditorRefKey(selectedBackground.value)];
+        return Array.isArray(refs) ? refs[0] || null : refs || null;
+      }
+      return null;
+    });
+
+    // Same fields as PixelEditor.vue's own height-menu state, now living
+    // here instead, since the menu itself moved to this shared toolbar.
+    const heightMenuVisible = ref(false);
+    const heightMenuValue = ref(0);
+    const heightMenuScaleContents = ref(false);
+    const openHeightMenu = () => {
+      if (!selectedBackground.value) return;
+      heightMenuValue.value = selectedBackground.value.pixels.length;
+      heightMenuScaleContents.value = false;
+    };
+    const handleUnifiedSetHeight = () => {
+      const background = selectedBackground.value;
+      if (!background) return;
+      heightMenuValue.value = Math.max(1, Math.min(64, heightMenuValue.value || 0));
+      if (heightMenuValue.value !== background.pixels.length) {
+        // Same customHeight flag handleBackgroundPixelsInput/
+        // handlePasteBackground set on any other resize - opts this
+        // background out of reflowBackgroundsToHeight's own automatic
+        // pfres-driven row count, so a later Superchip pfres change doesn't
+        // silently undo this resize.
+        background.customHeight = true;
+        background.pixels = resizePixelMatrixHeight(
+            background.pixels, heightMenuValue.value, 32, heightMenuScaleContents.value);
+      }
+      handleChildChange();
+      instance.proxy.$forceUpdate();
+      heightMenuVisible.value = false;
     };
 
     // Handles the pixel editor's own "input" event for a background's
@@ -477,7 +660,6 @@ export default defineComponent({
       instance.proxy.$forceUpdate();
     };
 
-    const instance = getCurrentInstance();
     const handleAddBackground = () => {
       const backgrounds = state.value.backgrounds;
       const maxId = max(backgrounds.map((o) => o.id)) || 0;
@@ -507,7 +689,10 @@ export default defineComponent({
       zoom, showPixelGrid, showPixelGridLabels, editorWidth, backgroundRows, pfColorsEnabled,
       dragAttrs, dragCardClass, dragHandleListeners, dragTargetListeners,
       copiedBackgroundRowColors, handleCopyBackgroundRowColors, handlePasteBackgroundRowColors,
-      copiedBackgroundData, handleCopyBackground, handlePasteBackground};
+      copiedBackgroundData, handleCopyBackground, handlePasteBackground,
+      activeEditor, setActiveEditor, selectedBackground,
+      effectiveEditor, pixelEditorRefKey,
+      heightMenuVisible, heightMenuValue, heightMenuScaleContents, openHeightMenu, handleUnifiedSetHeight};
   },
 });
 </script>
@@ -593,7 +778,13 @@ export default defineComponent({
   display: grid;
   gap: 8px;
   align-items: start;
-  margin-top: 12px;
+  /* Tighter than the 12px this used to be (matching the old margin-top
+     comment further up, before the sticky toolbar row existed) - see
+     PlayerEditor.vue's identical .animation-list rule for why: the toolbar
+     row directly above already has its own top/bottom padding, so the old
+     value on top of that read as too much combined space before the first
+     card. */
+  margin-top: 4px;
 }
 
 /* Same rounded, thin-bordered look as the Sound/Data/Text/Music tabs' own
@@ -724,6 +915,13 @@ export default defineComponent({
   margin: 0;
 }
 
+/* Same fix as PlayerEditor.vue's identical rule - without it, a disabled
+   Paste button read as clickable, no different from the enabled Copy
+   button next to it. */
+.player-icon-btn-size.v-btn--disabled {
+  opacity: 0.35;
+}
+
 .player-icon-btn-size >>> .v-icon {
   font-size: 19px !important;
 }
@@ -736,11 +934,25 @@ export default defineComponent({
   font-size: 21px !important;
 }
 
-/* Same reasoning as PlayerEditor.vue's own .editor-toolbar-row - keeps
-   editor-zoom and pixel-grid-toggle on one visually-centered line. */
-.editor-toolbar-row {
-  display: flex;
-  align-items: center;
+/* The "Set height" button passed into GraphicEditorToolbar.vue's own
+   "after-tools" slot - see PlayerEditor.vue's identical rule for why this
+   stays here rather than moving into that shared component. */
+.unified-toolbar-height-btn {
+  width: auto;
+  min-width: 0;
+  padding: 0 2px;
+  font-size: 0.75rem;
+  color: rgba(0, 0, 0, 0.55);
+}
+
+.unified-toolbar-height-btn >>> .v-icon {
+  font-size: 16px;
+  margin-top: -1px;
+}
+
+.unified-toolbar-scale-checkbox {
+  margin-top: -30px;
+  padding-left: 16px;
 }
 
 /* Absolutely positioned (matching Text/SoundFX/Data/Music's  collapse

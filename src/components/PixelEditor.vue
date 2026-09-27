@@ -1,5 +1,5 @@
 <template>
-  <v-card outlined @click="handleMouse" :ripple="false">
+  <v-card outlined @click="handleMouse" @mousedown="handleActivate" :ripple="false">
     <v-card-text>
       <slot name="badge" />
       <div class="editor-with-sidebar">
@@ -14,6 +14,10 @@
           <canvas
             ref="editor"
             class="editor-canvas"
+            :class="{
+              'editor-canvas-tool-pencil': toggledTool === 'pencil',
+              'editor-canvas-tool-eraser': toggledTool === 'eraser',
+            }"
             @mousedown="handleMouse"
             @mouseenter="handleMouse"
             @mouseleave="handleMouseLeave"
@@ -28,181 +32,22 @@
         </div>
       </div>
     </v-card-text>
-    <v-card-actions class="pixel-editor-tools">
-      <div class="pixel-editor-toolbar-row">
-          <v-btn-toggle v-model="toggledTool" borderless>
-            <v-btn
-              icon
-              small
-              title="Eraser"
-              value="eraser"
-              @click="editor.tool = eraser"
-            >
-              <v-icon>mdi-eraser</v-icon>
-            </v-btn>
-            <v-btn
-              icon
-              small
-              title="Pencil"
-              value="pencil"
-              @click="editor.tool = pencil"
-            >
-              <v-icon>mdi-pencil</v-icon>
-            </v-btn>
-            <v-btn
-              v-if="showClearButton"
-              icon
-              small
-              title="Clear"
-              value="clear"
-              @click="handleClear"
-            >
-              <v-icon>mdi-delete-sweep</v-icon>
-            </v-btn>
-          </v-btn-toggle>
-          <v-divider class="pixel-editor-toolbar-divider" vertical />
-          <v-btn
-            icon
-            small
-            title="Undo"
-            @click="() => editor.undo()"
-          >
-            <v-icon>mdi-undo</v-icon>
-          </v-btn>
-          <v-btn
-            icon
-            small
-            title="Redo"
-            @click="() => editor.redo()"
-          >
-            <v-icon>mdi-redo</v-icon>
-          </v-btn>
-
-          <v-divider class="pixel-editor-toolbar-divider" vertical />
-
-          <v-btn
-            icon
-            small
-            title="Export to image"
-            @click="() => handleExportImage()"
-          >
-            <v-icon>mdi-export</v-icon>
-          </v-btn>
-          <v-btn
-            icon
-            small
-            title="Import from image"
-            @click="() => handleImportImage()"
-          >
-            <v-icon>mdi-import</v-icon>
-          </v-btn>
-
-          <template v-if="allowChangingHeight">
-            <v-divider class="pixel-editor-toolbar-divider" vertical />
-
-            <div class="text-center">
-              <v-menu
-                v-model="heightMenuVisible"
-                :close-on-content-click="false"
-                offset-x
-              >
-                <template v-slot:activator="{ on, attrs }">
-                  <v-btn
-                    text
-                    small
-                    class="pixel-editor-height-btn"
-                    title="Set height"
-                    v-bind="attrs"
-                    v-on="on"
-                    @click="heightMenuValue = value.length; heightMenuScaleContents = false; heightMenuApplyToAllFrames = false"
-                  >
-                    <v-icon>mdi-human-male-height-variant</v-icon>
-                  </v-btn>
-                </template>
-
-                <v-card>
-                  <v-list>
-                    <v-list-item>
-                      <v-list-item-content>
-                        <v-list-item-title>Set height for this frame</v-list-item-title>
-                      </v-list-item-content>
-                    </v-list-item>
-                  </v-list>
-
-                  <v-divider></v-divider>
-
-                  <v-list>
-                    <v-list-item>
-                      <v-list-item-action>
-
-                        <v-slider
-                          v-model="heightMenuValue"
-                          :min="1"
-                          :max="64"
-                          label="Height"
-                          class="align-center"
-                          style="width: 400px"
-                        >
-                          <template v-slot:append>
-                            <v-text-field
-                              v-model="heightMenuValue"
-                              class="mt-0 pt-0"
-                              type="number"
-                              style="width: 60px"
-                            ></v-text-field>
-                          </template>
-                        </v-slider>
-
-                      </v-list-item-action>
-                    </v-list-item>
-                  </v-list>
-
-                  <!-- A plain div, not another v-list-item like the slider
-                       above it - v-list-item's own padding (meant for a
-                       list of separate, evenly-spaced rows) left a wide gap
-                       above this AND visually separated the checkbox from
-                       its own label, when the two are really one small,
-                       single control that belongs right under the slider
-                       it modifies. -->
-                  <div class="pixel-editor-scale-checkbox">
-                    <v-checkbox
-                      v-model="heightMenuScaleContents"
-                      label="Scale existing contents (nearest neighbor)"
-                      hide-details
-                      dense
-                    />
-                    <v-checkbox
-                      v-if="allowApplyToAllFrames"
-                      v-model="heightMenuApplyToAllFrames"
-                      label="Apply to every frame in this animation"
-                      hide-details
-                      dense
-                    />
-                  </div>
-
-                  <v-card-actions>
-                    <v-spacer></v-spacer>
-
-                    <v-btn
-                      text
-                      @click="heightMenuVisible = false"
-                    >
-                      Cancel
-                    </v-btn>
-                    <v-btn
-                      color="primary"
-                      text
-                      @click="handleSetHeight()"
-                    >
-                      Set height
-                    </v-btn>
-                  </v-card-actions>
-                </v-card>
-              </v-menu>
-            </div>
-          </template>
-          <v-spacer />
-          <slot name="toolbar-end" />
+    <!-- Every real call site now drives this component's own tools (Eraser/
+         Pencil/Undo/Redo/Export/Import/Set height) from a single toolbar
+         shared across a whole tab (see GraphicEditorToolbar.vue) rather than
+         a per-instance one - Clear is the one action still requested per
+         card/frame, so it's the only thing left to render here. -->
+    <v-card-actions v-if="showClearButton" class="pixel-editor-tools">
+      <div class="pixel-editor-hidden-toolbar-row">
+        <slot name="toolbar-end" />
+        <v-btn
+          icon
+          small
+          title="Clear"
+          @click="handleClear"
+        >
+          <v-icon>mdi-broom</v-icon>
+        </v-btn>
       </div>
     </v-card-actions>
   </v-card>
@@ -239,15 +84,6 @@ export default {
     // button isn't worth the risk of a misclick there. Backgrounds are the
     // one place a whole-grid clear is actually useful on its own.
     showClearButton: {type: Boolean, default: false},
-    // Shows a second "Set height" checkbox that applies the SAME resize
-    // (and the "scale existing contents" choice above it) to every other
-    // frame in this sprite's  animation, not just this one - opt-in
-    // (default off, see allowApplyToAllFrames'  gating below) since
-    // only a frame that's actually PART of an animation (a player sprite)
-    // has other frames to apply anything to at all; a background or the
-    // score font (allowChangingHeight itself is already false for both)
-    // never shows this regardless.
-    allowApplyToAllFrames: {type: Boolean, default: false},
     // Draws a thin grid line around every cell, on a separate overlay
     // canvas layered on top of the real drawing canvas (see mounted()'s own
     // ResizeObserver) - a pure visual aid, never part of the pixel data
@@ -266,27 +102,11 @@ export default {
       pencil: new Pencil(this.fgColor),
       eraser: new Pencil(this.bgColor),
 
-      heightMenuVisible: false,
-      heightMenuValue: 0,
-      // Off by default (reset every time the popup opens - see the
-      // activator's  click handler) - the existing truncate/pad
-      // behavior (see handleSetHeight) is what every frame resize has
-      // always done, so a first-time or occasional resize doesn't silently
-      // start distorting artwork the user only meant to crop or extend.
-      heightMenuScaleContents: false,
-      // Off by default, same reasoning and same activator reset as
-      // heightMenuScaleContents above - a resize should only ever touch
-      // every other frame in the animation when the user explicitly asks
-      // for that, not as a lingering choice from the last time this popup
-      // happened to be open (possibly on a totally different frame).
-      heightMenuApplyToAllFrames: false,
-
-      // String values (see the Eraser/Pencil/Clear v-btn "value" props),
-      // not index-based - Clear sits last in the group (after Pencil) so it
-      // can be repositioned without touching Eraser's/Pencil's  values,
-      // but it isn't a real drawing tool, so it's excluded here and reset
-      // back to whichever tool was actually active after every click (see
-      // handleClear) rather than staying lit up as if selected.
+      // 'pencil' or 'eraser' - which tool is currently active. Read
+      // externally by GraphicEditorToolbar.vue (its own activeTool
+      // computed) to highlight the right one on the shared toolbar, and set
+      // externally via setTool() below - this instance no longer renders
+      // its own Eraser/Pencil buttons at all (see setTool's own comment).
       toggledTool: 'pencil',
     };
   },
@@ -334,13 +154,13 @@ export default {
       this.drawGridOverlay();
     },
     // Picks up a row-count change this component DIDN'T itself just emit -
-    // needed for "Apply to every frame in this animation" (see
-    // handleSetHeight's  resize-all-frames event): every OTHER frame's
-    // own PixelEditor instance never sees that resize happen locally (only
-    // the ONE frame the popup was actually open on does, via
-    // handleSetHeight's  initEditor call), it only sees its "value" prop
-    // change out from under it once PlayerEditor.vue applies the resize to
-    // its frame.pixels - and the underlying PixelEditor library has no
+    // needed for "Set height" resizing every frame on a card together (see
+    // e.g. PlayerEditor.vue's own handleUnifiedSetHeight): every OTHER
+    // frame's own PixelEditor instance never sees that resize happen
+    // locally (only the ONE frame applyHeight was actually called on does),
+    // it only sees its "value" prop change out from under it once
+    // PlayerEditor.vue applies the resize to its frame.pixels - and the
+    // underlying PixelEditor library has no
     // built-in way to change its  row count after construction (see
     // initEditor's  comment), so without this, every other frame would
     // keep silently rendering at its OLD height/content until manually
@@ -491,6 +311,29 @@ export default {
       this.handleMouse();
     },
 
+    // Reports that this frame was just interacted with, so a caller driving
+    // a single toolbar shared across many PixelEditor instances (see
+    // GraphicEditorToolbar.vue) knows which one to act on next. Passes
+    // itself (not just an id) so the caller can call straight into
+    // setTool/undo/redo/applyHeight/handle*Image/handleClear below without
+    // needing its own parallel map of ids to component instances.
+    handleActivate() {
+      this.$emit('activate', this);
+    },
+
+    setTool(toolName) {
+      this.toggledTool = toolName;
+      this.editor.tool = toolName === 'eraser' ? this.eraser : this.pencil;
+    },
+
+    undo() {
+      this.editor.undo();
+    },
+
+    redo() {
+      this.editor.redo();
+    },
+
     handleMouse: debounce(function() {
       // eslint-disable-next-line no-invalid-this
       const pixels = this.getPixels();
@@ -604,31 +447,18 @@ export default {
       if (this.showGrid) this.$nextTick(() => this.drawGridOverlay());
     },
 
-    handleSetHeight() {
-      this.heightMenuValue = this.heightMenuValue || 0;
-      this.heightMenuValue = Math.max(1, Math.min(64, this.heightMenuValue));
-
+    // The actual resize - called externally by whichever tab-level "Set
+    // height" menu is currently driving this instance (see
+    // GraphicEditorToolbar.vue), since this component no longer has a
+    // height-menu popup of its own to call it internally.
+    applyHeight(newHeight, scaleContents) {
       const pixels = this.getPixels();
-      if (this.heightMenuValue != this.value.length) {
-        const resized = resizePixelMatrixHeight(
-            pixels, this.heightMenuValue, this.editor.width, this.heightMenuScaleContents);
+      if (newHeight != this.value.length) {
+        const resized = resizePixelMatrixHeight(pixels, newHeight, this.editor.width, scaleContents);
 
         this.$emit('input', resized);
-        this.initEditor(this.heightMenuValue, resized);
+        this.initEditor(newHeight, resized);
       }
-
-      // Every OTHER frame in this sprite's  animation - this component
-      // has no idea what those are (it only ever sees its  one frame's
-      // pixels), so the actual resizing happens one level up, in
-      // PlayerEditor.vue's  handler for this event; this only reports
-      // what the user asked for (the same height/scale choice this frame
-      // itself just used, above) and lets that handler decide who "every
-      // other frame" actually is.
-      if (this.allowApplyToAllFrames && this.heightMenuApplyToAllFrames) {
-        this.$emit('resize-all-frames', {height: this.heightMenuValue, scaleContents: this.heightMenuScaleContents});
-      }
-
-      this.heightMenuVisible = false;
     },
 
     createEmptyPixelMatrix() {
@@ -655,7 +485,6 @@ export default {
     },
 
     handleClear() {
-      const previousTool = this.editor.tool === this.eraser ? 'eraser' : 'pencil';
       this.setPixels(null);
       this.$emit('input', this.getPixels());
       // Separate from 'input' (an ordinary pixel edit) - lets a caller reset
@@ -663,12 +492,6 @@ export default {
       // whatever it has) alongside the pixels specifically on a real Clear
       // click, without every plain drawing stroke also wiping colors.
       this.$emit('clear');
-      // v-btn-toggle lights up whichever child's value was just clicked -
-      // without this, Clear itself would stay visually "selected" even
-      // though it isn't a real drawing tool (editor.tool is untouched).
-      this.$nextTick(() => {
-        this.toggledTool = previousTool;
-      });
     },
   },
 };
@@ -703,6 +526,28 @@ export default {
   height: 100%;
 
   border: 1px solid;
+}
+
+/* Swaps the plain arrow cursor for a small pencil/eraser glyph while
+   hovering the canvas, matching whichever tool is actually active
+   (toggledTool - see setTool) - a plain crosshair (Vuetify's own default
+   hover cursor here otherwise) gave no visual confirmation of WHICH tool a
+   click would use, easy to lose track of once the toolbar itself moved out
+   of this component (see hideToolbar) onto a shared row elsewhere on the
+   page. White fill + black outline (not the app's own plain grey/black MDI
+   icon color) so the glyph stays visible over both the mostly-black canvas
+   backgrounds these editors usually have and any bright artwork drawn on
+   them. The hotspot (the two numbers after the url()) is the pencil's own
+   drawing tip / the eraser's own bottom-left corner, so the cursor visually
+   points at the exact cell a click would affect, not just floats nearby -
+   "crosshair" is the fallback for browsers that don't support custom cursor
+   images at all. */
+.editor-canvas-tool-pencil {
+  cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><path fill='white' stroke='black' stroke-width='1' d='M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z'/></svg>") 3 21, crosshair;
+}
+
+.editor-canvas-tool-eraser {
+  cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><path fill='white' stroke='black' stroke-width='1' d='M16.24,3.56L21.19,8.5C21.97,9.29 21.97,10.55 21.19,11.34L12,20.53C10.44,22.09 7.91,22.09 6.34,20.53L2.81,17C2.03,16.21 2.03,14.95 2.81,14.16L13.75,3.56C14.54,2.78 15.8,2.78 16.24,3.56M4.22,15.58L7.76,19.11C8.54,19.9 9.8,19.9 10.59,19.11L14.54,15.16L9.42,10.04L4.22,15.58Z'/></svg>") 4 16, crosshair;
 }
 
 /* Layered directly on top of .editor-canvas (same inset/height) - drawn at
@@ -754,13 +599,7 @@ export default {
 }
 
 /* Flat icon buttons: no grey box, no elevation, and a hit area only a little
-   larger than the icon itself. No horizontal margin (an earlier version had
-   "0 1px") - at 200% zoom, the Score tab's own digit cards (narrower than
-   Player/Background's, since they're sized off DIGIT_BASE_WIDTH rather than
-   a full sprite frame) were just barely too narrow for the full button row
-   (eraser/clear/pencil, undo/redo, export/import) to fit without wrapping -
-   reclaiming the 2px/button this margin cost (see .pixel-editor-toolbar-
-   divider's own matching trim below) was enough to close that gap. */
+   larger than the icon itself. */
 .pixel-editor-tools >>> .v-btn {
   background-color: transparent !important;
   box-shadow: none !important;
@@ -769,12 +608,6 @@ export default {
   height: 26px;
   width: 26px;
   margin: 0;
-}
-
-/* Tighter than Vuetify's own "mx-1" (4px each side) - see .pixel-editor-
-   tools >>> .v-btn's own comment on why every bit of width matters here. */
-.pixel-editor-tools >>> .pixel-editor-toolbar-divider {
-  margin: 0 2px;
 }
 
 /* Vuetify paints its  grey hover/focus overlay here, which is the box we
@@ -799,59 +632,12 @@ export default {
   transform: scale(0.82);
 }
 
-/* The selected drawing tool, which previously read as the pressed grey box. */
-.pixel-editor-tools >>> .v-btn.v-btn--active .v-icon {
-  color: #1976d2 !important;
-}
-
-/* This one also shows the height next to its icon, so it needs the extra room. */
-.pixel-editor-tools >>> .v-btn.pixel-editor-height-btn {
-  width: auto;
-  min-width: 0;
-  padding: 0 2px;
-  font-size: 0.75rem;
-  color: rgba(0, 0, 0, 0.55);
-}
-
-.pixel-editor-tools >>> .v-btn.pixel-editor-height-btn .v-icon {
-  font-size: 16px;
-  margin-top: -1px;
-}
-
-.pixel-editor-tools >>> .v-btn.pixel-editor-height-btn:hover {
-  color: rgba(0, 0, 0, 0.87);
-}
-
-/* Pulled up close to the slider's  list-item above (a larger negative
-   top margin - confirmed the first attempt at this still left a visible
-   gap). left: 16px matches v-list-item's own default horizontal padding
-   (the slider row above still has that padding, being a real v-list-item;
-   this row is a plain div specifically to avoid v-list-item's much larger
-   VERTICAL padding, but still needs the same LEFT inset to actually line
-   up with it) - confirmed as a real bug leaving that out entirely: with
-   zero padding of its own, this row sat flush against the card's edge,
-   further left than the slider above it, not aligned with it. */
-.pixel-editor-scale-checkbox {
-  margin-top: -30px;
-  padding-left: 16px;
-}
-
-/* A plain flex row instead of Vuetify's v-row/v-col: their grid negative
-   margins are meant for full-width layouts and wrap prematurely in this
-   narrow, fixed-width card even when the buttons would otherwise fit. */
-.pixel-editor-toolbar-row {
+/* The Clear button - centered as one group with the "toolbar-end" slot's
+   own Copy/Paste (when a caller supplies them) under the graphic. */
+.pixel-editor-hidden-toolbar-row {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  /* v-card-actions is itself a flex container, so without this the row (its
-     one flex-item child) shrinks to fit its own icons instead of spanning
-     the full card width - leaving the "toolbar-end" slot's v-spacer nothing
-     to actually expand into. */
+  justify-content: center;
   width: 100%;
-  padding: 0 8px;
-}
-
-.pixel-editor-tools >>> .v-btn-toggle {
-  background-color: transparent !important;
 }
 </style>

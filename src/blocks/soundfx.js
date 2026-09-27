@@ -87,6 +87,21 @@ export const DEFAULT_ENVELOPE_DECAY = 0;
 export const DEFAULT_ENVELOPE_RELEASE = 4;
 export const ENVELOPE_SUSTAIN_PERCENT_OPTIONS = [0, 25, 50, 75, 100];
 export const DEFAULT_ENVELOPE_SUSTAIN_PERCENT = 100;
+// How many frames the Sustain hold itself lasts - same small-fixed-dropdown
+// reasoning as every other stage above, same range as Attack/Release (see
+// ENVELOPE_ATTACK_RELEASE_FRAME_OPTIONS' own comment). Release now always
+// starts immediately after Sustain ends (see clampEnvelopeStages/
+// buildEnvelopeCurve in utils/envelope.js) rather than always ending exactly
+// on the sound/note's own last frame the way it used to when Sustain had no
+// length of its own - a real reported request ("I should be able to shorten
+// the sustain to 0"), which wasn't actually possible before this existed:
+// Sustain used to just be "however long is left," with no way to make that
+// zero regardless of how short Attack/Decay/Release were set. Defaults to
+// the max option (32) so an existing preset saved before this field existed
+// (see its own migration clamp below) keeps sounding close to its old
+// "holds until Release" behavior rather than suddenly cutting off early.
+export const ENVELOPE_SUSTAIN_FRAME_OPTIONS = [0, 2, 4, 8, 16, 32];
+export const DEFAULT_ENVELOPE_SUSTAIN_FRAMES = 32;
 
 // Only meaningful once a note actually overlaps another note on the same
 // channel - see canPlaceNoteAt in MusicEditor.vue, which lets any
@@ -112,6 +127,7 @@ export const DEFAULT_SOUND_EFFECTS = {
       envelopeAttack: DEFAULT_ENVELOPE_ATTACK,
       envelopeDecay: DEFAULT_ENVELOPE_DECAY,
       envelopeSustain: DEFAULT_ENVELOPE_SUSTAIN_PERCENT,
+      envelopeSustainLength: DEFAULT_ENVELOPE_SUSTAIN_FRAMES,
       envelopeRelease: DEFAULT_ENVELOPE_RELEASE,
       // Only used for this preset's notes on the Music tab (see
       // generators/bbasic/music.js) - always on for every note played with
@@ -188,6 +204,11 @@ export const processSoundEffectsStorageDefaults = (soundEffectsStorage) => {
       Vue.set(soundEffect, 'envelopeSustain', DEFAULT_ENVELOPE_SUSTAIN_PERCENT);
     } else {
       Vue.set(soundEffect, 'envelopeSustain', Number(soundEffect.envelopeSustain));
+    }
+    if (!ENVELOPE_SUSTAIN_FRAME_OPTIONS.includes(Number(soundEffect.envelopeSustainLength))) {
+      Vue.set(soundEffect, 'envelopeSustainLength', DEFAULT_ENVELOPE_SUSTAIN_FRAMES);
+    } else {
+      Vue.set(soundEffect, 'envelopeSustainLength', Number(soundEffect.envelopeSustainLength));
     }
     if (!ARPEGGIO_DIVISION_OPTIONS.includes(Number(soundEffect.arpeggioDivision))) {
       soundEffect.arpeggioDivision = DEFAULT_ARPEGGIO_DIVISION;

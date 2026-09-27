@@ -1,5 +1,5 @@
 <template>
-  <v-card flat>
+  <v-card flat class="editor-container">
     <v-card-title>Score</v-card-title>
     <v-card-text>
       <v-select
@@ -52,8 +52,12 @@
             class="score-padding-field"
           />
         </div>
-        <editor-zoom v-model="zoom" class="score-editor-zoom" />
-        <div class="digit-list">
+        <graphic-editor-toolbar class="score-editor-toolbar-row" :active-editor="activeEditor">
+          <template v-slot:before-tools>
+            <editor-zoom v-model="zoom" class="score-editor-zoom" />
+          </template>
+        </graphic-editor-toolbar>
+        <div class="digit-list" :class="{'digit-list-tools-hidden': zoom <= 0.5}">
           <div
             class="digit"
             :style="{width: digitWidth}"
@@ -62,7 +66,10 @@
             :key="index"
           >
             <div class="digit-label">{{ index }}</div>
-            <div class="digit-editor">
+            <div
+              class="digit-editor"
+              :class="{'digit-editor-active': activeEditorIndex === index}"
+            >
               <pixel-editor
                 :key="activeDigitHeight + '-' + resetToken"
                 :width="8"
@@ -73,8 +80,32 @@
                 :showClearButton="true"
                 :name="'score-font-digit-' + index"
                 :allowChangingHeight="false"
+                :hideToolbar="true"
                 @input="handleChange"
-              />
+                @activate="(editorInstance) => setActiveEditor(editorInstance, index)"
+              >
+                <template v-slot:toolbar-end>
+                  <v-btn
+                    icon
+                    small
+                    title="Copy this digit's image"
+                    class="player-icon-btn-size"
+                    @click="() => handleCopyDigit(index)"
+                  >
+                    <v-icon>mdi-content-copy</v-icon>
+                  </v-btn>
+                  <v-btn
+                    icon
+                    small
+                    :disabled="!copiedDigitData"
+                    title="Paste copied image onto this digit"
+                    class="player-icon-btn-size"
+                    @click="() => handlePasteDigit(index)"
+                  >
+                    <v-icon>mdi-content-paste</v-icon>
+                  </v-btn>
+                </template>
+              </pixel-editor>
             </div>
           </div>
         </div>
@@ -91,6 +122,7 @@ import {computed, defineComponent, ref} from '@vue/composition-api';
 
 import ColorSwatchPicker from '../components/ColorSwatchPicker.vue';
 import EditorZoom from '../components/EditorZoom.vue';
+import GraphicEditorToolbar from '../components/GraphicEditorToolbar.vue';
 import PixelEditor from '../components/PixelEditor.vue';
 import {useConfigurationStorage, useScoreFontStorage, useSquishCustomScoreFontStorage} from '../hooks/project';
 import {useEditorZoom} from '../hooks/zoom';
@@ -130,8 +162,15 @@ const CUSTOM_SCORE_FONT_OPTION = {text: 'Custom (drawn below)', value: CUSTOM_SC
 // with no "Background: set color" block never changes it from this).
 const BACKGROUND_DEFAULT_COLOR_BYTE = 0xC4;
 
+// Same "module-scope ref, not per-instance state" reasoning as
+// PlayerEditor.vue's own copiedFrameData - a copied digit survives
+// navigating away from this tab and back (this component is destroyed/
+// recreated on navigation - see hooks/collapse.js's own comment on that
+// lifecycle elsewhere).
+const copiedDigitData = ref(null);
+
 export default defineComponent({
-  components: {ColorSwatchPicker, EditorZoom, PixelEditor},
+  components: {ColorSwatchPicker, EditorZoom, GraphicEditorToolbar, PixelEditor},
   setup() {
     const scoreFontStorage = useScoreFontStorage();
     const squishCustomScoreFontStorage = useSquishCustomScoreFontStorage();
@@ -328,6 +367,23 @@ export default defineComponent({
     const activeDigitHeight = computed(() =>
       isSquishCustomSelected.value ? SQUISH_DIGIT_HEIGHT : DIGIT_HEIGHT);
 
+    // Tracks whichever digit's own PixelEditor instance was last clicked
+    // into (see its "activate" event, emitted from PixelEditor.vue's
+    // handleActivate) - the single toolbar above (Eraser/Pencil/Undo/Redo/
+    // Export/Import) acts on THIS digit, since every digit's own
+    // per-instance toolbar is now hidden (hideToolbar on the pixel-editor
+    // below) in favor of this one shared row. No card-selection fallback is
+    // needed here (unlike PlayerEditor.vue's own effectiveFrameEditor) -
+    // there's no way to "select" a digit other than clicking directly into
+    // its own PixelEditor card (no separate header/name row to click that
+    // wouldn't also activate it), so a plain activeEditor is enough.
+    const activeEditor = ref(null);
+    const activeEditorIndex = ref(null);
+    const setActiveEditor = (editorInstance, index) => {
+      activeEditor.value = editorInstance;
+      activeEditorIndex.value = index;
+    };
+
     const state = computed({
       get() {
         try {
@@ -347,6 +403,24 @@ export default defineComponent({
     // reassigned to push it back into storage.
     const handleChange = () => {
       state.value = state.value;
+    };
+
+    // Same "whole image" copy/paste pair as PlayerEditor.vue's own
+    // handleCopyFrame/handlePasteFrame - digits have no row colors or other
+    // per-cell metadata to carry along, just the plain pixel matrix.
+    const handleCopyDigit = (index) => {
+      copiedDigitData.value = structuredClone(state.value.digits[index]);
+    };
+    const handlePasteDigit = (index) => {
+      if (!copiedDigitData.value) return;
+      state.value.digits[index] = structuredClone(copiedDigitData.value);
+      handleChange();
+      // PixelEditor only reads its "value" prop once, on mount (see
+      // resetToken's own comment right below) - pasting writes the new
+      // pixels from OUTSIDE the target digit's own editor instance, so
+      // without this it wouldn't actually show up until something else
+      // happened to force that digit to remount.
+      resetToken.value++;
     };
 
     // PixelEditor only reads its "value" prop once, on mount - it has no
@@ -382,6 +456,8 @@ export default defineComponent({
       scorePaddingLines,
       isEditableFontSelected,
       DECIMAL_DIGIT_COUNT,
+      activeEditor, activeEditorIndex, setActiveEditor,
+      copiedDigitData, handleCopyDigit, handlePasteDigit,
     };
   },
 });
@@ -407,8 +483,41 @@ export default defineComponent({
 /* Breathing room from the "Use extra glyphs" switch's  hint text
    ("Costs 48 extra bytes of ROM space.") directly above - the two sat flush
    against each other otherwise. */
-.score-editor-zoom {
+/* Unlike PlayerEditor.vue/BackgroundEditor.vue/TitleScreenEditor.vue, this
+   tab never had its own self-scrolling wrapper - it relied on some outer
+   ancestor (app-main's own overflow) to scroll instead, which is why the
+   toolbar row below couldn't stick to "the top of this tab" the way theirs
+   do (there was no boundary of this tab's own to stick to in the first
+   place). Same position: absolute + overflow: auto trick as those other
+   tabs' own .editor-container. */
+.editor-container {
+  position: absolute;
+  overflow: auto;
+  top: 0;
+  bottom: 0;
+  width: 100%;
+}
+
+/* Attribute passthrough - Vue applies a non-prop class/attribute given to a
+   component directly onto ITS OWN root element, so this reaches
+   GraphicEditorToolbar.vue's own outer div despite living in a different
+   file - restores the gap between the switches row above and the toolbar
+   that this tab used to set directly on its own (now-removed) wrapper. */
+.score-editor-toolbar-row {
   margin-top: 12px;
+}
+
+.score-editor-zoom {
+  margin-bottom: 0;
+}
+
+/* Marks which digit the shared toolbar above currently acts on - same
+   border-color + outline treatment as every other tab's own "-selected"
+   card highlight (App.vue's shared outlined-card border rule) and
+   PlayerEditor.vue's own identical per-frame highlight. */
+.digit-editor-active >>> .v-card {
+  border-color: var(--v-primary-base, #1976d2) !important;
+  outline: 2px solid var(--v-primary-base, #1976d2) !important;
 }
 
 .score-bkcolor-row {
@@ -448,6 +557,16 @@ export default defineComponent({
   gap: 16px;
 }
 
+/* At 50% zoom (the lowest level - see hooks/zoom.js's own ZOOM_LEVELS) each
+   digit is too small for the Copy/Paste/Clear row below its graphic to fit
+   without the icons overlapping or the card growing wider than the graphic
+   itself - hidden here rather than shrinking them further, since they're
+   still reachable via the shared toolbar at the top of the tab regardless
+   of zoom level. */
+.digit-list-tools-hidden >>> .pixel-editor-hidden-toolbar-row {
+  display: none;
+}
+
 /* Width is set inline from the zoom factor. */
 
 .digit-label {
@@ -461,5 +580,25 @@ export default defineComponent({
 
 .reset-button {
   margin-top: 24px;
+}
+
+/* Same sizing as PlayerEditor.vue's own identical .player-icon-btn-size -
+   the Copy/Paste buttons under each digit's graphic. */
+.player-icon-btn-size {
+  min-width: 0;
+  height: 26px !important;
+  width: 26px !important;
+  margin: 0;
+}
+
+/* Same fix as PlayerEditor.vue's identical rule - without it, a disabled
+   Paste button read as clickable, no different from the enabled Copy
+   button next to it. */
+.player-icon-btn-size.v-btn--disabled {
+  opacity: 0.35;
+}
+
+.player-icon-btn-size >>> .v-icon {
+  font-size: 19px !important;
 }
 </style>

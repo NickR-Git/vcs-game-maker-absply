@@ -1,9 +1,9 @@
 <template>
   <div>
     <v-card flat :ripple="false" class="editor-container" @click="deselectCard">
-      <v-card-title>Music (alpha 0.43)</v-card-title>
+      <v-card-title>Music (alpha 0.6)</v-card-title>
       <v-alert type="warning" dense outlined :icon="false" class="alpha-notice">
-        This feature is in early alpha. Things may change or break. In fact, it's guaranteed. You've been warned!
+        This feature is in alpha. Things may change or break. You've been warned!
       </v-alert>
       <v-card-text class="dim-section">
         <div class="dim-controls">
@@ -3325,7 +3325,12 @@ export default defineComponent({
 });
 </script>
 <style scoped>
+/* Shrinks to fit the warning text itself instead of stretching the full
+   card width (Vuetify's own v-alert default) - width: fit-content keeps its
+   own internal padding symmetric left/right either way, so this doesn't
+   need any padding override of its own to match. */
 .alpha-notice {
+  width: fit-content;
   margin: 0 16px 8px;
 }
 

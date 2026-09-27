@@ -830,7 +830,7 @@ const flattenPatternEvents = (song, pattern, channels, soundEffects, config = {}
   // its original pieces happened to have.
   const pushEvent = (channel, audv, audc, audf, frames, envelope = false, arpeggioSpeed = 0, arpeggioInterval = 0,
       arpeggioRange = 0, notePlayedIndex = 0, envelopeAttack = 0, envelopeDecay = 0, envelopeSustain = 0,
-      envelopeRelease = 0) => {
+      envelopeRelease = 0, envelopeSustainLength = 0) => {
     if (frames <= 0) return;
     const events = perChannel[channel];
     const prev = events[events.length - 1];
@@ -839,11 +839,12 @@ const flattenPatternEvents = (song, pattern, channels, soundEffects, config = {}
       prev.arpeggioSpeed === arpeggioSpeed && prev.arpeggioInterval === arpeggioInterval &&
       prev.arpeggioRange === arpeggioRange && prev.notePlayedIndex === notePlayedIndex &&
       prev.envelopeAttack === envelopeAttack && prev.envelopeDecay === envelopeDecay &&
-      prev.envelopeSustain === envelopeSustain && prev.envelopeRelease === envelopeRelease) {
+      prev.envelopeSustain === envelopeSustain && prev.envelopeRelease === envelopeRelease &&
+      prev.envelopeSustainLength === envelopeSustainLength) {
       prev.frames += frames;
     } else {
       events.push({audv, audc, audf, frames, envelope, arpeggioSpeed, arpeggioInterval, arpeggioRange,
-        notePlayedIndex, envelopeAttack, envelopeDecay, envelopeSustain, envelopeRelease});
+        notePlayedIndex, envelopeAttack, envelopeDecay, envelopeSustain, envelopeRelease, envelopeSustainLength});
     }
   };
 
@@ -916,6 +917,7 @@ const flattenPatternEvents = (song, pattern, channels, soundEffects, config = {}
         envelopeAttack: soundEffect.envelopeAttack,
         envelopeDecay: soundEffect.envelopeDecay,
         envelopeSustain: soundEffect.envelopeSustain,
+        envelopeSustainLength: soundEffect.envelopeSustainLength,
         envelopeRelease: soundEffect.envelopeRelease,
         arpeggioSpeed,
         arpeggioInterval,
@@ -984,12 +986,12 @@ const flattenPatternEvents = (song, pattern, channels, soundEffects, config = {}
         }
         pushEvent(channel, note.audv, note.audc, note.audf, lengthFrames, note.envelope, note.arpeggioSpeed,
             note.arpeggioInterval, note.arpeggioRange, note.notePlayedIndex, note.envelopeAttack,
-            note.envelopeDecay, note.envelopeSustain, note.envelopeRelease);
+            note.envelopeDecay, note.envelopeSustain, note.envelopeRelease, note.envelopeSustainLength);
         if (hasTail) {
           const bg = openNote.note;
           pushEvent(channel, bg.audv, bg.audc, bg.audf, openNote.endFrames - (startFrames + lengthFrames),
               bg.envelope, bg.arpeggioSpeed, bg.arpeggioInterval, bg.arpeggioRange, bg.notePlayedIndex,
-              bg.envelopeAttack, bg.envelopeDecay, bg.envelopeSustain, bg.envelopeRelease);
+              bg.envelopeAttack, bg.envelopeDecay, bg.envelopeSustain, bg.envelopeRelease, bg.envelopeSustainLength);
           openNote = {
             event: perChannel[channel][perChannel[channel].length - 1], note: bg,
             startFrames: startFrames + lengthFrames, endFrames: openNote.endFrames,
@@ -1013,7 +1015,7 @@ const flattenPatternEvents = (song, pattern, channels, soundEffects, config = {}
       // ENVELOPE_CHANGE_SENTINEL marker when it actually changes.
       pushEvent(channel, note.audv, note.audc, note.audf, lengthFrames, note.envelope, note.arpeggioSpeed,
           note.arpeggioInterval, note.arpeggioRange, note.notePlayedIndex, note.envelopeAttack, note.envelopeDecay,
-          note.envelopeSustain, note.envelopeRelease);
+          note.envelopeSustain, note.envelopeRelease, note.envelopeSustainLength);
       cursorFrames = startFrames + lengthFrames;
       openNote = note.audv > 0 ?
         {event: perChannel[channel][perChannel[channel].length - 1], note, startFrames, endFrames: cursorFrames} :
@@ -1063,7 +1065,7 @@ const flattenPatternEvents = (song, pattern, channels, soundEffects, config = {}
       events.some((event) => event.envelope);
     chunked[channel] = [];
     events.forEach(({audv, audc, audf, frames, envelope, arpeggioSpeed, arpeggioInterval, arpeggioRange,
-      notePlayedIndex, envelopeAttack, envelopeDecay, envelopeSustain, envelopeRelease}) => {
+      notePlayedIndex, envelopeAttack, envelopeDecay, envelopeSustain, envelopeRelease, envelopeSustainLength}) => {
       // Only THIS event's  arpeggio use caps it to 15 frames - a rest or
       // non-arpeggiating note on the same channel isn't dragged down to that
       // cap too (see generateMusicChecks' durationRead, which branches on
@@ -1091,6 +1093,7 @@ const flattenPatternEvents = (song, pattern, channels, soundEffects, config = {}
           envelopeDecay: isFinalChunk ? envelopeDecay : 0,
           envelopeSustain: isFinalChunk ? envelopeSustain : 0,
           envelopeRelease: isFinalChunk ? envelopeRelease : 0,
+          envelopeSustainLength: isFinalChunk ? envelopeSustainLength : 0,
         });
       }
     });
@@ -1211,7 +1214,7 @@ const eventsToPages = (events, getInstrumentIndex) => {
   let lastEnvelopeSelector = NO_ENVELOPE_SENTINEL;
   events.forEach((event) => {
     const {audv, audc, arpeggioSpeed, frames, envelope, envelopeAttack, envelopeDecay, envelopeSustain,
-      envelopeRelease} = event;
+      envelopeRelease, envelopeSustainLength} = event;
     if (Number(audv) > 0) {
       const instrumentByte = Number(audc) | (arpeggioSpeed << 4);
       if (instrumentByte !== lastInstrumentByte) {
@@ -1220,8 +1223,8 @@ const eventsToPages = (events, getInstrumentIndex) => {
       }
     }
     const envelopeSelector = envelope ? registerEnvelopeConfig({
-      ...clampEnvelopeStages({attack: envelopeAttack, decay: envelopeDecay, release: envelopeRelease,
-        totalFrames: frames}),
+      ...clampEnvelopeStages({attack: envelopeAttack, decay: envelopeDecay, sustainLength: envelopeSustainLength,
+        release: envelopeRelease, totalFrames: frames}),
       sustainPercent: envelopeSustain, peakVolume: Number(audv),
     }) : NO_ENVELOPE_SENTINEL;
     if (envelopeSelector !== lastEnvelopeSelector) {
@@ -2321,27 +2324,28 @@ export default (Blockly) => {
         return pageTables + repeatTable;
       }).join('\n\n');
     }
-    // Attack+decay frame length per registered envelope config (shared with
-    // one-shot Sound Effects - see registerEnvelopeConfig in soundfx.js),
-    // indexed by an ENVELOPE_CHANGE_SENTINEL marker's  runtime byte (see
+    // Combined attack+decay+sustain+release frame length per registered
+    // envelope config (shared with one-shot Sound Effects - see
+    // registerEnvelopeConfig in soundfx.js), indexed by an
+    // ENVELOPE_CHANGE_SENTINEL marker's  runtime byte (see
     // buildEnvelopeMarkerSubroutine below). Generated HERE - as part of
     // musicEngine's  relocatable payload - rather than alongside
-    // _envelopeAd{n}/_envelopeRel{n} (see buildEnvelopeDataTables in
-    // soundfx.js, itself now folded into generateEnvelopeChecks' own
-    // separate relocatable payload, wrapRelocatableGraphics('soundfxEnvelopeChecks', ...)
-    // - the two units can land in DIFFERENT banks from each other, so each
-    // has to carry its  copy of whatever data its  code reads): this
-    // table is read by musicEngine's  code specifically, which can get
-    // relocated independently, so it has to travel WITH that code instead
-    // (see resumeRead's  comment just below on this exact class of bug -
-    // a table and the code reading it must always share a bank, with no tag
+    // _envelope{n} (see buildEnvelopeDataTables in soundfx.js, itself now
+    // folded into generateEnvelopeChecks' own separate relocatable payload,
+    // wrapRelocatableGraphics('soundfxEnvelopeChecks', ...) - the two units
+    // can land in DIFFERENT banks from each other, so each has to carry its
+    // own copy of whatever data its  code reads): this table is read by
+    // musicEngine's  code specifically, which can get relocated
+    // independently, so it has to travel WITH that code instead (see
+    // resumeRead's  comment just below on this exact class of bug - a
+    // table and the code reading it must always share a bank, with no tag
     // needed when they do).
     const anyChannelHasEnvelope = Object.values(music.channelHasEnvelope || {}).some(Boolean);
     const envelopeAdLenTable = anyChannelHasEnvelope ? (() => {
       const configs = getEnvelopeConfigs();
-      const rows = chunk(configs.map(({attackDecayLength}) => attackDecayLength), 16)
+      const rows = chunk(configs.map(({envelopeLength}) => envelopeLength), 16)
           .map((row) => '  ' + row.join(', '));
-      return tableComment('Attack+decay frame length per envelope config, indexed by an ' +
+      return tableComment('Attack+decay+sustain+release frame length per envelope config, indexed by an ' +
         'ENVELOPE_CHANGE_SENTINEL marker\'s own byte - see buildEnvelopeMarkerSubroutine') +
         ` data _envelopeAdLen\n${rows.join('\n')}\nend`;
     })() : '';

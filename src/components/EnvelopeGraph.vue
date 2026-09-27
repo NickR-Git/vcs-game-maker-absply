@@ -31,11 +31,12 @@
         <polyline class="envelope-graph-line" :points="polylinePoints" />
       </svg>
       <!-- Every vertex gets a dot (matching the classic ADSR diagram's own
-           corners), but only the three whose position actually maps to an
-           editable field are draggable - the start (always silence at time
-           0) and the sustain-hold's own end (a fixed visual width, not a
-           real editable value - see SUSTAIN_VISUAL_WIDTH) are fixed
-           reference points only. -->
+           corners), but only the three whose position actually maps to a
+           DRAGGABLE field are draggable - the start (always silence at time
+           0) is a fixed reference point only; Sustain's own end IS a real
+           editable value now (sustainLength), but only via the dropdown
+           (see SoundFXEditor.vue), not by dragging, so it stays undraggable
+           here too. -->
       <div class="envelope-graph-dot envelope-graph-dot-static" :style="dotStyle(0, 0)" />
       <div
         class="envelope-graph-dot envelope-graph-dot-handle"
@@ -69,8 +70,8 @@
            regardless of actual segment width) so a label always sits under
            the part of the curve it actually names. -->
       <span class="envelope-graph-stage-label" :style="labelStyle(0, attackX)">Atk</span>
-      <span class="envelope-graph-stage-label" :style="labelStyle(attackX, decayX)">Dec</span>
-      <span class="envelope-graph-stage-label" :style="labelStyle(decayX, sustainEndX)">Sus</span>
+      <span v-if="decay > 0" class="envelope-graph-stage-label" :style="labelStyle(attackX, decayX)">Dec</span>
+      <span v-if="sustainLength > 0" class="envelope-graph-stage-label" :style="labelStyle(decayX, sustainEndX)">Sus</span>
       <span class="envelope-graph-stage-label" :style="labelStyle(sustainEndX, releaseX)">Rel</span>
     </div>
   </div>
@@ -89,16 +90,12 @@ import {ENVELOPE_STAGE_FRAME_OPTIONS, ENVELOPE_ATTACK_RELEASE_FRAME_OPTIONS,
 // two can never disagree on SHAPE, only on how many discrete steps make up
 // each ramp.
 //
-// Sustain has no fixed length of its own (it holds until the sound/note
-// ends, whenever that is) - drawn with a fixed visual width purely so the
-// plateau is visible, matching every ADSR reference diagram's  portrayal.
-const SUSTAIN_VISUAL_WIDTH = 6;
-
 export default defineComponent({
   props: {
     attack: {type: Number, required: true},
     decay: {type: Number, required: true},
     sustainPercent: {type: Number, required: true},
+    sustainLength: {type: Number, required: true},
     release: {type: Number, required: true},
   },
   data() {
@@ -115,8 +112,17 @@ export default defineComponent({
     };
   },
   computed: {
+    // Sustain could always be assumed nonzero here before (a fixed visual
+    // width stood in for its own real, always-"however long is left"
+    // length) - now that it's a real length that can genuinely be 0, all
+    // four stages can be 0 at once (an instant, silent "click"). totalUnits
+    // still floors at 1 for that case (so this doesn't divide by zero), but
+    // releaseX itself needs its own explicit 100% fallback below - dividing
+    // a zero sum by that floor would otherwise land it at 0%, breaking the
+    // static "sound ends here" dot's own invariant (other code assumes it
+    // always sits exactly at the right edge - see its own template comment).
     totalUnits() {
-      return Math.max(1, this.attack + this.decay + SUSTAIN_VISUAL_WIDTH + this.release);
+      return Math.max(1, this.attack + this.decay + this.sustainLength + this.release);
     },
     attackX() {
       return this.attack / this.totalUnits * 100;
@@ -125,10 +131,11 @@ export default defineComponent({
       return (this.attack + this.decay) / this.totalUnits * 100;
     },
     sustainEndX() {
-      return (this.attack + this.decay + SUSTAIN_VISUAL_WIDTH) / this.totalUnits * 100;
+      return (this.attack + this.decay + this.sustainLength) / this.totalUnits * 100;
     },
     releaseX() {
-      return (this.attack + this.decay + SUSTAIN_VISUAL_WIDTH + this.release) / this.totalUnits * 100;
+      const total = this.attack + this.decay + this.sustainLength + this.release;
+      return total === 0 ? 100 : (total / this.totalUnits * 100);
     },
     // Same midpoints labelStyle itself centers each of the 4 stage labels
     // on (see the template's  labelStyle calls) - one vertical line

@@ -1,7 +1,7 @@
 <template>
   <div>
     <v-card flat class="editor-container" :ripple="false" @click="deselectCard">
-      <v-card-title>Title (alpha 0.24)</v-card-title>
+      <v-card-title>Title (alpha 0.5)</v-card-title>
       <v-card-text>
         <p class="v-messages theme--light v-messages__message titlescreen-intro-paragraph">
           Compose a title screen from stacked image strips (drawn top to bottom) using the
@@ -14,10 +14,101 @@
           extra lines to set itself up, so stay comfortably under that limit.
         </p>
 
-        <div class="editor-toolbar-row">
-          <editor-zoom v-model="zoom" />
-          <pixel-grid-toggle v-model="showPixelGrid" />
-        </div>
+        <graphic-editor-toolbar :active-editor="effectiveFrameEditor">
+          <template v-slot:before-tools>
+            <editor-zoom v-model="zoom" />
+            <pixel-grid-toggle v-model="showPixelGrid" />
+          </template>
+          <template v-slot:after-tools>
+            <div class="text-center">
+              <v-menu
+                v-model="heightMenuVisible"
+                :close-on-content-click="false"
+                offset-x
+              >
+                <template v-slot:activator="{ on, attrs }">
+                  <v-btn
+                    text
+                    small
+                    class="unified-toolbar-height-btn"
+                    title="Set height"
+                    :disabled="!selectedGraphicCard"
+                    v-bind="attrs"
+                    v-on="on"
+                    @click="openHeightMenu"
+                  >
+                    <v-icon>mdi-human-male-height-variant</v-icon>
+                  </v-btn>
+                </template>
+
+                <v-card>
+                  <v-list>
+                    <v-list-item>
+                      <v-list-item-content>
+                        <v-list-item-title>Set height for every frame on this card</v-list-item-title>
+                      </v-list-item-content>
+                    </v-list-item>
+                  </v-list>
+
+                  <v-divider></v-divider>
+
+                  <v-list>
+                    <v-list-item>
+                      <v-list-item-action>
+
+                        <v-slider
+                          v-model="heightMenuValue"
+                          :min="1"
+                          :max="64"
+                          label="Height"
+                          class="align-center"
+                          style="width: 400px"
+                        >
+                          <template v-slot:append>
+                            <v-text-field
+                              v-model="heightMenuValue"
+                              class="mt-0 pt-0"
+                              type="number"
+                              style="width: 60px"
+                            ></v-text-field>
+                          </template>
+                        </v-slider>
+
+                      </v-list-item-action>
+                    </v-list-item>
+                  </v-list>
+
+                  <div class="unified-toolbar-scale-checkbox">
+                    <v-checkbox
+                      v-model="heightMenuScaleContents"
+                      label="Scale existing contents (nearest neighbor)"
+                      hide-details
+                      dense
+                    />
+                  </div>
+
+                  <v-card-actions>
+                    <v-spacer></v-spacer>
+
+                    <v-btn
+                      text
+                      @click="heightMenuVisible = false"
+                    >
+                      Cancel
+                    </v-btn>
+                    <v-btn
+                      color="primary"
+                      text
+                      @click="handleUnifiedSetHeight()"
+                    >
+                      Set height
+                    </v-btn>
+                  </v-card-actions>
+                </v-card>
+              </v-menu>
+            </div>
+          </template>
+        </graphic-editor-toolbar>
 
         <v-list class="titlescreen-list">
           <v-list-item
@@ -266,45 +357,144 @@
                             </template>
 
                             <template v-else>
-                              <div class="pixel-editor-container" :style="{width: editorWidth(card), maxWidth: editorWidth(card)}">
-                                <pixel-editor
-                                  :width="cardWidth(card)"
-                                  :height="card.pixels.length || 1"
-                                  :aspectRatio="cardWidth(card) / (card.pixels.length || 1)"
-                                  v-model="card.pixels"
-                                  :fgColor="editorFgColor(card)"
-                                  :rowColors="editorRowColors(card)"
-                                  :allowChangingHeight="true"
-                                  :showClearButton="true"
-                                  :showGrid="showPixelGrid"
-                                  :name="`titlescreen-${screen.id}-${card.id}`"
-                                  @input="() => handlePixelsInput(card)"
-                                  @resize="() => handlePixelsInput(card)"
-                                  @clear="() => handleClearCardColors(card)"
+                              <p v-if="card.frames.length > 1" class="v-messages theme--light v-messages__message titlescreen-player-hint">
+                                Plays back automatically (each frame's own Duration is in real frame ticks,
+                                same as a Player sprite animation) - no trigger block needed.
+                              </p>
+                              <div class="titlescreen-frame-list">
+                                <div
+                                  v-for="(frame, frameIndex) in card.frames"
+                                  :key="frame.id"
+                                  class="pixel-editor-parent-container"
                                 >
-                                  <template v-if="cardHasRowColors(card)" v-slot:sidebar>
-                                    <playfield-color-strip
-                                      :value="card.rowColors"
-                                      @input="(colors) => handleRowColorsInput(card, colors)"
+                                  <div
+                                    class="pixel-editor-container"
+                                    :class="{
+                                      'pixel-editor-container-active': frameHighlightState(card, frame) === 'blue',
+                                      'pixel-editor-container-active-grey': frameHighlightState(card, frame) === 'grey',
+                                    }"
+                                    :style="{width: editorWidth(card), maxWidth: editorWidth(card)}"
+                                  >
+                                    <v-text-field
+                                      v-if="card.frames.length > 1"
+                                      label="Duration"
+                                      v-model.number="frame.duration"
+                                      hide-details
+                                      type="number"
+                                      @change="handleChildChange"
                                     />
-                                  </template>
-                                  <template v-else v-slot:sidebar>
-                                    <playfield-color-strip
-                                      :value="[card.color || 0]"
-                                      @input="(colors) => handleSetCardColor(card, colors[0])"
-                                    />
-                                  </template>
-                                </pixel-editor>
+                                    <pixel-editor
+                                      :ref="pixelEditorRefKey(screen, card, frame)"
+                                      :width="cardWidth(card)"
+                                      :height="frame.pixels.length || 1"
+                                      :aspectRatio="cardWidth(card) / (frame.pixels.length || 1)"
+                                      v-model="frame.pixels"
+                                      :fgColor="editorFgColor(card)"
+                                      :rowColors="editorRowColors(card, frame)"
+                                      :showClearButton="true"
+                                      :showGrid="showPixelGrid"
+                                      :name="`titlescreen-${screen.id}-${card.id}`"
+                                      :hideToolbar="true"
+                                      @input="() => handleFramePixelsInput(card, frame)"
+                                      @resize="() => handleFramePixelsInput(card, frame)"
+                                      @clear="() => handleClearCardColors(card)"
+                                      @activate="(editorInstance) => setActiveFrame(editorInstance, card.id, frame.id)"
+                                    >
+                                      <template v-if="cardHasRowColors(card)" v-slot:sidebar>
+                                        <playfield-color-strip
+                                          :value="frame.rowColors"
+                                          @input="(colors) => handleRowColorsInput(frame, colors)"
+                                        />
+                                      </template>
+                                      <template v-else v-slot:sidebar>
+                                        <playfield-color-strip
+                                          :value="[card.color || 0]"
+                                          @input="(colors) => handleSetCardColor(card, colors[0])"
+                                        />
+                                      </template>
+                                      <template v-slot:toolbar-end>
+                                        <v-btn
+                                          icon
+                                          small
+                                          title="Copy this frame's image (and row colors, if any)"
+                                          class="titlescreen-icon-btn-size"
+                                          @click="() => handleCopyFrame(frame)"
+                                        >
+                                          <v-icon>mdi-content-copy</v-icon>
+                                        </v-btn>
+                                        <v-btn
+                                          icon
+                                          small
+                                          :disabled="!copiedFrameData"
+                                          title="Paste copied image (and row colors, if any) onto this frame"
+                                          class="titlescreen-icon-btn-size"
+                                          @click="() => handlePasteFrame(card, frame)"
+                                        >
+                                          <v-icon>mdi-content-paste</v-icon>
+                                        </v-btn>
+                                      </template>
+                                      <template v-slot:badge>
+                                        <div class="frame-number-badge">ID:{{ frameIndex + 1 }}</div>
+                                        <div class="frame-corner-toolbar">
+                                          <v-menu v-if="card.frames.length > 1" top>
+                                            <template v-slot:activator="{ on, attrs }">
+                                              <v-btn
+                                                title="Delete this frame"
+                                                icon
+                                                small
+                                                class="delete-icon-btn titlescreen-icon-btn-size"
+                                                v-bind="attrs"
+                                                v-on="on"
+                                              >
+                                                <v-icon>mdi-delete</v-icon>
+                                              </v-btn>
+                                            </template>
+
+                                            <v-card>
+                                              <v-card-title>Delete this frame?</v-card-title>
+                                              <v-list>
+                                                <v-list-item @click="handleDeleteFrame(card, frame)">
+                                                  <v-list-item-icon>
+                                                    <v-icon>mdi-check</v-icon>
+                                                  </v-list-item-icon>
+                                                  <v-list-item-title>Yes, delete</v-list-item-title>
+                                                </v-list-item>
+                                                <v-list-item link>
+                                                  <v-list-item-icon>
+                                                    <v-icon>mdi-cancel</v-icon>
+                                                  </v-list-item-icon>
+                                                  <v-list-item-title>No, don't delete</v-list-item-title>
+                                                </v-list-item>
+                                              </v-list>
+                                            </v-card>
+                                          </v-menu>
+                                        </div>
+                                      </template>
+                                    </pixel-editor>
+                                  </div>
+                                </div>
+                                <div class="titlescreen-add-frame-list-item">
+                                  <v-btn
+                                    class="titlescreen-add-frame-buttom"
+                                    color="primary"
+                                    title="Add animation frame"
+                                    dark
+                                    fab
+                                    @click="handleAddFrame(card)"
+                                  >
+                                    <v-icon>mdi-plus</v-icon>
+                                  </v-btn>
+                                </div>
                               </div>
 
                               <v-text-field
                                 class="titlescreen-scroll-window-field"
                                 label="Window height (0 = no scrolling)"
-                                title="How many rows show at once - leave at 0 (or at/above the image's full height) to show the whole image with no scrolling. Once set smaller, use the Set title screen scroll position block (Actions tab) to scroll through the rest of the image at runtime."
+                                title="How many rows show at once - leave at 0 (or at/above one frame's full height) to show the whole current frame with no scrolling. Once set smaller, use the Set title screen scroll position block (Actions tab) to scroll within whichever frame is currently showing."
                                 v-model.number="card.scrollWindow"
                                 type="number"
                                 min="0"
-                                :max="card.pixels.length || 1"
+                                :max="cardFrameHeight(card)"
                                 hide-details
                                 @change="handleChildChange"
                               />
@@ -374,9 +564,11 @@ import {computed, defineComponent, getCurrentInstance, ref} from '@vue/compositi
 import {max} from 'lodash';
 
 import {colorByteToCss} from '../utils/palette';
+import {resizePixelMatrixHeight} from '../utils/pixels';
 
 import ColorSwatchPicker from '../components/ColorSwatchPicker.vue';
 import EditorZoom from '../components/EditorZoom.vue';
+import GraphicEditorToolbar from '../components/GraphicEditorToolbar.vue';
 import PixelEditor from '../components/PixelEditor.vue';
 import PixelGridToggle from '../components/PixelGridToggle.vue';
 import PlayfieldColorStrip from '../components/PlayfieldColorStrip.vue';
@@ -387,12 +579,19 @@ import {useTitleScreenStorage, usePixelGridOverlayStorage,
 import {useEditorZoom} from '../hooks/zoom';
 import {DEFAULT_ROW_COLOR} from '../blocks/background';
 import {TITLE_SCREEN_KERNEL_TYPES, MAX_KERNEL_COPIES_PER_TYPE, MAX_PLAYER_CARDS, MAX_SCORE_CARDS,
-  blankTitleScreenPixels, processTitleScreenStorageDefaults} from '../blocks/titlescreen';
+  blankTitleScreenPixels, processTitleScreenStorageDefaults, cardFrameHeight} from '../blocks/titlescreen';
 import {processPlayerAnimationsStorageDefaults} from '../generators/bbasic/sprites';
+
+// Same "module-scope ref, not per-instance state" reasoning as
+// PlayerEditor.vue's own copiedFrameData - a copied frame survives
+// navigating away from this tab and back (this component is destroyed/
+// recreated on navigation - see hooks/collapse.js's own comment on that
+// lifecycle).
+const copiedFrameData = ref(null);
 
 export default defineComponent({
   name: 'TitleScreenEditor',
-  components: {ColorSwatchPicker, EditorZoom, PixelEditor, PixelGridToggle, PlayfieldColorStrip},
+  components: {ColorSwatchPicker, EditorZoom, GraphicEditorToolbar, PixelEditor, PixelGridToggle, PlayfieldColorStrip},
   setup() {
     const instance = getCurrentInstance();
     const titleScreenStorage = useTitleScreenStorage();
@@ -453,9 +652,9 @@ export default defineComponent({
     // (confirmed as a real, reported bug). A pure black row ($00) is nudged
     // to near-black so the editor still counts those pixels as "on" rather
     // than reading them as the black background.
-    const editorRowColors = (card) => {
-      if (!cardHasRowColors(card) || !card.rowColors) return null;
-      return card.rowColors.map((byte) => {
+    const editorRowColors = (card, frame) => {
+      if (!cardHasRowColors(card) || !frame.rowColors) return null;
+      return frame.rowColors.map((byte) => {
         const css = colorByteToCss(byte);
         return css === '#000000' ? '#010101' : css;
       });
@@ -521,10 +720,14 @@ export default defineComponent({
         return {
           id: maxId + 1,
           type,
-          pixels,
           color: 0x0f,
-          rowColors: TITLE_SCREEN_KERNEL_TYPES[type].hasRowColors ?
-            pixels.map(() => DEFAULT_ROW_COLOR) : undefined,
+          frames: [{
+            id: 1,
+            duration: 10,
+            pixels,
+            rowColors: TITLE_SCREEN_KERNEL_TYPES[type].hasRowColors ?
+              pixels.map(() => DEFAULT_ROW_COLOR) : undefined,
+          }],
         };
       })();
       screen.cards.push(newCard);
@@ -570,38 +773,96 @@ export default defineComponent({
     // separate from an ordinary pixel edit) resets its  color field(s)
     // back to the same default handleAddCard itself starts a new card at,
     // rather than leaving old picks behind on an otherwise blank card.
+    // rowColors is per-FRAME now (see cardFrameHeight's own comment in
+    // blocks/titlescreen.js), so this resets every one of the card's own
+    // frames, not just the one whose "clear" button was actually clicked -
+    // matches "clear" resetting the WHOLE card's look, not just one frame's
+    // pixels, which is already what it does for the pixel data itself
+    // (PixelEditor.vue's own "clear" event only ever touches its own
+    // v-model, i.e. just that one frame's pixels - this only covers color).
     const handleClearCardColors = (card) => {
       if (cardHasRowColors(card)) {
-        card.rowColors = (card.rowColors || []).map(() => DEFAULT_ROW_COLOR);
+        card.frames.forEach((frame) => {
+          frame.rowColors = (frame.rowColors || []).map(() => DEFAULT_ROW_COLOR);
+        });
       } else {
         card.color = 0x0f;
       }
       handleChildChange();
     };
 
-    // Keeps rowColors in sync with the image's  current height whenever
-    // the pixel editor's  height changes (drawing taller/shorter,
-    // resizing, importing a differently-sized image) - same
+    // Keeps a frame's own rowColors in sync with its  current height
+    // whenever the pixel editor's  height changes (drawing taller/
+    // shorter, resizing, importing a differently-sized image) - same
     // pad-or-truncate-without-clobbering-existing-picks reasoning as
     // PlayerEditor.vue's  ensureRowColors.
-    const ensureRowColors = (card) => {
+    const ensureRowColors = (card, frame) => {
       if (!cardHasRowColors(card)) return;
-      const rows = card.pixels.length || 1;
-      const existing = card.rowColors || [];
+      const rows = frame.pixels.length || 1;
+      const existing = frame.rowColors || [];
       if (existing.length === rows) return;
       const next = existing.slice(0, rows);
       while (next.length < rows) next.push(DEFAULT_ROW_COLOR);
-      card.rowColors = next;
+      frame.rowColors = next;
     };
 
-    const handlePixelsInput = (card) => {
-      ensureRowColors(card);
+    const handleFramePixelsInput = (card, frame) => {
+      ensureRowColors(card, frame);
       handleChildChange();
     };
 
-    const handleRowColorsInput = (card, colors) => {
-      card.rowColors = colors;
+    const handleRowColorsInput = (frame, colors) => {
+      frame.rowColors = colors;
       handleChildChange();
+    };
+
+    // Same shape as PlayerEditor.vue's own handleAddFrame - prefills the new
+    // frame with the previous frame's graphic (a copy, so editing it doesn't
+    // change the frame it came from), falling back to a blank card-width
+    // grid when this is the card's very first extra frame.
+    const handleAddFrame = (card) => {
+      const frames = card.frames;
+      const maxId = getMaxId(frames);
+      const previousFrame = frames[frames.length - 1];
+      const pixels = previousFrame ?
+        structuredClone(previousFrame.pixels) :
+        blankTitleScreenPixels(cardWidth(card));
+      const newFrame = {
+        id: maxId + 1,
+        duration: 10,
+        pixels,
+        ...(previousFrame && previousFrame.rowColors ?
+          {rowColors: structuredClone(previousFrame.rowColors)} : {}),
+      };
+      card.frames.push(newFrame);
+      handleChildChange();
+      instance.proxy.$forceUpdate();
+    };
+
+    const handleDeleteFrame = (card, frame) => {
+      card.frames = card.frames.filter(({id}) => id !== frame.id);
+      handleChildChange();
+      instance.proxy.$forceUpdate();
+    };
+
+    // "Standard" copy/paste - a frame's whole image, plus its row colors too
+    // (unconditionally, unlike PlayerEditor.vue's own version, which gates
+    // that on a project-wide toggle - there's no equivalent toggle here,
+    // hasRowColors is just a fixed property of the card's own type).
+    const handleCopyFrame = (frame) => {
+      copiedFrameData.value = {
+        pixels: structuredClone(frame.pixels),
+        ...(frame.rowColors ? {rowColors: structuredClone(frame.rowColors)} : {}),
+      };
+    };
+    const handlePasteFrame = (card, frame) => {
+      if (!copiedFrameData.value) return;
+      frame.pixels = structuredClone(copiedFrameData.value.pixels);
+      if (cardHasRowColors(card) && copiedFrameData.value.rowColors) {
+        frame.rowColors = structuredClone(copiedFrameData.value.rowColors);
+      }
+      handleChildChange();
+      instance.proxy.$forceUpdate();
     };
 
     const {isCollapsed: isScreenCollapsed, toggleCollapsed: toggleScreenCollapsed, collapseAll: collapseAllScreens} =
@@ -673,6 +934,123 @@ export default defineComponent({
       selectedScreenId.value = null;
     };
 
+    // The graphic card the shared "Set height" tool acts on - keyed off
+    // selectedCardId (the card the user is actually looking at, same
+    // reasoning as PlayerEditor.vue's own selectedAnimation/BackgroundEditor
+    // .vue's own selectedBackground), not activeFrameEditor (the last
+    // editor clicked INTO to draw/undo/etc.). Card ids are only unique
+    // WITHIN their own screen (see cardCollapseKey's own comment above), so
+    // this searches every screen the same way the existing "is this card
+    // selected" highlight already does (:class="titlescreen-card-selected"
+    // above) - same pre-existing id-collision caveat, not something new
+    // this introduces. null (and the tool disabled) for a non-bitmap card
+    // (player/score/space), which has no frames to resize at all.
+    const selectedGraphicCard = computed(() => {
+      for (const screen of state.value.screens) {
+        const card = screen.cards.find((c) => c.id === selectedCardId.value);
+        if (card) return card.frames ? card : null;
+      }
+      return null;
+    });
+
+    // Tracks whichever frame's own PixelEditor instance was last clicked
+    // into (see its "activate" event, emitted from PixelEditor.vue's
+    // handleActivate) - the single toolbar above (Eraser/Pencil/Undo/Redo/
+    // Export/Import) acts on THIS frame, since every card's own
+    // per-instance toolbar is now hidden (hideToolbar on the pixel-editor
+    // above) in favor of this one shared row. Same mechanism as
+    // PlayerEditor.vue's own activeFrameEditor/setActiveFrame.
+    // activeCardId is what effectiveFrameEditor below compares against
+    // selectedGraphicCard to decide whether this explicit click still
+    // "wins" over the selected card's own fallback editor - same
+    // id-collision caveat as selectedGraphicCard's own search above.
+    // activeFrameId (frame ids are only unique WITHIN their own card, same
+    // reasoning as PlayerEditor.vue's own activeFrameId) is what
+    // isFrameActive below compares against to draw the "you're editing this
+    // one" outline - same feature as PlayerEditor.vue's own frame outline,
+    // since a Title Screen graphic card can hold more than one frame
+    // (animation) too.
+    const activeFrameEditor = ref(null);
+    const activeCardId = ref(null);
+    const activeFrameId = ref(null);
+    const setActiveFrame = (editorInstance, cardId, frameId) => {
+      activeFrameEditor.value = editorInstance;
+      activeCardId.value = cardId;
+      activeFrameId.value = frameId;
+    };
+    const isFrameActive = (card, frame) =>
+      activeCardId.value === card.id && activeFrameId.value === frame.id;
+
+    // Same "blue while the frame's own card is actually selected, grey once
+    // deselected but still what the toolbar acts on" reasoning as
+    // PlayerEditor.vue's own frameHighlightState.
+    const frameHighlightState = (card, frame) => {
+      if (!isFrameActive(card, frame)) return null;
+      return selectedGraphicCard.value && selectedGraphicCard.value.id === card.id ? 'blue' : 'grey';
+    };
+
+    // Unique per screen+card+frame (card ids are only unique WITHIN their
+    // own screen, and frame ids only unique within their own card) - used as
+    // this frame's own PixelEditor.vue $ref name (see the template) so
+    // effectiveFrameEditor below can resolve straight to its component
+    // instance.
+    const pixelEditorRefKey = (screen, card, frame) => `pixelEditor_${screen.id}_${card.id}_${frame.id}`;
+
+    // Which screen a given (already-resolved) graphic card actually belongs
+    // to - selectedGraphicCard above only returns the card itself, but
+    // pixelEditorRefKey needs the screen too. Reference equality (not an id
+    // compare) since card is the exact object selectedGraphicCard found
+    // inside state.value.screens, not a copy.
+    const findScreenForCard = (card) => state.value.screens.find((screen) => screen.cards.includes(card));
+
+    // What the shared toolbar (Eraser/Pencil/Undo/Redo/Export/Import) above
+    // actually acts on - the explicitly-clicked-into frame (activeFrameEditor)
+    // when it still belongs to the currently SELECTED graphic card, otherwise
+    // the selected card's own first frame, resolved via its $ref. Without
+    // this fallback, the tools stayed disabled (and no frame was targeted at
+    // all) until a graphic was clicked directly - reported as unexpected,
+    // since selecting a card (clicking its title/anywhere else in it)
+    // already conveys "I'm working on this one" the same way every other
+    // per-card tool in this app already treats it. Same reasoning/shape as
+    // PlayerEditor.vue's own effectiveFrameEditor.
+    const effectiveFrameEditor = computed(() => {
+      if (activeFrameEditor.value && selectedGraphicCard.value && activeCardId.value === selectedGraphicCard.value.id) {
+        return activeFrameEditor.value;
+      }
+      if (selectedGraphicCard.value && selectedGraphicCard.value.frames.length) {
+        const screen = findScreenForCard(selectedGraphicCard.value);
+        if (!screen) return null;
+        const firstFrame = selectedGraphicCard.value.frames[0];
+        const refs = instance.proxy.$refs[pixelEditorRefKey(screen, selectedGraphicCard.value, firstFrame)];
+        return Array.isArray(refs) ? refs[0] || null : refs || null;
+      }
+      return null;
+    });
+
+    // Same fields as PixelEditor.vue's own height-menu state, now living
+    // here instead, since the menu itself moved to this shared toolbar -
+    // always resizes every frame on the selected card together, same as
+    // PlayerEditor.vue's own handleUnifiedSetHeight.
+    const heightMenuVisible = ref(false);
+    const heightMenuValue = ref(0);
+    const heightMenuScaleContents = ref(false);
+    const openHeightMenu = () => {
+      if (!selectedGraphicCard.value) return;
+      heightMenuValue.value = selectedGraphicCard.value.frames[0].pixels.length;
+      heightMenuScaleContents.value = false;
+    };
+    const handleUnifiedSetHeight = () => {
+      const card = selectedGraphicCard.value;
+      if (!card) return;
+      heightMenuValue.value = Math.max(1, Math.min(64, heightMenuValue.value || 0));
+      card.frames.forEach((frame) => {
+        frame.pixels = resizePixelMatrixHeight(frame.pixels, heightMenuValue.value, cardWidth(card), heightMenuScaleContents.value);
+      });
+      handleChildChange();
+      instance.proxy.$forceUpdate();
+      heightMenuVisible.value = false;
+    };
+
     return {
       state, handleChildChange,
       handleAddScreen, handleDeleteScreen,
@@ -682,13 +1060,18 @@ export default defineComponent({
       addCardOptions, canAddCardType, maxCopies, maxCopiesForType, playerAnimationOptions,
       handleAddCard, handleDeleteCard,
       handleSetBackgroundColor, handleSetCardColor, handleClearCardColors,
-      handlePixelsInput, handleRowColorsInput,
+      handleFramePixelsInput, handleRowColorsInput, cardFrameHeight,
+      handleAddFrame, handleDeleteFrame,
+      handleCopyFrame, handlePasteFrame, copiedFrameData,
       isCollapsed, toggleCollapsed, cardCollapseKey,
       cardDragAttrs, cardDragCardClass, cardDragHandleListeners, cardDragTargetListeners,
       showPixelGrid, zoom,
       selectedCardId, selectCard,
       selectedScreenId, selectScreen,
       deselectCard,
+      selectedGraphicCard, activeFrameEditor, setActiveFrame, isFrameActive, frameHighlightState,
+      effectiveFrameEditor, pixelEditorRefKey,
+      heightMenuVisible, heightMenuValue, heightMenuScaleContents, openHeightMenu, handleUnifiedSetHeight,
     };
   },
 });
@@ -698,15 +1081,33 @@ export default defineComponent({
   margin-bottom: 16px;
 }
 
-/* Same reasoning as BackgroundEditor.vue's  identical rule - keeps
-   editor-zoom and pixel-grid-toggle on one visually-centered line. */
-.editor-toolbar-row {
-  display: flex;
-  align-items: center;
+/* The "Set height" button passed into GraphicEditorToolbar.vue's own
+   "after-tools" slot - see PlayerEditor.vue's identical rule for why this
+   stays here rather than moving into that shared component. */
+.unified-toolbar-height-btn {
+  width: auto;
+  min-width: 0;
+  padding: 0 2px;
+  font-size: 0.75rem;
+  color: rgba(0, 0, 0, 0.55);
+}
+
+.unified-toolbar-height-btn >>> .v-icon {
+  font-size: 16px;
+  margin-top: -1px;
+}
+
+.unified-toolbar-scale-checkbox {
+  margin-top: -30px;
+  padding-left: 16px;
 }
 
 .titlescreen-list {
-  margin-top: 16px;
+  /* Tighter than the 16px this used to be - see PlayerEditor.vue's
+     identical .animation-list rule for why: the toolbar row directly above
+     already has its own top/bottom padding, so the old value on top of
+     that read as too much combined space before the first screen card. */
+  margin-top: 4px;
 }
 
 /* hooks/drag-reorder.js's  CSS_CLASS_DRAGGING/CSS_CLASS_DRAG_OVER -
@@ -834,26 +1235,55 @@ export default defineComponent({
   max-width: 220px;
 }
 
-/* Same reasoning as BackgroundEditor.vue's own .pixel-editor-container >>>
-   .v-card rule - PixelEditor.vue always wraps itself in its own outlined
-   v-card, which is redundant once .titlescreen-card already frames the
-   whole entry the same way. */
-.pixel-editor-container >>> .v-card {
-  border: none !important;
-  box-shadow: none !important;
+/* PixelEditor.vue's own outlined v-card is now the visible "frame" around
+   each individual animation frame - same as PlayerEditor.vue's own
+   Sprites-tab frames (which never stripped this border to begin with; see
+   that file for the closest reference). Previously stripped here (matching
+   Background's single-graphic cards, which have no per-frame concept at
+   all), but that's exactly why the border/outline highlight/delete button
+   all read as detached from the actual graphic once a card could hold more
+   than one frame - confirmed as a real reported bug ("the frame is wrong",
+   "delete button also in the wrong place") once compared side by side with
+   the Sprites tab. */
+
+/* Marks which frame the shared toolbar above (Eraser/Pencil/Undo/Redo/
+   Export/Import/Set height) currently acts on - same border-color + outline
+   treatment as every other tab's own "-selected" card highlight (App.vue's
+   shared .titlescreen-card-selected/etc. rule), and the same blue/grey
+   split as PlayerEditor.vue's own identical rules (see frameHighlightState's
+   own comment). */
+.pixel-editor-container-active >>> .v-card {
+  border-color: var(--v-primary-base, #1976d2) !important;
+  outline: 2px solid var(--v-primary-base, #1976d2) !important;
 }
 
-/* Same reasoning as BackgroundEditor.vue's  identical rules - Vuetify's
-   default v-card-text padding (16px on every side) otherwise left a wide
-   gap to the left of the canvas (and above/below it) that had nothing to
-   do with this card's own 12px padding, which already provides its own
-   spacing. */
-.pixel-editor-container >>> .v-card__text {
-  padding: 0 0 4px 0 !important;
+.pixel-editor-container-active-grey >>> .v-card {
+  border-color: rgba(0, 0, 0, 0.24) !important;
+  outline: 2px solid rgba(0, 0, 0, 0.24) !important;
 }
 
-.pixel-editor-container >>> .v-card__actions {
-  padding: 4px 0 0 0 !important;
+/* Same styling as PlayerEditor.vue's own identical .frame-number-badge -
+   was missing here entirely (this class name is shared with that file, but
+   had no matching rule of its own in THIS file), so it fell back to plain
+   unstyled text instead of reading as a small "ID: N" label. */
+.frame-number-badge {
+  text-align: left;
+  font-size: 0.75rem;
+  font-family: monospace;
+  opacity: 0.75;
+  margin-top: -8px;
+}
+
+/* Same reasoning/placement as PlayerEditor.vue's own identical
+   .frame-corner-toolbar - also missing here entirely, so Delete (and Copy/
+   Paste, before those moved to the toolbar-end slot) rendered inline after
+   the ID badge instead of floating in the frame's own top-right corner. */
+.frame-corner-toolbar {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
 }
 
 /* Same placement/style as every other tab's own "ID: N" badge (see
@@ -903,6 +1333,30 @@ export default defineComponent({
   min-width: 0;
   height: 26px !important;
   width: 26px !important;
+  margin: 0;
+}
+
+/* Same fix as PlayerEditor.vue's identical rule - without it, a disabled
+   Paste button read as clickable, no different from the enabled Copy
+   button next to it. */
+.titlescreen-icon-btn-size.v-btn--disabled {
+  opacity: 0.35;
+}
+
+/* Same reasoning/values as PlayerEditor.vue's identical rules - without an
+   explicit icon font-size, mdi-delete rendered at Vuetify's own default
+   (larger than this 26px button was actually sized for), overlapping the
+   graphic/ID badge next to it instead of sitting cleanly inside its own
+   corner. mdi-delete specifically needs a couple extra pixels over the
+   other icons here (copy/paste, etc.) to read as the same visual size -
+   its own glyph has more built-in padding around the trash-can shape at
+   the same font-size. */
+.titlescreen-icon-btn-size >>> .v-icon {
+  font-size: 19px !important;
+}
+
+.delete-icon-btn.titlescreen-icon-btn-size >>> .v-icon {
+  font-size: 21px !important;
 }
 
 /* Comes right after .titlescreen-screen-title-row, which already clears
@@ -975,6 +1429,42 @@ export default defineComponent({
 
 .add-titlescreen-card-buttom {
   margin-top: 8px;
+}
+
+/* Same layout as PlayerEditor.vue's own animation frame list - each frame
+   sits inline-block, side by side, rather than stacking as block-level divs
+   would by default, so the "add frame" button below lands to the RIGHT of
+   the last frame instead of wrapping underneath it. */
+/* Matches PlayerEditor.vue's own per-frame spacing exactly (there, this same
+   16px gap comes from v-list-item's own default right padding, since each
+   Sprites frame is a real v-list-item - this one's a plain div, so the same
+   value is set directly as margin instead). */
+.pixel-editor-parent-container {
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 16px;
+}
+
+/* Same reasoning/placement as PlayerEditor.vue's own .add-frame-list-item -
+   sits inline after the last frame, vertically centered against the frame
+   cards' height via vertical-align (rather than the list item's own default
+   flex centering, which only centers within its own row). */
+.titlescreen-add-frame-list-item {
+  display: inline-block;
+  vertical-align: middle;
+  width: auto;
+  margin-top: 16px;
+  margin-left: 12px;
+}
+
+/* Same circular sizing as PlayerEditor.vue's own .add-frame-buttom - a
+   distinct class (not shared with this file's own "Add a card" FAB button
+   below, .add-frame-buttom) since that one also carries an absolute-
+   positioned "bottom: 8px" rule meant for its own corner placement, not
+   relevant here. */
+.titlescreen-add-frame-buttom {
+  width: 36px;
+  height: 36px;
 }
 
 /* Same class name/positioning as BackgroundEditor.vue's  identical

@@ -62,6 +62,40 @@
             <v-icon>mdi-import</v-icon>
           </v-btn>
         </v-card-actions>
+
+        <v-dialog v-model="soundBankImportOpen" width="480">
+          <v-card>
+            <v-card-title>Import Sound Bank</v-card-title>
+            <v-card-text>
+              <p class="v-messages theme--light v-messages__message">
+                Choose which sounds to import. A name that matches an existing sound effect
+                replaces its parameters; anything else is added as a new card.
+              </p>
+              <v-btn small @click="handleSelectAllBankEntries(true)">Select all</v-btn>
+              <v-btn small class="ml-2" @click="handleSelectAllBankEntries(false)">Select none</v-btn>
+              <v-checkbox
+                v-for="(entry, index) in soundBankImportEntries"
+                :key="index"
+                v-model="entry.selected"
+                :label="entry.isExisting ? `${entry.name} (replaces existing)` : entry.name"
+                hide-details
+                dense
+              />
+            </v-card-text>
+            <v-card-actions>
+              <v-btn small @click="soundBankImportOpen = false">Cancel</v-btn>
+              <v-spacer></v-spacer>
+              <v-btn
+                color="primary"
+                text
+                :disabled="!soundBankImportEntries.some((entry) => entry.selected)"
+                @click="handleConfirmSoundBankImport"
+              >
+                Import selected
+              </v-btn>
+            </v-card-actions>
+          </v-card>
+        </v-dialog>
         <v-list class="soundfx-list" :class="{'soundfx-list--single-column': !soundFxColumns}">
           <v-list-item
             v-for="(soundEffect, index) in state.soundEffects"
@@ -309,8 +343,17 @@
                           class="soundfx-envelope-field"
                         />
                         <v-select
+                          label="Sustain length"
+                          title="How many frames the Sustain hold itself lasts before Release begins - 0 skips straight from Decay into Release."
+                          v-model="soundEffect.envelopeSustainLength"
+                          :items="envelopeSustainFrameOptionItems"
+                          hide-details
+                          @change="handleChildChange"
+                          class="soundfx-envelope-field"
+                        />
+                        <v-select
                           label="Release"
-                          title="Frames to ramp down from the Sustain level to silence, ending exactly when the sound ends."
+                          title="Frames to ramp down from the Sustain level to silence, starting right after Sustain ends."
                           v-model="soundEffect.envelopeRelease"
                           :items="envelopeAttackReleaseFrameOptionItems"
                           hide-details
@@ -352,6 +395,7 @@
                           :attack="soundEffect.envelopeAttack"
                           :decay="soundEffect.envelopeDecay"
                           :sustain-percent="soundEffect.envelopeSustain"
+                          :sustain-length="soundEffect.envelopeSustainLength"
                           :release="soundEffect.envelopeRelease"
                           @update:attack="(value) => handleEnvelopeGraphChange(soundEffect, 'envelopeAttack', value)"
                           @update:decay="(value) => handleEnvelopeGraphChange(soundEffect, 'envelopeDecay', value)"
@@ -440,8 +484,9 @@ import {DEFAULT_SOUND_EFFECTS, processSoundEffectsStorageDefaults, ARPEGGIO_DIVI
   DEFAULT_ARPEGGIO_DIVISION, DEFAULT_ARPEGGIO_INTERVAL, MIN_ARPEGGIO_INTERVAL,
   MAX_ARPEGGIO_INTERVAL, DEFAULT_ARPEGGIO_RANGE, ARPEGGIO_RANGE_OPTIONS,
   ENVELOPE_STAGE_FRAME_OPTIONS, ENVELOPE_ATTACK_RELEASE_FRAME_OPTIONS, ENVELOPE_SUSTAIN_PERCENT_OPTIONS,
-  DEFAULT_ENVELOPE_ATTACK, DEFAULT_ENVELOPE_DECAY, DEFAULT_ENVELOPE_SUSTAIN_PERCENT,
-  DEFAULT_ENVELOPE_RELEASE, NOISE_PRIORITY_OPTIONS, DEFAULT_NOISE_PRIORITY} from '../blocks/soundfx';
+  ENVELOPE_SUSTAIN_FRAME_OPTIONS, DEFAULT_ENVELOPE_ATTACK, DEFAULT_ENVELOPE_DECAY, DEFAULT_ENVELOPE_SUSTAIN_PERCENT,
+  DEFAULT_ENVELOPE_SUSTAIN_FRAMES, DEFAULT_ENVELOPE_RELEASE, NOISE_PRIORITY_OPTIONS,
+  DEFAULT_NOISE_PRIORITY} from '../blocks/soundfx';
 import {DEFAULT_DIM_PERCENT, dimVolume} from '../generators/bbasic/soundfx';
 import {getDateInfix} from '../utils/date';
 import {openFileDialog} from '../utils/file';
@@ -526,7 +571,8 @@ export default defineComponent({
     // a whole sound effect's every field, since dragging the envelope graph
     // is the one interaction here fiddly enough to want stepping back
     // through.
-    const ENVELOPE_HISTORY_KEYS = ['envelopeAttack', 'envelopeDecay', 'envelopeSustain', 'envelopeRelease'];
+    const ENVELOPE_HISTORY_KEYS = ['envelopeAttack', 'envelopeDecay', 'envelopeSustain', 'envelopeSustainLength',
+      'envelopeRelease'];
     const snapshotEnvelope = (soundEffect) => JSON.stringify(
         ENVELOPE_HISTORY_KEYS.reduce((acc, key) => {
           acc[key] = soundEffect[key]; return acc;
@@ -590,6 +636,7 @@ export default defineComponent({
       soundEffect.envelopeAttack = DEFAULT_ENVELOPE_ATTACK;
       soundEffect.envelopeDecay = DEFAULT_ENVELOPE_DECAY;
       soundEffect.envelopeSustain = DEFAULT_ENVELOPE_SUSTAIN_PERCENT;
+      soundEffect.envelopeSustainLength = DEFAULT_ENVELOPE_SUSTAIN_FRAMES;
       soundEffect.envelopeRelease = DEFAULT_ENVELOPE_RELEASE;
       handleChildChange();
     };
@@ -654,6 +701,7 @@ export default defineComponent({
         envelopeAttack: DEFAULT_ENVELOPE_ATTACK,
         envelopeDecay: DEFAULT_ENVELOPE_DECAY,
         envelopeSustain: DEFAULT_ENVELOPE_SUSTAIN_PERCENT,
+        envelopeSustainLength: DEFAULT_ENVELOPE_SUSTAIN_FRAMES,
         envelopeRelease: DEFAULT_ENVELOPE_RELEASE,
         priority: DEFAULT_NOISE_PRIORITY,
         arpeggio: false,
@@ -736,20 +784,23 @@ export default defineComponent({
       saveAs(blob, `SoundBank-${getDateInfix()}.json`);
     };
 
-    // Imports a previously exported sound bank - unlike a single sound
-    // effect's  import (handleImportSoundEffect, which always overwrites
-    // ONE already-selected card), this has no single target card to
-    // overwrite, so it matches by NAME instead: a bank entry whose name
-    // matches an existing card here replaces that card's  parameters
-    // (keeping its id, same reasoning as handleImportSoundEffect - every
-    // soundfx_play block/Music tab track already pointing at that id keeps
-    // working), and a bank entry with no name match becomes a brand new
-    // card instead. Matches MusicEditor.vue's  importSoundEffects in
-    // shape (name-keyed, id remapped), but that function keeps the
-    // EXISTING card untouched on a name match (it's importing songs, which
-    // reference sound effects by id and just need SOME matching id to point
-    // at) - this imports the sound effects themselves, so a name match has
-    // to actually overwrite the existing card's parameters instead.
+    // Which entries from the bank file most recently opened (see
+    // handleImportSoundBank below) are checked in the "Import Sound Bank"
+    // dialog - {data: the raw bank entry, name, selected, isExisting}, one
+    // per sound in the file. isExisting mirrors the same by-NAME match
+    // handleConfirmSoundBankImport itself uses, purely so the dialog can
+    // warn "(replaces existing)" next to anything that would overwrite a
+    // card already in this project, before the user actually confirms it.
+    const soundBankImportOpen = ref(false);
+    const soundBankImportEntries = ref([]);
+
+    // Loads a previously exported sound bank file and opens the picker
+    // dialog for it - same "click a card, then confirm what it does" shape
+    // as the emulator's own Keyboard Mapping dialog (App.vue/
+    // KeyMappingDialog.vue), rather than importing every sound in the file
+    // immediately and unconditionally the moment it's picked, which left no
+    // way to bring in just a few sounds from a bank without also
+    // overwriting/adding every other one it happened to contain.
     const handleImportSoundBank = () => {
       openFileDialog('.json,application/json')
           .then((file) => file.text())
@@ -759,24 +810,59 @@ export default defineComponent({
               throw new Error('File does not contain valid sound bank data');
             }
             const soundEffects = state.value.soundEffects;
-            let maxId = max(soundEffects.map((o) => o.id)) || 0;
-            bankData.soundEffects.forEach((imported) => {
-              // eslint-disable-next-line no-unused-vars
-              const {id, ...importedData} = imported;
-              const existing = imported.name && soundEffects.find((o) => o.name === imported.name);
-              if (existing) {
-                Object.assign(existing, importedData, {id: existing.id});
-                handleAudcChange(existing);
-              } else {
-                maxId += 1;
-                const newSoundEffect = {...importedData, id: maxId, name: imported.name || `Sound effect ${maxId}`};
-                soundEffects.push(newSoundEffect);
-                handleAudcChange(newSoundEffect);
-              }
-            });
-            instance.proxy.$forceUpdate();
+            soundBankImportEntries.value = bankData.soundEffects.map((imported) => ({
+              data: imported,
+              name: imported.name || 'Unnamed sound effect',
+              selected: true,
+              isExisting: !!(imported.name && soundEffects.find((o) => o.name === imported.name)),
+            }));
+            soundBankImportOpen.value = true;
           })
           .catch((e) => console.error('Failed to import sound bank', e));
+    };
+
+    const handleSelectAllBankEntries = (selected) => {
+      soundBankImportEntries.value.forEach((entry) => {
+        entry.selected = selected;
+      });
+    };
+
+    // Imports only the entries checked in the dialog above - unlike a
+    // single sound effect's  import (handleImportSoundEffect, which
+    // always overwrites ONE already-selected card), this has no single
+    // target card to overwrite, so it matches by NAME instead: a checked
+    // entry whose name matches an existing card here replaces that card's
+    // own parameters (keeping its id, same reasoning as
+    // handleImportSoundEffect - every soundfx_play block/Music tab track
+    // already pointing at that id keeps working), and a checked entry with
+    // no name match becomes a brand new card instead. Matches
+    // MusicEditor.vue's  importSoundEffects in shape (name-keyed, id
+    // remapped), but that function keeps the EXISTING card untouched on a
+    // name match (it's importing songs, which reference sound effects by id
+    // and just need SOME matching id to point at) - this imports the sound
+    // effects themselves, so a name match has to actually overwrite the
+    // existing card's parameters instead.
+    const handleConfirmSoundBankImport = () => {
+      const soundEffects = state.value.soundEffects;
+      let maxId = max(soundEffects.map((o) => o.id)) || 0;
+      soundBankImportEntries.value.forEach((entry) => {
+        if (!entry.selected) return;
+        const imported = entry.data;
+        // eslint-disable-next-line no-unused-vars
+        const {id, ...importedData} = imported;
+        const existing = imported.name && soundEffects.find((o) => o.name === imported.name);
+        if (existing) {
+          Object.assign(existing, importedData, {id: existing.id});
+          handleAudcChange(existing);
+        } else {
+          maxId += 1;
+          const newSoundEffect = {...importedData, id: maxId, name: imported.name || `Sound effect ${maxId}`};
+          soundEffects.push(newSoundEffect);
+          handleAudcChange(newSoundEffect);
+        }
+      });
+      instance.proxy.$forceUpdate();
+      soundBankImportOpen.value = false;
     };
 
     const handlePlaySoundEffect = (soundEffect) => {
@@ -839,6 +925,7 @@ export default defineComponent({
       state, handleChildChange, handleAddSoundEffect, handleDeleteSoundEffect, handlePlaySoundEffect,
       handleExportSoundEffect, handleImportSoundEffect,
       handleExportSoundBank, handleImportSoundBank,
+      soundBankImportOpen, soundBankImportEntries, handleSelectAllBankEntries, handleConfirmSoundBankImport,
       canUndoEnvelope, canRedoEnvelope, handleUndoEnvelope, handleRedoEnvelope, handleResetEnvelope,
       handleStopPreview, handleSetSoundEffectColor, handleToggleInstrument, autoInstrumentColor,
       isCollapsed, toggleCollapsed,
@@ -854,6 +941,7 @@ export default defineComponent({
       envelopeAttackReleaseFrameOptionItems:
         ENVELOPE_ATTACK_RELEASE_FRAME_OPTIONS.map((value) => ({text: `${value} frames`, value})),
       envelopeSustainPercentOptionItems: ENVELOPE_SUSTAIN_PERCENT_OPTIONS.map((value) => ({text: `${value}%`, value})),
+      envelopeSustainFrameOptionItems: ENVELOPE_SUSTAIN_FRAME_OPTIONS.map((value) => ({text: `${value} frames`, value})),
       priorityOptionItems: NOISE_PRIORITY_OPTIONS.map((value) => ({text: `${value}`, value})),
       handleEnvelopeGraphChange,
       MIN_ARPEGGIO_INTERVAL, MAX_ARPEGGIO_INTERVAL,
@@ -1003,12 +1091,12 @@ export default defineComponent({
   gap: 0;
 }
 
-/* Closes the gap between the bank Export/Import row above and the DIM
-   controls below it - v-card-text's own default 16px top padding otherwise
-   left them further apart than the bank row's own now-zeroed bottom
-   padding. */
+
+/* Tightens the gap between the "Sound" title above and the DIM controls
+   right below it - v-card-text's own default 16px top padding read as too
+   much space there. */
 .soundfx-dim-section {
-  padding-top: 8px;
+  padding-top: 0;
 }
 
 /* Full default Vuetify icon-button size (40px, 24px glyph - no "small"

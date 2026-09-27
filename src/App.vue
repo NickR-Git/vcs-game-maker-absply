@@ -78,7 +78,6 @@
     >
       <div class="nav-drawer-inner" :style="{paddingBottom: errorHeight + 'px'}">
       <v-list
-        shaped
         class="navigation-list"
       >
         <v-list-item
@@ -2099,6 +2098,14 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
   height: 100%;
   overflow-y: auto;
   box-sizing: border-box;
+}
+
+/* Vuetify's v-list has an 8px top/bottom padding by default, which left a
+   gap between the Actions tab and the top of the drawer that the top
+   toolbar's own tab row doesn't have. Removed so the first tab sits flush
+   with the drawer's top edge. */
+.navigation-list.v-list {
+  padding-top: 0;
 }
 
 .v-list-item__icon {
