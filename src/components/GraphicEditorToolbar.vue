@@ -1,7 +1,7 @@
 <template>
   <!-- @click.stop - every tab that uses this toolbar also has an outer
        "click anywhere to deselect the current card" handler (see e.g.
-       PlayerEditor.vue's own @click="deselectCard" on its root v-card).
+       PlayerEditor.vue's @click="deselectCard" on its root v-card).
        This toolbar sits OUTSIDE any card (directly in that same v-card-text),
        so without stopping it here, clicking any tool in it - confirmed
        directly with Pencil - bubbled up and deselected the very card those
@@ -77,7 +77,7 @@ export default {
     // The PixelEditor.vue instance the toolbar currently acts on - null
     // (every button disabled, no tool highlighted) until a caller resolves
     // one, however it chooses to (an explicit frame click, a $ref fallback
-    // to the selected card's own first frame, etc. - see each tab's own
+    // to the selected card's first frame, etc. - see each tab's own
     // "effectiveFrameEditor"-style computed for that logic, which stays
     // local to each tab since "which card is selected" means something
     // different in each one).
@@ -87,7 +87,7 @@ export default {
     // ancestor's true edge, so its own scrolled-state divider spans the
     // full pane width instead of stopping at the nearest padded ancestor.
     // 16 covers one padding level (this toolbar sitting directly in a
-    // tab's own v-card-text - PlayerEditor/BackgroundEditor/
+    // tab's v-card-text - PlayerEditor/BackgroundEditor/
     // TitleScreenEditor/ScoreFontEditor); TextFontEditor.vue passes 32,
     // since its own toolbar sits inside a SECOND nested v-card-text (the
     // "Text Minikernel Font" sub-card) on top of that.
@@ -100,11 +100,11 @@ export default {
   },
   computed: {
     // Reads the active editor's OWN reactive toggledTool directly (see
-    // PixelEditor.vue's own comment on why that's a separate string, not
+    // PixelEditor.vue's comment on why that's a separate string, not
     // literally "editor.tool") - Vue tracks this cross-component property
     // access the same as any other reactive read, so this recomputes
     // correctly the instant setTool() below mutates it, with no local
-    // ref/watcher of this component's own needed to keep them in sync.
+    // ref/watcher of this component's needed to keep them in sync.
     activeTool() {
       return this.activeEditor ? this.activeEditor.toggledTool : null;
     },
@@ -119,7 +119,7 @@ export default {
   },
   mounted() {
     // closest() (not querySelector, which only searches DESCENDANTS) since
-    // .editor-container is sometimes this component's own direct ancestor
+    // .editor-container is sometimes this component's direct ancestor
     // (PlayerEditor/BackgroundEditor/TitleScreenEditor/ScoreFontEditor) and
     // sometimes further up past an extra nested card (TextFontEditor) -
     // one call handles both without the caller needing to say which case
@@ -141,8 +141,8 @@ export default {
 };
 </script>
 <style scoped>
-/* Sticks to the top of the tab's own scrolling ancestor (.editor-container
-   - see mounted()'s own comment) as everything below it scrolls past, same
+/* Sticks to the top of the tab's scrolling ancestor (.editor-container
+   - see mounted()'s comment) as everything below it scrolls past, same
    position: sticky pattern every consuming tab used to implement by hand.
    background so scrolled-under content doesn't show through while pinned. */
 .graphic-editor-toolbar {
@@ -157,9 +157,17 @@ export default {
   transition: padding 0.15s ease;
 }
 
+/* "Soft Colors" (see App.vue's desaturate-app-colors class/comment) -
+   matches the darker .editor-container this bar is pinned inside of once
+   that's on, instead of staying the plain white every other surface swaps
+   away from. */
+.desaturate-app-colors .graphic-editor-toolbar {
+  background-color: #e1e1e1;
+}
+
 /* Marks where the pinned bar ends and the (actually scrolling) content
    begins underneath it, once there's actually something scrolled under it
-   to separate from - matches every tab's own darkened outlined-card border
+   to separate from - matches every tab's darkened outlined-card border
    color (App.vue's shared rule), not Vuetify's fainter default divider.
    Taller once actually pinned, for a bit more visual weight/breathing room
    than the flush, unscrolled-at-the-top state needs. */
@@ -169,12 +177,12 @@ export default {
   padding-bottom: 10px;
 }
 
-/* Separates the caller's own "before-tools" controls (zoom, pixel grid
+/* Separates the caller's "before-tools" controls (zoom, pixel grid
    toggles) from the standard tool icons - a wider gap than the inner
    dividers below since it's splitting two unrelated groups, not sub-groups
    within one. */
 .get-outer-divider {
-  margin: 0 8px;
+  margin: 0 6px;
 }
 
 .get-tools {

@@ -10,7 +10,7 @@
       />
     </template>
     <v-card class="palette-card">
-      <v-btn v-if="allowClear" text small block @click="$emit('input', null)">
+      <v-btn v-if="allowClear" small block class="palette-clear-btn" @click="$emit('input', null)">
         {{ clearLabel }}
       </v-btn>
       <div class="palette-grid">
@@ -68,6 +68,10 @@ export default defineComponent({
 
 .palette-card {
   padding: 4px;
+}
+
+.palette-clear-btn {
+  margin: 4px 0;
 }
 
 .palette-grid {

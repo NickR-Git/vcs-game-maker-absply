@@ -1,22 +1,21 @@
 <template>
-  <v-card outlined class="text-font-card">
-    <div class="text-font-card-header" @click="toggleCollapsed(cardEntry)">
-      <span class="text-font-card-title">Text Minikernel Font</span>
+  <div class="text-font-section">
+    <v-divider class="my-2" />
+    <div class="option-section-header" @click="toggleCollapsed(cardEntry)">
       <v-btn
         icon
         small
-        :title="isCollapsed(cardEntry) ? 'Expand this card' : 'Collapse this card'"
-        class="text-font-collapse-btn"
-        @click.stop="toggleCollapsed(cardEntry)"
+        :title="isCollapsed(cardEntry) ? 'Expand this section' : 'Collapse this section'"
       >
-        <v-icon>{{ isCollapsed(cardEntry) ? 'mdi-chevron-down' : 'mdi-chevron-up' }}</v-icon>
+        <v-icon>{{ isCollapsed(cardEntry) ? 'mdi-chevron-right' : 'mdi-chevron-down' }}</v-icon>
       </v-btn>
+      <span class="text-subtitle-1">Text Minikernel Font Editor</span>
     </div>
-    <v-card-text v-if="!isCollapsed(cardEntry)" class="text-font-card-text">
+    <div v-if="!isCollapsed(cardEntry)" class="option-section-content">
       <p class="v-messages theme--light v-messages__message">
         Edit the Text Minikernel's character set below. Each character is a fixed 4x5 pixel shape.
       </p>
-      <graphic-editor-toolbar class="text-font-controls-row" :active-editor="activeEditor" :bleed="32">
+      <graphic-editor-toolbar class="text-font-controls-row" :active-editor="activeEditor" :bleed="16">
         <template v-slot:before-tools>
           <editor-zoom v-model="zoom" class="text-font-zoom" />
         </template>
@@ -33,11 +32,11 @@
       </graphic-editor-toolbar>
       <p v-if="!ready" class="v-messages theme--light v-messages__message">Loading default glyphs...</p>
       <template v-else>
-        <!-- Only shown once the Text tab's own "Show a blinking scroll
+        <!-- Only shown once the Text tab's "Show a blinking scroll
              cursor" switch is on (enableTextScrollCursor) - this shape has
              nothing to do with the 51 real glyphs below it at all (it's
              never part of the indexed text_data table - see
-             TEXT_CURSOR_WIDTH's own comment in utils/text-font.js), so it's
+             TEXT_CURSOR_WIDTH's comment in utils/text-font.js), so it's
              kept visually and structurally separate rather than folded into
              .glyph-list as a 52nd entry. -->
         <div v-if="enableTextScrollCursor" class="cursor-glyph-section">
@@ -66,8 +65,8 @@
                 @activate="(editorInstance) => setActiveEditor(editorInstance, 'cursor')"
               />
               <!-- Same read-only, blank-scanline-interlaced preview as a
-                   real glyph's own (see interlacedPreviewRows below) - the
-                   cursor's own shape is drawn the exact same way, one
+                   real glyph's (see interlacedPreviewRows below) - the
+                   cursor's shape is drawn the exact same way, one
                    scanline per row with a blank one between (see
                    buildTextScrollCursorOverride in utils/text-font.js). -->
               <v-card v-else outlined class="glyph-preview-card">
@@ -91,7 +90,7 @@
             </div>
           </div>
         </div>
-        <div class="glyph-list">
+        <div class="glyph-list" :class="{'glyph-list-tools-hidden': zoom < 1.5}">
           <div
             class="glyph"
             :style="{width: glyphWidth}"
@@ -182,8 +181,8 @@
           <div>Reset to default glyphs</div>
         </v-btn>
       </template>
-    </v-card-text>
-  </v-card>
+    </div>
+  </div>
 </template>
 <script>
 import {computed, defineComponent, onMounted, ref} from '@vue/composition-api';
@@ -236,7 +235,7 @@ const buildBlankRow = () => new Array(TEXT_GLYPH_WIDTH).fill(0);
 const CARD_ENTRY = {id: 'glyphs'};
 
 // Same "module-scope ref, not per-instance state" reasoning as
-// PlayerEditor.vue's own copiedFrameData - a copied glyph survives
+// PlayerEditor.vue's copiedFrameData - a copied glyph survives
 // navigating away from this tab and back.
 const copiedGlyphData = ref(null);
 
@@ -245,14 +244,14 @@ export default defineComponent({
   setup() {
     const textFontStorage = useTextFontStorage();
     const configurationStorage = useConfigurationStorage();
-    const zoom = useEditorZoom('textfont');
+    const zoom = useEditorZoom('textfont', 2);
     const glyphWidth = computed(() => `${Math.round(GLYPH_BASE_WIDTH * zoom.value)}px`);
     // Same width, same per-pixel size as a real glyph tile - the cursor is
     // TEXT_CURSOR_WIDTH (4) pixels wide, identical to TEXT_GLYPH_WIDTH.
     const cursorGlyphWidth = computed(() => `${Math.round(GLYPH_BASE_WIDTH * zoom.value)}px`);
     const {isCollapsed, toggleCollapsed} = useCollapsedIds('text-font-card', true);
 
-    // Whether the Text tab's own "Show a blinking scroll cursor" switch is
+    // Whether the Text tab's "Show a blinking scroll cursor" switch is
     // on - read directly (not passed as a prop) since nothing else about
     // this component depends on a parent already knowing/passing it down,
     // same reasoning textBkColor's  read in TextEditor.vue already
@@ -292,14 +291,14 @@ export default defineComponent({
       }
     });
 
-    // Tracks whichever glyph's own PixelEditor instance was last clicked
+    // Tracks whichever glyph's PixelEditor instance was last clicked
     // into (see its "activate" event, emitted from PixelEditor.vue's
     // handleActivate) - the single toolbar above (Eraser/Pencil/Undo/Redo/
     // Export/Import) acts on THIS glyph, since every glyph's own
     // per-instance toolbar is now hidden (hideToolbar on the pixel-editor
     // above) in favor of this one shared row. activeEditorKey is either a
     // glyph's numeric index or the literal string 'cursor' - same reasoning
-    // as ScoreFontEditor.vue's own activeEditor/activeEditorIndex (no
+    // as ScoreFontEditor.vue's activeEditor/activeEditorIndex (no
     // card-selection fallback needed, since there's no way to "select" a
     // glyph other than clicking directly into its own PixelEditor card).
     const activeEditor = ref(null);
@@ -345,8 +344,8 @@ export default defineComponent({
       state.value.glyphs[index] = structuredClone(copiedGlyphData.value);
       handleChange();
       // PixelEditor only reads its "value" prop once, on mount (see
-      // resetToken's own comment right below) - pasting writes the new
-      // pixels from OUTSIDE the target glyph's own editor instance, so
+      // resetToken's comment right below) - pasting writes the new
+      // pixels from OUTSIDE the target glyph's editor instance, so
       // without this it wouldn't actually show up until something else
       // happened to force that glyph to remount.
       resetToken.value++;
@@ -382,42 +381,37 @@ export default defineComponent({
 });
 </script>
 <style scoped>
-.text-font-card {
+.text-font-section {
   margin-bottom: 16px;
 }
 
-.text-font-card-header {
+/* Matches Configuration.vue's collapsible-section look exactly (a
+   plain left-aligned chevron + title, not a card) - this used to be its own
+   outlined v-card, which read as one more nested card inside the Text tab's
+   own main card, unlike every other collapsible grouping in the app. */
+.option-section-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 12px 8px 12px 16px;
   cursor: pointer;
+  user-select: none;
 }
 
-.text-font-card-title {
-  font-size: 1.25rem;
-  font-weight: 500;
+.option-section-content {
+  padding-left: 4px;
 }
 
-/* Vuetify's own ".v-card__title + .v-card__text" rule zeroes this same
-   padding automatically when a real v-card-title comes right before it (see
-   TextEditor.vue's own top-level card, confirmed directly: 0px there) - it
-   never applies here since .text-font-card-header is a plain div, not an
-   actual v-card-title, so this description paragraph sat a further 16px
-   below the header than the Text tab's own description sits below ITS
-   title. Zeroed here by hand to match that same spacing exactly. */
-.text-font-card-text {
-  padding-top: 0;
-}
-
-/* Attribute passthrough onto GraphicEditorToolbar.vue's own root (see
-   ScoreFontEditor.vue's identical comment) - :bleed="32" (set in the
-   template) handles reaching TextEditor.vue's own real scrolling edge two
-   padded levels up (this card's own .text-font-card-text AND TextEditor.
-   vue's own outer v-card-text around this whole card); this class just
-   keeps the row's own internal layout/spacing. */
+/* Attribute passthrough onto GraphicEditorToolbar.vue's root (see
+   ScoreFontEditor.vue's identical comment) - :bleed="16" (set in the
+   template) reaches TextEditor.vue's real scrolling edge one padded
+   level up (this component no longer nests its own second v-card-text now
+   that it's a plain section, not a card - just TextEditor.vue's outer
+   v-card-text). No "gap" here (tried first) - every other tab's own
+   equivalent toolbar (e.g. ScoreFontEditor.vue's .score-editor-toolbar-row)
+   relies purely on GraphicEditorToolbar.vue's internal divider margins
+   for icon-to-icon spacing; adding a flex "gap" on top of those stacked an
+   extra 16px alongside them here, spacing this tab's icons out further
+   than every other tab's - confirmed as a real reported mismatch. */
 .text-font-controls-row {
-  gap: 16px;
   margin-bottom: 8px;
 }
 
@@ -426,19 +420,25 @@ export default defineComponent({
 }
 
 /* Same margin-top/padding-top override as TextEditor.vue's own
-   .text-columns-switch - Vuetify's own selection-control margin-top (meant
+   .text-columns-switch - Vuetify's selection-control margin-top (meant
    for stacking below other fields) otherwise pushes this out of line with
    the zoom control sharing this same row. */
 .text-font-preview-switch {
   flex: 0 0 auto;
   margin-top: 0 !important;
   padding-top: 0 !important;
+  /* GraphicEditorToolbar.vue's inner divider only carries a tight 2px
+     margin on each side (meant for the small icon buttons sandwiched
+     between the other dividers) - fine for those, but this switch's own
+     track/label read as uncomfortably close to the divider line right next
+     to it, unlike anything else in this toolbar. */
+  margin-left: 8px;
 }
 
 /* Marks which glyph the shared toolbar above currently acts on - same
-   border-color + outline treatment as every other tab's own "-selected"
+   border-color + outline treatment as every other tab's "-selected"
    card highlight (App.vue's shared outlined-card border rule) and
-   PlayerEditor.vue's own identical per-frame highlight. */
+   PlayerEditor.vue's identical per-frame highlight. */
 .glyph-editor-active >>> .v-card {
   border-color: var(--v-primary-base, #1976d2) !important;
   outline: 2px solid var(--v-primary-base, #1976d2) !important;
@@ -455,17 +455,26 @@ export default defineComponent({
   flex-wrap: wrap;
   gap: 12px;
   /* Every card in a row should start at the same height regardless of which
-     row it's actually in (see .glyph-label's own min-height comment right
+     row it's actually in (see .glyph-label's min-height comment right
      below) - flex's default "stretch" would instead make every card in a
      row match the row's TALLEST card, which isn't what's wanted here either. */
   align-items: flex-start;
 }
 
+/* Same reasoning as ScoreFontEditor.vue's .digit-list-tools-hidden -
+   the copy/paste icons under each glyph start overlapping/crowding the
+   glyph itself below 150% zoom, so hidden entirely rather than shrunk
+   further - still reachable via the shared toolbar at the top of the tab
+   regardless of zoom level. */
+.glyph-list-tools-hidden >>> .pixel-editor-hidden-toolbar-row {
+  display: none;
+}
+
 /* Width is set inline from the zoom factor. */
 
 /* min-height (rather than relying on the text itself) keeps every card in a
-   row starting at the same height even when a label's own text is empty -
-   the space glyph's own char is a literal " ", which the browser collapses
+   row starting at the same height even when a label's text is empty -
+   the space glyph's char is a literal " ", which the browser collapses
    to nothing visible, leaving that one card shorter (and so higher, given
    align-items: flex-start above) than its neighbors sharing the same row.
    glyphLabel() (see the script below) already substitutes "(space)" text
@@ -481,10 +490,10 @@ export default defineComponent({
   position: relative;
 }
 
-/* Same placement/style as PlayerEditor.vue's own .frame-number-badge -
+/* Same placement/style as PlayerEditor.vue's .frame-number-badge -
    plain flow (not overlaid on the card border), via the "badge" slot
    PixelEditor.vue exposes for exactly this, so it sits INSIDE the pixel
-   editor's own rendered card, pushing the canvas down naturally rather than
+   editor's rendered card, pushing the canvas down naturally rather than
    floating on top of it (which made it hard to read whenever the top row of
    pixels happened to be drawn in a similar color). This glyph's plain
    0-based index lets one be pointed out unambiguously even for a character
@@ -496,11 +505,11 @@ export default defineComponent({
   font-family: monospace;
   opacity: 0.6;
   /* Pulls it up out of v-card-text's default 16px top padding, same reason
-     as .frame-number-badge's own identical margin-top. */
+     as .frame-number-badge's identical margin-top. */
   margin-top: -8px;
 }
 
-/* Same sizing as PlayerEditor.vue's own .player-icon-btn-size - the
+/* Same sizing as PlayerEditor.vue's .player-icon-btn-size - the
    Copy/Paste buttons under each glyph's graphic. */
 .glyph-icon-btn-size {
   min-width: 0;
@@ -522,8 +531,8 @@ export default defineComponent({
 
 /* Matches PixelEditor.vue's  outlined v-card shape/width - kept a plain
    read-only rendering rather than a second PixelEditor instance (see the
-   template's own comment on why), so its sizing has to be replicated by
-   hand instead of coming from that component's own CSS. */
+   template's comment on why), so its sizing has to be replicated by
+   hand instead of coming from that component's CSS. */
 .glyph-preview-card {
   width: 100%;
 }
@@ -539,7 +548,7 @@ export default defineComponent({
 
 /* aspect-ratio 2/1 matches PIXEL_ASPECT (edit mode's  pixel cells are
    twice as wide as tall, for the same "one screen pixel is 2:1" reason - see
-   PIXEL_ASPECT's own comment) - a blank interlaced row (see
+   PIXEL_ASPECT's comment) - a blank interlaced row (see
    interlacedPreviewRows) is a real scanline too, so it keeps the exact same
    per-row height as a genuine pixel row rather than reading as a thin
    spacer. */

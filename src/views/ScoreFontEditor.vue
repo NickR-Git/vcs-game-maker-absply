@@ -163,9 +163,9 @@ const CUSTOM_SCORE_FONT_OPTION = {text: 'Custom (drawn below)', value: CUSTOM_SC
 const BACKGROUND_DEFAULT_COLOR_BYTE = 0xC4;
 
 // Same "module-scope ref, not per-instance state" reasoning as
-// PlayerEditor.vue's own copiedFrameData - a copied digit survives
+// PlayerEditor.vue's copiedFrameData - a copied digit survives
 // navigating away from this tab and back (this component is destroyed/
-// recreated on navigation - see hooks/collapse.js's own comment on that
+// recreated on navigation - see hooks/collapse.js's comment on that
 // lifecycle elsewhere).
 const copiedDigitData = ref(null);
 
@@ -175,7 +175,7 @@ export default defineComponent({
     const scoreFontStorage = useScoreFontStorage();
     const squishCustomScoreFontStorage = useSquishCustomScoreFontStorage();
     const configurationStorage = useConfigurationStorage();
-    const zoom = useEditorZoom('scorefont');
+    const zoom = useEditorZoom('scorefont', 1.5);
     const digitWidth = computed(() => `${Math.round(DIGIT_BASE_WIDTH * zoom.value)}px`);
 
     // Squish (and Squish Custom, which starts from Squish's  digits and is
@@ -367,13 +367,13 @@ export default defineComponent({
     const activeDigitHeight = computed(() =>
       isSquishCustomSelected.value ? SQUISH_DIGIT_HEIGHT : DIGIT_HEIGHT);
 
-    // Tracks whichever digit's own PixelEditor instance was last clicked
+    // Tracks whichever digit's PixelEditor instance was last clicked
     // into (see its "activate" event, emitted from PixelEditor.vue's
     // handleActivate) - the single toolbar above (Eraser/Pencil/Undo/Redo/
     // Export/Import) acts on THIS digit, since every digit's own
     // per-instance toolbar is now hidden (hideToolbar on the pixel-editor
     // below) in favor of this one shared row. No card-selection fallback is
-    // needed here (unlike PlayerEditor.vue's own effectiveFrameEditor) -
+    // needed here (unlike PlayerEditor.vue's effectiveFrameEditor) -
     // there's no way to "select" a digit other than clicking directly into
     // its own PixelEditor card (no separate header/name row to click that
     // wouldn't also activate it), so a plain activeEditor is enough.
@@ -416,8 +416,8 @@ export default defineComponent({
       state.value.digits[index] = structuredClone(copiedDigitData.value);
       handleChange();
       // PixelEditor only reads its "value" prop once, on mount (see
-      // resetToken's own comment right below) - pasting writes the new
-      // pixels from OUTSIDE the target digit's own editor instance, so
+      // resetToken's comment right below) - pasting writes the new
+      // pixels from OUTSIDE the target digit's editor instance, so
       // without this it wouldn't actually show up until something else
       // happened to force that digit to remount.
       resetToken.value++;
@@ -463,9 +463,9 @@ export default defineComponent({
 });
 </script>
 <style scoped>
-/* Same as Configuration.vue's own .option-switch rule - Vuetify aligns a
+/* Same as Configuration.vue's .option-switch rule - Vuetify aligns a
    switch's hint under the toggle track by default; indent it to line up
-   under the label text instead, matching the toggle's own width. */
+   under the label text instead, matching the toggle's width. */
 .option-switch >>> .v-messages {
   margin-left: 46px;
 }
@@ -485,9 +485,9 @@ export default defineComponent({
    against each other otherwise. */
 /* Unlike PlayerEditor.vue/BackgroundEditor.vue/TitleScreenEditor.vue, this
    tab never had its own self-scrolling wrapper - it relied on some outer
-   ancestor (app-main's own overflow) to scroll instead, which is why the
+   ancestor (app-main's overflow) to scroll instead, which is why the
    toolbar row below couldn't stick to "the top of this tab" the way theirs
-   do (there was no boundary of this tab's own to stick to in the first
+   do (there was no boundary of this tab's to stick to in the first
    place). Same position: absolute + overflow: auto trick as those other
    tabs' own .editor-container. */
 .editor-container {
@@ -500,7 +500,7 @@ export default defineComponent({
 
 /* Attribute passthrough - Vue applies a non-prop class/attribute given to a
    component directly onto ITS OWN root element, so this reaches
-   GraphicEditorToolbar.vue's own outer div despite living in a different
+   GraphicEditorToolbar.vue's outer div despite living in a different
    file - restores the gap between the switches row above and the toolbar
    that this tab used to set directly on its own (now-removed) wrapper. */
 .score-editor-toolbar-row {
@@ -512,9 +512,9 @@ export default defineComponent({
 }
 
 /* Marks which digit the shared toolbar above currently acts on - same
-   border-color + outline treatment as every other tab's own "-selected"
+   border-color + outline treatment as every other tab's "-selected"
    card highlight (App.vue's shared outlined-card border rule) and
-   PlayerEditor.vue's own identical per-frame highlight. */
+   PlayerEditor.vue's identical per-frame highlight. */
 .digit-editor-active >>> .v-card {
   border-color: var(--v-primary-base, #1976d2) !important;
   outline: 2px solid var(--v-primary-base, #1976d2) !important;
@@ -530,7 +530,7 @@ export default defineComponent({
 
 /* Vuetify's  switch margin-top (meant for stacking below other fields)
    otherwise pushes this out of line with the swatch/label sharing this same
-   row - same override TextEditor.vue's own .text-columns-switch uses for
+   row - same override TextEditor.vue's .text-columns-switch uses for
    an identical inline-row switch. margin-left separates it from the label
    text right before it. */
 .score-fade-switch {
@@ -557,7 +557,7 @@ export default defineComponent({
   gap: 16px;
 }
 
-/* At 50% zoom (the lowest level - see hooks/zoom.js's own ZOOM_LEVELS) each
+/* At 50% zoom (the lowest level - see hooks/zoom.js's ZOOM_LEVELS) each
    digit is too small for the Copy/Paste/Clear row below its graphic to fit
    without the icons overlapping or the card growing wider than the graphic
    itself - hidden here rather than shrinking them further, since they're
@@ -582,7 +582,7 @@ export default defineComponent({
   margin-top: 24px;
 }
 
-/* Same sizing as PlayerEditor.vue's own identical .player-icon-btn-size -
+/* Same sizing as PlayerEditor.vue's identical .player-icon-btn-size -
    the Copy/Paste buttons under each digit's graphic. */
 .player-icon-btn-size {
   min-width: 0;

@@ -1,5 +1,5 @@
 <template>
-  <v-card flat>
+  <v-card flat class="editor-container">
     <v-card-title>Project</v-card-title>
 
     <v-card-actions class="project-actions">
@@ -96,22 +96,29 @@
         label="Project Title"
         persistent-placeholder
       />
-      <v-row>
-        <v-col cols="6">
+      <div class="project-developer-version-row">
+        <div class="project-developer-col">
           <v-text-field
             v-model="projectDeveloper"
             label="Developer"
             persistent-placeholder
           />
-        </v-col>
-        <v-col cols="6">
+        </div>
+        <div class="project-version-col">
           <v-text-field
             v-model="projectVersion"
             label="Version"
             persistent-placeholder
           />
-        </v-col>
-      </v-row>
+          <v-switch
+            v-model="projectAutoIncrementVersion"
+            label="Increment on Save"
+            title="Bumps the last segment of this Version field (e.g. 1.2.3 -> 1.2.4) every time you save the project."
+            hide-details
+            class="project-auto-increment-switch"
+          />
+        </div>
+      </div>
       <v-row class="project-tight-row">
         <v-col cols="6">
           <v-text-field
@@ -611,7 +618,7 @@ export default defineComponent({
       // Re-entrancy guard: a real reported bug ("the open window opening
       // twice", the SAME native picker flashing closed and immediately
       // reopening before anything was picked) traces to this handler firing
-      // twice for one click - Chrome's own spec for showOpenFilePicker()
+      // twice for one click - Chrome's spec for showOpenFilePicker()
       // aborts and replaces any picker already open when called again
       // before the first resolves, which looks exactly like a flash/reopen
       // rather than two separate dialogs. Persisted across the whole click
@@ -904,7 +911,7 @@ export default defineComponent({
    invisible circular hit area) with the "Project" title text's left edge
    above it - confirmed directly via getBoundingClientRect() (icon was 22px
    further right than the title). v-card-actions' own default 16px left
-   padding plus the icon button's own internal padding around its glyph
+   padding plus the icon button's internal padding around its glyph
    accounted for all 22px between them. */
 .project-actions {
   padding-left: 8px;
@@ -977,7 +984,7 @@ export default defineComponent({
 
 /* Matches the tight gap between the Project Title field and the Developer/
    Version row below it (a plain v-text-field followed by a v-row collapses
-   to a small negative margin, -12px, by Vuetify's own default) - two v-rows
+   to a small negative margin, -12px, by Vuetify's default) - two v-rows
    stacked back to back don't get that same collapse (confirmed directly:
    +12px instead), leaving a visibly bigger gap before this row than every
    other row on this tab. */
@@ -985,12 +992,59 @@ export default defineComponent({
   margin-top: -24px !important;
 }
 
+/* Plain flexbox (not v-row/v-col, tried first) - Vuetify's grid breaks on
+   VIEWPORT width (its "sm" breakpoint etc, a media query under the hood),
+   but this tab's actual available width is the CONTENT area, which is the
+   viewport MINUS whatever the left nav-drawer/right emulator-drawer
+   currently take up - confirmed as the real reason the earlier v-row/v-col
+   version never actually wrapped: the browser window could easily stay
+   above Vuetify's "sm" breakpoint (600px) while the content column itself
+   was already down to a couple hundred cramped pixels with both drawers
+   open. flex-wrap here reacts to this row's real rendered width
+   instead, however that width got there. */
+.project-developer-version-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 24px;
+}
+
+.project-developer-col {
+  flex: 1 1 220px;
+}
+
+/* Puts the Auto-increment switch to the right of the Version field, in the
+   same column, rather than a separate one - flex-basis matches
+   .project-developer-col's so the two sides split evenly while there's
+   room, and wraps onto its own full-width row below Developer (see
+   .project-developer-version-row's comment) once there isn't. */
+.project-version-col {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1 1 220px;
+}
+
+/* Vuetify's selection-control margin-top (meant for a switch stacking
+   BELOW another field) otherwise pushes this out of vertical alignment
+   with the Version field sharing this row - same fix as this app's other
+   inline field+switch rows (e.g. TextEditor.vue's own
+   .text-scroll-cursor-switch). white-space: nowrap keeps its label on one
+   line - safe now that Version/the switch always share a full row's width
+   between them (see .project-version-col's comment) rather than a
+   half-width column that could get narrower than the label itself. */
+.project-auto-increment-switch {
+  margin-top: 0;
+  padding-top: 0;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 /* Same flat-icon, fade-in-on-hover/blue-on-press treatment as every other
    icon button in the app (e.g. GeneratedCode.vue's own
    .generated-code-flat-icon-btn, MusicEditor.vue's own
    .music-flat-icon-btn) - transparent background (no Vuetify default hover
    circle), icon fades from a faint grey to near-black on hover, and flashes
-   the app's own blue on an actual click/press. */
+   the app's blue on an actual click/press. */
 .project-flat-icon-btn {
   background-color: transparent !important;
   box-shadow: none !important;

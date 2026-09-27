@@ -1,5 +1,5 @@
 <template>
-  <v-card flat class="about-card">
+  <v-card flat class="about-card editor-container">
     <v-card-title>About</v-card-title>
 
     <v-divider class="my-0" />
@@ -73,7 +73,7 @@ export default {
 /* Fills .app-main-inner's  real, deterministic height (see its comment
    in App.vue) instead of just sizing to content - a flex column so
    .about-text below can claim the leftover space (flex: 1, after the
-   title/divider's own natural height) and vertically center its own
+   title/divider's natural height) and vertically center its own
    content within THAT, rather than only within its own content height. */
 .about-card {
   display: flex;
@@ -81,12 +81,12 @@ export default {
   height: 100%;
 }
 
-/* Matches Project.vue's own .project-settings-text - v-card-text's default
+/* Matches Project.vue's .project-settings-text - v-card-text's default
    top/bottom padding otherwise leaves a bigger gap than intended under the
    divider above. Flex column with align-items:center centers every direct
    child (the logo block, the description, the Contributors list) as its
    own box in the middle of the page, not just the text within each one;
-   flex: 1 + justify-content: center (with .about-card's own height: 100%
+   flex: 1 + justify-content: center (with .about-card's height: 100%
    above) is what centers that whole column vertically too, not just
    horizontally. */
 .about-text {
@@ -114,13 +114,13 @@ export default {
 
 /* The logo.svg asset itself has a fair amount of transparent padding baked
    into its own bounding box (visible directly: the "VCS GAME MAKER" text
-   inside it doesn't reach the SVG's own edges) - a negative margin here
+   inside it doesn't reach the SVG's edges) - a negative margin here
    pulls the version text up into that empty space instead of stacking a
    real gap on top of it, which otherwise reads as a much bigger gap than
    intended once the logo is scaled up to this page's 48px height. Kept
-   small (not the App.vue sidebar's own tighter fit) since the version text
+   small (not the App.vue sidebar's tighter fit) since the version text
    below is now normal body size, not that sidebar's small 11px label, and
-   overlapped the logo's own bottom edge at a larger negative value. */
+   overlapped the logo's bottom edge at a larger negative value. */
 .about-logo {
   display: block;
   height: 96px;

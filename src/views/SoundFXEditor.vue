@@ -309,7 +309,7 @@
                       <v-switch
                         v-model="soundEffect.envelope"
                         label="Envelope"
-                        title="Shapes this sound's own volume over time (Attack/Decay/Sustain/Release), instead of playing at a fixed volume until it ends. Applies both here and when this preset is used as a Music tab instrument."
+                        title="Shapes this sound's volume over time (Attack/Decay/Sustain/Release), instead of playing at a fixed volume until it ends. Applies both here and when this preset is used as a Music tab instrument."
                         hide-details
                         class="soundfx-envelope-switch"
                         @change="handleChildChange"
@@ -334,19 +334,19 @@
                           class="soundfx-envelope-field"
                         />
                         <v-select
-                          label="Sustain"
-                          title="The volume level (percent of full volume) held after Attack/Decay, until Release begins."
-                          v-model="soundEffect.envelopeSustain"
-                          :items="envelopeSustainPercentOptionItems"
+                          label="Sustain length"
+                          title="How many frames the Sustain hold itself lasts before Release begins - 0 skips straight from Decay into Release."
+                          v-model="soundEffect.envelopeSustainLength"
+                          :items="envelopeSustainFrameOptionItems"
                           hide-details
                           @change="handleChildChange"
                           class="soundfx-envelope-field"
                         />
                         <v-select
-                          label="Sustain length"
-                          title="How many frames the Sustain hold itself lasts before Release begins - 0 skips straight from Decay into Release."
-                          v-model="soundEffect.envelopeSustainLength"
-                          :items="envelopeSustainFrameOptionItems"
+                          label="Sustain Volume"
+                          title="The volume level (percent of full volume) held after Attack/Decay, until Release begins."
+                          v-model="soundEffect.envelopeSustain"
+                          :items="envelopeSustainPercentOptionItems"
                           hide-details
                           @change="handleChildChange"
                           class="soundfx-envelope-field"
@@ -409,7 +409,7 @@
 
                 <!-- Its own row (not inline with soundfx-fields-section above,
                      where this used to sit next to Fade) so it lands in the
-                     same place - close to the card's own bottom edge - whether
+                     same place - close to the card's bottom edge - whether
                      expanded or collapsed, instead of being roughly mid-card
                      while expanded but bottom-edge while collapsed. -->
                 <v-card-text class="soundfx-delete-section">
@@ -796,7 +796,7 @@ export default defineComponent({
 
     // Loads a previously exported sound bank file and opens the picker
     // dialog for it - same "click a card, then confirm what it does" shape
-    // as the emulator's own Keyboard Mapping dialog (App.vue/
+    // as the emulator's Keyboard Mapping dialog (App.vue/
     // KeyMappingDialog.vue), rather than importing every sound in the file
     // immediately and unconditionally the moment it's picked, which left no
     // way to bring in just a few sounds from a bank without also
@@ -962,8 +962,8 @@ export default defineComponent({
 /* v-list-item's  default left/right padding (16px each side) stacks on
    top of v-card-text's, pushing the sound effect card in from both edges
    instead of it actually filling the full available width - confirmed as
-   the source of a visible gap past the card's own right edge, same fix as
-   PlayerEditor.vue's own identical .entry-list-item rule. */
+   the source of a visible gap past the card's right edge, same fix as
+   PlayerEditor.vue's identical .entry-list-item rule. */
 .entry-list-item {
   padding-left: 0;
   padding-right: 0;
@@ -976,7 +976,7 @@ export default defineComponent({
   grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
   gap: 8px;
   /* No margin-top - v-list's  default padding-top (8px, unlike e.g.
-     TitleScreenEditor.vue's own .titlescreen-card-list, which zeroes it
+     TitleScreenEditor.vue's .titlescreen-card-list, which zeroes it
      out) already supplies the gap here, stacking an 8px margin-top on top
      of that made the gap under the import/export buttons visibly bigger
      than the 8px gap above them (Show field to buttons) - a real reported
@@ -992,12 +992,12 @@ export default defineComponent({
 /* overflow: visible added alongside the existing padding reset - Vuetify's
    own default "overflow: hidden" here (normally there to ellipsis-truncate
    long list-item text, not relevant to a card filling this whole slot) was
-   clipping the selected card's own 2px outline (see .soundfx-card-selected
+   clipping the selected card's 2px outline (see .soundfx-card-selected
    - an outline draws outside the border edge, in the few pixels of this
-   parent's own box the card doesn't otherwise use), a real reported bug.
+   parent's box the card doesn't otherwise use), a real reported bug.
    min-width: 0 is needed ALONGSIDE that change (see MusicEditor.vue's own
-   identical fix for the full explanation) - a flex item's own min-width
-   defaults to "auto" (its content's own intrinsic width) UNLESS overflow is
+   identical fix for the full explanation) - a flex item's min-width
+   defaults to "auto" (its content's intrinsic width) UNLESS overflow is
    something other than visible, in which case the default is 0 instead;
    switching to overflow: visible silently undid that, letting a card
    refuse to shrink below its own widest content instead of the tab's width. */
@@ -1017,7 +1017,7 @@ export default defineComponent({
    margin-top: 16px, meant for stacking them below other form fields - with
    nothing above it here, that just pushes the switch down out of line with
    the slider next to it (which has no such margin). !important because
-   Vuetify's own ".v-input--selection-controls" rule outweighs a single
+   Vuetify's ".v-input--selection-controls" rule outweighs a single
    custom class on specificity alone. */
 .dim-switch {
   flex: 0 0 auto;
@@ -1027,7 +1027,7 @@ export default defineComponent({
 .dim-slider {
   flex: 0 1 200px;
   /* Pulls the "%" label below in closer than the row's  16px gap - the
-     slider's own internal thumb padding already leaves visual space after
+     slider's internal thumb padding already leaves visual space after
      it, so the label doesn't need the full gap on top of that. */
   margin-right: -12px;
   /* The slider's track sits a few px higher within its  box than the
@@ -1060,7 +1060,7 @@ export default defineComponent({
 }
 
 /* Same margin-top/padding-top override as .dim-switch elsewhere in this
-   file - Vuetify's own selection-control margin-top (meant for stacking
+   file - Vuetify's selection-control margin-top (meant for stacking
    below other fields) otherwise pushes this out of line with the Show
    select next to it. */
 .soundfx-columns-switch {
@@ -1070,8 +1070,8 @@ export default defineComponent({
 }
 
 /* Now sits under the Show/Columns filter row (not directly under the tab
-   title - see the template's own placement) - padding-left: 0 lines the
-   first icon's own left edge up with the Show field beside it above,
+   title - see the template's placement) - padding-left: 0 lines the
+   first icon's left edge up with the Show field beside it above,
    margin-top separates it from that row (it used to rely on
    v-card-actions' own default top padding for spacing under the title,
    which no longer applies here). No margin-bottom override - the sound
@@ -1080,7 +1080,7 @@ export default defineComponent({
    below them (buttons to cards) read as the same size. gap: 0 because a
    v-btn immediately following another v-btn gets its own Vuetify-injected
    margin-left, which .soundfx-bank-btn below zeroes out, matching
-   .project-flat-icon-btn's own identical fix. */
+   .project-flat-icon-btn's identical fix. */
 .soundfx-bank-actions {
   padding-left: 0;
   padding-top: 0;
@@ -1093,19 +1093,19 @@ export default defineComponent({
 
 
 /* Tightens the gap between the "Sound" title above and the DIM controls
-   right below it - v-card-text's own default 16px top padding read as too
+   right below it - v-card-text's default 16px top padding read as too
    much space there. */
 .soundfx-dim-section {
   padding-top: 0;
 }
 
 /* Full default Vuetify icon-button size (40px, 24px glyph - no "small"
-   prop), matching Project.vue's own .project-flat-icon-btn exactly - same
+   prop), matching Project.vue's .project-flat-icon-btn exactly - same
    flat, transparent background (no default hover circle), same fade-in-on-
    hover/blue-on-press icon colour transitions - rather than this card's
    own smaller, darker .soundfx-icon-btn-size treatment used inside each
-   sound effect card, since these sit in the tab's own top-level toolbar
-   row instead. margin-left forced to 0 - see this rule's own comment on
+   sound effect card, since these sit in the tab's top-level toolbar
+   row instead. margin-left forced to 0 - see this rule's comment on
    .soundfx-bank-actions for why. */
 .soundfx-bank-btn {
   margin-left: 0 !important;
@@ -1131,7 +1131,7 @@ export default defineComponent({
 }
 
 /* Single full-width column instead of the grid .soundfx-list defaults to
-   (see that rule's own comment) - toggled via the "Columns" switch above. */
+   (see that rule's comment) - toggled via the "Columns" switch above. */
 .soundfx-list--single-column {
   display: flex;
   flex-direction: column;
@@ -1139,9 +1139,9 @@ export default defineComponent({
 
 /* Grid's  default stretch (align-items: start on .soundfx-list overrides
    that for the grid case, but each item still fills its own column width)
-   isn't automatic here - .entry-list-item (Vuetify's own v-list-item, the
+   isn't automatic here - .entry-list-item (Vuetify's v-list-item, the
    actual flex child) doesn't stretch to the container's full width on its
-   own, leaving .soundfx-card's own width: 100% only filling 100% of that
+   own, leaving .soundfx-card's width: 100% only filling 100% of that
    un-stretched item instead of the whole row. */
 .soundfx-list--single-column .entry-list-item {
   width: 100%;
@@ -1158,12 +1158,12 @@ export default defineComponent({
 
 /* Card-level click-to-select styling (cursor/ripple/hover suppression on
    .soundfx-card.v-card--link/.editor-container.v-card--link, and the actual
-   .soundfx-card-selected outline) lives in App.vue's own global stylesheet
+   .soundfx-card-selected outline) lives in App.vue's global stylesheet
    now, shared with MusicEditor.vue's identical .song-card treatment rather
    than duplicated per-tab - see its own comment there. */
 
 /* Same reasoning/placement as TextEditor.vue's identical .text-drag-handle
-   rule (see hooks/drag-reorder.js's own comment) - only this top strip is
+   rule (see hooks/drag-reorder.js's comment) - only this top strip is
    actually draggable, so click-and-drag still selects text everywhere else
    in the card. */
 .soundfx-drag-handle {
@@ -1200,7 +1200,7 @@ export default defineComponent({
 
 /* Same top-edge fix as .soundfx-delete-btn, positioned at the opposite
    corner - a smaller top offset than .soundfx-delete-btn's, since this one
-   has to line up against .soundfx-id-badge's own text baseline right next to
+   has to line up against .soundfx-id-badge's text baseline right next to
    it, not just sit inside the card. */
 .soundfx-collapse-btn {
   top: 2px !important;
@@ -1223,7 +1223,7 @@ export default defineComponent({
   z-index: 1;
 }
 
-/* Same 4px gap as the Music tab's own .track-instrument-row, but flex-start
+/* Same 4px gap as the Music tab's .track-instrument-row, but flex-start
    (not flex-end) - unlike that row's dense, hide-details fields, Sound
    name is a full-size v-text-field with a good deal of reserved underline
    space below its own value text, so bottom-aligning the swatch to the
@@ -1236,9 +1236,9 @@ export default defineComponent({
 }
 
 /* Clears .soundfx-toolbar-top-right, which would otherwise overlap the name
-   field's own label/text at the top of the card - matches the Music tab's
+   field's label/text at the top of the card - matches the Music tab's
    own song cards' card-top-to-label gap (measured directly: 36.67px there
-   vs this field's own 40.67px at 24px margin-top, so 20px lines the two
+   vs this field's 40.67px at 24px margin-top, so 20px lines the two
    up) - was 36px originally. */
 .soundfx-name-field {
   margin-top: 20px;
@@ -1248,8 +1248,8 @@ export default defineComponent({
 /* Same 20px top nudge as .soundfx-name-field right before it - a v-select
    floats its own label the same way a v-text-field does, so it needs the
    same alignment fix to sit level with the name field and the instrument
-   button (see that button's own comment) rather than sitting higher than
-   both. Fixed, narrow width (unlike the name field's own flex-grow) - just
+   button (see that button's comment) rather than sitting higher than
+   both. Fixed, narrow width (unlike the name field's flex-grow) - just
    a single small 1-5 number, no need to compete for the row's spare
    width. */
 .soundfx-priority {
@@ -1259,7 +1259,7 @@ export default defineComponent({
 
 /* Same flat-icon, fade-in-on-hover treatment as .soundfx-stop-btn/
    .soundfx-play-btn below, plus an "on" tint (see .soundfx-instrument-btn-
-   active) matching the Music tab's own mute/solo toggle buttons
+   active) matching the Music tab's mute/solo toggle buttons
    (MusicEditor.vue's .music-icon-btn-active - same blue, #1976d2, Vuetify's
    default "primary"). 30px roughly centers it against .soundfx-name-field's
    own floating label/text (20px offset) - not a measured value, nudge if it
@@ -1267,7 +1267,7 @@ export default defineComponent({
    .soundfx-icon-btn-size (defined later in this same file), whose own
    "margin: 0 1px" shorthand resets margin-top to 0 and would otherwise win
    on source order alone despite matching specificity - confirmed as the
-   actual cause of this button rendering hard against the row's own top
+   actual cause of this button rendering hard against the row's top
    edge instead of lined up with the name field next to it. */
 .soundfx-instrument-btn {
   flex: 0 0 auto;
@@ -1298,10 +1298,10 @@ export default defineComponent({
    <color-swatch-picker> itself lands on that invisible marker, not on the
    actual visible swatch, so this has to pierce into the component's own
    internal .color-swatch-picker-dot class instead. 41px (.soundfx-name-
-   field's own 20px margin-top, plus 21px to reach the vertical center of
+   field's 20px margin-top, plus 21px to reach the vertical center of
    its floating label + value text) - measured directly against the
    rendered field, since a fixed field like this one doesn't share the
-   Instrument row's own dense/hide-details proportions to eyeball from. */
+   Instrument row's dense/hide-details proportions to eyeball from. */
 .soundfx-name-row >>> .color-swatch-picker-dot {
   margin-top: 41px;
   margin-left: -6px;
@@ -1350,7 +1350,7 @@ export default defineComponent({
 }
 
 /* Split from the rest of the card's content (soundfx-fields-section) so the
-   name field can stay visible while collapsed - v-card-text's own default
+   name field can stay visible while collapsed - v-card-text's default
    padding-bottom would otherwise open a gap between them that the original,
    single v-card-text never had. */
 .soundfx-name-section {
@@ -1377,14 +1377,14 @@ export default defineComponent({
   justify-content: flex-end;
   padding-top: 0;
   /* Vuetify's v-card-text default padding-bottom (16px) left too much empty
-     space below the last field row, especially once Arpeggio's own stacked
+     space below the last field row, especially once Arpeggio's stacked
      controls made that row taller - shrunk to a small amount instead of
      zeroed, so the Delete button itself (rendered here whenever there's
      more than one sound effect) still has a little clearance from the
-     card's own bottom edge rather than sitting flush against it. */
+     card's bottom edge rather than sitting flush against it. */
   padding-bottom: 8px;
-  /* Matches .soundfx-toolbar-top-right's own "right: 8px" (the Play
-     button's own horizontal position) - v-card-text's default 16px right
+  /* Matches .soundfx-toolbar-top-right's "right: 8px" (the Play
+     button's horizontal position) - v-card-text's default 16px right
      padding put this 8px further left than that, so Delete and Play didn't
      line up vertically despite both being right-aligned. */
   padding-right: 8px;
@@ -1396,7 +1396,7 @@ export default defineComponent({
 
 /* row-gap 4px (not the same 8px as column-gap) to match the gap above this
    section, between the Sound name row and this one (soundfx-name-section's
-   own padding-bottom: 0 / soundfx-fields-section's own padding-top: 0) -
+   own padding-bottom: 0 / soundfx-fields-section's padding-top: 0) -
    without splitting it out, the plain 8px shorthand made a wrapped row
    within this section sit visibly farther from its neighbor above/below
    than the Sound name row sits from Sound type. */
@@ -1460,7 +1460,7 @@ export default defineComponent({
   display: flex;
   /* flex-start, not center - with center, a taller item (e.g. Envelope's
      own dropdowns) sharing a wrapped line with the switch grows that
-     line's own height, and "center" then pulls the switch down to that
+     line's height, and "center" then pulls the switch down to that
      line's new midpoint - a real reported bug (the switch visibly shifting
      position purely from toggling its own fields on, which grow the line
      it's sharing). flex-start pins every item to the top of its own line
@@ -1490,7 +1490,7 @@ export default defineComponent({
 }
 
 /* Arpeggio's  expanded fields already add their  visual separation
-   above Envelope (see the un-scoped rule above's own comment, written for
+   above Envelope (see the un-scoped rule above's comment, written for
    the collapsed case) - the same margin-top on top of THAT read as too
    much. */
 .soundfx-arpeggio-block--expanded + .soundfx-envelope-block {
@@ -1509,21 +1509,21 @@ export default defineComponent({
   width: 100%;
   gap: 4px;
   /* Breathing room from the Attack/Decay/Sustain/Release fields above
-     (.soundfx-envelope-block's own row-gap is 0, so without this the
-     fields' bottom edge and this row's own divider line sit flush). */
+     (.soundfx-envelope-block's row-gap is 0, so without this the
+     fields' bottom edge and this row's divider line sit flush). */
   margin-top: 8px;
   /* Right-aligned, under the graph's  right edge (where Release ends),
      rather than the left edge (where Attack starts). */
   justify-content: flex-end;
   /* Separates the graph's  reset/undo/redo controls from the Attack/
      Decay/Sustain/Release dropdowns above them - same border colour
-     EnvelopeGraph.vue's own .envelope-graph frame uses, so this reads as
+     EnvelopeGraph.vue's .envelope-graph frame uses, so this reads as
      the same "framed panel" visual language rather than an unrelated line. */
   padding-top: 6px;
   border-top: 1px solid rgba(0, 0, 0, 0.24);
 }
 
-/* Same margin-top override as SoundFXEditor's own .dim-switch - Vuetify's
+/* Same margin-top override as SoundFXEditor's .dim-switch - Vuetify's
    selection-control margin-top (meant for stacking below other fields)
    otherwise pushes this out of line with the dropdowns next to it. Also
    zeroes its own 4px padding-top (a v-switch default, unlike the plain
@@ -1538,7 +1538,7 @@ export default defineComponent({
 /* Extra push-down ONLY while the block is expanded (fields showing beside
    the switch) - collapsed, the switch is alone on its own line and the
    base -4px above already looks right. Under align-items: flex-start (see
-   that rule's own comment for why it replaced center), every item pins to
+   that rule's comment for why it replaced center), every item pins to
    the TOP of its line, which for a v-select/v-text-field means the top of
    its LABEL text, well above where its actual input box sits - this was
    applied unconditionally before, which correctly aligned the switch with

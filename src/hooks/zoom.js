@@ -7,8 +7,8 @@ const keyOf = (name) => `vcs-game-maker.zoom.${name}`;
 export const ZOOM_LEVELS = [0.5, 0.75, 1, 1.5, 2, 3, 4];
 const DEFAULT_ZOOM = 1;
 
-const clamp = (value) => {
-  if (!Number.isFinite(value)) return DEFAULT_ZOOM;
+const clamp = (value, fallback = DEFAULT_ZOOM) => {
+  if (!Number.isFinite(value)) return fallback;
   return Math.min(ZOOM_LEVELS[ZOOM_LEVELS.length - 1], Math.max(ZOOM_LEVELS[0], value));
 };
 
@@ -18,9 +18,9 @@ const clamp = (value) => {
 // refs here also means a tab keeps its zoom when it is revisited.
 const zoomRefs = {};
 
-const zoomRefFor = (name) => {
+const zoomRefFor = (name, defaultZoom) => {
   if (!zoomRefs[name]) {
-    zoomRefs[name] = ref(clamp(parseFloat(localStorage.getItem(keyOf(name)))));
+    zoomRefs[name] = ref(clamp(parseFloat(localStorage.getItem(keyOf(name))), defaultZoom));
   }
   return zoomRefs[name];
 };
@@ -28,16 +28,21 @@ const zoomRefFor = (name) => {
 /**
  * Zoom factor for one editor tab, remembered between visits.
  * @param {string} name Identifies the tab, e.g. "player0".
+ * @param {number} [defaultZoom] Zoom to start at before the tab has ever
+ *   been visited/zoomed - the Text tab's glyphs (200%, see
+ *   TextFontEditor.vue) and the Score tab's digits (150%, see
+ *   ScoreFontEditor.vue) both read better zoomed in further by default than
+ *   every other tab's shared 100%.
  * @return {*} Writable computed holding the zoom factor.
  */
-export const useEditorZoom = (name) => {
-  const stored = zoomRefFor(name);
+export const useEditorZoom = (name, defaultZoom = DEFAULT_ZOOM) => {
+  const stored = zoomRefFor(name, defaultZoom);
   return computed({
     get() {
       return stored.value;
     },
     set(value) {
-      const zoom = clamp(value);
+      const zoom = clamp(value, defaultZoom);
       stored.value = zoom;
       localStorage.setItem(keyOf(name), String(zoom));
     },

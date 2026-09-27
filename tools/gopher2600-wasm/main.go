@@ -182,7 +182,7 @@ type console struct {
 	renderFrame js.Func
 
 	// frameCount paces the periodic runtime.GC() call in onAnimationFrame -
-	// see that call's own comment for why.
+	// see that call's comment for why.
 	frameCount uint64
 
 	// keyMapping is the user-configurable keyboard->controller bindings (see
@@ -208,7 +208,7 @@ type console struct {
 // which port/kind of control it drives. For Kind == "joystick", Control is
 // one of "up"/"down"/"left"/"right"/"fire". For Kind == "keypad", Control
 // is the single keypad rune ("1".."9", "*", "0", "#") controllers.Keypad's
-// own HandleEvent expects (see that file's own switch).
+// own HandleEvent expects (see that file's switch).
 type keyBinding struct {
 	Code    string
 	Port    plugging.PortID
@@ -234,7 +234,7 @@ func newConsole(canvas js.Value) *console {
 	canvas.Set("width", defaultCropWidth)
 	canvas.Set("height", defaultCropHeight)
 	style := canvas.Get("style")
-	style.Set("width", fmt.Sprintf("%dpx", defaultCropWidth*2)) // see onAnimationFrame's own comment on the 2x stretch
+	style.Set("width", fmt.Sprintf("%dpx", defaultCropWidth*2)) // see onAnimationFrame's comment on the 2x stretch
 	style.Set("height", fmt.Sprintf("%dpx", defaultCropHeight))
 	c.ctx.Set("fillStyle", "#000")
 	c.ctx.Call("fillRect", 0, 0, defaultCropWidth, defaultCropHeight)
@@ -257,7 +257,7 @@ func (c *console) onAnimationFrame(this js.Value, args []js.Value) (result any) 
 	}
 
 	// Forces a GC sweep roughly every 10 seconds (600 frames at 60fps),
-	// rather than only whenever Go's own runtime decides its own default
+	// rather than only whenever Go's runtime decides its own default
 	// heuristics warrant one. This render loop runs continuously for as
 	// long as the tab is open, allocating a fresh RGBA/audio buffer, JS
 	// interop values, etc. every single frame - a real reported crash
@@ -283,13 +283,13 @@ func (c *console) onAnimationFrame(this js.Value, args []js.Value) (result any) 
 		// TIA/RIOT keep ticking on their own clock and still produce real
 		// frame-complete signals - so the loop below would never surface an
 		// error, just render whatever was on screen at the moment of the
-		// jam, forever. Matches the real desktop frontend's own Jammed check
+		// jam, forever. Matches the real desktop frontend's Jammed check
 		// in hardware/run.go ("emulation will run forever if we don't check
 		// for this"). Reported once, not every frame.
 		if !c.jamReported {
 			c.jamReported = true
 			js.Global().Get("console").Call("error", fmt.Sprintf(
-				"gopher2600-wasm: CPU jammed (illegal opcode) at PC=$%04x %s - the compiled ROM's own code "+
+				"gopher2600-wasm: CPU jammed (illegal opcode) at PC=$%04x %s - the compiled ROM's code "+
 					"is corrupted at this address, most likely a bad jump/bank-switch target landing in "+
 					"data instead of code. This is a real hardware halt condition, not an emulator bug.",
 				c.vcs.CPU.PC.Address(), c.vcs.Mem.Cart.MappedBanks()))
@@ -315,7 +315,7 @@ func (c *console) onAnimationFrame(this js.Value, args []js.Value) (result any) 
 	// existing DEBUG logs above, since a real reported freeze - confirmed
 	// directly via pixel-diffing the canvas, byte-identical across several
 	// seconds of input with zero console errors, so neither the Jammed check
-	// above nor Step()'s own error path is firing - can outlast that cap.
+	// above nor Step()'s error path is firing - can outlast that cap.
 	// Logs the PC and whether this frame's step loop completed a real frame
 	// (frameDone) or bailed out on the 200_000-step safety cap, so a frozen
 	// picture can be told apart from "legitimately still running, just not
@@ -378,7 +378,7 @@ func (c *console) powerOn() error {
 	// observed frame timing - confirmed directly as the cause of a real
 	// reported bug (screen goes solid black, audio keeps playing, looks
 	// like a lockup but isn't one): a single frame that runs long enough to
-	// overrun the compiled ROM's own kernel timing budget (the actual
+	// overrun the compiled ROM's kernel timing budget (the actual
 	// trigger - a heavy collision check only running on the one frame a
 	// hardware collision fires) is enough for the auto-detector to
 	// reclassify the signal as a different, longer-scanline spec - directly
@@ -524,7 +524,7 @@ func joystickEvent(control string) (ports.Event, bool) {
 //
 // ports.DataStickTrue/DataStickFalse (set/clear ONE axis bit), not
 // DataStickSet (set the axis AND clear every other bit on the stick) - the
-// ports package's own doc comment on EventDataStick is explicit about this
+// ports package's doc comment on EventDataStick is explicit about this
 // distinction: DataStickSet is for D-Pad-style devices that always report
 // their FULL current state every event, while a keyboard (which only ever
 // reports ONE key changing at a time) needs the true/false form so pressing
@@ -546,13 +546,13 @@ func joystickEventData(control string, down bool) ports.EventData {
 // safeFunc wraps a JS-invoked Go callback with panic recovery. Without this,
 // an unrecovered panic in ANY js.FuncOf callback (keyboard events, the
 // exposed API) fatally terminates the entire WASM instance - unlike
-// onAnimationFrame's own recover(), which only protects the render loop
+// onAnimationFrame's recover(), which only protects the render loop
 // itself, every other callback registered below had none at all until this.
 // A dead instance's JS object reference survives (window.gopher2600 is still
 // truthy), but every subsequent call into it throws "Go program has already
 // exited" - which, left unguarded on the JS caller's side, previously broke
 // unrelated ROM builds for the rest of the page's lifetime (see
-// hooks/rom.js's own try/catch around gopher2600 calls for the other half of
+// hooks/rom.js's try/catch around gopher2600 calls for the other half of
 // this fix).
 func safeFunc(name string, fn func(this js.Value, args []js.Value) any) js.Func {
 	return js.FuncOf(func(this js.Value, args []js.Value) (result any) {
@@ -565,6 +565,32 @@ func safeFunc(name string, fn func(this js.Value, args []js.Value) any) js.Func 
 		}()
 		return fn(this, args)
 	})
+}
+
+// isEditableTarget reports whether a keyboard event's target is a text-
+// entry element (an <input>/<textarea>, or anything contenteditable) - the
+// app embedding this canvas has real form fields sitting right alongside
+// it (the Project tab's Title field, every tab's name/search fields,
+// etc.), and this console's keydown/keyup listeners are registered on
+// `document` (see main() below), not scoped to the canvas itself, so
+// without this check every mapped key (WASD, arrows, Space, the numeric
+// keypad...) was intercepted - and preventDefault()'d - even while the
+// user was actively typing in one of those fields elsewhere on the page,
+// confirmed as a real reported bug ("why can't I use the space bar in text
+// fields now").
+func isEditableTarget(event js.Value) bool {
+	target := event.Get("target")
+	if target.IsUndefined() || target.IsNull() {
+		return false
+	}
+	if target.Get("isContentEditable").Truthy() {
+		return true
+	}
+	switch target.Get("tagName").String() {
+	case "INPUT", "TEXTAREA", "SELECT":
+		return true
+	}
+	return false
 }
 
 func main() {
@@ -589,12 +615,15 @@ func main() {
 	js.Global().Call("requestAnimationFrame", c.renderFrame)
 
 	js.Global().Get("document").Call("addEventListener", "keydown", safeFunc("keydown", func(this js.Value, args []js.Value) any {
+		if isEditableTarget(args[0]) {
+			return nil
+		}
 		code := args[0].Get("code").String()
 		if binding, ok := c.findKeyBinding(code); ok {
 			args[0].Call("preventDefault")
 			// KeyboardEvent.repeat is true for every OS-auto-repeated keydown
 			// a held key fires after the initial press, not just the first
-			// one - stick.go's own HandleEvent XORs the axis bit for
+			// one - stick.go's HandleEvent XORs the axis bit for
 			// DataStickTrue (not a plain OR/set - see its "cancel" comment),
 			// so it's only correct to call once per real press edge. Without
 			// this check, every repeat toggled the bit off then back on
@@ -613,6 +642,9 @@ func main() {
 		return nil
 	}))
 	js.Global().Get("document").Call("addEventListener", "keyup", safeFunc("keyup", func(this js.Value, args []js.Value) any {
+		if isEditableTarget(args[0]) {
+			return nil
+		}
 		code := args[0].Get("code").String()
 		if binding, ok := c.findKeyBinding(code); ok {
 			args[0].Call("preventDefault")
@@ -689,9 +721,9 @@ func main() {
 	}))
 
 	// setKeyMapping replaces the whole keyboard->controller mapping wholesale
-	// (see console.keyMapping's own comment). Called from App.vue on mount
+	// (see console.keyMapping's comment). Called from App.vue on mount
 	// (a fresh VCS/newConsole starts with an empty mapping - see
-	// console.keyMapping's own comment) and again every time the Input
+	// console.keyMapping's comment) and again every time the Input
 	// Mapping settings UI changes a binding. args[0] is a JS array of
 	// {code, port, kind, control} objects - the single source of truth for
 	// the actual default bindings lives in App.vue's own

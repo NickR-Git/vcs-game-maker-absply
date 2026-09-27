@@ -1,7 +1,7 @@
 'use strict';
 
 import Vue from 'vue';
-import VueCompositionApi from '@vue/composition-api';
+import VueCompositionApi, {ref} from '@vue/composition-api';
 
 import Blockly from 'blockly';
 import {preprocessBatariBasic, compileBatariBasicToAsm, assembleBatariBasic} from './bb-compiler';
@@ -36,11 +36,35 @@ export {markRomOutdated, useRomOutdated, useRomCapacity, useHasCompiledRom, useC
 
 const EMPTY_WORKSPACE = '<xml xmlns="https://developers.google.com/blockly/xml"/>';
 
+// Whether ANY build - a real one (buildRom) or a title-screen preview
+// (buildTitleScreenPreviewRom) - is currently running. Both funnel their
+// actual work through Blockly.BBasic, a single module-level singleton
+// object that workspaceToCode()/init() read and write a large amount of
+// per-build scratch state onto (nameDB_, titleScreenAnimationChecks,
+// relocation banks, etc.) - each individual build is internally self-
+// consistent (everything gets reset/reassigned fresh at the start of its
+// its call to workspaceToCode()), but two builds interleaved via overlapping
+// awaits (this WASM-backed pipeline yields to the event loop between
+// preprocess/compile/assemble stages - see bb-compiler.js) could each read
+// and write that SAME shared object mid-build, confirmed directly as a real
+// bug: clicking a title screen's Play button and then Update ROM shortly
+// after produced a corrupted assembly (a variable referenced but never
+// declared) that neither build alone would ever produce. Exported so
+// both App.vue's "Update ROM" button and TitleScreenEditor.vue's Play
+// button can disable themselves while the OTHER kind of build is running,
+// on top of the hard guard each function below already has.
+const buildInProgress = ref(false);
+export const useBuildInProgress = () => buildInProgress;
+
 // Loads the stored workspace headlessly (so this works from any tab, not
 // just the editor) and runs it through the given callback, disposing it
-// afterwards either way.
-const withHeadlessWorkspace = (callback) => {
-  const xmlText = useWorkspaceStorage().value;
+// afterwards either way. xmlOverride (optional) skips storage entirely and
+// builds the headless workspace from this XML text instead - used by
+// buildTitleScreenPreviewRom below to compile a small synthetic program
+// (rather than the project's real Actions-tab workspace) without ever
+// touching the real one on screen.
+const withHeadlessWorkspace = (callback, xmlOverride) => {
+  const xmlText = xmlOverride !== undefined ? xmlOverride : useWorkspaceStorage().value;
   const workspace = new Blockly.Workspace();
   try {
     const dom = Blockly.Xml.textToDom(
@@ -55,7 +79,8 @@ const withHeadlessWorkspace = (callback) => {
 // The generated bBasic bakes in the backgrounds, animations and score font read
 // from storage, so it has to be regenerated from the current project at build
 // time; a graphics edit alone would otherwise leave the cached code stale.
-const regenerateCode = () => withHeadlessWorkspace((workspace) => BlocklyBB.workspaceToCode(workspace));
+const regenerateCode = (xmlOverride) =>
+  withHeadlessWorkspace((workspace) => BlocklyBB.workspaceToCode(workspace), xmlOverride);
 
 // How many letter-pool slots the current project would actually need if
 // Superchip RAM were off - used by Configuration.vue to check whether
@@ -69,7 +94,7 @@ const regenerateCode = () => withHeadlessWorkspace((workspace) => BlocklyBB.work
 // user variables against the FULL letter pool undercounted real pressure
 // whenever a project leaned on dev-var-heavy features but few explicit
 // variables - letting "disable Superchip" through here even though the real
-// build (bbasic.js's own "Too many variables" throw) would then fail. A real
+// build (bbasic.js's "Too many variables" throw) would then fail. A real
 // headless compile (same as regenerateCode above) is run so
 // letterVarsUsed/superchipVarsUsed reflect this exact project's actual
 // dev-var + user-var total (see bbasic.js's  routeDevVar/init() comments
@@ -407,7 +432,7 @@ const computeBankContents = (maxBanks, textMinikernelActive) => {
 // wrapper subroutine's  body, both scanned here the same way
 // codeReferencesAnyFunction does - must always land in the exact same bank
 // as each other, whichever bank that turns out to be. Anything reaching a
-// function through a wrapper's own "gosub" (bank-taggable) is deliberately
+// function through a wrapper's "gosub" (bank-taggable) is deliberately
 // NOT part of this - only the wrapper itself joins the family, not whatever
 // calls the wrapper, which stays free to relocate independently.
 //
@@ -733,6 +758,22 @@ const MAX_RELOCATION_ATTEMPTS = 64;
  * @return {!Promise<boolean>} Whether the ROM was built.
  */
 export const buildRom = async () => {
+  // See buildInProgress's comment above - a title screen preview build
+  // running concurrently with this one corrupted a real build's output
+  // before this guard existed.
+  if (buildInProgress.value) {
+    appendCompileLog('Another build is already in progress - try again once it finishes.', 'error');
+    return false;
+  }
+  buildInProgress.value = true;
+  try {
+    return await buildRomInner();
+  } finally {
+    buildInProgress.value = false;
+  }
+};
+
+const buildRomInner = async () => {
   const errorStorage = useErrorStorage();
   const configurationStorage = useConfigurationStorage();
   const relocatedThisBuild = [];
@@ -754,7 +795,7 @@ export const buildRom = async () => {
 
   // Tracks the most recent failure so the post-loop fallback (see its own
   // comment, right after the for loop below) can still report something
-  // useful if the attempt budget runs out without the loop's own "nothing
+  // useful if the attempt budget runs out without the loop's "nothing
   // left to try" branch ever firing.
   let lastCode = '';
   let lastFailure = null;
@@ -932,7 +973,7 @@ export const buildRom = async () => {
       // combining it with one of the byte-swappable preset/custom fonts
       // isn't supported, so those are skipped whenever Squish is picked.
       // "Show remaining CPU cycles as the score" (config.enableCycleScore,
-      // bB's own "set debug cyclescore") always forces the stock/Default
+      // bB's "set debug cyclescore") always forces the stock/Default
       // font here regardless of the Score tab's  selection - it reuses
       // the standard kernel's  digit-drawing routine to overlay its cycle
       // count, and a Custom/Squish font's  digit shapes would otherwise
@@ -1259,7 +1300,7 @@ export const buildRom = async () => {
               // confirmed directly as a real bug: the untried-lowest-number
               // version piled the vast majority of a project's content into
               // bank 2 while later banks sat completely empty, since once
-              // bank 1's own "still there" candidates run out (which happens
+              // bank 1's "still there" candidates run out (which happens
               // within the first few attempts), nearly every relocation for
               // the rest of the build goes through this exact fallback path.
               // Every bank already tried for THIS unit (triedBanks, which
@@ -1363,4 +1404,115 @@ export const buildRom = async () => {
         `Gave up after trying ${MAX_RELOCATION_ATTEMPTS} different bank combinations without finding one ` +
         `that compiles.\n\nBank assignments at failure:\n${JSON.stringify(diagnostics, null, 2)}`));
   return false;
+};
+
+// A synthetic single-block program - "On Title screen update: Draw title
+// screen [screenId]" - matching the exact pattern titlescreen_draw's
+// tooltip recommends ("call this repeatedly... for as long as you want it
+// shown"). No "Change state to Title screen" block needed alongside it:
+// bbasic.bb.hbs's template (see systemStartEvent/titleStartEvent/
+// titleUpdateEvent) already runs Title state unconditionally right after
+// boot, before ever falling into the main gameplay loop - title_update
+// starts running every frame from power-on with no explicit state block at
+// all, exactly like a real project's title screen normally starts out.
+const buildTitleScreenPreviewXml = (screenId) =>
+  `<xml xmlns="https://developers.google.com/blockly/xml">` +
+    `<block type="event_block">` +
+      `<field name="EVENT">title_update</field>` +
+      `<statement name="DO">` +
+        `<block type="titlescreen_draw">` +
+          `<field name="SCREEN">${screenId}</field>` +
+        `</block>` +
+      `</statement>` +
+    `</block>` +
+  `</xml>`;
+
+/**
+ * Compiles a tiny, throwaway ROM that does nothing but show one Title
+ * screen page, and loads it into the preview emulator - lets a single card
+ * be test-played without building (or disturbing) the real project's
+ * compiled ROM, "ROM up to date" status, ROM capacity numbers, or Generated
+ * Code tab content, all of which stay exactly as they were before this was
+ * called. Deliberately NOT a thin wrapper around buildRom() above - that
+ * function's side effects (setCompiledRomBytes/markRomUpToDate/
+ * setRomCapacity/recordSuccessfulRelocationBanks/useGeneratedBasic) are all
+ * specifically about the REAL project's last build, and would have
+ * been silently overwritten with data about this one-off synthetic program
+ * instead had this reused it directly.
+ * @param {number|string} screenId Which Title Screen tab page to show
+ *   (screen.id, same value titlescreen_draw's SCREEN field expects).
+ * @return {!Promise<boolean>} Whether the preview ROM was built and loaded.
+ */
+export const buildTitleScreenPreviewRom = async (screenId) => {
+  // See buildInProgress's comment near the top of this file - running
+  // this concurrently with a real buildRom() (or another preview) corrupted
+  // BOTH builds' output before this guard existed, since they share
+  // Blockly.BBasic's module-level scratch state across the awaits either
+  // one's WASM-backed compile pipeline yields on.
+  if (buildInProgress.value) {
+    appendCompileLog('Another build is already in progress - try again once it finishes.', 'error');
+    return false;
+  }
+  buildInProgress.value = true;
+  const errorStorage = useErrorStorage();
+  try {
+    clearCompileLog();
+    appendCompileLog(`Building a preview of Title Screen ${screenId}...`, 'stage');
+    // Starts every preview from a clean slate rather than whatever
+    // relocation state the last REAL build (or a previous preview) happened
+    // to leave behind - this synthetic program is always small enough to
+    // need none of it, and resetRelocationBanks()'s effect is purely an
+    // in-memory working set for whichever build is currently running, not
+    // anything that needs to be restored again afterward for the real
+    // project's next build to behave correctly (that build resets it
+    // again itself, the same first step buildRomInner() above always takes).
+    resetRelocationBanks();
+    let code;
+    try {
+      code = regenerateCode(buildTitleScreenPreviewXml(screenId));
+    } catch (e) {
+      appendCompileLog('Failed to generate the preview bBasic code.', 'error');
+      showError(errorStorage, 'Error while generating title screen preview code', code, e);
+      return false;
+    }
+    try {
+      errorStorage.value = '';
+      // No text minikernel/score font override siblings here (see
+      // buildRomInner's much longer equivalent block above) - this
+      // synthetic program has no text/score blocks at all, so
+      // BlocklyBB.isTextMinikernelActive() is always false for it regardless
+      // of what the real project uses. Only the Title Screen Kernel's
+      // siblings are ever actually needed.
+      const siblingFiles = {};
+      if (BlocklyBB.titleScreenUsedKernelKeys) {
+        Object.assign(siblingFiles, await getTitleScreenSiblingFiles(BlocklyBB.titleScreenUsedKernelKeys));
+        Object.assign(siblingFiles, BlocklyBB.titleScreenAsmFiles || {});
+      }
+      const log = (text) => appendCompileLog(text);
+      appendCompileLog('Preprocessing...', 'stage');
+      const preprocessed = await preprocessBatariBasic(code, log);
+      appendCompileLog('Compiling to assembly...', 'stage');
+      const compiled = await compileBatariBasicToAsm(preprocessed, siblingFiles, log);
+      appendCompileLog('Assembling ROM...', 'stage');
+      const compiledResult = await assembleBatariBasic(compiled.mainAsm, compiled.workDir, log);
+      try {
+        withGopher2600((gopher2600) => {
+          gopher2600.loadRom(compiledResult.output);
+          gopher2600.setKeypadMode('left', false);
+          gopher2600.setKeypadMode('right', false);
+        });
+      } catch (previewError) {
+        console.error('gopher2600-wasm: failed to load the title screen preview ROM into the emulator ' +
+          '(the ROM itself compiled successfully) - try "Refresh emulator":', previewError);
+      }
+      appendCompileLog('Preview build succeeded.', 'stage');
+      return true;
+    } catch (e) {
+      appendCompileLog('Preview build failed.', 'error');
+      showError(errorStorage, 'Error while compiling title screen preview code', code, e);
+      return false;
+    }
+  } finally {
+    buildInProgress.value = false;
+  }
 };

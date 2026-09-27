@@ -1,5 +1,5 @@
 <template>
-  <v-app id="inspire" :class="{'hide-description-text': hideDescriptionText}">
+  <v-app id="inspire" :class="{'hide-description-text': hideDescriptionText, 'desaturate-app-colors': desaturateAppColors}">
     <div class="app-logo">
       <img src="./assets/logo.svg" alt="VCS Game Maker" class="app-logo-img" />
       <div class="app-logo-version">{{ version }}</div>
@@ -265,7 +265,6 @@
         <div class="emulator-toolbar-row">
           <v-btn
             small
-            text
             class="emulator-refresh-button"
             title="Reload the page to fix the emulator preview if it has disappeared - you'll need to click Update ROM again afterward"
             @click="handleRefreshEmulator"
@@ -279,7 +278,9 @@
         <div class="panel-switches-row mt-2">
           <v-btn
             small
-            :color="emulatorPoweredOn ? 'primary' : undefined"
+            :color="emulatorPoweredOn ? 'green' : undefined"
+            class="emulator-power-button"
+            :class="{'emulator-power-button-on': emulatorPoweredOn}"
             title="Power the emulated console on or off"
             @click="handleTogglePower(!emulatorPoweredOn)"
           >
@@ -309,29 +310,36 @@
           >
             P2: {{ emulatorRightDifficultyPro ? 'A' : 'B' }}
           </v-btn>
-          <v-btn
-            small
-            title="Select switch - hold to select (e.g. cycle game variation)"
-            @mousedown="handlePressSelect"
-            @mouseup="handleReleaseSelect"
-            @mouseleave="handleReleaseSelect"
-          >
-            Select
-          </v-btn>
-          <v-btn
-            small
-            title="Reset switch - hold to reset the running game"
-            @mousedown="handlePressReset"
-            @mouseup="handleReleaseReset"
-            @mouseleave="handleReleaseReset"
-          >
-            Reset
-          </v-btn>
+          <div class="emulator-select-reset-group">
+            <v-btn
+              small
+              class="emulator-select-button"
+              title="Select switch - hold to select (e.g. cycle game variation)"
+              @mousedown="handlePressSelect"
+              @mouseup="handleReleaseSelect"
+              @mouseleave="handleReleaseSelect"
+            >
+              Select
+            </v-btn>
+            <v-btn
+              small
+              class="emulator-reset-button"
+              title="Reset switch - hold to reset the running game"
+              @mousedown="handlePressReset"
+              @mouseup="handleReleaseReset"
+              @mouseleave="handleReleaseReset"
+            >
+              Reset
+            </v-btn>
+          </div>
         </div>
         <div class="rom-buttons-row mt-2">
           <v-btn
             :color="romOutdated ? 'warning' : 'primary'"
             :loading="building"
+            :disabled="buildInProgress && !building"
+            :title="buildInProgress && !building ?
+              'A title screen preview is currently building - try again once it finishes' : undefined"
             @click="handleRomUpdate"
           >
             {{ romOutdated ? 'Update ROM' : 'ROM up to date' }}
@@ -465,9 +473,10 @@
 </template>
 
 <script>
-import {useCompileLog, useErrorStorage, useHideDescriptionTextStorage, useHideSidebarStorage,
-  useStellaPathStorage} from './hooks/project';
-import {buildRom, useRomCapacity, useRomOutdated, useHasCompiledRom, useCompiledRomBytes} from './hooks/rom';
+import {useCompileLog, useDesaturateBlocklyColorsStorage, useErrorStorage, useHideDescriptionTextStorage,
+  useHideSidebarStorage, useStellaPathStorage} from './hooks/project';
+import {buildRom, useRomCapacity, useRomOutdated, useHasCompiledRom, useCompiledRomBytes,
+  useBuildInProgress} from './hooks/rom';
 import {safeWithGopher2600} from './hooks/emulator';
 import KeyMappingDialog from './components/KeyMappingDialog.vue';
 import {productName, version} from '../package.json';
@@ -512,7 +521,7 @@ const EMULATOR_MEASURE_INTERVAL = 50;
 // before var10 rather than after it as a plain string compare would) -
 // these arrive in RESERVATION order (whichever feature/user variable
 // happened to route first), which is meaningless to a reader scanning for
-// a specific letter/slot. localeCompare's own {numeric: true} option
+// a specific letter/slot. localeCompare's {numeric: true} option
 // handles both slot shapes with one comparator: plain single-letter slots
 // (a, b, c...) collate alphabetically same as always, and multi-character
 // "varN" slots collate by their embedded number instead of lexicographically.
@@ -561,8 +570,10 @@ export default {
     return {
       errorStorage, compileLog: useCompileLog(), romOutdated: useRomOutdated(), romCapacity: useRomCapacity(),
       hasCompiledRom: useHasCompiledRom(), compiledRomBytes: useCompiledRomBytes(),
+      buildInProgress: useBuildInProgress(),
       productName, version, hideDescriptionTextStorage: useHideDescriptionTextStorage(),
       hideSidebarStorage: useHideSidebarStorage(),
+      desaturateAppColorsStorage: useDesaturateBlocklyColorsStorage(),
       stellaPathStorage: useStellaPathStorage(),
     };
   },
@@ -603,6 +614,14 @@ export default {
     // useHideSidebarStorage's  comment in hooks/project.js.
     hideSidebar() {
       return !!this.hideSidebarStorage;
+    },
+    // Same "Soft Colors" preference the Blockly canvas itself desaturates
+    // by (see BlocklyComponent.vue's parseBlockColour patch) - bound as
+    // a class on the root v-app below so the tab bar/nav-drawer's own
+    // hardcoded per-tab colors (.actions-item, .titlescreen-item, etc.)
+    // mute along with the blocks instead of staying fully saturated.
+    desaturateAppColors() {
+      return !!this.desaturateAppColorsStorage;
     },
     // Same "window.electronAPI's mere presence" check as Configuration.vue's
     // own isElectron - see preload.js's  comment. Gates the "Test in
@@ -700,9 +719,9 @@ export default {
     // bytes, missile fire's  fired-direction state, etc.) reads very
     // differently from a variable the user themselves created on the
     // Variables tab, even though both draw from the exact same letter/
-    // Superchip budget and both count toward the summary line's own "X of Y"
+    // Superchip budget and both count toward the summary line's "X of Y"
     // above. Letters first (the pool every project always has), Superchip
-    // slots after - matches the summary line's own "letters, ... Superchip
+    // slots after - matches the summary line's "letters, ... Superchip
     // RAM" order; each half sorted independently (see sortByAssignmentSlot's
     // own comment) so that grouping itself is preserved, only the ORDER
     // within each half changes.
@@ -794,7 +813,7 @@ export default {
         // Superchip's  r/w pool (see computeVariableUsage's  comment
         // in hooks/rom.js) - every entry here is isUserVariable: false, so
         // this only ever contributes to the block list, never the user one,
-        // matching this pool's own "never offered to the user" design.
+        // matching this pool's "never offered to the user" design.
         ...sortByAssignmentSlot((usage.superchipRwAssignments || []).filter(matches)),
       ];
     },
@@ -1103,11 +1122,86 @@ export default {
      moved into this component's DOM by attachEmulator(), so it never
      carries this component's scope attribute. -->
 <style>
+/* All gated behind "Soft Colors" (see Configuration.vue's switch,
+   bound to desaturateAppColors below) - off means plain stock Vuetify
+   white everywhere, on mutes both block/tab colors (see the filter rules
+   further below) AND swaps every white surface for one of three
+   progressively darker tiers: cards (lightest, so they still read as
+   distinct surfaces), the app's chrome/background around them
+   (darker), and the build/error console footer below that (darkest, so it
+   reads as its own panel). Each needs !important to beat Vuetify's own
+   base stylesheet (plain classes there, not inline styles, so a plain
+   override without !important would otherwise just lose a specificity tie
+   to a same-specificity rule that happens to be loaded after this one). */
+.desaturate-app-colors .theme--light.v-card {
+  background-color: #ebebeb !important;
+}
+
+.desaturate-app-colors.v-application,
+.desaturate-app-colors .theme--light.v-app-bar.v-toolbar.v-sheet,
+.desaturate-app-colors .theme--light.v-navigation-drawer,
+.desaturate-app-colors .editor-container.theme--light.v-card {
+  background-color: #e1e1e1 !important;
+}
+
+.desaturate-app-colors .error-message.theme--light.v-footer {
+  background-color: #bdbdbd !important;
+}
+
+/* Every v-switch's OFF-state thumb (the little knob) defaults to plain
+   white, unlike its ON state (which gets a "primary--text" utility class
+   added, tinting it the app's blue via currentColor) - same card color
+   as the rest of this file's darker-than-white overrides above, so the knob
+   doesn't stand out as the one leftover white dot against a switch's own
+   track and whatever card/background it's sitting on. Excludes the "on"
+   variant (:not(.primary--text)) so the blue itself is untouched. */
+.desaturate-app-colors .v-input--switch__thumb:not(.primary--text) {
+  background-color: #ebebeb !important;
+}
+
+/* Every solid-colored button throughout the app (color="primary"/"green"/
+   etc, Vuetify's ".v-btn--has-bg" - the power button once on, "Update
+   ROM", the P1/P2 difficulty and Color/B&W switches, every tab's own
+   selected-state toggle buttons, and so on) - same saturate+darken
+   treatment as the top toolbar/sidebar tab icons above (see those rules'
+   own comments), so a colored button reads as muted/calmer under Soft
+   Colors the same way everything else does, instead of standing out as the
+   one remaining fully-saturated thing on the page. Unscoped (this file's
+   FIRST <style> block, not the <style scoped> one below) since these
+   buttons live in every tab's view component, not just App.vue's own
+   template. */
+.desaturate-app-colors .theme--light.v-btn.v-btn--has-bg {
+  filter: saturate(50%) brightness(0.85);
+}
+
+/* Each tab's card grid is wrapped in a v-list (titlescreen-list, text-list,
+   soundfx-list, background-list, song-list, data-list, animation-list) -
+   v-list is a v-sheet, not a v-card, so it fell through the .theme--light.
+   v-card rule above and stayed Vuetify's default solid white, showing
+   through as a white background behind/between the actual item cards.
+   Transparent instead, so the surrounding .editor-container's own
+   background (set above) shows through there instead. Targeted by each
+   tab's list class rather than a blanket ".v-list.v-sheet" rule, which
+   would also hit dropdown/menu content that legitimately still needs an
+   opaque background to stay readable over whatever's behind it. */
+.desaturate-app-colors .titlescreen-list,
+.desaturate-app-colors .titlescreen-card-list,
+.desaturate-app-colors .text-list,
+.desaturate-app-colors .soundfx-list,
+.desaturate-app-colors .background-list,
+.desaturate-app-colors .song-list,
+.desaturate-app-colors .data-list,
+.desaturate-app-colors .animation-list,
+.desaturate-app-colors .animation-frame-list,
+.desaturate-app-colors .about-list {
+  background-color: transparent !important;
+}
+
 /* The app's  default font, as a custom property so switching it later
-   (see public/index.html's own <link> for the actual font file/weights)
+   (see public/index.html's <link> for the actual font file/weights)
    only means changing this one value, not hunting down every place that
    might otherwise hardcode a font name. .v-application is the exact
-   selector Vuetify's own bundled CSS itself uses for its default
+   selector Vuetify's bundled CSS itself uses for its default
    (Roboto) font-family - matching it here, with !important, is what lets
    this override win over that built-in rule instead of just adding a
    second, lower-priority one beside it. */
@@ -1116,8 +1210,8 @@ export default {
   /* Blockly's  block/flyout text only - deliberately separate from
      --app-font-family above (the rest of the app, Vuetify panels included,
      stays on Inter) - see the .blocklyText/.blocklyFlyoutLabelText rule
-     below and APP_BLOCKLY_THEME's own fontStyle in ActionEditor.vue, which
-     both have to agree on this exact font (that file's own comment explains
+     below and APP_BLOCKLY_THEME's fontStyle in ActionEditor.vue, which
+     both have to agree on this exact font (that file's comment explains
      why: Blockly measures block width from its own theme fontStyle, not
      from whatever CSS ends up applied, so the two have to be kept in sync
      by hand). public/index.html loads the actual font file for this. */
@@ -1125,8 +1219,8 @@ export default {
 }
 
 /* Every scrollbar in the app (the left sidebar, the emulator column, each
-   editor tab's own scroll area, the error console) was previously left at
-   the browser's own default width/appearance - unstyled anywhere in this
+   editor tab's scroll area, the error console) was previously left at
+   the browser's default width/appearance - unstyled anywhere in this
    codebase (confirmed directly, no "::-webkit-scrollbar"/"scrollbar-width"
    rule existed before this one). Global rather than scoped to any one
    panel, so all of them read as one consistent, subdued design: a slim,
@@ -1134,7 +1228,7 @@ export default {
    it), a little darker on hover so it's still easy to find and grab. 16px
    gutter, 12px visible thumb - the thumb is narrower than the gutter via a
    transparent border + background-clip: content-box (the border eats into
-   the thumb's own box without changing the gutter it's laid out in, and
+   the thumb's box without changing the gutter it's laid out in, and
    clipping the background to content-box keeps that border area from
    getting painted over) - the standard trick for "thinner bar than its own
    track." Firefox has no equivalent for a specific pixel gutter/thumb size
@@ -1142,15 +1236,15 @@ export default {
    gets the color change here, not the exact sizing. */
 /* Vuetify's default outlined-card border (rgba(0, 0, 0, 0.12)) reads as
    quite faint - darkened a bit here so card edges are easier to pick out
-   from the page background. Targets each tab's own MAIN per-entry card
+   from the page background. Targets each tab's MAIN per-entry card
    class by name (not a blanket .v-sheet--outlined rule, which is what
-   v-card's own "outlined" prop applies) specifically so this does NOT also
+   v-card's "outlined" prop applies) specifically so this does NOT also
    darken a sub-frame nested inside one of these - PixelEditor.vue's own
    outlined card (the sprite/background pixel art canvas, nested inside
-   .animation-card/.background-card) and MusicEditor.vue's own .pattern-card
+   .animation-card/.background-card) and MusicEditor.vue's .pattern-card
    (nested inside .song-card) both stay at Vuetify's default lighter
    border, since each is a sub-frame within its own main card rather than
-   that main card's own edge. */
+   that main card's edge. */
 .animation-card,
 .background-card,
 .data-card,
@@ -1171,8 +1265,8 @@ export default {
    ripple, and a hover/focus/active darkening overlay via ::before) on both
    a selectable card AND its own tab's outer editor-container (whose own
    click clears the selection - see deselectCard) - the ONLY visual effect
-   either should have is the selected card's own outline below, nothing
-   else. Add a tab's own MAIN card class (matching the list just above) to
+   either should have is the selected card's outline below, nothing
+   else. Add a tab's MAIN card class (matching the list just above) to
    both selector groups here when wiring up a new tab. */
 .soundfx-card.v-card--link,
 .song-card.v-card--link,
@@ -1210,10 +1304,10 @@ export default {
 
 /* Recolors a selected card's  border to the app's primary blue, plus a
    2px outline (drawn outside the border edge, never part of layout/box-
-   sizing, so a card's own content never shifts when selected) for extra
+   sizing, so a card's content never shifts when selected) for extra
    visual weight. Both need !important: border-color beats v-sheet--
-   outlined's own rule on specificity, and outline-style needs to beat
-   Vuetify's own base stylesheet, which resets "outline: 0" on .v-card -
+   outlined's rule on specificity, and outline-style needs to beat
+   Vuetify's base stylesheet, which resets "outline: 0" on .v-card -
    without it, only outline-color/outline-width actually applied (confirmed
    directly: outline-STYLE stayed "none", so nothing ever painted) and the
    selected card visually looked like nothing but the border-color change
@@ -1233,7 +1327,7 @@ export default {
 /* Every tab's  main window card shares this exact class name
    (PlayerEditor/BackgroundEditor/SoundFXEditor/TextEditor/DataEditor.vue,
    among others) - squared off globally here rather than per-file, so it
-   reads consistently with Options/Music (which use v-card's own "flat"
+   reads consistently with Options/Music (which use v-card's "flat"
    prop, no shadow, so their rounding was never visible either way) and
    Generated Code (which already squares this exact class off itself, for
    an unrelated clipping reason - see its own comment - and would otherwise
@@ -1250,8 +1344,8 @@ export default {
    rgba(0, 0, 0, 0.12). Both drawers share this exact class, so one rule
    covers both dividers. Has to live in this unscoped <style> block, not
    the <style scoped> block below (where every other App.vue rule targeting
-   Vuetify's own drawer classes lives) - this particular div is rendered by
-   Vuetify's own internal render function rather than this component's
+   Vuetify's drawer classes lives) - this particular div is rendered by
+   Vuetify's internal render function rather than this component's
    template, so it never receives this component's scope attribute, and a
    scoped version of this exact rule silently never matched it at all. */
 .v-navigation-drawer__border {
@@ -1263,7 +1357,7 @@ export default {
    not a fixed CSS value - there's nothing to override in its own
    stylesheet), and that computed value routinely lands below this app's
    own chrome-level z-index: 20 rules (.emulator-resize-handle,
-   .error-resize-handle's own z-index: 2 sits inside .error-message's
+   .error-resize-handle's z-index: 2 sits inside .error-message's
    z-index: 10 stacking context, .emulator-hide-button, etc - see their own
    comments). Confirmed as a real bug: the sidebar/console drag handles
    rendered on top of popup menus (e.g. a sound effect's delete
@@ -1272,17 +1366,17 @@ export default {
    added here needs to keep this in mind too. */
 /* Was pinned to a fixed 30 - too low. .v-overlay (Vuetify's  generic
    modal-backdrop wrapper - shared by v-dialog, v-menu, AND a temporary
-   v-navigation-drawer's own scrim, e.g. the emulator sidebar) gets its own
+   v-navigation-drawer's scrim, e.g. the emulator sidebar) gets its own
    z-index assigned dynamically by Vuetify, unrelated to this stylesheet,
    and it climbs over a long session as more menus/dialogs open - confirmed
    directly, it drifted to 201, well above this fixed 30, putting a
-   dialog's own scrim on top of its content and making the dialog's buttons
+   dialog's scrim on top of its content and making the dialog's buttons
    unclickable (document.elementFromPoint() at their center returned the
    scrim, not the button - reported as "Create New Project" doing nothing
    when clicked).
    An earlier fix for this pinned .v-overlay itself below 30 instead of
    raising this - wrong, since .v-overlay isn't dialog-specific: capping it
-   also capped the emulator sidebar's own drawer scrim, breaking ITS
+   also capped the emulator sidebar's drawer scrim, breaking ITS
    stacking (reported directly: "the emulator sidebar is now behind the
    overlay"). Raised high enough here instead that it stays above .v-overlay
    regardless of how far that drifts, without touching .v-overlay at all -
@@ -1320,12 +1414,12 @@ export default {
 /* Blockly draws its  scrollbars as SVG rects (.blocklyScrollbarHandle),
    not real browser scrollbars, so the ::-webkit-scrollbar rules above never
    reach them - overridden here with the same rest/hover colors so they read
-   as the same design instead of Blockly's own default light grey.
-   Blockly's own stock stylesheet (node_modules/blockly/core/css.js) already
+   as the same design instead of Blockly's default light grey.
+   Blockly's stock stylesheet (node_modules/blockly/core/css.js) already
    has a ".blocklyFlyout .blocklyScrollbarHandle"/"...:hover" pair (two
    classes) specifically for flyout scrollbars, darkened for its grey
    background - that beats a plain ".blocklyScrollbarHandle" rule on
-   specificity regardless of source order, so the flyout's own scrollbar was
+   specificity regardless of source order, so the flyout's scrollbar was
    still showing Blockly's stock grey (#bbb/#aaa) instead of this app's
    rgba(0,0,0,0.25/0.4), particularly obvious on hover. Repeating the
    ".blocklyFlyout" prefix here matches that specificity so this app's colors
@@ -1345,9 +1439,9 @@ export default {
 /* Matches the grid-snap icon's  rest/hover/press opacity steps (see
    ActionEditor.vue's setupGridSnapZoomButton) - overrides Blockly's own
    stock ".blocklyZoom>image"/"...:hover"/"...:active" rule (css.js,
-   .4/.6/.8), which is the SAME selector this app's own stylesheet uses, so
+   .4/.6/.8), which is the SAME selector this app's stylesheet uses, so
    which one wins is otherwise just a source-order coin flip (Blockly injects
-   its CSS at runtime, after this file's own compiled <style> tag) -
+   its CSS at runtime, after this file's compiled <style> tag) -
    !important makes this app's values win unconditionally instead. */
 .blocklyZoom > image,
 .blocklyZoom > svg > image {
@@ -1375,20 +1469,20 @@ export default {
    browsers without overlaying scrollbars") to reserve scrollbar space
    up front and avoid a width shift on pages that sometimes need to
    scroll and sometimes don't. Confirmed directly (via computed style
-   and a search of every loaded stylesheet's own rules) as the actual
+   and a search of every loaded stylesheet's rules) as the actual
    source of an always-present, non-functional scrollbar flush against
-   the browser's own right edge - not a bug in this app's own layout,
-   and not something overflowing. This app's own design already has
+   the browser's right edge - not a bug in this app's layout,
+   and not something overflowing. This app's design already has
    every panel (nav drawer, emulator sidebar, each editor tab, the
    error console) scroll internally on its own, so the document itself
-   is never actually meant to scroll at all - Vuetify's own "always
+   is never actually meant to scroll at all - Vuetify's "always
    reserve the gutter" tradeoff has nothing real to protect against
    here, just an inert scrollbar with no content to scroll to. */
 html {
   overflow-y: auto !important;
 }
 
-/* Vuetify's own .v-application--wrap (the flex column that lays out the
+/* Vuetify's .v-application--wrap (the flex column that lays out the
    app-bar/v-main/footer) only sets "min-height: 100vh" - a FLOOR, not a
    fixed size. flex-shrink only ever kicks in when a flex CONTAINER's own
    main-size is definite/fixed and smaller than its children's combined
@@ -1399,10 +1493,10 @@ html {
    never a real space shortage for it to respond to, just an ever-growing
    container. height: 100vh makes this a genuinely fixed-size flex
    container, which is what actually makes .app-main shrink to fit instead
-   of dictating the page's own height - confirmed as the real remaining
+   of dictating the page's height - confirmed as the real remaining
    piece after the flex-shrink change alone turned out not to be enough on
-   its own. v-app's own auto-generated v-application--wrap div is rendered
-   by the v-app COMPONENT itself, not written in App.vue's own template, so
+   its own. v-app's auto-generated v-application--wrap div is rendered
+   by the v-app COMPONENT itself, not written in App.vue's template, so
    (like .v-main__wrap elsewhere in this file) this has to live in this
    UNSCOPED block rather than the scoped one below - a scoped version
    matches nothing here, the same reason the fab z-index rule above had to
@@ -1412,14 +1506,14 @@ html {
 }
 
 /* Keeps every tab's floating "+" fab (Background, Player0/1, Sound, Music,
-   Data) above .error-message's own fixed, viewport-pinned footer (see that
+   Data) above .error-message's fixed, viewport-pinned footer (see that
    rule, in this file's OWN scoped style block below - .error-message is in
-   App.vue's own template, so scoped CSS reaches it fine). This rule has to
+   App.vue's template, so scoped CSS reaches it fine). This rule has to
    live in this UNSCOPED block instead, even though it's right next to
    .error-message conceptually: every one of those fab buttons is rendered
-   by a CHILD component's own template (PlayerEditor.vue, BackgroundEditor.vue,
+   by a CHILD component's template (PlayerEditor.vue, BackgroundEditor.vue,
    etc.), and Vue's scoped CSS only ever auto-attaches its scope attribute to
-   elements written directly in THIS component's own template - a scoped
+   elements written directly in THIS component's template - a scoped
    version of this exact rule silently matched nothing at all in any other
    component, confirmed directly as why the fabs went missing again even
    after this same fix was already applied once (it just never actually
@@ -1435,22 +1529,22 @@ html {
 }
 
 /* Blockly ships its  bundled CSS (font: 11pt sans-serif on these exact
-   selectors) rather than inheriting the page's own font-family, so the
+   selectors) rather than inheriting the page's font-family, so the
    block canvas/flyout text stayed in the browser's generic sans-serif even
    after .v-application above switched everywhere else - confirmed directly
-   by inspecting Blockly's own injected stylesheet. font-family only (not
+   by inspecting Blockly's injected stylesheet. font-family only (not
    the shorthand font: ... property) so this doesn't also touch the 11pt
    size Blockly itself sets. Deliberately its own --blockly-font-family (see
-   that variable's own comment above), not --app-font-family - only the
+   that variable's comment above), not --app-font-family - only the
    block/flyout text itself uses this font, everything else in the app
    stays on Inter. [class*="-theme"] (not a fixed ".app-theme") because
-   Blockly's own injected theme class is literally that theme's own NAME +
+   Blockly's injected theme class is literally that theme's NAME +
    "-theme" (see Theme.prototype.getClassName) - confirmed as the reason an
    earlier version of this rule (".classic-theme", copied from Blockly's own
    default theme name rather than the actual "app-theme" class this
-   project's own custom theme produces) never matched anything at all.
+   project's custom theme produces) never matched anything at all.
    [class*="-renderer"] the same way, for the exact same reason - Blockly's
-   injected renderer class is that renderer's own name + "-renderer" (see
+   injected renderer class is that renderer's name + "-renderer" (see
    renderers/common/renderer.js), and this app has already switched which
    renderer it uses more than once (geras -> zelos -> thrasos), so a fixed
    class here would go stale again the next time it does. */
@@ -1461,13 +1555,13 @@ html {
 
 /* The color picker (field_grid_dropdown, see blocks/color.js's own
    color_get) - white background + rounded corners instead of Blockly's own
-   default (the block's own colour, purple here, tinting the whole flyout -
+   default (the block's colour, purple here, tinting the whole flyout -
    set directly as an inline style by DropDownDiv.setColour(), hence
    !important to win over it). :has(.fieldGridDropDownContainer) scopes this
    to only the grid-dropdown color picker specifically - .blocklyDropDownDiv
    is a single shared singleton every ordinary (non-grid) dropdown field
    also reuses, so a blanket override here would have re-colored every
-   plain dropdown's own flyout too. */
+   plain dropdown's flyout too. */
 .blocklyDropDownDiv:has(.fieldGridDropDownContainer) {
   background-color: #fff !important;
   border-radius: 8px !important;
@@ -1484,7 +1578,7 @@ html {
 
 /* Each swatch cell's  bordered frame, shrunk to match blocks/color.js's
    own 28x28 swatch images (up from an original 16x16) - @blockly/field-
-   grid-dropdown's own default padding-left:15px is leftover checkmark
+   grid-dropdown's default padding-left:15px is leftover checkmark
    space (this app already hides the checkmark itself, see that package's
    own CSS), which otherwise left every swatch floating off-center in a
    much bigger, mostly-empty cell instead of filling it. That same package's
@@ -1509,13 +1603,13 @@ html {
 }
 
 /* The currently-selected swatch (whichever color this field is already set
-   to) - @blockly/field-grid-dropdown's own default is a translucent dark
+   to) - @blockly/field-grid-dropdown's default is a translucent dark
    overlay wash across the whole cell (background-color: rgba(1,1,1,.25)),
    muddying the actual color underneath rather than clearly marking it as
    selected. A 2px solid black INSET box-shadow instead - inset (not a
    plain border) so it draws inside the cell's existing bounds rather than
    adding to them, which would otherwise shift/shrink the swatch image
-   relative to every other (unselected) cell's own size. */
+   relative to every other (unselected) cell's size. */
 .fieldGridDropDownContainer.blocklyMenu .blocklyMenuItemSelected {
   background-color: transparent !important;
   box-shadow: inset 0 0 0 2px #000 !important;
@@ -1532,10 +1626,10 @@ html {
 }
 
 /* See Configuration.vue's "Hide small description text" switch (VCSGM
-   Options) and this file's own hideDescriptionText computed, bound as a
+   Options) and this file's hideDescriptionText computed, bound as a
    class on the root v-app above - hides every hint/description paragraph
    app-wide from one place, now that they all consistently share this same
-   Vuetify class (see TextEditor.vue's own hint paragraph for the pattern).
+   Vuetify class (see TextEditor.vue's hint paragraph for the pattern).
    Left targeting the plain class (not "v-messages" too) since a field's
    OWN validation/error messages also render through the same DOM structure
    and use ".v-messages__message" too - scoping any tighter would need
@@ -1559,10 +1653,10 @@ html {
 #gopher2600-target-container {
   overflow: hidden;
   /* This sits inside .emulator-drawer-inner's flex column, at a fixed
-     JS-computed height (see App.vue's own updateEmulatorScale) - without
+     JS-computed height (see App.vue's updateEmulatorScale) - without
      this, once the ROM capacity bank-contents text below it (see
      .rom-capacity-detail) grew long enough after a build that everything in
-     the column no longer fit, the flex column's own default flex-shrink: 1
+     the column no longer fit, the flex column's default flex-shrink: 1
      would silently compress this container below its real height instead
      of leaving it alone, clipping the bottom of the emulator canvas behind
      whatever sits right after it - the panel switches/Update ROM/Get
@@ -1597,7 +1691,7 @@ html {
 /* Shrinks the handle to the same diameter as the track's  height (14px,
    giving it the same 7px radius as the track/channel), instead of
    Vuetify's default handle (20px) sticking out past both edges of the
-   track. top is re-centered to match (Vuetify's own rule computes it as
+   track. top is re-centered to match (Vuetify's rule computes it as
    half the DEFAULT 20px handle - "calc(50% - 10px)" - which no longer
    centers a 14px one). */
 .v-input--switch__thumb {
@@ -1611,7 +1705,7 @@ html {
    .v-input--switch__track in node_modules/vuetify/dist/vuetify.css) shrunk
    to 32px - this used to be scoped to just the Options tab's own
    .option-switch class, so every OTHER tab's switches (Sound's DIM/
-   Columns, Text/Data's own Columns, etc.) stayed at the wider default
+   Columns, Text/Data's Columns, etc.) stayed at the wider default
    instead of matching it (a real reported inconsistency). Made global,
    here, instead of copy-pasting the same rule's scoped class onto every
    other view. */
@@ -1619,16 +1713,16 @@ html {
   width: 32px !important;
 }
 
-/* Vuetify's own "on" position (translate(20px, 0), see its own
+/* Vuetify's "on" position (translate(20px, 0), see its own
    .v-input--switch.v-input--is-dirty rule) was tuned for the DEFAULT 20px
    handle - shrinking the handle to 14px above (a 6px smaller diameter,
-   3px off each edge) left it 3px short of the track's own right edge once
+   3px off each edge) left it 3px short of the track's right edge once
    turned on, reported as looking not far enough right. +3px restores the
    same reach the original, larger handle had. Then shortened another 4px
    (22px -> 18px), same reasoning as the track-width rule just above: this
    value has to stay in sync with the 36px -> 32px track shrink (both now
    app-wide, not just Options-tab-scoped), so the thumb still lands flush
-   against the track's own right edge instead of overshooting it once
+   against the track's right edge instead of overshooting it once
    checked. */
 .v-application--is-ltr .v-input--switch.v-input--is-dirty .v-input--switch__thumb {
   transform: translate(18px, 0) !important;
@@ -1637,8 +1731,8 @@ html {
 /* App-wide: lighter underline for a text field (or a v-select/v-combobox,
    which are both built on top of v-text-field in this Vuetify version - the
    same class carries their own underline too) while it's NOT focused -
-   Vuetify's own default resting-state color (rgba(0,0,0,.42), see
-   node_modules/vuetify/dist/vuetify.css's own ".theme--light.v-text-field >
+   Vuetify's default resting-state color (rgba(0,0,0,.42), see
+   node_modules/vuetify/dist/vuetify.css's ".theme--light.v-text-field >
    .v-input__control > .v-input__slot:before" rule) reads as fairly dark/
    prominent even on a field nobody's currently using. Only the plain
    ":before" (resting) rule below is touched - the focused state (its own
@@ -1649,13 +1743,13 @@ html {
    style that actually shows this underline at all - confirmed via a
    project-wide grep - so no variant exclusion is needed here.
 
-   :not(:hover) keeps this from also flattening Vuetify's own hover-darken
+   :not(:hover) keeps this from also flattening Vuetify's hover-darken
    rule (its own ".theme--light.v-text-field:not(.v-input--has-state):hover
    > ... :before", rgba(0,0,0,.87)) - that rule and this one both target the
    same ::before, so without this exclusion the !important below (needed to
-   beat Vuetify's own un-!important resting rule) was winning on hover too,
+   beat Vuetify's un-!important resting rule) was winning on hover too,
    silently killing the hover feedback instead of just lightening the
-   resting state. Letting Vuetify's own already-tuned hover rule apply
+   resting state. Letting Vuetify's already-tuned hover rule apply
    unopposed here is simpler than duplicating/guessing a new hover value. */
 .theme--light.v-text-field:not(:hover) > .v-input__control > .v-input__slot:before {
   border-color: rgba(0, 0, 0, 0.15) !important;
@@ -1690,6 +1784,24 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
 .delete-icon-btn::before {
   background-color: transparent !important;
 }
+
+/* Import buttons (e.g. PlayerEditor.vue's "Import animation frames",
+   TitleScreenEditor.vue's "Import card frames"): same muted-grey-at-rest/
+   no-filled-circle treatment as .delete-icon-btn above, just not red - these
+   aren't destructive, so they darken to near-black on hover instead, the
+   same neutral hover convention MusicEditor.vue's .music-flat-icon-btn
+   uses for its non-destructive icon buttons. */
+.import-icon-btn {
+  color: var(--editor-icon-rest-color) !important;
+}
+
+.import-icon-btn:hover {
+  color: rgba(0, 0, 0, 0.87) !important;
+}
+
+.import-icon-btn::before {
+  background-color: transparent !important;
+}
 </style>
 <style scoped>
 /* Vuetify animates the drawer's width over 200ms, but the emulator's scale is
@@ -1705,15 +1817,15 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
    same border separately to each pane below it (tried first - two
    separately-bordered panes, each only as wide as its own column, instead
    of one line spanning the full width in one place). !important because
-   the v-app-bar's own "color=white" prop applies Vuetify's ".white" color
+   the v-app-bar's "color=white" prop applies Vuetify's ".white" color
    utility class, which sets "border-color: #fff !important" - confirmed
    directly (computed style showed this border rendering solid white,
-   invisible against the toolbar's own white background) rather than assumed. */
+   invisible against the toolbar's white background) rather than assumed. */
 .top-toolbar {
   /* Matches the darkened .v-sheet--outlined card border color (see its own
      comment) rather than Vuetify's default rgba(0, 0, 0, 0.12). */
   border-bottom: 1px solid rgba(0, 0, 0, 0.24) !important;
-  /* Vuetify's own .v-app-bar base styles already transition left/right/
+  /* Vuetify's .v-app-bar base styles already transition left/right/
      width/max-width/transform (its own built-in slide when $vuetify.
      application.left changes, e.g. when a drawer opens/closes) - removing
      the drawer element entirely via v-if (see "Never show the left
@@ -1731,8 +1843,8 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
    v-btn-with-text, not the smaller round "icon" button variant elsewhere
    in this app), it leaves each one a 64x36 rectangle around a ~24px icon,
    which reads as an odd wide rectangle on hover/focus instead of a square
-   matching the icon's own proportions. min-width dropped to the same 36px
-   as the button's own (unchanged) 36px height, padding dropped to just
+   matching the icon's proportions. min-width dropped to the same 36px
+   as the button's (unchanged) 36px height, padding dropped to just
    enough to keep the icon centered, so the hover/focus overlay itself
    comes out square. margin adds explicit breathing room back between
    buttons now that min-width no longer does that as a side effect - kept
@@ -1745,8 +1857,8 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
   margin: 0 4px !important;
 }
 
-/* v-app-bar's own "app" positioning normally sets its  inline "left"
-   style past the drawer's own width automatically, via Vuetify's shared
+/* v-app-bar's "app" positioning normally sets its  inline "left"
+   style past the drawer's width automatically, via Vuetify's shared
    $vuetify.application.left tracking - which only accounts for space an
    ACTUALLY PRESENT drawer reserves. Whenever the drawer isn't there to
    reserve it (removed entirely via v-if - see "Never show the left
@@ -1763,17 +1875,17 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
    directly via computed style in both states. An earlier version of this
    used "padding-left: 192px" instead, which looked superficially similar
    but actually left two real, confirmed mismatches against the normal
-   case: the toolbar's own box (so its white background/bottom border)
+   case: the toolbar's box (so its white background/bottom border)
    still started at x: 0 instead of x: 200 like normal, and its first
    icon landed 8px further left (208px vs the normal case's 216px) since
-   192 + Vuetify's own 16px internal toolbar padding undershoots the
+   192 + Vuetify's 16px internal toolbar padding undershoots the
    normal case's real 200 + 16. Overriding "left" directly instead makes
    both the box geometry and the icon position match the normal case
    exactly, not just approximately.
-   !important is required to win over Vuetify's own inline "left: 0px" -
+   !important is required to win over Vuetify's inline "left: 0px" -
    inline styles normally beat stylesheet rules, but never one marked
    !important.
-   The template's own condition is "hideSidebar || !drawer", not just
+   The template's condition is "hideSidebar || !drawer", not just
    "!drawer" alone - confirmed directly as a second real overlap bug:
    toggling "Never show the left sidebar" on while the drawer happened to
    be open removes the drawer element via v-if without ever flipping its
@@ -1787,7 +1899,7 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
 }
 
 /* Sits in the empty top-left corner: to the left of .top-toolbar (which
-   only starts at x: 200px, past the navigation drawer's own width), above
+   only starts at x: 200px, past the navigation drawer's width), above
    the drawer itself (which is "clipped" and starts at y: 72px, see the
    template). Fixed positioning (not part of any Vuetify "app" element's
    own flow) since none of the surrounding chrome has a slot for it. */
@@ -1823,10 +1935,10 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
 /* .app-logo's  divider, independent of the drawer's  border-top
    below (which only actually renders on-screen while the drawer itself is
    both present AND open) - confirmed directly as a real gap: the drawer is
-   translated off-screen (not just closed) below Vuetify's own responsive
+   translated off-screen (not just closed) below Vuetify's responsive
    mobile-breakpoint regardless of "Never show the left sidebar", and
    removed from the DOM entirely when that setting IS on, so relying on
-   the drawer's own border for this was never reliably visible under the
+   the drawer's border for this was never reliably visible under the
    logo to begin with. Same width/x-position .top-toolbar-no-drawer's own
    "left: 200px" override reserves, same color/thickness as every other
    divider in this file, positioned to align with .top-toolbar's own
@@ -1850,8 +1962,8 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
    own border-bottom above, reading as one continuous line across the whole
    window instead of two separate borders that happen to match colors. */
 /* margin-top: -1px nudges the border up a hair from where it'd otherwise
-   land - even though the drawer's own top (now "clipped" below the app-bar,
-   see the template) and .top-toolbar's own bottom edge compute to the exact
+   land - even though the drawer's top (now "clipped" below the app-bar,
+   see the template) and .top-toolbar's bottom edge compute to the exact
    same y-coordinate, the two borders still rendered a device pixel apart at
    this window's 1.5x scale factor, a common sub-pixel rounding artifact
    between two independently-positioned elements whose edges only coincide
@@ -1868,29 +1980,29 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
    nothing needs to animate. */
 .app-main {
   transition: none;
-  /* Vuetify's own .v-main is "flex: 1 0 auto" - flex-shrink: 0 means it
+  /* Vuetify's .v-main is "flex: 1 0 auto" - flex-shrink: 0 means it
      NEVER shrinks below its own content's natural height, regardless of how
      little space v-application--wrap (min-height: 100vh, otherwise
      content-driven) actually has left for it - so a tab with enough content
      to be genuinely taller than the viewport (16 score-font glyph cards,
      for instance) grew the WHOLE PAGE taller instead of ever reaching
-     .app-main-inner's own overflow-y: auto at all, which only ever gets a
+     .app-main-inner's overflow-y: auto at all, which only ever gets a
      chance to clip/scroll content that doesn't already fit within the
      height this element itself was already given. flex-shrink: 1
      (overriding Vuetify's 0) lets this actually shrink to fit its real
-     allocated space instead of dictating the page's own height upward, and
-     min-height: 0 removes flexbox's own separate "never shrink below
+     allocated space instead of dictating the page's height upward, and
+     min-height: 0 removes flexbox's separate "never shrink below
      content size" default floor (distinct from flex-shrink, and it applies
      even with flex-shrink: 1 unless overridden) that would otherwise still
      block the same thing from working. Confirmed directly as the real root
      cause of a "phantom" scrollbar appearing at the literal browser window
-     edge (not this app's own internal panel scrollbars) specifically on
+     edge (not this app's internal panel scrollbars) specifically on
      tabs with enough content to actually be taller than one viewport. */
   flex: 1 1 auto;
   min-height: 0;
 }
 
-/* Vuetify's own .v-main is "flex: 1 0 auto" (flex-shrink: 0) with no fixed
+/* Vuetify's .v-main is "flex: 1 0 auto" (flex-shrink: 0) with no fixed
    height of its own - a paddingBottom bound directly to it (an earlier
    version of this) just grew that box past whatever space the outer
    v-application--wrap flex column actually had left, overflowing the
@@ -1898,27 +2010,27 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
    scrollbar case fixed elsewhere) instead of being absorbed anywhere. This
    inner div is a plain block, not a flex item with its own shrink-doesn't-
    happen behavior - height: calc(100% - Npx) takes exactly whatever height
-   v-main's own flex-grow already resolved (stretched across via v-main's
+   v-main's flex-grow already resolved (stretched across via v-main's
    default row-direction align-items: stretch on its real single child,
    .v-main__wrap, which this sits inside), reduced by errorHeight to reserve
-   room for .error-message's own fixed footer (which isn't an "app" element
+   room for .error-message's fixed footer (which isn't an "app" element
    Vuetify lays out room for).
    position: relative makes THIS the containing block for any
    position: absolute descendant a routed view renders (e.g.
-   ActionEditor.vue's own "#blockly2 { position: absolute; bottom: 0; }",
+   ActionEditor.vue's "#blockly2 { position: absolute; bottom: 0; }",
    which sizes the whole Blockly canvas including its toolbox/flyout, or
-   GeneratedCode.vue's own ".editor-container", same pattern) - without it,
+   GeneratedCode.vue's ".editor-container", same pattern) - without it,
    such a descendant skips past this div (position: static doesn't
    establish a containing block) straight to the next actual positioned
-   ancestor up the tree, Vuetify's own .v-main__wrap, which still extends
+   ancestor up the tree, Vuetify's .v-main__wrap, which still extends
    all the way to the TRUE viewport bottom.
    A PADDING-based version of this (height: 100% + padding-bottom: Npx +
    box-sizing: border-box, matching .nav-drawer-inner/.emulator-drawer-inner's
    own pattern) was tried here first and confirmed NOT equivalent for this
-   specific job: a position: absolute child's own "bottom: 0" aligns with
+   specific job: a position: absolute child's "bottom: 0" aligns with
    its containing block's PADDING-box edge, which is the same as the
    border-box edge (the outermost edge, padding included) whenever there's
-   no border - so "bottom: 0" landed exactly at this div's own OUTER edge,
+   no border - so "bottom: 0" landed exactly at this div's OUTER edge,
    completely ignoring the padding meant to hold it back, and every
    position: absolute view (ActionEditor's Blockly canvas, GeneratedCode's
    whole editor pane including its search dock) kept rendering straight
@@ -1939,23 +2051,23 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
    positioned child, so the hover highlight never actually spilled onto the
    content to its left the way .error-resize-handle's does (that one lives in
    a v-footer, which doesn't clip). Fixed to the window instead, with "right"
-   bound inline to emulatorWidth so it still tracks the drawer's own left
+   bound inline to emulatorWidth so it still tracks the drawer's left
    edge as it's resized. */
 .emulator-resize-handle {
   position: fixed;
   /* 72px clears the fixed chrome above the drawer (the app-bar's own
-     height, see .emulator-hide-button's own comment below) - this used to
+     height, see .emulator-hide-button's comment below) - this used to
      be a plain 0, which ran the handle up over that chrome instead of
-     starting at the drawer's own clipped top edge. */
+     starting at the drawer's clipped top edge. */
   top: 72px;
   /* bottom is set inline (bound to errorHeight, see the template) rather
      than a plain 0 here - this handle used to run the full viewport height,
      rendering on top of the console footer (a sibling, not a descendant, so
-     the console's own z-index couldn't help) instead of stopping above it
+     the console's z-index couldn't help) instead of stopping above it
      the way the emulator drawer itself already does. */
   /* Straddles the drawer's  left edge (-5px to +5px, via the "right"
      style bound to emulatorWidth - 5 in the template), matching
-     .error-resize-handle's own straddle - a plain 6px strip fully inside
+     .error-resize-handle's straddle - a plain 6px strip fully inside
      the drawer was too easy to miss by a pixel and land on the emulator
      content instead. */
   width: 10px;
@@ -1973,7 +2085,7 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
 }
 
 /* A visible grip bar centered in the drag strip - same rest/hover grey as
-   the scrollbar thumbs and .error-resize-handle's own grip below, so all of
+   the scrollbar thumbs and .error-resize-handle's grip below, so all of
    the app's draggable handles read as one consistent design instead of
    being invisible until hovered. */
 .emulator-resize-handle::after {
@@ -2004,11 +2116,11 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
    transition), which was clipping away the left half of this button when it
    lived inside the drawer as an absolutely-positioned child straddling its
    edge. Fixed to the window instead, with "right" bound inline to
-   emulatorWidth (see the template) so it still tracks the drawer's own left
+   emulatorWidth (see the template) so it still tracks the drawer's left
    edge as it's resized. top: 80px clears the fixed chrome above the drawer
-   (the app-bar's own 72px, plus a little breathing room), putting this at
+   (the app-bar's 72px, plus a little breathing room), putting this at
    the top of the emulator column instead of vertically centered on it.
-   z-index bumped well past Vuetify's own app-bar/navigation-drawer chrome,
+   z-index bumped well past Vuetify's app-bar/navigation-drawer chrome,
    which otherwise sat on top of and ate clicks meant for this button. */
 .emulator-hide-button {
   position: fixed;
@@ -2037,7 +2149,7 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
    default than the app's usual blue "primary" accent, since this floats
    over whatever tab is open rather than living inside a toolbar/panel with
    other controls, and shouldn't compete for attention until the user is
-   actually reaching for it. Full opacity plus the app's own primary blue on
+   actually reaching for it. Full opacity plus the app's primary blue on
    hover together read as "now active"/clickable. */
 .emulator-toggle-button {
   opacity: 0.5;
@@ -2056,7 +2168,7 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
    since it isn't an "app" element Vuetify reserves layout space for) count
    against this 100% height, instead of being added on top of it - otherwise
    the flex children size themselves as if the footer weren't there, and
-   .rom-capacity-detail's own scrollbar never kicks in until content is
+   .rom-capacity-detail's scrollbar never kicks in until content is
    pushed further down than the footer already covers. */
 .emulator-drawer-inner {
   display: flex;
@@ -2068,7 +2180,7 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
      flush edge to edge with no breathing room. #gopher2600-target-container
      (the emulator screen itself) also ends up very slightly narrower as a
      result, rather than compensating it back out with its own negative
-     margin - that container's own width feeds a live ResizeObserver-driven
+     margin - that container's width feeds a live ResizeObserver-driven
      scale calculation (see updateEmulatorScale/observeEmulatorSize below),
      and a negative margin there risks that measurement disagreeing with
      what's actually laid out, for a fix this small. */
@@ -2087,6 +2199,35 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
   gap: 8px;
 }
 
+/* Select/Reset as one indivisible unit within .panel-switches-row's own
+   flex-wrap, rather than two separate flex items - a plain flex-wrap row
+   wraps items ONE AT A TIME as space runs out, which could leave Select on
+   the previous row and Reset alone on the next. Grouping them into their
+   own nested flex container (itself a single flex item as far as the outer
+   row is concerned) makes the pair wrap down together or not at all. */
+.emulator-select-reset-group {
+  display: flex;
+  gap: 8px;
+}
+
+/* Vuetify's "color" prop doesn't compute a contrasting icon/text color
+   from the color itself (that only happens via the app's overall light/
+   dark THEME, not per-button) - without this, the power icon stayed its
+   usual dark grey on top of the now-green filled button once powered on,
+   reading as low-contrast/hard to see instead of a clear white icon on a
+   solid green background. No ">>> " deep-combinator here (tried first) -
+   this v-icon is written directly in THIS component's template (unlike
+   e.g. Blockly's injected SVG text elsewhere in this file), so it already
+   carries this component's scope attribute like any other element
+   here, and gets matched by a plain scoped selector same as they would -
+   using >>> would have stripped that attribute-selector specificity back
+   off again, losing a specificity tie against the app-wide "Soft Colors"
+   icon-darkening rule (.desaturate-app-colors .theme--light.v-icon, itself
+   3 classes) instead of comfortably beating it. */
+.panel-switches-row .emulator-power-button.emulator-power-button-on.green .v-icon {
+  color: #fff !important;
+}
+
 /* Same reasoning as .emulator-drawer-inner above: the error console footer
    overlaps the bottom of this drawer too (it isn't an "app" element Vuetify
    reserves layout space for), so a plain height: 100% scroll area would let
@@ -2102,7 +2243,7 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
 
 /* Vuetify's v-list has an 8px top/bottom padding by default, which left a
    gap between the Actions tab and the top of the drawer that the top
-   toolbar's own tab row doesn't have. Removed so the first tab sits flush
+   toolbar's tab row doesn't have. Removed so the first tab sits flush
    with the drawer's top edge. */
 .navigation-list.v-list {
   padding-top: 0;
@@ -2127,9 +2268,9 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
    same color down for the sidebar alone. */
 
 /* The top v-app-bar's  tab buttons (.actions-item/.player-item/etc,
-   the exact same class names as the sidebar's own v-list-item entries just
+   the exact same class names as the sidebar's v-list-item entries just
    above - see the rules right below this one) used to render with
-   Vuetify's own default v-btn appearance, a solid light grey fill
+   Vuetify's default v-btn appearance, a solid light grey fill
    (".theme--light.v-btn.v-btn--has-bg { background-color: #f5f5f5 }" - see
    node_modules/vuetify/dist/vuetify.css), unlike the sidebar's own
    v-list-item entries, which have no background fill of their own at all -
@@ -2138,11 +2279,11 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
    is what removes that default fill, the same way it would for any other
    Vuetify text-style button - no CSS override needed here for that part.
    Once that grey fill is gone, the hover/active TINT COLOR already matches
-   the sidebar for free: Vuetify's own v-btn already uses
+   the sidebar for free: Vuetify's v-btn already uses
    "background-color: currentColor" for its built-in hover/focus/active
    overlay (".v-btn:before"/".v-btn--active::before" in the same vuetify.css),
    and the color rules below already force "color: rgbX !important" on
-   these exact same classes. The tint's own STRENGTH still didn't match
+   these exact same classes. The tint's STRENGTH still didn't match
    though (confirmed directly against vuetify.css) - v-list-item's own
    overlay opacities (hover 0.04, active 0.12) are roughly HALF v-btn's own
    (hover 0.08, active 0.18), which read as visibly lighter/washed-out on
@@ -2163,6 +2304,136 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
 }
 .navigation-list.v-list .v-list-item--active:focus::before {
   opacity: 0.16 !important;
+}
+
+/* "Soft Colors" (see Configuration.vue) - these tab colors are plain
+   hardcoded rgb() values, not run through Blockly's HSL-based
+   parseBlockColour patch (see BlocklyComponent.vue), so there's no single
+   funnel to desaturate them through the way every block color has. A CSS
+   filter, same mechanism already used for the blockly text/emoji desaturation,
+   covers both the icon and label text (and the border-left indicator) of
+   each tab in one rule, with no per-tab color duplication. */
+.desaturate-app-colors .actions-item,
+.desaturate-app-colors .titlescreen-item,
+.desaturate-app-colors .player-item,
+.desaturate-app-colors .background-item,
+.desaturate-app-colors .sound-item,
+.desaturate-app-colors .music-item,
+.desaturate-app-colors .text-tab-item,
+.desaturate-app-colors .data-item,
+.desaturate-app-colors .scorefont-item,
+.desaturate-app-colors .configuration-item,
+.desaturate-app-colors .generated-item,
+.desaturate-app-colors .project-item {
+  filter: saturate(50%);
+}
+
+/* The left-hand nav-drawer's tab labels/icons AND the top toolbar's
+   matching tab icons - desaturating alone (see the filter rule just above)
+   left them a similar lightness to before, which read as harder to read
+   against both bars' own darkened backgrounds (see the app-wide
+   .desaturate-app-colors background tiers). Darkened on top of that same
+   desaturation (filters compose) by the same amount in both places, so a
+   given tab's icon reads as the exact same color whether it's clicked in
+   the top bar or the sidebar - confirmed as a real reported mismatch when
+   only the sidebar had this. */
+/* Only brightness here (not saturate too) - the ANCESTOR .actions-item/etc
+   already gets its own saturate(50%) (see that rule further below), which
+   composites over its entire rendered box including these two children, so
+   adding a second saturate() here would double it up (effectively ~25%,
+   not 50%) rather than matching the top toolbar's single combined
+   "saturate(50%) brightness(0.7)" value (see that rule further below - the
+   top toolbar's icon has no such ancestor filter to compose with, since it
+   sits directly inside the v-btn with no v-list-item wrapper, so it needs
+   the full combined value declared directly on itself instead). */
+.desaturate-app-colors .nav-drawer .v-list-item__content,
+.desaturate-app-colors .nav-drawer .v-list-item__icon {
+  filter: brightness(0.7);
+}
+
+/* Same rule as just above, for the top toolbar's matching tab icons - kept
+   as its own rule (rather than one shared selector list) so the brightness
+   filter here can be combined with the saturate(50%) filter every top-
+   toolbar/sidebar tab icon already gets (see that rule further below) into
+   ONE filter value. A second, separate "filter: brightness(0.7)" rule of
+   equal-or-higher specificity targeting the SAME element would have just
+   replaced that saturate() entirely instead of composing with it - CSS
+   filter doesn't merge across separate declarations the way e.g. transform
+   sometimes can be reasoned about; only the highest-specificity single
+   declaration wins. */
+.desaturate-app-colors .top-toolbar .actions-item,
+.desaturate-app-colors .top-toolbar .titlescreen-item,
+.desaturate-app-colors .top-toolbar .player-item,
+.desaturate-app-colors .top-toolbar .background-item,
+.desaturate-app-colors .top-toolbar .sound-item,
+.desaturate-app-colors .top-toolbar .music-item,
+.desaturate-app-colors .top-toolbar .text-tab-item,
+.desaturate-app-colors .top-toolbar .data-item,
+.desaturate-app-colors .top-toolbar .scorefont-item,
+.desaturate-app-colors .top-toolbar .configuration-item,
+.desaturate-app-colors .top-toolbar .generated-item,
+.desaturate-app-colors .top-toolbar .project-item {
+  filter: saturate(50%) brightness(0.7);
+}
+
+/* Every OTHER icon/text in the app (not the left nav-drawer's tab
+   icons/labels, already darkened above, or the top toolbar's colored per-
+   tab icons, restored below) - Vuetify's default light-theme text/icon
+   opacities (rgba(0,0,0,.87) for body text, .54 for icons, lighter still
+   for hints/secondary text) were tuned against a plain white background.
+   Against the darker card/app-bg tiers those same alpha values read as
+   noticeably lower-contrast, so both are bumped darker here. color (not
+   filter) - filter would also darken whatever background is BEHIND the
+   element, since it applies to the full rendered box, not just the text/
+   icon glyph itself. */
+.desaturate-app-colors.theme--light {
+  color: rgba(0, 0, 0, 0.95) !important;
+}
+
+.desaturate-app-colors .theme--light.v-icon {
+  color: rgba(0, 0, 0, 0.75) !important;
+}
+
+/* The top toolbar's tab icons (.actions-item/.titlescreen-item/etc,
+   directly <v-icon> inside the v-btn - no .v-list-item__icon wrapper the
+   way the sidebar's matching entries have, see those rules further below)
+   otherwise matched the blanket darkening rule just above with nothing
+   more specific to beat it, flattening every tab's distinct color
+   (green/purple/blue/etc) down to plain dark grey - confirmed as a real
+   reported bug. Restores each one back to its own per-tab color (already
+   forced onto the parent .actions-item/etc button - see those rules) via
+   plain inheritance. */
+.desaturate-app-colors .top-toolbar .theme--light.v-icon {
+  color: inherit !important;
+}
+
+/* Vuetify's hover overlay (".v-btn:before", tinted by the button's own
+   currentColor at ~8% opacity) barely showed up on a plain grey-background
+   button like "Reset to Defaults"/"Refresh emulator" - "Reset to Defaults"
+   forces its own resting text color to a faint rgba(0,0,0,.38)-ish grey
+   (see Configuration.vue's rule), unlike the other three here, which
+   left ITS OWN hover overlay noticeably fainter than the rest even though
+   all four are meant to read as the same style of button - confirmed as a
+   real reported mismatch. One explicit, shared hover background instead of
+   relying on that per-button overlay math, so all four always match
+   exactly regardless of each button's resting text color. */
+.reset-to-defaults-btn.v-btn:hover,
+.emulator-refresh-button.v-btn:hover,
+.palette-clear-btn.v-btn:hover,
+.emulator-select-button.v-btn:hover,
+.emulator-reset-button.v-btn:hover {
+  background-color: #e0e0e0 !important;
+}
+
+/* Same explicit-hover-color reasoning as just above, darker to match Soft
+   Colors' own darker background tiers (see the app-wide
+   .desaturate-app-colors rules) - overrides the plain-theme value above. */
+.desaturate-app-colors .reset-to-defaults-btn.v-btn:hover,
+.desaturate-app-colors .emulator-refresh-button.v-btn:hover,
+.desaturate-app-colors .palette-clear-btn.v-btn:hover,
+.desaturate-app-colors .emulator-select-button.v-btn:hover,
+.desaturate-app-colors .emulator-reset-button.v-btn:hover {
+  background-color: #d0d0d0 !important;
 }
 
 .actions-item,
@@ -2367,7 +2638,7 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
 }
 
 /* position: fixed pins this to the viewport bottom so it can't scroll away
-   with page content. This previously covered every tab's own floating "+"
+   with page content. This previously covered every tab's floating "+"
    button (Background, Player0/1, Sound, Music, Data - all use Vuetify's
    "absolute right fab" pattern with no z-index of their own) since a fab
    with no explicit z-index loses the stacking fight against this footer's
@@ -2393,7 +2664,7 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
 /* The actual scroll container - moved here from .error-message itself
    (which used to have overflow-y: scroll directly) so .error-resize-handle
    (a sibling of this, not a descendant) never scrolls along with the log
-   content: .error-resize-handle's own position: absolute is anchored to
+   content: .error-resize-handle's position: absolute is anchored to
    .error-message, which is also where a scrollbar's scroll OFFSET used to
    be tracked - a still-scrolling ancestor drags an absolutely-positioned
    child's rendered position along with it exactly like any other content,
@@ -2405,7 +2676,7 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
    own strip) rather than sized through flexbox (a v-footer's row-direction
    flex layout makes height the CROSS axis, which turned out to still let
    this grow to fit its own content instead of actually clipping to the
-   footer's own fixed height even with align-self: stretch + flex +
+   footer's fixed height even with align-self: stretch + flex +
    min-height: 0 all set - confirmed directly: scrollHeight kept exactly
    matching clientHeight, i.e. never actually overflowing/scrolling
    internally at all, which spilled the overflow out into the page's own
@@ -2415,7 +2686,7 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
 /* overflow-y: auto (not "scroll") - "scroll" unconditionally reserves a
    scrollbar track even when the log has too few lines to actually need
    one, which renders as an inert, un-draggable scrollbar (no real content
-   to scroll to) flush against the browser's own right edge, confirmed as
+   to scroll to) flush against the browser's right edge, confirmed as
    a real, confusing bug on its own (looked like something was broken,
    since dragging it did nothing) rather than an intentional "always show
    the gutter to avoid layout shift" choice - nothing in this rule's own
@@ -2432,7 +2703,7 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
 /* v-footer's  default is a row-direction flex container (fine for a
    single <pre>, wrong once this holds many stacked lines) - column instead,
    with no gap of its own, so spacing between lines comes only from
-   .compile-log-line's own tight line-height below. */
+   .compile-log-line's tight line-height below. */
 .error-console-content {
   display: flex;
   flex-direction: column;
@@ -2441,7 +2712,7 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
 }
 
 /* Live progress feed for the build pipeline (see hooks/rom.js's buildRom())
-   - overrides the footer's own blanket red (meant for errorStorage's actual
+   - overrides the footer's blanket red (meant for errorStorage's actual
    error banner just below it) back to ordinary text color for anything that
    isn't itself an error-level entry. margin: 0 and a tight line-height keep
    many lines from spreading out - the default paragraph-like spacing looked

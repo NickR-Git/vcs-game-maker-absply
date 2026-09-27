@@ -11,9 +11,9 @@ const STORAGE_KEY = 'vcs-game-maker.keyMapping';
 
 // Matches what the preview shipped with before this was configurable
 // (arrow keys + Space for Player 1's joystick, WASD + left-Ctrl for Player
-// 2's - see tools/gopher2600-wasm/main.go's own git history), plus new
+// 2's - see tools/gopher2600-wasm/main.go's git history), plus new
 // defaults for Keypad mode modeled on this project's earlier Javatari-based
-// preview's own equivalent defaults (UserPreferences.js's keypadKeys):
+// preview's equivalent defaults (UserPreferences.js's keypadKeys):
 // Player 1's Keypad defaults to 1,2,3/Q,W,E/A,S,D/Z,X,C - this overlaps
 // Player 2's WASD joystick defaults, which is fine, since a port is only
 // ever actually Joystick OR Keypad at a time (see main.go's own
@@ -26,7 +26,7 @@ export const DEFAULT_KEY_MAPPING = {
   ],
   // k1-k9 read left-to-right, top-to-bottom (1,2,3/4,5,6/7,8,9); k10-k12 are
   // the bottom row (*, 0, #) - the same reading order
-  // tools/gopher2600-wasm/vendor/.../controllers/keypad.go's own HandleEvent
+  // tools/gopher2600-wasm/vendor/.../controllers/keypad.go's HandleEvent
   // expects (see KEYPAD_CONTROL_CHARS below).
   keypad: [
     {
@@ -36,11 +36,11 @@ export const DEFAULT_KEY_MAPPING = {
       k10: 'KeyZ', k11: 'KeyX', k12: 'KeyC',
     },
     {
-      // Numpad row order flipped relative to k1-k9's own reading order - a
+      // Numpad row order flipped relative to k1-k9's reading order - a
       // real numpad's physical rows run 7,8,9/4,5,6/1,2,3 top-to-bottom
       // (the opposite of a phone/Keypad Controller's 1,2,3/4,5,6/7,8,9), so
       // this matches each keypad digit to the numpad key actually above/
-      // below it rather than reusing the numpad's own digit for each.
+      // below it rather than reusing the numpad's digit for each.
       k1: 'Numpad7', k2: 'Numpad8', k3: 'Numpad9',
       k4: 'Numpad4', k5: 'Numpad5', k6: 'Numpad6',
       k7: 'Numpad1', k8: 'Numpad2', k9: 'Numpad3',
@@ -91,7 +91,7 @@ const mapping = ref(load());
 export const useKeyMapping = () => mapping;
 
 // Flattens the friendly per-control shape above into the {code, port, kind,
-// control} array tools/gopher2600-wasm's own setKeyMapping (main.go) expects.
+// control} array tools/gopher2600-wasm's setKeyMapping (main.go) expects.
 const flatten = (value) => {
   const flat = [];
   PORTS.forEach((port, i) => {
@@ -117,7 +117,7 @@ const persistAndPush = () => {
  * binding of the SAME kind first (two joystick controls, or two keypad
  * controls, can't share one physical key - but a joystick control and a
  * keypad control can, since a given port is only ever actually one or the
- * other at a time - see main.go's own keypadModeByPort/findKeyBinding. The
+ * other at a time - see main.go's keypadModeByPort/findKeyBinding. The
  * default mapping itself relies on this: Player 1's Keypad defaults reuse
  * Player 2's WASD joystick defaults).
  * @param {string} kind 'joystick' or 'keypad'.
@@ -146,11 +146,27 @@ export const resetKeyMapping = () => {
 };
 
 // Pushed on every fresh window.gopher2600 instance, not just at page load -
-// see hooks/emulator.js's own comment on 'gopher2600-ready' firing again
+// see hooks/emulator.js's comment on 'gopher2600-ready' firing again
 // after an automatic crash-recovery reinstantiation, which boots with an
-// empty keyMapping (tools/gopher2600-wasm/main.go's own console struct has
+// empty keyMapping (tools/gopher2600-wasm/main.go's console struct has
 // no defaults of its own - this module is the single source of truth for
 // what the defaults actually are).
 window.addEventListener('gopher2600-ready', () => {
   withGopher2600((gopher2600) => gopher2600.setKeyMapping(flatten(mapping.value)));
 });
+// The event above alone left the mapping unapplied until the very first
+// setKeyBinding/resetKeyMapping call (i.e. actually opening the Keyboard
+// Mapping dialog and editing something) - confirmed as a real reported bug.
+// This module is only reached via a static import chain starting at
+// KeyMappingDialog.vue (App.vue -> that component -> here), which resolves
+// at the same time as every other top-level import when the app's bundle
+// first evaluates - genuinely no guarantee that's BEFORE
+// public/index.html's gopher2600-wasm loader fires 'gopher2600-ready'
+// for the very first time; a JS event listener that starts listening after
+// an event already fired simply never sees it, unlike withGopher2600's own
+// retry loop below, which instead POLLS for window.gopher2600 - already
+// existing or not yet - and only gives up after 40 tries. Calling that
+// directly here, once, covers the case the event's timing could miss;
+// the event listener above still separately covers every LATER
+// reinstantiation after a crash.
+withGopher2600((gopher2600) => gopher2600.setKeyMapping(flatten(mapping.value)));
