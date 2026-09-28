@@ -463,9 +463,10 @@
             :key="index"
             class="compile-log-line"
             :class="entry.level === 'error' ? 'compile-log-error' : 'compile-log-info'"
-            :style="{fontWeight: entry.level === 'stage' ? 'bold' : 'normal'}"
-          >{{ entry.text }}</div>
-          <pre v-if="errorStorage" v-text="errorStorage"></pre>
+            :style="entry.level === 'stage' ? {fontWeight: 'bold'} : {}"
+          ><span v-if="entry.html" v-html="entry.text"></span><template v-else>{{ entry.text }}</template></div>
+          <pre v-if="errorStorage" v-html="errorStorage"></pre>
+          <div v-if="errorStorage && errorBannerHighlight" class="error-banner-highlight" v-html="errorBannerHighlight"></div>
         </div>
       </div>
     </v-footer>
@@ -473,11 +474,13 @@
 </template>
 
 <script>
-import {useCompileLog, useDesaturateBlocklyColorsStorage, useErrorStorage, useHideDescriptionTextStorage,
-  useHideSidebarStorage, useStellaPathStorage} from './hooks/project';
+import {useCompileLog, useDesaturateBlocklyColorsStorage, useErrorBannerHighlight, useErrorStorage,
+  useHideDescriptionTextStorage, useHideSidebarStorage, useStellaPathStorage,
+  markSkipLoadLastProjectCheckOnce} from './hooks/project';
 import {buildRom, useRomCapacity, useRomOutdated, useHasCompiledRom, useCompiledRomBytes,
   useBuildInProgress} from './hooks/rom';
 import {safeWithGopher2600} from './hooks/emulator';
+import {escapeHtml} from './utils/build-error';
 import KeyMappingDialog from './components/KeyMappingDialog.vue';
 import {productName, version} from '../package.json';
 
@@ -568,7 +571,8 @@ export default {
     const errorStorage = useErrorStorage();
     console.info('Text', version);
     return {
-      errorStorage, compileLog: useCompileLog(), romOutdated: useRomOutdated(), romCapacity: useRomCapacity(),
+      errorStorage, errorBannerHighlight: useErrorBannerHighlight(),
+      compileLog: useCompileLog(), romOutdated: useRomOutdated(), romCapacity: useRomCapacity(),
       hasCompiledRom: useHasCompiledRom(), compiledRomBytes: useCompiledRomBytes(),
       buildInProgress: useBuildInProgress(),
       productName, version, hideDescriptionTextStorage: useHideDescriptionTextStorage(),
@@ -1047,6 +1051,7 @@ export default {
     // to fix the project from - reloading known-good bytes into a fresh
     // instance carries no such risk.
     handleRefreshEmulator() {
+      markSkipLoadLastProjectCheckOnce();
       window.location.reload();
     },
     handleRomDownload() {
@@ -1081,7 +1086,10 @@ export default {
       try {
         const result = await window.electronAPI.launchStella(this.stellaPathStorage, this.compiledRomBytes.output);
         if (!result.success) {
-          this.errorStorage.value = `Couldn't launch Stella: ${result.error}`;
+          // escapeHtml - errorStorage's <pre> renders via v-html now (see
+          // showError's boldenErrorHeaders), so a raw '<'/'>'/'&' in a
+          // Stella launch error would otherwise be parsed as real markup.
+          this.errorStorage.value = `Couldn't launch Stella: ${escapeHtml(result.error)}`;
         }
       } finally {
         this.launchingStella = false;
@@ -1146,7 +1154,22 @@ export default {
    override without !important would otherwise just lose a specificity tie
    to a same-specificity rule that happens to be loaded after this one). */
 .desaturate-app-colors .theme--light.v-card {
-  background-color: #e6e6e6 !important;
+  background-color: #eeeeee !important;
+}
+
+/* Vuetify's own .theme--light.v-list default (white) isn't covered by the
+   v-card rule above - a v-list nested inside a v-menu's popup card (e.g.
+   the Set height popup's title/slider rows) kept a plain white background
+   even with Subdued Palette on, while the rest of that same popup (rows
+   with no v-list wrapper) correctly picked up the card's grey - confirmed
+   as a real reported bug, visibly inconsistent within one popup. Scoped to
+   .v-menu__content specifically - every tab's own card-list container
+   (.background-list, .animation-list, .titlescreen-card-list, ...) is
+   ALSO a v-list, and painting those the same grey showed as a stray light
+   box sitting behind that tab's cards instead (also confirmed as a real
+   reported bug once tried unscoped). */
+.desaturate-app-colors .v-menu__content .theme--light.v-list {
+  background-color: #eeeeee !important;
 }
 
 .desaturate-app-colors.v-application,
@@ -1160,6 +1183,16 @@ export default {
   background-color: #bdbdbd !important;
 }
 
+/* Darkens the error console's red text to match Soft Colors' desaturated
+   palette - the plain Material red (rgb(244, 67, 54)) both .theme--light.
+   v-footer.error-message (the blanket color errorStorage's <pre> inherits)
+   and .compile-log-error use normally stood out as the one remaining bright,
+   saturated color against every other darkened/desaturated element. */
+.desaturate-app-colors .theme--light.v-footer.error-message,
+.desaturate-app-colors .compile-log-error {
+  color: #c62828 !important;
+}
+
 /* Every v-switch's OFF-state thumb (the little knob) defaults to plain
    white, unlike its ON state (which gets a "primary--text" utility class
    added, tinting it the app's blue via currentColor) - same card color
@@ -1169,6 +1202,33 @@ export default {
    variant (:not(.primary--text)) so the blue itself is untouched. */
 .desaturate-app-colors .v-input--switch__thumb:not(.primary--text) {
   background-color: #ebebeb !important;
+}
+
+/* The ON-state's "primary--text" blue (see the comment above) - left
+   untouched by the OFF-state rule above on purpose, but still one more
+   fully-saturated color left on the page otherwise, confirmed directly as
+   a real reported gap ("make the blue on toggles also be affected"). Same
+   filter treatment as every other colored control under Subdued Palette. */
+.desaturate-app-colors .v-input--switch__thumb.primary--text,
+.desaturate-app-colors .v-input--switch__track.primary--text {
+  filter: saturate(50%) brightness(0.85);
+}
+
+/* v-slider's filled AND unfilled track, plus the thumb (SoundFXEditor.vue's
+   "DIM" slider, MusicEditor.vue/BackgroundEditor.vue/TitleScreenEditor.vue/
+   PlayerEditor.vue's sliders) - all plain Vuetify "primary" background
+   color utility classes (the unfilled side also gets Vuetify's
+   "lighten-3"), same as the switch thumb/track above, just not named
+   "primary--text" this time (it's a background-color, not a text/
+   currentColor tint) - confirmed directly as a real reported gap ("slider
+   colors should also update" - and, once the filled side was fixed, "the
+   slider bar color should also get darker, not just the filled part").
+   Same filter treatment as every other colored control under Subdued
+   Palette. */
+.desaturate-app-colors .v-slider__track-fill.primary,
+.desaturate-app-colors .v-slider__track-background.primary,
+.desaturate-app-colors .v-slider__thumb.primary {
+  filter: saturate(50%) brightness(0.85);
 }
 
 /* Every solid-colored button throughout the app (color="primary"/"green"/
@@ -1184,6 +1244,29 @@ export default {
    template. */
 .desaturate-app-colors .theme--light.v-btn.v-btn--has-bg {
   filter: saturate(50%) brightness(0.85);
+}
+
+/* Same rule as above, for the floating circular "+" add buttons several
+   tabs use (BackgroundEditor.vue/DataEditor.vue/MusicEditor.vue/etc's
+   fab v-btns) - these pass Vuetify's "dark" prop (just to force their icon
+   white against the colored background), which makes Vuetify give them
+   ".theme--dark" instead of ".theme--light", so the rule above never
+   matched them at all - confirmed directly as a real reported gap ("the
+   floating + buttons don't desaturate"). */
+.desaturate-app-colors .theme--dark.v-btn.v-btn--has-bg {
+  filter: saturate(50%) brightness(0.85);
+}
+
+/* The "alpha"/experimental-feature warning banners (v-alert type="warning",
+   e.g. MusicEditor.vue's .alpha-notice) - Vuetify's stock warning
+   orange (#fb8c00, applied via its "warning--text" utility class here since
+   these are all "outlined" alerts, text/border only, no filled background)
+   stayed exactly as bright as ever even with every other color on the page
+   muted, confirmed directly as a real reported gap. Darker (not just
+   desaturated, unlike the button filter above) since the request was
+   specifically for a darker orange, not a softer one. */
+.desaturate-app-colors .warning--text {
+  filter: brightness(0.75);
 }
 
 /* Each tab's card grid is wrapped in a v-list (titlescreen-list, text-list,
@@ -1266,6 +1349,25 @@ export default {
 .titlescreen-card,
 .titlescreen-screen-card {
   border-color: rgba(0, 0, 0, 0.24) !important;
+}
+
+/* Popup cards (v-menu's own Set height/import pickers/etc., and v-dialog's
+   own confirm/settings popups - e.g. KeyMappingDialog.vue) render as plain
+   v-cards with no "outlined" prop, so they had no border at all - just
+   elevation/shadow separating them from whatever's behind. Matches the
+   same darkened border color as the main per-entry cards above, so any
+   popup reads as consistent with the rest of the app instead of a
+   borderless white/grey blob. */
+.v-menu__content > .v-card,
+.v-dialog > .v-card {
+  border: 1px solid rgba(0, 0, 0, 0.24);
+  /* These cards default to overflow: visible, so a flush-edged child (e.g.
+     the Set height popup's v-card-actions row) squares off past the
+     card's own rounded corners instead of being clipped to them - right at
+     that corner, whatever's behind the popup shows through instead of the
+     card's own background color, reading as "the wrong color at the
+     bottom" (confirmed as a real reported bug). */
+  overflow: hidden;
 }
 
 /* Card-level click-to-select (see selectCard/selectedCardId/deselectCard in
@@ -1363,6 +1465,33 @@ export default {
 .v-navigation-drawer__border {
   background-color: rgba(0, 0, 0, 0.24) !important;
 }
+
+/* Every tab's intro paragraph (DataEditor.vue/MusicEditor.vue/ScoreFontEditor.vue/
+   SoundFXEditor.vue/TextEditor.vue/TitleScreenEditor.vue) shares this exact
+   class already - one shared rule here instead of each tab guessing its
+   margin-top (TextEditor.vue's .text-intro-paragraph once had a -5px
+   override, landing it visibly closer to its title than every other tab's -
+   confirmed directly as a real reported inconsistency). Explicit margin-top:
+   0 - matches Vuetify's default v-card-title/v-card-text spacing (what
+   every tab actually gets with no override at all), made explicit and
+   centralized here rather than "correct by nobody having touched it yet". */
+.v-messages__message {
+  margin-top: 0;
+}
+
+/* The v-card-text wrapping every tab's intro paragraph (Background/Sprites/
+   Title screen/Sound/Music/Score/Text/Data/Project/Generated) - one shared
+   class/rule here instead of each tab picking its own padding-bottom to
+   fight its own next-element's padding-top (Sound/Music/Generated each
+   independently zeroed this same way after being reported as "too much
+   space" before the content below - confirmed as a real reported
+   inconsistency once every tab was compared side by side). Zeroed so the
+   paragraph's own 16px margin-bottom (see .v-messages__message above) is
+   the ONLY thing setting that gap, everywhere, at exactly the same value. */
+.tab-intro-section {
+  padding-bottom: 0;
+}
+
 
 /* Vuetify assigns v-menu/v-dialog overlay content its  z-index
    dynamically at open time (computed from whatever's already on the page,
@@ -1776,9 +1905,42 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
 
 /* Shared with the pixel editor toolbar's icons (see PixelEditor.vue) so a
    delete button's rest state matches them, instead of standing out as an
-   always-red trash can. */
+   always-red trash can.
+
+   --v-primary-base backs every "active/selected" blue accent across the
+   app (active toolbar icons, drag-reorder highlights, focused pixel
+   editor borders, etc.) that already referenced
+   var(--v-primary-base, #1976d2) defensively, as if it were a real
+   Vuetify theme variable - Vuetify itself never actually defines that
+   variable (confirmed directly - absent from its compiled CSS), so
+   every one of those rules was silently just using the literal #1976d2
+   fallback, un-themeable. Defining it for real here activates all of them
+   at once, and lets Subdued Palette override just this one variable
+   below instead of every individual rule that references it - the
+   plain-hardcoded "#1976d2 !important" rules elsewhere in the app were
+   switched to reference this same variable+fallback for the same reason,
+   see e.g. GraphicEditorToolbar.vue's .v-btn--active rule.
+
+   --destructive-color is the same idea for red "this deletes something"
+   accents (the delete button's hover color below, the Quick Colors
+   palette's delete-armed swatch outline/X icon in QuickColorPalette.vue) -
+   confirmed directly as a real reported gap ("red delete hover color
+   should also update"). */
 :root {
   --editor-icon-rest-color: rgba(0, 0, 0, 0.38);
+  --v-primary-base: #1976d2;
+  --destructive-color: red;
+}
+
+/* Desaturated/darkened equivalents of the two variables above
+   (saturate(50%) brightness(85%), the same transform every other colored
+   control under Subdued Palette uses via filter - precomputed here
+   instead, since CSS filters can't be applied to a custom property's
+   color value directly). Retroactively darkens every rule that references
+   either variable with zero changes needed at each individual call site. */
+.desaturate-app-colors {
+  --v-primary-base: #3e668d;
+  --destructive-color: #c62828;
 }
 
 /* Delete buttons (trash icon, top-right of a graphics/data/sound card): the
@@ -1790,7 +1952,7 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
 }
 
 .delete-icon-btn:hover {
-  color: red !important;
+  color: var(--destructive-color, red) !important;
 }
 
 .delete-icon-btn::before {
@@ -2723,6 +2885,18 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
   padding-top: 8px;
 }
 
+/* Every browser's UA stylesheet sets <pre> { font-family: monospace } by
+   default - never explicitly overridden here before, so errorStorage's
+   <pre> (the error banner's plain-text body) has always silently rendered
+   in a different font than the .compile-log-line entries above it (plain
+   <div>s, which inherit the app's regular font normally) - confirmed
+   directly as a real, pre-existing mismatch, not something introduced this
+   session. Unified here rather than on the <pre> element itself so a
+   future addition to this panel doesn't need to remember to repeat it. */
+.error-console-content pre {
+  font-family: inherit;
+}
+
 /* Live progress feed for the build pipeline (see hooks/rom.js's buildRom())
    - overrides the footer's blanket red (meant for errorStorage's actual
    error banner just below it) back to ordinary text color for anything that
@@ -2744,6 +2918,23 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
   color: rgb(244, 67, 54);
   font-weight: bold;
 }
+
+/* showError's optional highlightHtml (see utils/build-error.js) - rendered
+   right after the plain-text error banner, in the same red that banner
+   already inherits from .theme--light.v-footer.error-message. Deliberately
+   NOT bold itself (only whichever inline <b> tags the HTML content brings
+   with it are) - this div previously set font-weight: bold on the whole
+   paragraph, which made the intended "just this phrase" <b> inside it
+   render even heavier ("bolder" relative to an already-bold parent) while
+   the surrounding plain sentence wrongly looked bold too - confirmed
+   directly as a real reported "everything looks bold, and the bytes text
+   looks extra bold" bug. padding-left matches .compile-log-line's, so this
+   lines up with the log text above it instead of sitting flush left. */
+.error-banner-highlight {
+  padding-left: 8px;
+  padding-top: 4px;
+}
+
 
 .error-resize-handle {
   position: absolute;

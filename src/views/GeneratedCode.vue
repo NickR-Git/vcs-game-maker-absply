@@ -4,6 +4,13 @@
       <v-card-title>
         Generated bBasic code
       </v-card-title>
+      <v-card-text class="tab-intro-section">
+        <p class="v-messages theme--light v-messages__message generated-code-intro-paragraph">
+          The batari Basic source this project compiles down to, from its last "Update ROM" build -
+          useful for debugging a compile error, or just seeing what your blocks actually produce.
+          Save it to a file or copy it to the clipboard below.
+        </p>
+      </v-card-text>
       <div class="generated-code-toolbar">
         <v-btn
           icon
@@ -394,6 +401,17 @@ export default defineComponent({
   border-radius: 0;
 }
 
+/* Was a bare <p>, direct child of the v-card, with no v-card-text wrapper
+   at all - unlike every other tab's intro paragraph, so it had neither the
+   standard 16px left/right padding (confirmed as a real reported bug, text
+   sat flush against the card edge) nor a contained position for the shared
+   "v-messages__message" class's positioning to resolve against (Vuetify's
+   own base CSS expects that class inside a positioned ancestor - without
+   one, this rendered many times taller than its actual text, leaving a
+   huge blank gap before the toolbar below - also confirmed as a real
+   reported bug). Now wrapped in a v-card-text with the shared
+   .tab-intro-section class (see App.vue) like every other tab. */
+
 /* Flush left, own row below the title, above the code itself. Same "gap"
    spacing method as Project.vue's own .project-actions. */
 .generated-code-toolbar {
@@ -497,7 +515,7 @@ export default defineComponent({
 }
 
 .generated-code-flat-icon-btn:active >>> .v-icon {
-  color: #1976d2 !important;
+  color: var(--v-primary-base, #1976d2) !important;
 }
 
 .code-scroll {

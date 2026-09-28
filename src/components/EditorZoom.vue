@@ -29,18 +29,22 @@ import {ZOOM_LEVELS, stepZoom} from '../hooks/zoom';
 export default defineComponent({
   props: {
     value: {type: Number, default: 1},
+    // Stops to zoom between - defaults to the shared ZOOM_LEVELS every tab
+    // but Title screen uses (see hooks/zoom.js's useEditorZoom/stepZoom,
+    // and TitleScreenEditor.vue's TITLESCREEN_ZOOM_LEVELS).
+    levels: {type: Array, default: () => ZOOM_LEVELS},
   },
   computed: {
     canZoomIn() {
-      return this.value < ZOOM_LEVELS[ZOOM_LEVELS.length - 1];
+      return this.value < this.levels[this.levels.length - 1];
     },
     canZoomOut() {
-      return this.value > ZOOM_LEVELS[0];
+      return this.value > this.levels[0];
     },
   },
   methods: {
     step(direction) {
-      this.$emit('input', stepZoom(this.value, direction));
+      this.$emit('input', stepZoom(this.value, direction, this.levels));
     },
   },
 });

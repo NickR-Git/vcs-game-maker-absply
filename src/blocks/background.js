@@ -238,6 +238,11 @@ export const hasBackgroundFadeActiveChecks = (workspace) => {
 // the feature on doesn't visibly change an untouched background.
 export const DEFAULT_ROW_COLOR = 0x0E;
 
+// Resets an existing rowColors array back to DEFAULT_ROW_COLOR, one entry
+// per row - shared by every tab's own "clear colors" handler (Background,
+// Sprites, Title screen) so they don't each redeclare the same map().
+export const clearRowColors = (rowColors) => (rowColors || []).map(() => DEFAULT_ROW_COLOR);
+
 // Row count used when Superchip RAM's higher-resolution playfield (pfres) is
 // not enabled. This is the app's  established default, one row short of
 // standard batari Basic's implicit pfres=12 (11 visible + 1 hidden scroll

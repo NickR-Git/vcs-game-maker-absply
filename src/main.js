@@ -6,7 +6,7 @@ Vue.use(VueCompositionApi);
 import App from './App.vue';
 import vuetify from './plugins/vuetify';
 import router from './router';
-import {clearProjectStorage, useLoadLastProjectStorage} from './hooks/project';
+import {clearProjectStorage, useLoadLastProjectStorage, consumeSkipLoadLastProjectCheckOnce} from './hooks/project';
 import {migrateLegacyPlayerAnimationsInLocalStorage} from './hooks/migrate-player-animations';
 import {migrateLegacyPlayerBlocksInLocalStorage} from './hooks/migrate-player-blocks';
 import {migrateLegacyBounceBlocksInLocalStorage} from './hooks/migrate-bounce-blocks';
@@ -55,8 +55,13 @@ migrateLegacyKeypadBlocksInLocalStorage();
 // Whether to restore the last saved project on startup is a user preference
 // (see the Options tab) rather than always-on - when disabled, every launch
 // starts from the empty/default project instead. Done before the app is
-// created so nothing has read the old project yet.
-if (!useLoadLastProjectStorage().value) {
+// created so nothing has read the old project yet. Skipped for the one
+// reload App.vue's "Refresh emulator" button just triggered (see
+// markSkipLoadLastProjectCheckOnce's comment) - that button reloads the
+// page purely to get a fresh emulator instance, not to start a new session,
+// so it shouldn't wipe the project out from under the user as a side effect
+// even with this preference off.
+if (!consumeSkipLoadLastProjectCheckOnce() && !useLoadLastProjectStorage().value) {
   clearProjectStorage();
 }
 

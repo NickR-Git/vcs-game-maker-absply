@@ -1,6 +1,13 @@
 <template>
   <v-card flat class="editor-container">
     <v-card-title>Project</v-card-title>
+    <v-card-text class="tab-intro-section">
+      <p class="v-messages theme--light v-messages__message project-intro-paragraph">
+        Save your project to a .vcsgm file, or open one you saved earlier - everything on every
+        other tab lives in this one file. The fields below (Title, Developer, Version, etc.) are
+        saved with it too, and shape the suggested filename when you save.
+      </p>
+    </v-card-text>
 
     <v-card-actions class="project-actions">
       <v-btn
@@ -91,11 +98,21 @@
 
     <v-card-text class="project-settings-text">
       <span class="text-subtitle-1 project-settings-label">Project Settings</span>
-      <v-text-field
-        v-model="projectTitle"
-        label="Project Title"
-        persistent-placeholder
-      />
+      <div class="project-title-row">
+        <v-text-field
+          v-model="projectTitle"
+          label="Project Title"
+          persistent-placeholder
+          class="project-title-field"
+        />
+        <v-switch
+          v-model="projectIncludeDateInFilename"
+          label="Include date/time in filename"
+          title="Adds the current date and time to the saved filename. Only optional once Project Title is filled in - with no title, the date is the only thing keeping repeated saves from overwriting each other, so it stays on regardless of this switch."
+          hide-details
+          class="project-auto-increment-switch"
+        />
+      </div>
       <div class="project-developer-version-row">
         <div class="project-developer-col">
           <v-text-field
@@ -151,7 +168,7 @@ import {defineComponent, reactive, computed, onMounted} from '@vue/composition-a
 import {saveAs} from 'file-saver';
 import YAML from 'yaml';
 
-import {appendCompileLog, useBackgroundsStorage, useConfigurationStorage, useDataTablesStorage, usePlayerAnimationsStorage, useProjectAutoIncrementVersionStorage, useScoreFontStorage, useSongsStorage, useSoundEffectsStorage, useSquishCustomScoreFontStorage, useTextFontStorage, useTextStringsStorage, useTitleScreenStorage, useWorkspaceStorage} from '../hooks/project';
+import {appendCompileLog, useBackgroundsStorage, useConfigurationStorage, useDataTablesStorage, usePlayerAnimationsStorage, useProjectAutoIncrementVersionStorage, useProjectIncludeDateInFilenameStorage, useScoreFontStorage, useSongsStorage, useSoundEffectsStorage, useSquishCustomScoreFontStorage, useTextFontStorage, useTextStringsStorage, useTitleScreenStorage, useWorkspaceStorage} from '../hooks/project';
 import {combineLegacyPlayerAnimations, remapPlayer1AnimationIndexesInWorkspaceXml} from '../hooks/migrate-player-animations';
 import {migrateLegacyPlayerBlocksInWorkspaceXml} from '../hooks/migrate-player-blocks';
 import {migrateLegacyBounceBlocksInWorkspaceXml} from '../hooks/migrate-bounce-blocks';
@@ -273,6 +290,9 @@ export default defineComponent({
     // switch or start a new project, so it deliberately does NOT live on
     // configurationStorage via useConfigField.
     const projectAutoIncrementVersion = useProjectAutoIncrementVersionStorage();
+    // Same "standing app preference, not a project setting" reasoning as
+    // projectAutoIncrementVersion above.
+    const projectIncludeDateInFilename = useProjectIncludeDateInFilenameStorage();
 
     // Restores whatever file handle was persisted from the last Save
     // As.../Open Project this browser did (see utils/file-handle-storage.js)
@@ -320,7 +340,8 @@ export default defineComponent({
     return {data, router, backgroundsStorage, playerAnimationsStorage,
       workspaceStorage, configurationStorage, scoreFontStorage, squishCustomScoreFontStorage, dataTablesStorage,
       textStringsStorage, textFontStorage, soundEffectsStorage, songsStorage, titleScreenStorage, projectTitle,
-      projectDescription, projectDeveloper, projectVersion, projectAutoIncrementVersion, projectWebsite, projectEmail};
+      projectDescription, projectDeveloper, projectVersion, projectAutoIncrementVersion, projectIncludeDateInFilename,
+      projectWebsite, projectEmail};
   },
   methods: {
     // Bumps the last dot-separated segment of the version string (e.g.
@@ -450,11 +471,19 @@ export default defineComponent({
     // leaves periods alone (they're valid on every platform, unlike the
     // characters it actually strips), but "0.50.23.vcsgm" reads as though
     // ".23" were the file's  extension, not part of the version.
+    // The date/time stamp itself is only actually optional once a Title is
+    // filled in (see the "Include date/time" switch next to that field) -
+    // with no title at all, the date is the only thing keeping repeated
+    // saves from colliding on a bare "0-0-8.vcsgm", so it always stays on
+    // regardless of the switch in that case.
     buildSaveFilename() {
-      const titlePrefix = this.projectTitle ? `${sanitizeForFilename(this.projectTitle)}_` : '';
-      const versionSuffix = this.projectVersion ?
-        `_${sanitizeForFilename(this.projectVersion).replace(/\./g, '-')}` : '';
-      return `${titlePrefix}${getDateInfix()}${versionSuffix}.vcsgm`;
+      const includeDate = !this.projectTitle || this.projectIncludeDateInFilename;
+      const parts = [
+        this.projectTitle ? sanitizeForFilename(this.projectTitle) : '',
+        includeDate ? getDateInfix() : '',
+        this.projectVersion ? sanitizeForFilename(this.projectVersion).replace(/\./g, '-') : '',
+      ].filter(Boolean);
+      return `${parts.join('_')}.vcsgm`;
     },
 
     // Always prompts, regardless of whether a "Save" handle already exists
@@ -1042,6 +1071,21 @@ export default defineComponent({
   gap: 0 24px;
 }
 
+/* Same reasoning as .project-developer-version-row above (Vuetify's grid
+   breakpoints don't react to the actual available content width, plain
+   flexbox does) - puts the "Include date/time" switch beside the Title
+   field, wrapping onto a separate row once there isn't room. */
+.project-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 24px;
+}
+
+.project-title-field {
+  flex: 1 1 220px;
+}
+
 .project-developer-col {
   flex: 1 1 220px;
 }
@@ -1098,6 +1142,6 @@ export default defineComponent({
 }
 
 .project-flat-icon-btn:active >>> .v-icon {
-  color: #1976d2 !important;
+  color: var(--v-primary-base, #1976d2) !important;
 }
 </style>

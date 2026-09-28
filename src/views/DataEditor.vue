@@ -2,7 +2,7 @@
   <div>
     <v-card class="editor-container" :ripple="false" @click="deselectCard">
       <v-card-title>Data</v-card-title>
-      <v-card-text>
+      <v-card-text class="tab-intro-section">
         <p class="v-messages theme--light v-messages__message data-intro-paragraph">
           Define read-only lookup tables here (0-255 byte values each), then read them at
           runtime with the "Data table ID at index" block - useful for anything indexed by a
@@ -1406,6 +1406,23 @@ export default defineComponent({
   color: rgb(233, 30, 99) !important;
 }
 
+/* This whole per-format color palette (red/orange/blue/purple/pink above)
+   isn't reachable through any single shared class/variable the way the
+   app's "active" blue or "delete" red accents are (see App.vue's
+   --v-primary-base/--destructive-color comment) - five genuinely different
+   colors, not one repeated concept - so it gets the same catch-all filter
+   treatment as any other one-off multi-color group under Subdued Palette
+   (e.g. App.vue's sidebar tab icon rule), confirmed directly as a real
+   reported gap ("check the full app for elements that may not be getting
+   updated colors"). */
+.desaturate-app-colors .data-flat-icon-btn >>> .v-icon.data-format-icon-background,
+.desaturate-app-colors .data-flat-icon-btn >>> .v-icon.data-format-icon-player0,
+.desaturate-app-colors .data-flat-icon-btn >>> .v-icon.data-format-icon-player1,
+.desaturate-app-colors .data-flat-icon-btn >>> .v-icon.data-format-icon-sound,
+.desaturate-app-colors .data-flat-icon-btn >>> .v-icon.data-format-icon-text {
+  filter: saturate(50%) brightness(0.85);
+}
+
 .data-caption-row {
   display: flex;
   align-items: flex-end;
@@ -1478,6 +1495,16 @@ export default defineComponent({
   min-width: 0;
   background-color: white;
   padding: 1px 2px;
+}
+
+/* "Soft Colors" (see App.vue's desaturate-app-colors class/comment) - this
+   plain white cell background isn't covered by any of App.vue's blanket
+   rules (not a .v-card/.v-btn/etc, just a bare div), so it stayed the one
+   bright white surface left on this tab even with Soft Colors on. Matches
+   the app chrome/background tier's color (App.vue's .desaturate-app-
+   colors.v-application rule) rather than introducing a fourth shade. */
+.desaturate-app-colors .data-value-row {
+  background-color: #e1e1e1;
 }
 
 /* Which side of THIS cell a dragged value would land on (see

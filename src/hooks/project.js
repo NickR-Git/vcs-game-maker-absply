@@ -87,6 +87,25 @@ export const useErrorStorage = () => computed({
   },
 });
 
+// A small, separate piece of state from errorRef above, specifically for
+// showError's optional highlightHtml (see utils/build-error.js) - errorRef
+// itself renders through a plain <pre v-text> in App.vue (safe by default,
+// since most error text flowing through it is a raw DASM error, a project's
+// bBasic source, or other content this app doesn't fully control), so it
+// can never render inline HTML like <b> - only THIS ref, rendered through
+// a dedicated v-html element, can. Cleared automatically by every
+// showError call that doesn't pass a highlight, so a stale bold line from
+// an earlier, unrelated error never lingers above a later one.
+const errorHighlightRef = ref('');
+export const useErrorBannerHighlight = () => computed({
+  get() {
+    return errorHighlightRef.value;
+  },
+  set(value) {
+    errorHighlightRef.value = value;
+  },
+});
+
 // Live progress feed for the ROM build pipeline (see hooks/rom.js's
 // buildRom()) - a separate store from errorRef above so a build's own
 // step-by-step narration (which stage is running, which bank got relocated
@@ -108,8 +127,14 @@ export const clearCompileLog = () => {
   compileLogRef.value = [];
 };
 
-export const appendCompileLog = (text, level = 'info') => {
-  compileLogRef.value = [...compileLogRef.value, {text, level}];
+// html: opt-in only, and only ever for a caller building the string itself
+// out of known-safe pieces (e.g. plain numbers) - never for text that could
+// carry along unescaped project/user data (a DASM error, a bBasic source
+// snippet, a user-chosen subroutine/variable name), which
+// stays through the safe, escaped default path every other call already
+// uses (see App.vue's v-text vs v-html split on this same entry).
+export const appendCompileLog = (text, level = 'info', html = false) => {
+  compileLogRef.value = [...compileLogRef.value, {text, level, html}];
 };
 
 // Whether to restore the last saved project on startup, or always start from
@@ -129,6 +154,39 @@ export const useLoadLastProjectStorage = () => {
       raw.value = value ? 'true' : 'false';
     },
   });
+};
+
+// App.vue's "Refresh emulator" button (a manual recovery fallback for a
+// stuck/crashed emulator instance - see its comment) reloads the whole
+// page, which main.js treats exactly like a genuine fresh app launch -
+// including respecting "load last project" above when it's off, wiping the
+// very project the user was just working on as a side effect of a button
+// whose only real job is fixing the emulator preview, confirmed directly as
+// a real reported bug ("clicking refresh emulator unloads the current
+// project"). sessionStorage (not localStorage) - this only ever needs to
+// survive the ONE reload it's set right before, then main.js clears it
+// immediately after reading it, so a genuinely new browser session later
+// still respects the user's real preference normally.
+const SKIP_LOAD_LAST_PROJECT_CHECK_KEY = 'vcs-game-maker.skipLoadLastProjectCheckOnce';
+export const markSkipLoadLastProjectCheckOnce = () => {
+  try {
+    sessionStorage.setItem(SKIP_LOAD_LAST_PROJECT_CHECK_KEY, 'true');
+  } catch (e) {
+    // A reload not honoring this is no worse than before this existed -
+    // not worth failing the refresh itself over.
+  }
+};
+
+// Called once, at app startup (see main.js) - consumes (clears) the flag
+// the same read, so only the ONE reload it was set for is ever affected.
+export const consumeSkipLoadLastProjectCheckOnce = () => {
+  try {
+    const shouldSkip = sessionStorage.getItem(SKIP_LOAD_LAST_PROJECT_CHECK_KEY) === 'true';
+    sessionStorage.removeItem(SKIP_LOAD_LAST_PROJECT_CHECK_KEY);
+    return shouldSkip;
+  } catch (e) {
+    return false;
+  }
 };
 
 // Same "standing app preference, not part of the project itself" reasoning
@@ -203,6 +261,12 @@ export const useDataColumnsStorage = () =>
 // the point of a "always bump the version for me" habit).
 export const useProjectAutoIncrementVersionStorage = () =>
   useBooleanAppSetting('vcs-game-maker.projectAutoIncrementVersion');
+// Same "standing app preference, not a project setting" reasoning as the
+// others above. Defaults to true so an existing project's saved filenames
+// keep including the date/time stamp exactly as they always have, rather
+// than silently changing shape the moment this toggle shipped.
+export const useProjectIncludeDateInFilenameStorage = () =>
+  useBooleanAppSetting('vcs-game-maker.projectIncludeDateInFilename', true);
 
 // Same "standing app preference, not a project setting" reasoning as the
 // others above - the desktop (Electron) build's own "Test in Stella" button

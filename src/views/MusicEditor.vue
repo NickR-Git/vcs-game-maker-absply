@@ -5,6 +5,14 @@
       <v-alert type="warning" dense outlined :icon="false" class="alpha-notice">
         This feature is in alpha. Things may change or break. You've been warned!
       </v-alert>
+      <v-card-text class="tab-intro-section">
+        <p class="v-messages theme--light v-messages__message music-intro-paragraph">
+          Compose songs here, then play one at runtime with a "Play song" block (Actions tab).
+          A song is a sequence of patterns (drag to reorder, or repeat one in a row); each
+          pattern holds one or more instrument tracks, note by note, with its own tempo if it
+          needs one.
+        </p>
+      </v-card-text>
       <v-card-text class="dim-section">
         <div class="dim-controls">
           <v-switch
@@ -3379,6 +3387,7 @@ export default defineComponent({
    are kept visually identical too. */
 .dim-section {
   padding-bottom: 0;
+  padding-top: 0;
 }
 
 .dim-controls {
@@ -3656,7 +3665,7 @@ export default defineComponent({
    down, for a one-shot action button (Undo, zoom reset, etc.) that has no
    ongoing on/off state of its own to show that color persistently. */
 .music-flat-icon-btn:active >>> .v-icon {
-  color: #1976d2 !important;
+  color: var(--v-primary-base, #1976d2) !important;
 }
 
 /* "This is currently on/playing" tint for any .music-flat-icon-btn toggle -
@@ -3668,7 +3677,7 @@ export default defineComponent({
    !important color rule above - a plain :color="primary" prop on the v-icon
    itself loses to it silently. */
 .music-flat-icon-btn.music-icon-btn-active >>> .v-icon {
-  color: #1976d2 !important;
+  color: var(--v-primary-base, #1976d2) !important;
 }
 
 .music-icon-btn-size {

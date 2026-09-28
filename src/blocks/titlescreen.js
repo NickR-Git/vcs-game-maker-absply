@@ -114,6 +114,38 @@ export const titleCardScrollOffsetVarName = (ref) => `titleCardScroll_${sanitize
 // buildCardDataAsm) with just one frame.
 export const titleCardIndexVarName = (ref) => `titleCardIndex_${sanitizeCardRef(ref)}`;
 
+// The Title tab's help text ("~85 rows of 48x2/96x2, ~170 rows of
+// 48x1") is a PER-PAGE, on-screen draw-time budget - how many TV scanlines
+// the kernel takes to draw ONE page - not a ROM storage limit (see
+// generators/bbasic/titlescreen.js's estimateTitleScreenGraphicsBytes for
+// that one). Only ONE frame of an animated card ever draws per actual video
+// frame, so unlike ROM storage, a card's OTHER frames don't count here -
+// this uses cardFrameHeight (one frame's height) only, never multiplied by
+// frame count. Screens are also NOT summed together here - only one page's
+// routine runs per actual frame rendered, so a page over budget is a
+// problem even if every OTHER page is small, and a page under budget is
+// fine even if every OTHER page combined is huge.
+export const TITLE_SCREEN_PAGE_ROW_BUDGET = 85;
+
+export const titleScreenPageWeightedRows = (screen) =>
+  (screen.cards || []).reduce((total, card) => {
+    const typeInfo = TITLE_SCREEN_KERNEL_TYPES[card.type];
+    if (!typeInfo) return total;
+    return total + cardFrameHeight(card) * (typeInfo.doubleLine ? 1 : 0.5);
+  }, 0);
+
+// Whether any single page's stacked height actually exceeds the draw-time
+// budget above - read by hooks/rom.js's titleScreenOverflowHint so it only
+// mentions the "~85/170 rows" guidance when it's genuinely relevant, rather
+// than always pairing it with the (unrelated) ROM storage overflow this
+// project may hit for a totally different reason - a project can legitimately
+// need far more than "85 rows" of stored graphics data (many frames, many
+// pages) while every individual page still draws well within budget.
+export const titleScreenAnyPageOverRowBudget = (storage) => {
+  const {screens} = processTitleScreenStorageDefaults(storage);
+  return screens.some((screen) => titleScreenPageWeightedRows(screen) > TITLE_SCREEN_PAGE_ROW_BUDGET);
+};
+
 // Every animated card, across every screen, as "screenId:cardId" refs - see
 // titleCardFrameCounterVarName's comment for why this is resolved by
 // ref rather than waiting for kernel slot assignment.

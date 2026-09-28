@@ -2,7 +2,14 @@
   <div>
     <v-card class="editor-container" :ripple="false" @click="deselectCard">
       <v-card-title>Backgrounds</v-card-title>
-      <v-card-text>
+      <v-card-text class="tab-intro-section">
+        <p class="v-messages theme--light v-messages__message background-intro-paragraph">
+          Draw full-screen playfield backgrounds here, then set one as the active background
+          with a "Background" block (Actions tab). Each pixel is either on or off; if "Enable
+          per-row playfield colors (pfcolors)" is turned on (Options tab), each row can have
+          its own color instead of one fixed color for the whole background.
+        </p>
+
         <graphic-editor-toolbar :active-editor="effectiveEditor">
           <template v-slot:before-tools>
             <editor-zoom v-model="zoom" />
@@ -19,10 +26,9 @@
           </template>
           <template v-slot:after-tools>
             <div class="text-center">
-              <v-menu
+              <v-dialog
                 v-model="heightMenuVisible"
-                :close-on-content-click="false"
-                offset-x
+                width="480"
               >
                 <template v-slot:activator="{ on, attrs }">
                   <v-btn
@@ -103,7 +109,7 @@
                     </v-btn>
                   </v-card-actions>
                 </v-card>
-              </v-menu>
+              </v-dialog>
             </div>
           </template>
           <template v-if="pfColorsEnabled" v-slot:below-tools>
@@ -222,7 +228,7 @@
                       :ref="pixelEditorRefKey(background)"
                       :width="32"
                       :height="background.pixels.length"
-                      :aspectRatio="32 / (background.pixels.length || 1)"
+                      :aspectRatio="(32 / (background.pixels.length || 1)) * (11 / 24)"
                       name="background"
                       :value="background.pixels"
                       fgColor="orange"
@@ -234,6 +240,7 @@
                       :hideToolbar="true"
                       @input="(pixels) => handleBackgroundPixelsInput(background, pixels)"
                       @clear="() => handleClearRowColors(background)"
+                      @clear-colors="() => handleClearRowColors(background)"
                       @activate="(editorInstance) => setActiveEditor(editorInstance, background.id)"
                     >
                       <template v-if="pfColorsEnabled" v-slot:sidebar>
@@ -306,7 +313,7 @@ import {useBackgroundsStorage, useColorPaletteStorage, useConfigurationStorage,
 import {useEditorZoom} from '../hooks/zoom';
 import {colorByteToCss} from '../utils/palette';
 import {resizePixelMatrixHeight} from '../utils/pixels';
-import {DEFAULT_BACKGROUNDS, DEFAULT_ROW_COLOR, effectiveBackgroundRows,
+import {DEFAULT_BACKGROUNDS, DEFAULT_ROW_COLOR, clearRowColors, effectiveBackgroundRows,
   processBackgroundStorageDefaults} from '../blocks/background';
 
 // Width of one background editor at 100% zoom.
@@ -608,7 +615,7 @@ export default defineComponent({
     // an otherwise blank graphic.
     const handleClearRowColors = (background) => {
       if (!pfColorsEnabled.value || !background.rowColors) return;
-      background.rowColors = background.rowColors.map(() => DEFAULT_ROW_COLOR);
+      background.rowColors = clearRowColors(background.rowColors);
       handleChildChange();
       instance.proxy.$forceUpdate();
     };
@@ -823,22 +830,22 @@ export default defineComponent({
   box-shadow: none !important;
 }
 
-/* Split, not just zeroed: v-card-text (canvas) and v-card-actions
-   (toolbar, below) each carry their own default Vuetify padding, which
-   don't match each other (16px vs 8px) - zeroing v-card-text's padding
-   entirely earlier left its LEFT edge flush with the card while the
-   toolbar's left padding (untouched) kept it indented, so the two no
-   longer lined up. Zeroing left/right on both instead lines their left
-   edges up exactly with each other (and with the graphic itself), while a
-   small bottom/top pair (4px each, 8px combined) keeps a real but modest
-   gap between canvas and toolbar instead of them sitting flush against
-   each other. */
+/* PixelEditor.vue's own left/right v-card-text/v-card-actions padding
+   (see its comment) is meant for standalone use - redundant here since
+   .background-card above already pads the WHOLE background entry the same
+   way (12px), doubling up (12+16=28px) into a visibly wider left/right
+   gutter around just the graphic/tools, and a taller bottom gutter, than
+   every other tab has. Zeroed back out, scoped to this nested instance
+   only, so .background-card's own 12px is the only gutter left. */
 .pixel-editor-container >>> .v-card__text {
-  padding: 0 0 4px 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
 }
 
 .pixel-editor-container >>> .v-card__actions {
-  padding: 4px 0 0 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  padding-bottom: 0 !important;
 }
 
 /* Only this top strip is draggable (see hooks/drag-reorder.js's own
@@ -986,9 +993,15 @@ export default defineComponent({
    the now-absolutely-positioned collapse button/ID badge instead of them
    overlapping this field, now that neither sits in a normal-flow row above
    it anymore. Matches .soundfx-name-field's margin-top (SoundFXEditor.vue)
-   for consistent badge-to-name spacing across every tab. */
+   for consistent badge-to-name spacing across every tab.
+   margin-bottom: -12px - same fix, same measured ~12px excess, as
+   PlayerEditor.vue's .animation-name-field (see its comment) - this field
+   isn't hide-details either, so Vuetify reserves a hint/error strip
+   below it, taller than DataEditor.vue's equivalent card ends up by the
+   same amount. */
 .background-name-field {
   margin-top: 20px;
+  margin-bottom: -12px;
 }
 
 .add-frame-buttom {

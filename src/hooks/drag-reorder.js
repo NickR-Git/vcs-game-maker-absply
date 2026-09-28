@@ -78,12 +78,23 @@ export const useDragReorder = (getItems, setItems) => {
       event.preventDefault();
       event.dataTransfer.dropEffect = 'move';
       dragOverIndex.value = index;
+      // Stops this dragover from also reaching an ANCESTOR's own
+      // dragTargetListeners (e.g. TitleScreenEditor.vue's per-screen card
+      // list nested inside that screen's own draggable-card list) -
+      // without this, dragover bubbling up the DOM marked the outer
+      // screen/card as "dragged over" too, showing its own drag-above
+      // highlight for a drag that can only ever reorder within this
+      // nested list, never actually move onto that outer target
+      // (confirmed as a real reported bug).
+      event.stopPropagation();
     },
-    dragleave: () => {
+    dragleave: (event) => {
       if (dragOverIndex.value === index) dragOverIndex.value = null;
+      event.stopPropagation();
     },
     drop: (event) => {
       event.preventDefault();
+      event.stopPropagation();
       const from = draggedIndex.value;
       reset();
       if (from == null || from === index) return;

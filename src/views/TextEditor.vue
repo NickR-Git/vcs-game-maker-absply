@@ -2,7 +2,7 @@
   <div>
     <v-card class="editor-container" :ripple="false" @click="deselectCard">
       <v-card-title>Text</v-card-title>
-      <v-card-text>
+      <v-card-text class="tab-intro-section">
         <p class="v-messages theme--light v-messages__message text-intro-paragraph">
           Define text blocks here, then display them at runtime with either the "Show text"
           block (pick from a list) or "Show text ID" - useful for choosing a message from a
@@ -512,17 +512,6 @@ export default defineComponent({
   padding-right: 0;
 }
 
-/* Pulls this intro paragraph up 5px - confirmed directly (measured from the
-   "Text" title's own text glyphs down to this paragraph's own top: 20px,
-   vs. only 15px between the Text Minikernel Font subcard's own header and
-   ITS description right below it - TextFontEditor.vue's own custom header
-   has less bottom padding than Vuetify's default v-card-title). Matches
-   that tighter subcard spacing instead of the wider gap Vuetify's own
-   v-card-title default padding otherwise leaves here. */
-.text-intro-paragraph {
-  margin-top: -5px;
-}
-
 .text-bkcolor-row {
   display: flex;
   align-items: center;
@@ -733,11 +722,17 @@ export default defineComponent({
 }
 
 /* Split from the rest of the card's content (text-message-section) so the
-   name field can stay visible while collapsed - v-card-text's own default
-   padding-bottom would otherwise open a gap between them that the original,
-   single v-card-text never had. */
+   name field can stay visible while collapsed. padding-bottom: 0 (an
+   earlier version) left almost no room below the name field's
+   underline while collapsed - unlike DataEditor.vue's equivalent .data-
+   name-section, whose Table name field isn't hide-details, so Vuetify
+   reserves a ~22px hint/error strip below it "for free" - this
+   field IS hide-details (no hint text ever needed here), so that room
+   has to come from padding instead, tuned to match that same ~22px gap
+   directly (confirmed against the real rendered card) rather than
+   guessing. */
 .text-name-section {
-  padding-bottom: 0;
+  padding-bottom: 22px;
 }
 
 .text-message-section {

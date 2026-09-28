@@ -212,9 +212,16 @@ export default defineComponent({
   width: 16px !important;
 }
 
+/* margin-top: -2px - .quick-color-label-row's align-items: center lines
+   this label's box up against the 16px collapse button next to it, but
+   the label's text sits slightly LOW within that box (ordinary text
+   line-height, vs. the icon centered exactly in the button), reading as
+   visibly unaligned - confirmed directly as a real reported "text needs
+   to move up a pixel or two". */
 .quick-color-section-label {
   font-size: 12px;
   color: rgba(0, 0, 0, 0.6);
+  margin-top: -2px;
   margin-bottom: 4px;
 }
 
@@ -272,15 +279,17 @@ export default defineComponent({
    action about to happen - a red outline plus the "X" icon (see
    .quick-color-delete-icon below) rather than just the plain hover ring,
    so it's unambiguous this click removes the color instead of selecting
-   it. */
+   it. var(--destructive-color, red) - see App.vue's comment on that
+   variable - so this darkens along with every other "delete" accent under
+   Subdued Palette instead of staying the one leftover bright red. */
 .quick-color-swatch-delete-armed {
-  outline: 2px solid red;
+  outline: 2px solid var(--destructive-color, red);
   outline-offset: -2px;
   cursor: not-allowed;
 }
 
 .quick-color-delete-icon {
-  color: red !important;
+  color: var(--destructive-color, red) !important;
   /* A dark swatch would otherwise swallow a plain red icon - the shadow
      keeps the "X" readable against any quick color, light or dark. */
   filter: drop-shadow(0 0 1px white) drop-shadow(0 0 1px white);

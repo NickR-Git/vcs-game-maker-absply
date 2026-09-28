@@ -250,6 +250,6 @@ export default {
 }
 
 .emulator-flat-icon-btn:active >>> .v-icon {
-  color: #1976d2 !important;
+  color: var(--v-primary-base, #1976d2) !important;
 }
 </style>

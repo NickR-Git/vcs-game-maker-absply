@@ -11,7 +11,8 @@ import BlocklyBB, {RELOCATABLE_EVENT_NAMES, SYSTEM_VARIABLES} from '../generator
 import {processPlayerAnimationsStorageDefaults} from '../generators/bbasic/sprites';
 import {getExtendedScoreGraphics, getTextMinikernelSiblingFiles} from '../generators/bbasic/text-minikernel-files';
 import {getTitleScreenSiblingFiles} from '../generators/bbasic/titlescreen-files';
-import {TITLE_SCREEN_SUBROUTINE_NAME} from '../generators/bbasic/titlescreen';
+import {TITLE_SCREEN_SUBROUTINE_NAME, estimateTitleScreenGraphicsBytes} from '../generators/bbasic/titlescreen';
+import {titleScreenAnyPageOverRowBudget} from '../blocks/titlescreen';
 import {processBackgroundStorageDefaults} from '../blocks/background';
 import {findSongById} from '../blocks/music';
 import {buildScoreFontOverride, SQUISH_SCORE_FONT} from '../utils/score-font';
@@ -23,7 +24,7 @@ import {showError} from '../utils/build-error';
 import {computeRomCapacity} from '../utils/rom-capacity';
 import {useGeneratedBasic} from './generated';
 import {appendCompileLog, clearCompileLog, useBackgroundsStorage, useConfigurationStorage, useErrorStorage,
-  usePlayerAnimationsStorage, useTextFontStorage, useWorkspaceStorage} from './project';
+  usePlayerAnimationsStorage, useTextFontStorage, useTitleScreenStorage, useWorkspaceStorage} from './project';
 import {getRelocationBanks, resetRelocationBanks, setRelocationBank,
   recordSuccessfulRelocationBanks, seedRelocationBanksFromLastSuccess} from './relocation-banks';
 import {markRomUpToDate, markRomOutdated, useRomOutdated, useHasCompiledRom,
@@ -164,6 +165,180 @@ export const usesPlayer0RainbowColors = () => {
 // the cascade directly.
 const isOverflowError = (e) => /segment overflow|origin reverse-indexed|Unknown Mnemonic 'jmp BS_(jsr|return)'/i
     .test((e && e.message) || '');
+
+// Every title screen's combined graphics (see generators/bbasic/titlescreen.js's
+// registerTitleScreenSubroutine) compile into ONE subroutine, which - unlike
+// ordinary relocatable content - needs a bank fully to itself (the
+// Titlescreen Kernel's documentation: "make sure the minikernel has the
+// bank fully to itself"). That means an overflow caused by too much title
+// screen data can never be fixed by relocating things to different banks -
+// no bank is any bigger than any other - so the real build's 64-attempt
+// relocation retry loop below would otherwise burn through its whole budget
+// (confirmed to take about a minute) before giving up with a generic "gave
+// up after trying 64 combinations" message that never mentions title
+// screens at all. Surfaced only as a hint alongside the real DASM error
+// (never in place of it, and never used to skip/short-circuit a build) -
+// estimateTitleScreenGraphicsBytes is only a fallback here - whenever the
+// failed compile left a usable partial symbol table (e.partialSymbolmap,
+// see bb-compiler.js's assemble()), computeRomCapacity reads the REAL
+// assembled bytes for the title screen's bank straight from that failed
+// attempt instead - the actual total (graphics data AND the kernel/driver
+// code sharing the same bank), not an estimate. That real number is also
+// logged as a dedicated bold compile-log line (not just folded into the
+// plain-text error banner below), so it stands out as the one concrete fact
+// pointing at what's actually filling up the bank. Deliberately talks in
+// ROM BYTES, not the Title tab's "~85/170 rows" help text - that number is
+// a completely different, per-PAGE budget (how many TV scanlines ONE page
+// takes to draw, unaffected by an animated card's OTHER frames or by other
+// pages), and reusing it here for a ROM STORAGE problem (every frame on
+// every page, whether currently visible or not) was confirmed directly as
+// misleading - a project can legitimately need far more than "85 rows" of
+// stored graphics data while every individual page still draws in time.
+// Rough, but not dependent on any particular build having already run or
+// left usable partial diagnostic data (unlike the real usedBytes/totalBytes
+// path below, which needs a failed compile's partial DASM symbol table to
+// exist AND be usable - confirmed directly as unreliable for exactly the
+// overflow case this hint exists for: a bank that fails deep inside the
+// title screen kernel's content can abort before DASM ever resolves a
+// usable "scoretable" symbol for that bank at all). titleScreenUsedKernelKeys
+// (set by registerTitleScreenSubroutine during code GENERATION, which
+// already succeeded by the time an ASSEMBLY-stage overflow like this is
+// caught) says exactly which minikernel copies are actually compiled in -
+// each is a separate #ifconst-included file with its real code,
+// on top of the driver's fixed vsync/vblank/overscan/playfield boilerplate
+// every title screen pays regardless of card count.
+const TITLE_SCREEN_DRIVER_CODE_BYTES = 300;
+// Per-copy code size genuinely differs by graphic type (public/bb19/
+// titlescreen/*_kernel.asm) - 96x2 pushes twice the pixel columns through
+// the same per-scanline draw loop as 48x1/48x2, and needs its own
+// row-color table logic 48x1 skips entirely, so a single flat estimate
+// for every type under- or over-counted depending on which types a
+// project actually used. Approximate (still no way to know the REAL
+// assembled size without a compile - see this function's own caller's
+// comment), scaled from each type's real combined source line count
+// (48x1: 158 lines across its 1/X files, 48x2: 199, 96x2: 259 self-
+// contained) against the previous flat 150 baseline (kept as 48x2's own
+// number, since it sits in the middle).
+const TITLE_SCREEN_PER_KERNEL_COPY_CODE_BYTES_BY_TYPE = {
+  '48x1': 120,
+  '48x2': 150,
+  '96x2': 195,
+};
+const DEFAULT_PER_KERNEL_COPY_CODE_BYTES = 150;
+const estimateTitleScreenKernelCodeBytes = () => {
+  const usedKeys = BlocklyBB.titleScreenUsedKernelKeys;
+  if (!usedKeys) return TITLE_SCREEN_DRIVER_CODE_BYTES;
+  let bytes = TITLE_SCREEN_DRIVER_CODE_BYTES;
+  usedKeys.forEach((key) => {
+    // Strips the "_N" kernel-copy slot suffix (e.g. "96x2_3" -> "96x2") -
+    // see assignKernelSlots' own `${card.type}_${slot}` key format.
+    const type = key.replace(/_\d+$/, '');
+    bytes += TITLE_SCREEN_PER_KERNEL_COPY_CODE_BYTES_BY_TYPE[type] ?? DEFAULT_PER_KERNEL_COPY_CODE_BYTES;
+  });
+  return bytes;
+};
+
+// Every title screen's combined graphics (see generators/bbasic/titlescreen.js's
+// registerTitleScreenSubroutine) compile into ONE subroutine, which - unlike
+// ordinary relocatable content - needs a bank fully to itself (the
+// Titlescreen Kernel's documentation: "make sure the minikernel has the
+// bank fully to itself"). That means an overflow caused by too much title
+// screen data can never be fixed by relocating things to different banks -
+// no bank is any bigger than any other - so the real build's 64-attempt
+// relocation retry loop below would otherwise burn through its whole budget
+// (confirmed to take about a minute) before giving up with a generic "gave
+// up after trying 64 combinations" message that never mentions title
+// screens at all. Surfaced only as a hint alongside the real DASM error
+// (never in place of it, and never used to skip/short-circuit a build).
+// Prefers the REAL assembled bytes for the title screen's bank (graphics
+// AND kernel code together) whenever the failed compile left a usable
+// partial DASM symbol table (see bb-compiler.js's assemble()); falls back
+// to estimateTitleScreenGraphicsBytes + estimateTitleScreenKernelCodeBytes
+// otherwise, clearly labeled as an estimate rather than presented as exact.
+// Deliberately talks in ROM BYTES, not the Title tab's "~85/170 rows" help
+// text - that number is a completely different, per-PAGE budget (how many
+// TV scanlines ONE page takes to draw, unaffected by an animated card's
+// OTHER frames or by other pages), and reusing it here for a ROM STORAGE
+// problem (every frame on every page, whether currently visible or not)
+// was confirmed directly as misleading - a project can legitimately need
+// far more than "85 rows" of stored graphics data while every individual
+// page still draws in time.
+// Returns {text, highlight}: text is the plain-text paragraph appended to
+// the error banner's <pre> (see showError - safe by default, escaped),
+// highlight is a short, bold HTML snippet (built only from this function's
+// plain numbers, never from e/project data) rendered separately above
+// it via showError's highlightHtml param and useErrorBannerHighlight - a
+// plain <pre v-text> can't render inline <b> itself, confirmed directly as
+// why an earlier version of this (the bytes count folded into the plain
+// text alone) never actually appeared bold in the error banner, only in
+// the compile log line below returns '' for text when there's nothing to
+// say (see the early return just below) - always paired with an empty
+// highlight too, callers pass both together.
+const titleScreenOverflowHint = (e) => {
+  // Nothing to say if the project has no title screen content at all - a
+  // plain kernel driver overhead number would wrongly imply the title
+  // screen is even relevant to an unrelated overflow.
+  if (!BlocklyBB.titleScreenUsedKernelKeys || !BlocklyBB.titleScreenUsedKernelKeys.size) {
+    return {text: '', highlight: ''};
+  }
+  const bank = (getRelocationBanks().subroutineBanks || {})[TITLE_SCREEN_SUBROUTINE_NAME] || 1;
+  // Only worth bringing up when a page is ACTUALLY over that separate
+  // draw-time budget - otherwise every ROM storage overflow would wrongly
+  // imply the rows guidance was violated too, when a project can easily
+  // need far more than "85 rows" of stored graphics (many frames, many
+  // pages) while every individual page still draws well within budget.
+  const rowsClause = titleScreenAnyPageOverRowBudget(useTitleScreenStorage()) ?
+    ` This is separate from the Title tab's "~85/170 rows" guidance, which is also currently ` +
+    `exceeded on at least one page - that limits how much ONE page draws on screen (a draw-time ` +
+    `budget), not how much is stored.` : '';
+  let usedBytes = null;
+  let totalBytes = null;
+  let isEstimate = false;
+  if (e && e.partialSymbolmap) {
+    try {
+      const capacity = computeRomCapacity({output: e.partialOutput, symbolmap: e.partialSymbolmap});
+      const bankCapacity = capacity && capacity.perBank[bank - 1];
+      if (bankCapacity) {
+        usedBytes = bankCapacity.usableBytes - bankCapacity.freeBytes;
+        totalBytes = bankCapacity.usableBytes;
+      }
+    } catch (capacityErr) {
+      // Falls through to the estimate below - losing this real number
+      // isn't worth failing the whole error report over.
+    }
+  }
+  if (usedBytes == null) {
+    isEstimate = true;
+    usedBytes = estimateTitleScreenGraphicsBytes(useTitleScreenStorage()) + estimateTitleScreenKernelCodeBytes();
+    // 3956, not 4096 - measured directly against a real successful compile
+    // (a near-empty title screen used 418 of 3956 usable bytes per
+    // computeRomCapacity), the standard kernel's footer/bankswitch
+    // trampoline (ORG $2FF4-bscode_length in the shipped kernel asm)
+    // reserves real space this fallback needs to account for too. Even
+    // with that correction, this estimate can still be WRONG - confirmed
+    // directly against a real project that overflowed while this exact
+    // formula predicted only 3032/3956 bytes used - the estimate has no
+    // way to see the 256-byte row-color alignment padding buildCardDataAsm
+    // can need, so it can undercount a real failure. Phrased in the
+    // message as "estimated to need at least", not a guarantee either way.
+    totalBytes = 3956;
+  }
+  appendCompileLog(`Title screen bank ${bank} usage${isEstimate ? ' (estimated)' : ''}: ` +
+    `<b>${usedBytes} / ${totalBytes} bytes</b> (graphics data + kernel code)`, 'info', true);
+  // The error banner's <pre> can't render inline HTML (see App.vue's
+  // v-text vs v-html split, and useErrorBannerHighlight's comment), so the
+  // WHOLE explanatory paragraph lives here (rendered as a separate div right
+  // after the <pre>, see App.vue's template) rather than split between a
+  // plain-text "text" paragraph and a separate bold summary - text stays
+  // empty below, this is the one and only paragraph shown.
+  const highlight = `This may be caused by the Title Screen's graphics data: every animation frame on ` +
+    `every page is baked into ROM at once, and the title screen's bank (bank ${bank}) ` +
+    `${isEstimate ? 'is estimated to need at least' : 'is using'} <b>${usedBytes} of its ${totalBytes}</b> ` +
+    `usable bytes${isEstimate ? ' (a real build can still fail even under this estimate)' : ''}.` +
+    `${rowsClause} Try reducing animation frame counts, shrinking card heights, ` +
+    `or reusing frames across cards.`;
+  return {text: '', highlight};
+};
 
 // How many physical banks each bankswitched ROM size actually provides
 // (2k/4k don't bankswitch at all, so they're absent - overflowing there just
@@ -1376,9 +1551,11 @@ const buildRomInner = async () => {
           functions: BlocklyBB.getFunctionNames(),
         },
       };
+      const titleScreenHint = titleScreenOverflowHint(e);
       const annotatedError = new Error(
-          `${e.message}\n\nBank assignments at failure:\n${JSON.stringify(diagnostics, null, 2)}`);
-      showError(errorStorage, 'Error while compiling bBasic code', code, annotatedError);
+          `${e.message}${titleScreenHint.text}\n\nBank assignments at failure:\n` +
+          `${JSON.stringify(diagnostics, null, 2)}`);
+      showError(errorStorage, 'Error while compiling bBasic code', code, annotatedError, titleScreenHint.highlight);
       return false;
     }
   }
@@ -1401,10 +1578,12 @@ const buildRomInner = async () => {
     },
   };
   appendCompileLog('Build failed.', 'error');
+  const titleScreenHint = titleScreenOverflowHint(lastFailure);
   showError(errorStorage, 'Error while compiling bBasic code', lastCode,
       new Error(`${(lastFailure && lastFailure.message) || 'Ran out of relocation attempts.'}\n\n` +
         `Gave up after trying ${MAX_RELOCATION_ATTEMPTS} different bank combinations without finding one ` +
-        `that compiles.\n\nBank assignments at failure:\n${JSON.stringify(diagnostics, null, 2)}`));
+        `that compiles.${titleScreenHint.text}\n\nBank assignments at failure:\n` +
+        `${JSON.stringify(diagnostics, null, 2)}`), titleScreenHint.highlight);
   return false;
 };
 
@@ -1571,7 +1750,16 @@ export const buildTitleScreenPreviewRom = async (screenId) => {
       return true;
     } catch (e) {
       appendCompileLog('Preview build failed.', 'error');
-      showError(errorStorage, 'Error while compiling title screen preview code', code, e);
+      // Unlike the real build, there's no relocation retry loop to burn
+      // through here - _titlescreen_system either fits its dedicated bank
+      // or it doesn't, so an overflow-shaped failure here is title screen
+      // data almost by construction (this build compiles nothing else that
+      // could overflow a bank by itself). Still phrased as a hint, not a
+      // certainty - see titleScreenOverflowHint's comment.
+      const titleScreenHint = isOverflowError(e) ? titleScreenOverflowHint(e) : {text: '', highlight: ''};
+      const annotatedError = isOverflowError(e) ? new Error(`${e.message}${titleScreenHint.text}`) : e;
+      showError(errorStorage, 'Error while compiling title screen preview code', code, annotatedError,
+          titleScreenHint.highlight);
       return false;
     }
   } finally {

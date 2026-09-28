@@ -39,7 +39,7 @@
           </v-btn>
         </v-btn-toggle>
         <v-divider class="get-inner-divider" vertical />
-        <v-btn icon small title="Undo" :disabled="!activeEditor && !hasPendingQuickColorUndo" @click="handleUndo">
+        <v-btn icon small title="Undo" :disabled="!activeEditor && !hasPendingQuickColorUndo && !hasPendingCardUndo" @click="handleUndo">
           <v-icon>mdi-undo</v-icon>
         </v-btn>
         <v-btn icon small title="Redo" :disabled="!activeEditor" @click="() => activeEditor.redo()">
@@ -63,6 +63,7 @@
 </template>
 <script>
 import {tryUndoQuickColorDeletion, usePendingQuickColorDeletion} from '../hooks/quick-color-undo';
+import {tryUndoCardDeletion, usePendingCardDeletion} from '../hooks/card-delete-undo';
 
 // The single toolbar shared across every tab with a graphic editor
 // (PlayerEditor/BackgroundEditor/TitleScreenEditor/ScoreFontEditor/
@@ -129,6 +130,11 @@ export default {
     hasPendingQuickColorUndo() {
       return usePendingQuickColorDeletion().value;
     },
+    // Same reasoning as hasPendingQuickColorUndo above, for a deleted
+    // Title Screen card (see hooks/card-delete-undo.js).
+    hasPendingCardUndo() {
+      return usePendingCardDeletion().value;
+    },
   },
   mounted() {
     // closest() (not querySelector, which only searches DESCENDANTS) since
@@ -150,12 +156,16 @@ export default {
     setTool(tool) {
       if (this.activeEditor) this.activeEditor.setTool(tool);
     },
-    // Tries the pending quick color deletion first (see
-    // hooks/quick-color-undo.js) - only actually restores it if nothing's
-    // been drawn on the SAME frame that was focused when it was deleted
-    // since, falling through to this frame's normal pixel undo either
-    // way otherwise.
+    // Tries the pending card deletion first (see hooks/card-delete-undo.js
+    // - no staleness check, unlike quick color deletion below, since
+    // nothing about a deleted card ties it to any particular frame's
+    // pixel undo history the way a quick color swatch does), then the
+    // pending quick color deletion (see hooks/quick-color-undo.js - only
+    // actually restores it if nothing's been drawn on the SAME frame that
+    // was focused when it was deleted since), falling through to this
+    // frame's normal pixel undo either way otherwise.
     handleUndo() {
+      if (tryUndoCardDeletion()) return;
       if (tryUndoQuickColorDeletion(this.activeEditor)) return;
       if (this.activeEditor) this.activeEditor.undo();
     },
@@ -253,7 +263,7 @@ export default {
 }
 
 .get-tools >>> .v-btn.v-btn--active .v-icon {
-  color: #1976d2 !important;
+  color: var(--v-primary-base, #1976d2) !important;
 }
 
 .get-tools >>> .v-btn-toggle {

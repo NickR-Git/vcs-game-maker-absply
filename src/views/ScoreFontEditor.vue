@@ -1,7 +1,13 @@
 <template>
   <v-card flat class="editor-container">
     <v-card-title>Score</v-card-title>
-    <v-card-text>
+    <v-card-text class="tab-intro-section">
+      <p class="v-messages theme--light v-messages__message scorefont-intro-paragraph">
+        The score display shown at the bottom of the screen - set its value with "Score set to"
+        or "Score change by" (Actions tab), and its color with the Score category's color
+        blocks. Pick a built-in digit font below, or draw a custom one.
+      </p>
+
       <v-select
         v-model="selectedFont"
         :items="scoreFontOptions"

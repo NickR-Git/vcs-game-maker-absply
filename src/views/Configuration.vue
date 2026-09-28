@@ -224,7 +224,7 @@
         />
         <v-switch
           v-model="desaturateBlocklyColors"
-          label="Soft Colors"
+          label="Subdued Palette"
           hint="Mutes block and app colors to half their normal saturation for a calmer, less colorful view."
           persistent-hint
           class="option-switch"
@@ -653,7 +653,7 @@ export default defineComponent({
 }
 
 .reset-to-defaults-btn.v-btn:active {
-  color: #1976d2 !important;
+  color: var(--v-primary-base, #1976d2) !important;
 }
 
 /* Left-aligned collapse chevron + section title - matches the other tabs'

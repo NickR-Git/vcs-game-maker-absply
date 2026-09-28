@@ -88,7 +88,7 @@ export default {
 
 .pixel-grid-toggle-btn-active >>> .v-icon,
 .pixel-grid-toggle-btn-active .pixel-grid-toggle-label {
-  color: #1976d2 !important;
+  color: var(--v-primary-base, #1976d2) !important;
 }
 
 /* The text variant (label prop, see this button's  comment) - a small
@@ -146,7 +146,7 @@ export default {
 }
 
 .pixel-grid-toggle-btn-active .pixel-grid-toggle-label {
-  background-color: #1976d2;
+  background-color: var(--v-primary-base, #1976d2);
   color: #fff !important;
 }
 </style>

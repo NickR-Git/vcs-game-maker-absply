@@ -38,6 +38,16 @@
          a per-instance one - Clear is the one action still requested per
          card/frame, so it's the only thing left to render here. -->
     <v-card-actions v-if="showClearButton" class="pixel-editor-tools">
+      <v-btn
+        v-if="$slots.sidebar"
+        icon
+        small
+        title="Clear this graphic's color data only (leaves the drawing itself untouched)"
+        class="pixel-editor-clear-colors-btn"
+        @click="$emit('clear-colors')"
+      >
+        <v-icon>mdi-invert-colors-off</v-icon>
+      </v-btn>
       <div class="pixel-editor-hidden-toolbar-row">
         <slot name="toolbar-end" />
         <v-btn
@@ -602,8 +612,19 @@ export default {
   padding-bottom: 8px;
 }
 
+/* v-card-actions' own default left/right padding (8px) doesn't match
+   v-card-text's above (16px) - left as-is, the two rows' left edges land at
+   different x positions, throwing off the toolbar row/clear-colors button's
+   centering under the canvas/sidebar above them (confirmed as a real
+   reported bug, visible once a caller has a color sidebar). Matched to
+   v-card-text's left/right here (bottom bumped to the same 8px for a
+   consistent gutter all around) so every tab using this component gets the
+   same alignment without each caller redeclaring it - a caller nesting this
+   inside its own already-padded card (e.g. BackgroundEditor.vue's
+   .background-card) can zero this left/right padding back out locally to
+   avoid doubling up. */
 .pixel-editor-tools {
-  padding-top: 0;
+  padding: 0 16px 8px 16px;
 }
 
 /* Lays the optional color sidebar beside the canvas. align-items: stretch makes
@@ -661,12 +682,24 @@ export default {
   transform: scale(0.82);
 }
 
+/* Sits under the color sidebar, not the canvas. Width matched to
+   PlayfieldColorStrip.vue's own 22px strip (not the generic 26px icon-
+   button width above) so the icon centers under the swatches themselves;
+   margin-right reproduces the strip's own 4px gap to the canvas, so the
+   toolbar row beside it still starts exactly where the canvas does. */
+.pixel-editor-clear-colors-btn {
+  flex: 0 0 22px;
+  width: 22px !important;
+  margin-right: 4px !important;
+}
+
 /* The Clear button - centered as one group with the "toolbar-end" slot's
    own Copy/Paste (when a caller supplies them) under the graphic. */
 .pixel-editor-hidden-toolbar-row {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 </style>

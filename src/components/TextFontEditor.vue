@@ -17,7 +17,7 @@
       </p>
       <graphic-editor-toolbar class="text-font-controls-row" :active-editor="activeEditor" :bleed="16">
         <template v-slot:before-tools>
-          <editor-zoom v-model="zoom" class="text-font-zoom" />
+          <editor-zoom v-model="zoom" :levels="textFontZoomLevels" class="text-font-zoom" />
         </template>
         <template v-slot:after-tools>
           <v-switch
@@ -192,7 +192,13 @@ import GraphicEditorToolbar from './GraphicEditorToolbar.vue';
 import PixelEditor from './PixelEditor.vue';
 import {useCollapsedIds} from '../hooks/collapse';
 import {useConfigurationStorage, useTextFontStorage} from '../hooks/project';
-import {useEditorZoom} from '../hooks/zoom';
+import {useEditorZoom, ZOOM_LEVELS} from '../hooks/zoom';
+
+// Each glyph is a tiny fixed 4x5 grid - unlike every other tab's graphics,
+// zooming below 100% here makes it too small to usefully edit at all, so
+// the shared 50%/75% stops are dropped, scoped to just this tab (see
+// useEditorZoom/stepZoom's own "levels" param).
+const TEXT_FONT_ZOOM_LEVELS = ZOOM_LEVELS.filter((level) => level >= 1);
 import {
   TEXT_GLYPH_ORDER,
   TEXT_GLYPH_WIDTH,
@@ -244,7 +250,7 @@ export default defineComponent({
   setup() {
     const textFontStorage = useTextFontStorage();
     const configurationStorage = useConfigurationStorage();
-    const zoom = useEditorZoom('textfont', 2);
+    const zoom = useEditorZoom('textfont', 2, TEXT_FONT_ZOOM_LEVELS);
     const glyphWidth = computed(() => `${Math.round(GLYPH_BASE_WIDTH * zoom.value)}px`);
     // Same width, same per-pixel size as a real glyph tile - the cursor is
     // TEXT_CURSOR_WIDTH (4) pixels wide, identical to TEXT_GLYPH_WIDTH.
@@ -371,7 +377,7 @@ export default defineComponent({
 
     return {
       state, handleChange, handleReset, ready, resetToken, glyphLabel,
-      zoom, glyphWidth, cursorGlyphWidth, isCollapsed, toggleCollapsed, cardEntry: CARD_ENTRY,
+      zoom, textFontZoomLevels: TEXT_FONT_ZOOM_LEVELS, glyphWidth, cursorGlyphWidth, isCollapsed, toggleCollapsed, cardEntry: CARD_ENTRY,
       showInGamePreview, interlacedPreviewRows, enableTextScrollCursor,
       TEXT_GLYPH_ORDER, TEXT_GLYPH_WIDTH, TEXT_GLYPH_HEIGHT, TEXT_CURSOR_WIDTH, TEXT_CURSOR_HEIGHT, PIXEL_ASPECT,
       activeEditor, activeEditorKey, setActiveEditor,

@@ -2,6 +2,14 @@
   <div>
     <v-card class="editor-container" :ripple="false" @click="deselectCard">
       <v-card-title>Sound</v-card-title>
+      <v-card-text class="tab-intro-section">
+        <p class="v-messages theme--light v-messages__message soundfx-intro-paragraph">
+          Design sound effects here, then trigger one at runtime with a "Play sound effect"
+          block (Actions tab). Each effect is a Frequency/Volume/Duration envelope (or a
+          multi-step Arpeggio), with a Priority deciding which effect wins if two try to play on
+          the same channel at once.
+        </p>
+      </v-card-text>
       <v-card-text class="soundfx-dim-section">
         <div class="dim-controls">
           <v-switch
@@ -1099,6 +1107,7 @@ export default defineComponent({
   padding-top: 0;
 }
 
+
 /* Full default Vuetify icon-button size (40px, 24px glyph - no "small"
    prop), matching Project.vue's .project-flat-icon-btn exactly - same
    flat, transparent background (no default hover circle), same fade-in-on-
@@ -1127,7 +1136,7 @@ export default defineComponent({
 }
 
 .soundfx-bank-btn:active >>> .v-icon {
-  color: #1976d2 !important;
+  color: var(--v-primary-base, #1976d2) !important;
 }
 
 /* Single full-width column instead of the grid .soundfx-list defaults to
@@ -1290,7 +1299,7 @@ export default defineComponent({
 }
 
 .soundfx-instrument-btn.soundfx-instrument-btn-active >>> .v-icon {
-  color: #1976d2 !important;
+  color: var(--v-primary-base, #1976d2) !important;
 }
 
 /* Vuetify's v-menu renders its activator slot content as a SIBLING of its
@@ -1352,9 +1361,13 @@ export default defineComponent({
 /* Split from the rest of the card's content (soundfx-fields-section) so the
    name field can stay visible while collapsed - v-card-text's default
    padding-bottom would otherwise open a gap between them that the original,
-   single v-card-text never had. */
+   single v-card-text never had. margin-bottom: -8px on top of that -
+   confirmed directly against the real rendered card that this row still
+   left about 8px more room below it than DataEditor.vue's equivalent
+   .data-name-section, matching that same ~22px gap exactly instead. */
 .soundfx-name-section {
   padding-bottom: 0;
+  margin-bottom: -8px;
 }
 
 .soundfx-fields-section {
@@ -1558,7 +1571,7 @@ export default defineComponent({
 }
 
 .soundfx-arpeggio-btn.soundfx-arpeggio-btn-active >>> .v-icon {
-  color: #1976d2 !important;
+  color: var(--v-primary-base, #1976d2) !important;
 }
 
 /* Grows (unlike .soundfx-number's fixed 90px, used for Volume/Duration

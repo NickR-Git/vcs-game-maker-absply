@@ -2,7 +2,14 @@
   <div>
     <v-card class="editor-container" :ripple="false" @click="deselectCard">
       <v-card-title>{{ title }}</v-card-title>
-      <v-card-text>
+      <v-card-text class="tab-intro-section">
+        <p class="v-messages theme--light v-messages__message player-intro-paragraph">
+          Draw sprite animations here, shared by all Player sprites - assign one to a Player
+          with a "Player animation" block, then control playback with "Player animation
+          Play/Pause" (Actions tab). Each animation has its own 1x/2x/4x width (matching real
+          player size) setting, which will be set automatically when that sprite is activated.
+        </p>
+
         <graphic-editor-toolbar :active-editor="effectiveFrameEditor">
           <template v-slot:before-tools>
             <editor-zoom v-model="zoom" />
@@ -10,10 +17,9 @@
           </template>
           <template v-slot:after-tools>
             <div class="text-center">
-              <v-menu
+              <v-dialog
                 v-model="heightMenuVisible"
-                :close-on-content-click="false"
-                offset-x
+                width="480"
               >
                 <template v-slot:activator="{ on, attrs }">
                   <v-btn
@@ -94,7 +100,7 @@
                     </v-btn>
                   </v-card-actions>
                 </v-card>
-              </v-menu>
+              </v-dialog>
             </div>
           </template>
           <template v-if="spriteColorsEnabled" v-slot:below-tools>
@@ -282,6 +288,7 @@
                         :hideToolbar="true"
                         @input="handleChildChange"
                         @clear="() => handleClearRowColors(frame)"
+                        @clear-colors="() => handleClearRowColors(frame)"
                         @activate="(editorInstance) => setActiveFrame(editorInstance, animation.id, frame.id)"
                       >
                         <template v-if="spriteColorsEnabled" v-slot:sidebar>
@@ -422,7 +429,7 @@ import PlayfieldColorStrip from '../components/PlayfieldColorStrip.vue';
 import QuickColorPalette from '../components/QuickColorPalette.vue';
 import {useCollapsedIds} from '../hooks/collapse';
 import {useDragReorder} from '../hooks/drag-reorder';
-import {DEFAULT_ROW_COLOR} from '../blocks/background';
+import {DEFAULT_ROW_COLOR, clearRowColors} from '../blocks/background';
 import {DEFAULT_SPRITES, processPlayerAnimationsStorageDefaults} from '../generators/bbasic/sprites';
 import {useColorPaletteStorage, useConfigurationStorage, usePixelGridOverlayStorage} from '../hooks/project';
 import {useEditorZoom} from '../hooks/zoom';
@@ -457,7 +464,10 @@ export default defineComponent({
   props: ['storageFactory', 'title', 'fgColor', 'name'],
   setup(props) {
     const instance = getCurrentInstance();
-    const zoom = useEditorZoom(props.name);
+    // 0.75, not the shared 100% default - same "this tab reads better at a
+    // different starting zoom" reasoning useEditorZoom's comment already
+    // documents for Text (200%) and Score (150%).
+    const zoom = useEditorZoom(props.name, 0.75);
     // Shared across Player 0/1 AND the Background tab (see
     // PixelGridToggle.vue's  comment) - not per-player like zoom above.
     const showPixelGrid = usePixelGridOverlayStorage();
@@ -916,7 +926,7 @@ export default defineComponent({
     // behind on an otherwise blank frame.
     const handleClearRowColors = (frame) => {
       if (!spriteColorsEnabled.value || !frame.rowColors) return;
-      handleRowColorsInput(frame, frame.rowColors.map(() => DEFAULT_ROW_COLOR));
+      handleRowColorsInput(frame, clearRowColors(frame.rowColors));
     };
 
     // Copies/pastes a frame's ENTIRE row-color list at once (not one row at
@@ -1032,6 +1042,15 @@ export default defineComponent({
      12px on top of that read as too much combined space before the first
      card. */
   margin-top: 4px;
+}
+
+/* A real <v-list> (unlike Title screen's equivalent .titlescreen-frame-list,
+   a plain div), so it carries Vuetify's own default 8px top/bottom padding
+   unless stripped - stacking on top of .animation-card's own 12px bottom
+   padding below, leaving noticeably more space under the last frame than
+   the same card's edges elsewhere (confirmed as a real reported bug). */
+.animation-frame-list {
+  padding: 0;
 }
 
 /* overflow: visible added alongside the padding reset (see MusicEditor.vue's
@@ -1152,9 +1171,17 @@ export default defineComponent({
    the now-absolutely-positioned collapse button/ID badge instead of them
    overlapping this field, now that neither sits in a normal-flow row above
    it anymore. Matches .soundfx-name-field's margin-top (SoundFXEditor.vue)
-   for consistent badge-to-name spacing across every tab. */
+   for consistent badge-to-name spacing across every tab.
+   margin-bottom: -12px - this field isn't hide-details, so (like
+   DataEditor.vue's Table name field) Vuetify already reserves a
+   hint/error strip below it, but this one measured about 12px taller than
+   Data's equivalent card ends up (confirmed against both real rendered
+   cards while collapsed) - pulled back in to match that same gap exactly,
+   rather than leaving this card noticeably taller than every other tab's
+   for no visible reason. */
 .animation-name-field {
   margin-top: 20px;
+  margin-bottom: -12px;
 }
 
 /* Sits right after the name field, in the same normal-flow row as the rest
@@ -1187,7 +1214,7 @@ export default defineComponent({
    "selected" look (a faint grey tint, barely different from unselected)
    didn't read as clearly "this one's active" against the other two. */
 .animation-preview-scale-toggle >>> .v-btn.v-btn--active {
-  background-color: #1976d2 !important;
+  background-color: var(--v-primary-base, #1976d2) !important;
   color: #fff !important;
 }
 

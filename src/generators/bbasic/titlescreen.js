@@ -1,7 +1,7 @@
 'use strict';
 
 import {TITLE_SCREEN_KERNEL_TYPES, MAX_KERNEL_COPIES_PER_TYPE,
-  processTitleScreenStorageDefaults, isCardAnimated,
+  processTitleScreenStorageDefaults, isCardAnimated, cardFrameHeight,
   titleCardFrameCounterVarName, titleCardScrollOffsetVarName,
   titleCardIndexVarName} from '../../blocks/titlescreen';
 import {useTitleScreenStorage, usePlayerAnimationsStorage,
@@ -53,11 +53,38 @@ const buildCardDataAsm = (card, key, typeInfo, ref, Blockly) => {
   // resolvePlayerSlotFrames below already enforce) - the editor's own
   // "Resize all frames" tool is the only way frames ever change height, so
   // this only ever actually trims/pads a hand-edited/imported project file
-  // that skipped that tool.
-  const rows = frames.flatMap((frame) => {
+  // that skipped that tool. Computed per-frame (not flattened yet) so the
+  // dedup pass right below can compare frames by exactly what would be
+  // written to ROM.
+  const paddedFrames = frames.map((frame) => {
     const framePixels = frame.pixels || [];
-    return Array.from({length: frameHeight}, (_, i) => framePixels[i] || new Array(typeInfo.width).fill(0));
+    const pixelRows = Array.from({length: frameHeight}, (_, i) => framePixels[i] || new Array(typeInfo.width).fill(0));
+    const frameColors = frame.rowColors || [];
+    const colorRows = hasRowColors ?
+      Array.from({length: frameHeight}, (_, i) => frameColors[i] ?? 0) : null;
+    return {pixelRows, colorRows};
   });
+  // Animation frames are frequently repeated (a held pose, a blank/off
+  // frame reused between "on" frames, a bounce that revisits an earlier
+  // frame) - an identical frame (same pixels, and same row colors for
+  // types that have them) is written to ROM only once; every logical
+  // frame number that repeats it is pointed at that same physical copy
+  // instead via frameOffsets below (see generateTitleScreenAnimationChecks'
+  // use of it), rather than storing the exact same bytes again for
+  // each repeat. Purely a ROM-size optimization - the kernel has no idea
+  // some frame numbers alias to the same physical rows, it just draws
+  // whichever bmp_${key}_index it's handed.
+  const uniqueFrames = [];
+  const frameOffsets = paddedFrames.map((frame) => {
+    const contentKey = JSON.stringify(frame.pixelRows) + '|' + JSON.stringify(frame.colorRows);
+    let physicalSlot = uniqueFrames.findIndex((existing) => existing.contentKey === contentKey);
+    if (physicalSlot === -1) {
+      physicalSlot = uniqueFrames.length;
+      uniqueFrames.push({...frame, contentKey});
+    }
+    return physicalSlot * frameHeight;
+  });
+  const rows = uniqueFrames.flatMap((frame) => frame.pixelRows);
   const height = rows.length;
   const scrollWindow = Number(card.scrollWindow) || 0;
   const windowHeight = (scrollWindow > 0 && scrollWindow < frameHeight) ? scrollWindow : frameHeight;
@@ -94,7 +121,19 @@ const buildCardDataAsm = (card, key, typeInfo, ref, Blockly) => {
   // titleCardIndexVarName - see its comment in blocks/titlescreen.js)
   // fixes that while keeping the exact symbol name the per-copy kernel
   // files already reference directly.
-  if (windowHeight < height) {
+  // Was "windowHeight < height" - equivalent before frame dedup above
+  // existed (height was always frameCount * frameHeight then, so more than
+  // one frame always meant height > frameHeight >= windowHeight), but no
+  // longer: a card with several logical frames that all happen to be
+  // pixel-identical now dedups down to a single physical frame, making
+  // height === frameHeight - the indirect check would then wrongly skip
+  // aliasing bmp_${key}_index to a real dev var for a card
+  // generateTitleScreenAnimationChecks still writes to every frame,
+  // reintroducing the exact dead-store bug this alias exists to prevent
+  // (see the comment above). Checking frames.length directly instead
+  // keeps this correct regardless of how many of those frames end up
+  // sharing physical storage.
+  if (windowHeight < frameHeight || frames.length > 1) {
     const indexVar = Blockly.BBasic.nameDB_.getName(
         titleCardIndexVarName(ref), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
     lines.push(`bmp_${key}_index = ${indexVar}`);
@@ -107,10 +146,8 @@ const buildCardDataAsm = (card, key, typeInfo, ref, Blockly) => {
     // about that. Stacked the same frame-0-first order as the pixel rows
     // above, one frame's rowColors (padded/truncated to frameHeight,
     // same as pixels) right after the previous frame's.
-    const rowColors = frames.flatMap((frame) => {
-      const frameColors = frame.rowColors || [];
-      return Array.from({length: frameHeight}, (_, i) => frameColors[i] ?? 0);
-    });
+    // Already padded/truncated and deduplicated - see uniqueFrames above.
+    const rowColors = uniqueFrames.flatMap((frame) => frame.colorRows);
     lines.push(
         `   if >. != >[.+(bmp_${key}_height)]`,
         '      align 256',
@@ -157,7 +194,8 @@ const buildCardDataAsm = (card, key, typeInfo, ref, Blockly) => {
     );
   }
 
-  return {code: lines.join('\n'), frameHeight, frameCount: frames.length, frameDurations: frames.map((f) => f.duration || 1)};
+  return {code: lines.join('\n'), frameHeight, frameCount: frames.length,
+    frameDurations: frames.map((f) => f.duration || 1), frameOffsets};
 };
 
 // Resolves a "player" card's  player0Animation/player1Animation field
@@ -266,6 +304,62 @@ const buildScoreDataAsm = () => {
   return lines.join('\n');
 };
 
+// A rough lower bound on the ROM BYTES every title screen's graphics DATA
+// needs, across every screen combined (registerTitleScreenSubroutine
+// compiles every screen's cards into the ONE shared _titlescreen_system
+// subroutine/bank, so this is a project-wide total, not per-screen) - NOT
+// the same thing as the Title tab's "~85/170 rows" help text, which is
+// a completely different, per-PAGE budget: how many TV scanlines the kernel
+// takes to DRAW one page (a 48x2/96x2 row draws 2 scanlines, a 48x1 row
+// draws 1, both capping out around 170 scanlines total - confirmed
+// directly, 85*2 = 170*1), unaffected by how many frames an animated card
+// has (only the CURRENTLY selected frame's rows ever get drawn) or how many
+// OTHER pages exist (only one page's routine runs per actual frame
+// rendered). This instead estimates ROM STORAGE: every animation frame is a
+// separate, permanently-baked-in byte table (the kernel just changes which
+// one it points at), so unlike the draw-time budget, MORE frames or MORE
+// pages both genuinely add up here even though nothing about what's ever
+// visible at once changes. Deliberately a LOWER bound, not a byte-exact
+// prediction - it counts each card/frame's pixel and row-color bytes
+// (matching buildCardDataAsm/buildPlayerDataAsm/buildScoreDataAsm's real
+// output exactly), but skips the 256-byte alignment padding a card's
+// row-color table can need and the driver/kernel code itself (title_
+// playfield/vblank/overscan boilerplate plus each used minikernel type's
+// draw routine) - both real, but not knowable ahead of an actual compile,
+// and both small next to what many animation frames add up to.
+export const estimateTitleScreenGraphicsBytes = (storage) => {
+  const {screens} = processTitleScreenStorageDefaults(storage);
+  let bytes = 0;
+  let countedPlayerCard = false;
+  let countedScoreCard = false;
+  screens.forEach((screen) => {
+    (screen.cards || []).forEach((card) => {
+      const typeInfo = TITLE_SCREEN_KERNEL_TYPES[card.type];
+      if (typeInfo) {
+        const height = cardFrameHeight(card) * ((card.frames && card.frames.length) || 1);
+        bytes += height * typeInfo.blockCount;
+        bytes += typeInfo.hasRowColors ? height : 1;
+        return;
+      }
+      if (card.type === 'player' && !countedPlayerCard) {
+        countedPlayerCard = true;
+        [0, 1].forEach((playerIndex) => {
+          const animationIndex = playerIndex === 0 ? card.player0Animation : card.player1Animation;
+          const {height, frames} = resolvePlayerSlotFrames(animationIndex);
+          bytes += frames.length * height * 2;
+        });
+        return;
+      }
+      if (card.type === 'score' && !countedScoreCard) {
+        countedScoreCard = true;
+        const config = useConfigurationStorage().value || {};
+        bytes += resolveScoreDigitBytes(config.scoreFont).length;
+      }
+    });
+  });
+  return bytes;
+};
+
 // Assigns every card, across EVERY screen, a physical kernel copy slot
 // (type_N, e.g. "48x1_3") - the kernel ships exactly 8 pre-built copies of
 // each bitmap type project-wide (see MAX_KERNEL_COPIES_PER_TYPE's own
@@ -354,12 +448,12 @@ const assignKernelSlots = (screens, Blockly) => {
       usedKernelKeys.add(key);
       layoutLines.push(` draw_${key}`);
       const ref = `${screen.id}:${card.id}`;
-      const {code, frameHeight, frameCount, frameDurations} =
+      const {code, frameHeight, frameCount, frameDurations, frameOffsets} =
         buildCardDataAsm(card, key, typeInfo, ref, Blockly);
       dataBlocks.push(code);
       cardSlotsByRef[ref] = key;
       if (isCardAnimated(card)) {
-        cardAnimationByRef[ref] = {key, frameHeight, frameCount, frameDurations};
+        cardAnimationByRef[ref] = {key, frameHeight, frameCount, frameDurations, frameOffsets};
       }
     });
 
@@ -634,22 +728,28 @@ const generateTitleScreenAnimationChecks = (Blockly, cardAnimationByRef) => {
   const resolveVar = (canonicalName) =>
     Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
   return refs.map((ref) => {
-    const {key, frameHeight, frameDurations} = cardAnimationByRef[ref];
+    // frameOffsets[N] (see buildCardDataAsm) is frame N's ALREADY-computed
+    // physical byte offset - a plain multiply of frameHeight before frame
+    // dedup existed, but now possibly shared with an earlier, identical
+    // frame's offset - so each branch below writes it directly instead of
+    // writing a frame NUMBER (temp1) and multiplying by frameHeight
+    // afterward, which would only ever reach a frame's OWN offset, never a
+    // duplicate's shared one.
+    const {key, frameDurations, frameOffsets} = cardAnimationByRef[ref];
     const counterVar = resolveVar(titleCardFrameCounterVarName(ref));
     const totalDuration = frameDurations.reduce((sum, duration) => sum + duration, 0) || frameDurations.length;
+    const scrollTerm = scrollTargetRefs.has(ref) ? ` + ${resolveVar(titleCardScrollOffsetVarName(ref))}` : '';
     const lines = [
       ` ${counterVar} = ${counterVar} + 1`,
       ` if ${counterVar} >= ${totalDuration} then ${counterVar} = 0`,
-      ' temp1 = 0',
+      ` bmp_${key}_index = ${frameOffsets[0]}${scrollTerm}`,
     ];
     let cumulative = 0;
     frameDurations.forEach((duration, frameIndex) => {
       cumulative += duration;
       if (frameIndex === frameDurations.length - 1) return;
-      lines.push(` if ${counterVar} >= ${cumulative} then temp1 = ${frameIndex + 1}`);
+      lines.push(` if ${counterVar} >= ${cumulative} then bmp_${key}_index = ${frameOffsets[frameIndex + 1]}${scrollTerm}`);
     });
-    const scrollTerm = scrollTargetRefs.has(ref) ? ` + ${resolveVar(titleCardScrollOffsetVarName(ref))}` : '';
-    lines.push(` bmp_${key}_index = temp1 * ${frameHeight}${scrollTerm}`);
     return lines.join('\n');
   }).join('\n\n') + '\n';
 };

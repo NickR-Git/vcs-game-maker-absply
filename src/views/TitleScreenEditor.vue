@@ -2,29 +2,29 @@
   <div>
     <v-card flat class="editor-container" :ripple="false" @click="deselectCard">
       <v-card-title>Title (alpha 0.5)</v-card-title>
-      <v-card-text>
+      <v-card-text class="tab-intro-section">
         <p class="v-messages theme--light v-messages__message titlescreen-intro-paragraph">
-          Compose a title screen from stacked image strips (drawn top to bottom) using the
-          Titlescreen Kernel. 48x1 images are single-color and half-height pixels (the sharpest
-          option); 48x2/96x2 images support a different color per row, at normal (roughly
-          square) pixel proportions. Add a "Draw title screen" block (Actions tab) to show it -
-          call it in a loop for as long as you want it up. Per the kernel's documentation, a
-          page's total stacked height shouldn't exceed about 85 rows of 48x2/96x2 (double-line)
-          images, or about 170 rows of 48x1 (single-line) images - each card also costs a few
-          extra lines to set itself up, so stay comfortably under that limit.
+          Compose a title screen from stacked image strips (top to bottom). 48x1 images are
+          single-color, half-height pixels (the sharpest option); 48x2/96x2 support a color per
+          row at normal proportions. Show it with a "Draw title screen" block (Actions tab),
+          called in a loop for as long as you want it up.
+        </p>
+        <p class="v-messages theme--light v-messages__message titlescreen-intro-paragraph">
+          All pages share one bank of ROM: keep the total stacked height under about 85 rows of
+          48x2/96x2 images, or 170 rows of 48x1 images, across every page combined - each card
+          adds a little overhead too, so stay comfortably under that.
         </p>
 
         <graphic-editor-toolbar :active-editor="effectiveFrameEditor">
           <template v-slot:before-tools>
-            <editor-zoom v-model="zoom" />
+            <editor-zoom v-model="zoom" :levels="titlescreenZoomLevels" />
             <pixel-grid-toggle v-model="showPixelGrid" />
           </template>
           <template v-slot:after-tools>
             <div class="text-center">
-              <v-menu
+              <v-dialog
                 v-model="heightMenuVisible"
-                :close-on-content-click="false"
-                offset-x
+                width="480"
               >
                 <template v-slot:activator="{ on, attrs }">
                   <v-btn
@@ -105,7 +105,7 @@
                     </v-btn>
                   </v-card-actions>
                 </v-card>
-              </v-menu>
+              </v-dialog>
             </div>
           </template>
           <template v-slot:below-tools>
@@ -458,6 +458,7 @@
                                       @input="() => handleFramePixelsInput(card, frame)"
                                       @resize="() => handleFramePixelsInput(card, frame)"
                                       @clear="() => handleClearCardColors(card)"
+                                      @clear-colors="() => handleClearCardColors(card)"
                                       @activate="(editorInstance) => setActiveFrame(editorInstance, card.id, frame.id)"
                                     >
                                       <template v-if="cardHasRowColors(card)" v-slot:sidebar>
@@ -640,12 +641,21 @@ import PixelGridToggle from '../components/PixelGridToggle.vue';
 import PlayfieldColorStrip from '../components/PlayfieldColorStrip.vue';
 import QuickColorPalette from '../components/QuickColorPalette.vue';
 import {useCollapsedIds} from '../hooks/collapse';
+import {recordCardDeletion} from '../hooks/card-delete-undo';
 import {useDragReorder} from '../hooks/drag-reorder';
 import {useTitleScreenStorage, usePixelGridOverlayStorage,
   usePlayerAnimationsStorage, useColorPaletteStorage} from '../hooks/project';
-import {useEditorZoom} from '../hooks/zoom';
+import {useEditorZoom, ZOOM_LEVELS} from '../hooks/zoom';
+
+// A 96-wide card at 50% (the lowest level every other tab offers) can still
+// run wider than the editor column, needing its own horizontal scrollbar
+// (see .titlescreen-card-body's own comment) - 25% added here, scoped to
+// just this tab (see useEditorZoom/stepZoom's own "levels" param), so a
+// wide card can be zoomed out small enough to see the whole thing at once
+// without scrolling.
+const TITLESCREEN_ZOOM_LEVELS = [0.25, ...ZOOM_LEVELS];
 import {buildTitleScreenPreviewRom, useBuildInProgress} from '../hooks/rom';
-import {DEFAULT_ROW_COLOR} from '../blocks/background';
+import {DEFAULT_ROW_COLOR, clearRowColors} from '../blocks/background';
 import {TITLE_SCREEN_KERNEL_TYPES, MAX_KERNEL_COPIES_PER_TYPE, MAX_PLAYER_CARDS, MAX_SCORE_CARDS,
   blankTitleScreenPixels, processTitleScreenStorageDefaults, cardFrameHeight} from '../blocks/titlescreen';
 import {processPlayerAnimationsStorageDefaults} from '../generators/bbasic/sprites';
@@ -664,7 +674,7 @@ export default defineComponent({
   setup() {
     const instance = getCurrentInstance();
     const titleScreenStorage = useTitleScreenStorage();
-    const zoom = useEditorZoom('titlescreen');
+    const zoom = useEditorZoom('titlescreen', undefined, TITLESCREEN_ZOOM_LEVELS);
     const showPixelGrid = usePixelGridOverlayStorage();
 
     // Read-only here - components/QuickColorPalette.vue (mounted below)
@@ -857,9 +867,21 @@ export default defineComponent({
     };
 
     const handleDeleteCard = (screen, card) => {
+      const index = screen.cards.findIndex(({id}) => id === card.id);
       screen.cards = screen.cards.filter(({id}) => id !== card.id);
       handleChildChange();
       instance.proxy.$forceUpdate();
+      // Lets the shared graphics toolbar's Undo button (see
+      // hooks/card-delete-undo.js) bring this card back at the same
+      // position, rather than deleting a card being the one action on this
+      // tab Undo can never touch.
+      recordCardDeletion(() => {
+        const restored = screen.cards.slice();
+        restored.splice(index, 0, card);
+        screen.cards = restored;
+        handleChildChange();
+        instance.proxy.$forceUpdate();
+      });
     };
 
     const handleSetBackgroundColor = (screen, color) => {
@@ -886,7 +908,7 @@ export default defineComponent({
     const handleClearCardColors = (card) => {
       if (cardHasRowColors(card)) {
         card.frames.forEach((frame) => {
-          frame.rowColors = (frame.rowColors || []).map(() => DEFAULT_ROW_COLOR);
+          frame.rowColors = clearRowColors(frame.rowColors);
         });
       } else {
         card.color = 0x0f;
@@ -1239,7 +1261,7 @@ export default defineComponent({
       handleCopyFrame, handlePasteFrame, copiedFrameData,
       isCollapsed, toggleCollapsed, cardCollapseKey,
       cardDragAttrs, cardDragCardClass, cardDragHandleListeners, cardDragTargetListeners,
-      showPixelGrid, zoom,
+      showPixelGrid, zoom, titlescreenZoomLevels: TITLESCREEN_ZOOM_LEVELS,
       selectedCardId, selectCard,
       selectedScreenId, selectScreen,
       deselectCard,
@@ -1400,11 +1422,18 @@ export default defineComponent({
    btn) - the corner toolbar's absolute top-right position never
    collides with it horizontally, same as every other tab's identical
    layout. */
+/* margin-bottom: -12px - same fix, same measured ~12px excess, as
+   PlayerEditor.vue's .animation-name-field/BackgroundEditor.vue's
+   .background-name-field (see their comments) - this row's Page name
+   field isn't hide-details either, so Vuetify reserves a hint/error strip
+   below it, taller than DataEditor.vue's equivalent card ends up by the
+   same amount. */
 .titlescreen-screen-title-row {
   display: flex;
   align-items: center;
   gap: 8px;
   margin-top: 20px;
+  margin-bottom: -12px;
 }
 
 .titlescreen-screen-name-field {
@@ -1550,7 +1579,7 @@ export default defineComponent({
 
 .titlescreen-play-btn:active >>> .v-icon,
 .titlescreen-play-btn.v-btn--loading >>> .v-icon {
-  color: #1976d2 !important;
+  color: var(--v-primary-base, #1976d2) !important;
 }
 
 /* Same fix as PlayerEditor.vue's identical rule - without it, a disabled
@@ -1628,8 +1657,19 @@ export default defineComponent({
    scrollbar too (confirmed as a real bug) - hidden avoids that forced
    conversion, and is safe since nothing in here is ever taller than its
    own content. */
+/* padding: 2px - this clipping box's own edges land exactly flush against
+   the first/last frame's own box on every side (nothing reserves space
+   around them), so a selected frame's 2px outline (see
+   .pixel-editor-container-active's own comment) bled past this element's
+   overflow-hidden boundary and was clipped away - visible only on the
+   FIRST frame of each wrapped row (nothing to its left) and the top/bottom
+   rows (nothing above/below), never on a frame with a sibling on that
+   side to bleed into instead. Confirmed as a real reported bug ("selection
+   border... looks like it's being cut off on the left... the first card in
+   every row"). 2px matches the outline width exactly. */
 .titlescreen-card-body {
   margin-top: 34px;
+  padding: 2px;
   overflow-x: auto;
   overflow-y: hidden;
 }
