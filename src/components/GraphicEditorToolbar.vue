@@ -16,7 +16,24 @@
       <slot name="before-tools" />
       <v-divider class="get-outer-divider" vertical />
       <div class="get-tools">
+        <v-btn icon small title="Undo" :disabled="!activeEditor && !hasPendingQuickColorUndo && !hasPendingCardUndo" @click="handleUndo">
+          <v-icon>mdi-undo</v-icon>
+        </v-btn>
+        <v-btn icon small title="Redo" :disabled="!activeEditor" @click="() => activeEditor.redo()">
+          <v-icon>mdi-redo</v-icon>
+        </v-btn>
+        <v-divider class="get-inner-divider" vertical />
         <v-btn-toggle :value="activeTool" borderless>
+          <v-btn
+            icon
+            small
+            title="Move (V, hold-drag a selection to relocate it)"
+            value="move"
+            :disabled="!activeEditor"
+            @click="setTool('move')"
+          >
+            <v-icon>mdi-cursor-move</v-icon>
+          </v-btn>
           <v-btn
             icon
             small
@@ -86,11 +103,57 @@
           </v-btn>
         </v-btn-toggle>
         <v-divider class="get-inner-divider" vertical />
-        <v-btn icon small title="Undo" :disabled="!activeEditor && !hasPendingQuickColorUndo && !hasPendingCardUndo" @click="handleUndo">
-          <v-icon>mdi-undo</v-icon>
+        <!-- A separate v-btn-toggle, not more buttons inside the one above -
+             v-btn-toggle only expects v-btn children, so a divider can't sit
+             inside it. Bound to the exact same :value/@click as the one
+             above, so highlighting and selection still work identically
+             across both - Vuetify doesn't care which literal component
+             instance a button lives in, only that its own "value" matches
+             this shared activeTool. -->
+        <v-btn-toggle :value="activeTool" borderless>
+          <v-btn
+            icon
+            small
+            title="Rectangle select (M, hold Shift to add to the selection)"
+            value="rect-select"
+            :disabled="!activeEditor"
+            @click="setTool('rect-select')"
+          >
+            <svg class="v-icon get-shape-icon get-marquee-icon" viewBox="0 0 24 24">
+              <rect x="3.5" y="3.5" width="17" height="17" />
+            </svg>
+          </v-btn>
+          <v-btn
+            icon
+            small
+            title="Circle select (C, hold Shift to add to the selection)"
+            value="circle-select"
+            :disabled="!activeEditor"
+            @click="setTool('circle-select')"
+          >
+            <svg class="v-icon get-shape-icon get-marquee-icon" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="9.5" />
+            </svg>
+          </v-btn>
+          <v-btn
+            icon
+            small
+            title="Polygon select (P, click to place points, double-click to close, hold Shift to add to the selection)"
+            value="polygon-select"
+            :disabled="!activeEditor"
+            @click="setTool('polygon-select')"
+          >
+            <svg class="v-icon get-shape-icon get-marquee-icon get-polygon-icon" viewBox="0 0 24 24">
+              <path d="M4 17 L9 4 L20 9 L17 20 Z" />
+            </svg>
+          </v-btn>
+        </v-btn-toggle>
+        <v-divider class="get-inner-divider" vertical />
+        <v-btn icon small title="Flip horizontally (Shift+H)" :disabled="!activeEditor" @click="() => activeEditor.flipHorizontal()">
+          <v-icon>mdi-flip-horizontal</v-icon>
         </v-btn>
-        <v-btn icon small title="Redo" :disabled="!activeEditor" @click="() => activeEditor.redo()">
-          <v-icon>mdi-redo</v-icon>
+        <v-btn icon small title="Flip vertically (Shift+V)" :disabled="!activeEditor" @click="() => activeEditor.flipVertical()">
+          <v-icon>mdi-flip-vertical</v-icon>
         </v-btn>
         <v-divider class="get-inner-divider" vertical />
         <v-btn icon small title="Export to image" :disabled="!activeEditor" @click="() => activeEditor.handleExportImage()">
@@ -122,6 +185,10 @@ const TOOL_HOTKEYS = {
   l: 'line',
   r: 'rectangle',
   o: 'oval',
+  v: 'move',
+  m: 'rect-select',
+  c: 'circle-select',
+  p: 'polygon-select',
 };
 
 // The single toolbar shared across every tab with a graphic editor
@@ -218,12 +285,14 @@ export default {
     handleScroll(event) {
       this.isScrolled = event.target.scrollTop > 0;
     },
-    // Handles every graphic-editor hotkey in one place: the (B/E/G/L/R/O)
-    // tool shortcuts (see each tool button's own title), "'" for the pixel
-    // grid overlay, Shift+"'" for its X,Y coordinate labels, and "H" for
-    // Set height - all the common Photoshop/Aseprite-style single-letter
-    // bindings, since users coming from those tools already reach for them
-    // without thinking.
+    // Handles every graphic-editor hotkey in one place: the
+    // (B/E/G/L/R/O/V/M/C/P) tool shortcuts (see each tool button's own
+    // title), "'" for the pixel grid overlay, Shift+"'" for its X,Y
+    // coordinate labels, "H" for Set height, Shift+H/Shift+V for Flip
+    // Horizontal/Vertical, and Escape to clear the current selection - all
+    // the common Photoshop/Aseprite-style single-letter bindings, since
+    // users coming from those tools already reach for them without
+    // thinking.
     handleToolHotkey(event) {
       // Skip Ctrl/Cmd/Alt combos entirely (e.g. leaves Ctrl+Z/Ctrl+Shift+Z
       // browser/OS shortcuts alone) - Shift alone is deliberately NOT
@@ -252,6 +321,30 @@ export default {
       // below acts on the currently selected card/frame, so there's nothing
       // to do without one.
       if (!this.activeEditor) return;
+
+      // Clears any active selection (and discards an in-progress, not-yet-
+      // closed polygon - see PolygonSelect's own cancel()), matching every
+      // other image editor's "Escape backs out of the current selection"
+      // convention.
+      if (key === 'Escape') {
+        event.preventDefault();
+        this.activeEditor.deselect();
+        return;
+      }
+
+      // Shift+H/Shift+V for Flip Horizontal/Vertical (matching Aseprite's
+      // own bindings) - checked ahead of the plain "H" height-hotkey below,
+      // since that one's deliberately NOT shift-gated.
+      if (key.toLowerCase() === 'h' && event.shiftKey) {
+        event.preventDefault();
+        this.activeEditor.flipHorizontal();
+        return;
+      }
+      if (key.toLowerCase() === 'v' && event.shiftKey) {
+        event.preventDefault();
+        this.activeEditor.flipVertical();
+        return;
+      }
 
       if (key.toLowerCase() === 'h') {
         event.preventDefault();
@@ -387,6 +480,17 @@ export default {
   transition: color 0.15s ease, transform 0.08s ease;
 }
 
+/* Disabled buttons (no activeEditor - e.g. Import/Export/Undo/Redo/Flip
+   with no card/frame selected) otherwise rendered at the exact same
+   rgba(0,0,0,0.38) as an ENABLED button's own resting color above (that
+   rule's !important wins over Vuetify's own default disabled dimming),
+   reading as clickable when they're not - confirmed as a real reported
+   bug on Import/Export specifically. Dimmed further so a disabled icon is
+   visually distinct from a merely-unhovered enabled one. */
+.get-tools >>> .v-btn--disabled .v-icon {
+  color: rgba(0, 0, 0, 0.18) !important;
+}
+
 /* Line/Rectangle/Oval are all plain inline SVGs, not MDI glyphs - no set
    of existing MDI icons draws all three at a guaranteed, matchable stroke
    width the way hand-built ones sharing one stroke-width can.
@@ -418,6 +522,38 @@ export default {
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+/* Dashed, not solid - the classic "marching ants" marquee look, so the
+   three selection tools read as a distinct kind of tool from the solid-
+   stroke Rectangle/Oval DRAW tools right next to them, even though two of
+   the three reuse the exact same underlying shapes. */
+/* A near-zero dash length, combined with .get-shape-icon's own
+   stroke-linecap: round (inherited, not overridden here), draws each
+   "dash" as a round dot instead of a short line segment - the classic
+   dotted marquee look, not a dashed one. Dot SIZE is stroke-width (a round
+   cap on a near-zero-length dash is just a filled circle that wide), not
+   the dasharray itself - bumped past the shared 2px .get-shape-icon
+   stroke-width so the dots actually read as dots, not tiny specks. */
+.get-tools >>> .get-marquee-icon {
+  stroke-width: 2.5;
+  stroke-dasharray: 0.1 4.5;
+}
+
+/* The polygon path's own points don't reach the 24x24 viewBox's edges as
+   fully as the rectangle/circle marquee icons' shapes do, reading smaller
+   alongside them at the same 19px box - bumped up to actually match. */
+/* stroke-width/dasharray are in the shared 24x24 viewBox's own units, not
+   screen px - since this icon's rendered box (23px) is larger than the
+   circle/rectangle marquee icons' (19px), the SAME stroke-width value
+   renders visibly thicker dots here purely from that extra scale-up.
+   Scaled back down by the same ratio (19/23) so the actual ON-SCREEN dot
+   size matches those other two exactly. */
+.get-tools >>> .get-polygon-icon {
+  width: 23px;
+  height: 23px;
+  stroke-width: 2.07;
+  stroke-dasharray: 0.08 3.7;
 }
 
 .get-tools >>> .v-btn:not(.v-btn--disabled):hover .v-icon {

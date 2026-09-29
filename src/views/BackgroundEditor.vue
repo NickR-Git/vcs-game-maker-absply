@@ -223,12 +223,25 @@
                   </div>
                 </v-list-item-title>
                 <v-list-item-subtitle v-if="!isCollapsed(background)">
+                  <!-- aspectRatio is a fixed 4:3 (not (32 / background.pixels.length) *
+                       (11/24), which this used to be) - the real playfield's TOTAL height
+                       stays a constant 96 scanlines regardless of pfres/row count (see
+                       pfRowDivisorFor's own comment in utils/playfield-coords.js: each
+                       row's real height is 96/pfres scanlines, so pfres rows * 96/pfres
+                       scanlines/row = 96 always) - only how many rows subdivide that same
+                       fixed height changes, not the height itself. Dividing by the CURRENT
+                       row count instead (the old formula) only happened to give the right
+                       4:3 ratio at exactly the non-Superchip default (11 rows, where
+                       32/11 * 11/24 reduces to 32/24 = 4/3) - at any other pfres, it
+                       scaled the whole canvas taller or shorter for no reason, confirmed
+                       as a real reported bug ("background graphic looks stretched
+                       vertically when Superchip pfres is higher than the default"). -->
                   <div class="pixel-editor-container" :style="{width: editorWidth, maxWidth: editorWidth}">
                     <pixel-editor
                       :ref="pixelEditorRefKey(background)"
                       :width="32"
                       :height="background.pixels.length"
-                      :aspectRatio="(32 / (background.pixels.length || 1)) * (11 / 24)"
+                      :aspectRatio="4 / 3"
                       name="background"
                       :value="background.pixels"
                       fgColor="orange"

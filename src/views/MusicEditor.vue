@@ -1,7 +1,7 @@
 <template>
   <div>
     <v-card flat :ripple="false" class="editor-container">
-      <v-card-title>Music (alpha 0.6)</v-card-title>
+      <v-card-title>Music (alpha 0.75)</v-card-title>
       <v-alert type="warning" dense outlined :icon="false" class="alpha-notice">
         This feature is in alpha. Things may change or break. You've been warned!
       </v-alert>
@@ -484,7 +484,7 @@
                             icon
                             small
                             title="Undo"
-                            class="music-flat-icon-btn music-icon-btn-size"
+                            class="music-flat-icon-btn music-icon-btn-size piano-roll-transport-btn"
                             :disabled="!canUndoPattern(activePattern(song))"
                             @click="() => handleUndoPattern(song, activePattern(song))"
                           >
@@ -494,12 +494,13 @@
                             icon
                             small
                             title="Redo"
-                            class="music-flat-icon-btn music-icon-btn-size"
+                            class="music-flat-icon-btn music-icon-btn-size piano-roll-transport-btn"
                             :disabled="!canRedoPattern(activePattern(song))"
                             @click="() => handleRedoPattern(song, activePattern(song))"
                           >
                             <v-icon small>mdi-redo</v-icon>
                           </v-btn>
+                          <v-divider class="music-toolbar-divider" vertical />
                           <v-btn
                             icon
                             small
@@ -3667,6 +3668,25 @@ export default defineComponent({
 
 .music-icon-btn-size >>> .v-icon {
   font-size: 19px !important;
+}
+
+/* Matches GraphicEditorToolbar.vue's own Undo/Redo spacing/press-feedback
+   exactly, per a direct request to align the two. .music-icon-btn-size's
+   own margin: 0 1px (needed elsewhere - see that class's own comment)
+   would otherwise stack with .subdivision-controls' 4px gap for an uneven
+   6px gap between these two buttons, unlike the graphic toolbar's clean
+   4px (gap alone, zero button margin - see GraphicEditorToolbar.vue's own
+   .get-tools comment). Overrides .music-flat-icon-btn:active's shared blue
+   tint (right above) with a scale-down instead - the graphic toolbar's own
+   one-shot-action press feedback, rather than the "currently on" color this
+   tab otherwise reserves for toggles/playback. */
+.subdivision-controls >>> .piano-roll-transport-btn {
+  margin: 0;
+}
+
+.subdivision-controls >>> .piano-roll-transport-btn:active .v-icon {
+  color: rgba(0, 0, 0, 0.87) !important;
+  transform: scale(0.82);
 }
 
 .music-name-field {

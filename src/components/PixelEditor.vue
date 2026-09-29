@@ -19,7 +19,9 @@
               'editor-canvas-tool-eraser': toggledTool === 'eraser',
               'editor-canvas-tool-fill': toggledTool === 'fill',
               'editor-canvas-tool-line': toggledTool === 'line',
-              'editor-canvas-tool-shape': toggledTool === 'rectangle' || toggledTool === 'oval',
+              'editor-canvas-tool-shape': toggledTool === 'rectangle' || toggledTool === 'oval' ||
+                toggledTool === 'rect-select' || toggledTool === 'circle-select' || toggledTool === 'polygon-select',
+              'editor-canvas-tool-move': toggledTool === 'move',
             }"
             @mousedown="handleMouse"
             @mouseenter="handleMouse"
@@ -28,7 +30,7 @@
             @mousemove="handleMouse"
           />
           <canvas
-            v-if="showGrid"
+            v-if="showGrid || selection || polygonPreview"
             ref="gridOverlay"
             class="grid-overlay-canvas"
           />
@@ -74,6 +76,8 @@ import Bucket from '../utils/bucket-tool';
 import Line from '../utils/line-tool';
 import Rectangle from '../utils/rectangle-tool';
 import Oval from '../utils/oval-tool';
+import Move from '../utils/move-tool';
+import {RectangleSelect, CircleSelect, PolygonSelect} from '../utils/selection-tools';
 import {isMatrixEqual} from '../utils/array';
 import {getDateInfix} from '../utils/date';
 import {loadImageFromFile, openFileDialog} from '../utils/file';
@@ -123,6 +127,30 @@ export default {
       line: new Line(this.fgColor),
       rectangle: new Rectangle(this.fgColor),
       oval: new Oval(this.fgColor),
+      move: new Move(() => this.selection, (sel) => {
+        this.selection = sel;
+      }, this.bgColor),
+      rectSelect: new RectangleSelect((sel) => {
+        this.selection = sel;
+      }, () => this.selection),
+      circleSelect: new CircleSelect((sel) => {
+        this.selection = sel;
+      }, () => this.selection),
+      polygonSelect: new PolygonSelect((sel) => {
+        this.selection = sel;
+      }, (points) => {
+        this.polygonPreview = points;
+      }, () => this.selection),
+      // A Set of "x,y" cell keys, or null for "nothing selected" - see
+      // selection-tools.js/move-tool.js. Reassigned wholesale (never
+      // mutated in place) every time it changes, since Vue 2 can't observe
+      // a plain Set's own mutations.
+      selection: null,
+      // The polygon-select tool's own in-progress vertex list (see its own
+      // onPreview callback), or null while it's not mid-polygon - without
+      // rendering these as they're placed, every click looked like it did
+      // nothing at all until a polygon happened to actually close.
+      polygonPreview: null,
     };
   },
   computed: {
@@ -148,7 +176,7 @@ export default {
     // TODO: Just for testing
     window.isMatrixEqual = isMatrixEqual;
 
-    if (this.showGrid) this.setupGridOverlay();
+    if (this.showGrid || this.selection || this.polygonPreview) this.setupGridOverlay();
   },
   beforeDestroy() {
     this.teardownGridOverlay();
@@ -185,25 +213,66 @@ export default {
         this.setPixels(this.getPixels(), false);
       }
     },
-    // The overlay canvas only exists in the DOM while showGrid is true (see
-    // the template's  v-if) - the ResizeObserver has to be (re)attached
-    // to whichever real element currently exists, not created once up
-    // front.
+    // The overlay canvas only exists in the DOM while showGrid, selection,
+    // OR polygonPreview is truthy (see the template's  v-if) - the
+    // ResizeObserver has to be (re)attached to whichever real element
+    // currently exists, not created once up front. Only tears the overlay
+    // down when NONE of the three is active - selection/polygonPreview also
+    // draw on this same canvas (see drawGridOverlay), so a project with
+    // showGrid off but an active selection (or in-progress polygon) still
+    // needs it mounted.
     showGrid(value) {
-      if (value) {
+      if (value || this.selection || this.polygonPreview) {
         this.$nextTick(() => this.setupGridOverlay());
       } else {
         this.teardownGridOverlay();
       }
     },
-    // Extra coverage alongside initEditor's  redraw call (see its
-    // comment) for the one case that changes row count WITHOUT going
-    // through initEditor synchronously in the same tick: the Background
-    // tab's  resolution setting (Superchip pfres), which passes a new
-    // "height" prop value the moment it changes, slightly ahead of
-    // reflowBackgroundsToHeight's  pixel-matrix update reaching this
-    // component's "value" prop and triggering initEditor from there.
-    height() {
+    // Same overlay-lifecycle reasoning as showGrid just above, from the
+    // other direction - a selection tool can make this go from null to a
+    // real Set (or back) at any time, independent of showGrid.
+    selection(value) {
+      if (value || this.showGrid || this.polygonPreview) {
+        this.$nextTick(() => {
+          if (!this.gridResizeObserver) this.setupGridOverlay();
+          else this.drawGridOverlay();
+        });
+      } else {
+        this.teardownGridOverlay();
+      }
+    },
+    // Same overlay-lifecycle reasoning again, for the polygon tool's own
+    // in-progress vertex list (see PolygonSelect's onPreview callback).
+    polygonPreview(value) {
+      if (value || this.showGrid || this.selection) {
+        this.$nextTick(() => {
+          if (!this.gridResizeObserver) this.setupGridOverlay();
+          else this.drawGridOverlay();
+        });
+      } else {
+        this.teardownGridOverlay();
+      }
+    },
+    // The "height" prop (used for aspectRatio's own CSS sizing upstream -
+    // see BackgroundEditor.vue's identical background.pixels.length-based
+    // expression for both) can update slightly AHEAD of the "value" prop
+    // reaching this same update, within the same Vue patch - reflowing the
+    // wrapper's own on-screen box to the new row count before initEditor
+    // has actually resized the underlying canvas/grid to match. Normally
+    // the "value" watcher below catches up in the same tick regardless,
+    // but confirmed as a real reported gap (Superchip pfres changes -
+    // reflowBackgroundsToHeight): the canvas was left showing its OLD
+    // row count's content stretched/squished into the NEW aspect-ratio
+    // box, not just briefly but persistently, whenever something about
+    // that specific reflow's timing meant the "value" watcher's own
+    // reference-equality check didn't end up firing. This is a direct,
+    // redundant safety net - if the underlying editor's own row count is
+    // already out of sync with this prop by the time it changes, fix it
+    // here too, independent of whatever "value" does or doesn't do.
+    height(newHeight) {
+      if (this.editor && this.editor.height !== newHeight && this.value) {
+        this.initEditor(newHeight, this.value);
+      }
       this.$nextTick(() => this.drawGridOverlay());
     },
     showCellIds() {
@@ -291,23 +360,99 @@ export default {
       const cellWidth = cssWidth / cols;
       const cellHeight = cssHeight / rows;
 
-      ctx.strokeStyle = 'rgba(170, 170, 170, 0.5)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      for (let col = 0; col <= cols; col++) {
-        // +0.5 lands the 1px line exactly on a device pixel instead of
-        // straddling two (and rendering as a blurry 2px band) - the
-        // standard canvas crisp-line trick.
-        const x = Math.round(col * cellWidth) + 0.5;
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, cssHeight);
+      // Guarded on showGrid specifically - this same canvas is also used
+      // to draw the selection highlight below regardless of showGrid (see
+      // the template's own v-if="showGrid || selection"), so a project
+      // with the grid off but an active selection shouldn't also get grid
+      // lines it never asked for.
+      if (this.showGrid) {
+        ctx.strokeStyle = 'rgba(170, 170, 170, 0.5)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let col = 0; col <= cols; col++) {
+          // +0.5 lands the 1px line exactly on a device pixel instead of
+          // straddling two (and rendering as a blurry 2px band) - the
+          // standard canvas crisp-line trick.
+          const x = Math.round(col * cellWidth) + 0.5;
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, cssHeight);
+        }
+        for (let row = 0; row <= rows; row++) {
+          const y = Math.round(row * cellHeight) + 0.5;
+          ctx.moveTo(0, y);
+          ctx.lineTo(cssWidth, y);
+        }
+        ctx.stroke();
       }
-      for (let row = 0; row <= rows; row++) {
-        const y = Math.round(row * cellHeight) + 0.5;
-        ctx.moveTo(0, y);
-        ctx.lineTo(cssWidth, y);
+
+      // A semi-transparent fill over every selected cell, plus a solid
+      // border wherever a selected cell's edge borders a NON-selected one
+      // (or the canvas edge) - drawing the border per-edge like this
+      // (rather than one rectangle around the selection's own bounding
+      // box) is what makes a non-rectangular selection (CircleSelect,
+      // PolygonSelect) read as its own actual shape instead of a plain box.
+      if (this.selection && this.selection.size) {
+        ctx.fillStyle = 'rgba(33, 150, 243, 0.35)';
+        this.selection.forEach((key) => {
+          const [col, row] = key.split(',').map(Number);
+          ctx.fillRect(col * cellWidth, row * cellHeight, cellWidth, cellHeight);
+        });
+        ctx.strokeStyle = 'rgba(33, 150, 243, 0.95)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        this.selection.forEach((key) => {
+          const [col, row] = key.split(',').map(Number);
+          const x0 = col * cellWidth;
+          const y0 = row * cellHeight;
+          const x1 = x0 + cellWidth;
+          const y1 = y0 + cellHeight;
+          if (!this.selection.has(`${col},${row - 1}`)) {
+            ctx.moveTo(x0, y0);
+            ctx.lineTo(x1, y0);
+          }
+          if (!this.selection.has(`${col},${row + 1}`)) {
+            ctx.moveTo(x0, y1);
+            ctx.lineTo(x1, y1);
+          }
+          if (!this.selection.has(`${col - 1},${row}`)) {
+            ctx.moveTo(x0, y0);
+            ctx.lineTo(x0, y1);
+          }
+          if (!this.selection.has(`${col + 1},${row}`)) {
+            ctx.moveTo(x1, y0);
+            ctx.lineTo(x1, y1);
+          }
+        });
+        ctx.stroke();
       }
-      ctx.stroke();
+
+      // The polygon tool's own in-progress vertex list (see PolygonSelect's
+      // onPreview callback) - a small dot at each placed vertex's cell
+      // center plus an open polyline connecting them in order, so a click
+      // visibly does something immediately instead of looking like a no-op
+      // until the polygon happens to close (the actual reported "doesn't
+      // seem to work" bug this preview exists to fix).
+      if (this.polygonPreview && this.polygonPreview.length) {
+        ctx.fillStyle = 'rgba(33, 150, 243, 0.95)';
+        ctx.strokeStyle = 'rgba(33, 150, 243, 0.95)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        this.polygonPreview.forEach((point, i) => {
+          const x = (point.x + 0.5) * cellWidth;
+          const y = (point.y + 0.5) * cellHeight;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+        const dotRadius = Math.min(cellWidth, cellHeight) * 0.15;
+        this.polygonPreview.forEach((point) => {
+          const x = (point.x + 0.5) * cellWidth;
+          const y = (point.y + 0.5) * cellHeight;
+          ctx.beginPath();
+          ctx.arc(x, y, dotRadius, 0, Math.PI * 2);
+          ctx.fill();
+        });
+      }
 
       if (!this.showCellIds) return;
       // "X,Y" - matches the two arguments every "Background: pixel at X/Y"
@@ -387,12 +532,26 @@ export default {
       if (toolName === 'line') return this.line;
       if (toolName === 'rectangle') return this.rectangle;
       if (toolName === 'oval') return this.oval;
+      if (toolName === 'move') return this.move;
+      if (toolName === 'rect-select') return this.rectSelect;
+      if (toolName === 'circle-select') return this.circleSelect;
+      if (toolName === 'polygon-select') return this.polygonSelect;
       return this.pencil;
     },
 
     setTool(toolName) {
       this.toggledTool = toolName;
       this.editor.tool = this.toolFor(toolName);
+    },
+
+    // Clears whatever's currently selected, and discards an in-progress,
+    // not-yet-closed polygon along with it (PolygonSelect's own points
+    // list is otherwise independent of "selection" - it hasn't produced a
+    // real selection yet) - called by GraphicEditorToolbar.vue's Escape
+    // hotkey handler.
+    deselect() {
+      this.selection = null;
+      this.polygonSelect.cancel();
     },
 
     undo() {
@@ -575,6 +734,26 @@ export default {
       this.editor.set(editorPixels, logToHistory);
     },
 
+    // Mirrors every row left-to-right - a plain pixel-matrix edit like any
+    // drawing stroke (real history entry, real 'input' emit), not a
+    // separate "transform" concept.
+    flipHorizontal() {
+      const pixels = this.getPixels().map((row) => [...row].reverse());
+      this.setPixels(pixels);
+      this.$emit('input', pixels);
+    },
+
+    // Reverses the row order top-to-bottom. Note this only flips the
+    // pixel DATA - a caller with per-row colors (rowColors - see
+    // BackgroundEditor.vue) keeps its existing row-color assignment, since
+    // that's driven by row position on the actual hardware playfield, not
+    // by whatever's currently drawn there.
+    flipVertical() {
+      const pixels = [...this.getPixels()].reverse();
+      this.setPixels(pixels);
+      this.$emit('input', pixels);
+    },
+
     handleClear() {
       this.setPixels(null);
       this.$emit('input', this.getPixels());
@@ -659,6 +838,13 @@ export default {
    correctly on its own. */
 .editor-canvas-tool-shape {
   cursor: crosshair;
+}
+
+/* Move drags whatever's currently selected, wherever the pointer lands -
+   the standard "move" cursor communicates that at a glance, no custom
+   glyph needed. */
+.editor-canvas-tool-move {
+  cursor: move;
 }
 
 /* Layered directly on top of .editor-canvas (same inset/height) - drawn at
