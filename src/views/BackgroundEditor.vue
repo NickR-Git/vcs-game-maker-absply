@@ -10,7 +10,7 @@
           its own color instead of one fixed color for the whole background.
         </p>
 
-        <graphic-editor-toolbar :active-editor="effectiveEditor">
+        <graphic-editor-toolbar :active-editor="effectiveEditor" @height-hotkey="handleSetHeightHotkey">
           <template v-slot:before-tools>
             <editor-zoom v-model="zoom" />
             <pixel-grid-toggle v-model="showPixelGrid" />
@@ -18,8 +18,8 @@
               v-model="showPixelGridLabels"
               :icon="null"
               label="XY"
-              title-on="Hide pixel coordinates"
-              title-off="Show pixel coordinates"
+              title-on="Hide pixel coordinates (Shift+')"
+              title-off="Show pixel coordinates (Shift+')"
               :disabled="!showPixelGrid"
               disabled-title="Turn on the pixel grid to show coordinates"
             />
@@ -35,7 +35,7 @@
                     text
                     small
                     class="unified-toolbar-height-btn"
-                    title="Set height"
+                    title="Set height (H)"
                     :disabled="!selectedBackground"
                     v-bind="attrs"
                     v-on="on"
@@ -489,6 +489,13 @@ export default defineComponent({
       heightMenuValue.value = selectedBackground.value.pixels.length;
       heightMenuScaleContents.value = false;
     };
+    // The "H" hotkey - see PlayerEditor.vue's own handleSetHeightHotkey for
+    // why this can't just call openHeightMenu alone.
+    const handleSetHeightHotkey = () => {
+      if (!selectedBackground.value) return;
+      openHeightMenu();
+      heightMenuVisible.value = true;
+    };
     const handleUnifiedSetHeight = () => {
       const background = selectedBackground.value;
       if (!background) return;
@@ -702,7 +709,8 @@ export default defineComponent({
       copiedBackgroundData, handleCopyBackground, handlePasteBackground,
       activeEditor, setActiveEditor, selectedBackground,
       effectiveEditor, pixelEditorRefKey,
-      heightMenuVisible, heightMenuValue, heightMenuScaleContents, openHeightMenu, handleUnifiedSetHeight};
+      heightMenuVisible, heightMenuValue, heightMenuScaleContents, openHeightMenu, handleUnifiedSetHeight,
+      handleSetHeightHotkey};
   },
 });
 </script>
@@ -952,13 +960,34 @@ export default defineComponent({
 .unified-toolbar-height-btn {
   width: auto !important;
   min-width: 0 !important;
+  margin-left: -6px !important;
   padding: 0 2px;
   font-size: 0.75rem;
   color: rgba(0, 0, 0, 0.55);
+  background-color: transparent !important;
+  box-shadow: none !important;
+}
+
+/* Same rest/hover/press treatment as every icon in GraphicEditorToolbar.vue
+   itself (its own .get-tools >>> .v-btn rules) - this button previously
+   fell back to Vuetify's default "text" button hover (a grey background
+   overlay, not the flat color-only fade the rest of the toolbar uses),
+   reading as a different, out-of-place control sitting right next to them. */
+.unified-toolbar-height-btn::before {
+  display: none;
+}
+
+.unified-toolbar-height-btn:not(.v-btn--disabled):hover {
+  color: rgba(0, 0, 0, 0.87) !important;
+}
+
+.unified-toolbar-height-btn:not(.v-btn--disabled):active {
+  transform: scale(0.92);
 }
 
 .unified-toolbar-height-btn >>> .v-icon {
   font-size: 16px;
+  transition: color 0.15s ease;
   margin-top: -1px;
 }
 

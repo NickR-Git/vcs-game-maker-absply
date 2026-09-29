@@ -53,11 +53,11 @@ export default defineComponent({
 .editor-zoom {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
 }
 
 .editor-zoom-label {
-  min-width: 4em;
+  min-width: 3em;
   text-align: center;
   font-variant-numeric: tabular-nums;
 }

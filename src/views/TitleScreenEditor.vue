@@ -15,7 +15,7 @@
           adds a little overhead too, so stay comfortably under that.
         </p>
 
-        <graphic-editor-toolbar :active-editor="effectiveFrameEditor">
+        <graphic-editor-toolbar :active-editor="effectiveFrameEditor" @height-hotkey="handleSetHeightHotkey">
           <template v-slot:before-tools>
             <editor-zoom v-model="zoom" :levels="titlescreenZoomLevels" />
             <pixel-grid-toggle v-model="showPixelGrid" />
@@ -31,7 +31,7 @@
                     text
                     small
                     class="unified-toolbar-height-btn"
-                    title="Set height"
+                    title="Set height (H)"
                     :disabled="!selectedGraphicCard"
                     v-bind="attrs"
                     v-on="on"
@@ -447,7 +447,7 @@
                                       :ref="pixelEditorRefKey(screen, card, frame)"
                                       :width="cardWidth(card)"
                                       :height="frame.pixels.length || 1"
-                                      :aspectRatio="cardWidth(card) / (frame.pixels.length || 1)"
+                                      :aspectRatio="cardAspectRatio(card, frame.pixels.length)"
                                       v-model="frame.pixels"
                                       :fgColor="editorFgColor(card)"
                                       :rowColors="editorRowColors(card, frame)"
@@ -750,6 +750,20 @@ export default defineComponent({
     // consistent, legible scale.
     const TITLESCREEN_PIXEL_SCALE = 14;
     const editorWidth = (card) => `${Math.round(cardWidth(card) * TITLESCREEN_PIXEL_SCALE * zoom.value)}px`;
+    // A 48x2/96x2 card's rows are 2 scanlines tall on real hardware, which
+    // is already close enough to a TIA color clock's width to render as
+    // roughly square (the plain width/height ratio below). A 48x1 card's
+    // rows are only 1 scanline tall - half that - so without a correction
+    // its preview renders each pixel with the SAME (square) proportions as
+    // 48x2, making a 48x1 card's actual half-height pixels invisible in the
+    // editor. Matches BackgroundEditor.vue's own (11/24) real-hardware
+    // pixel-proportion correction, which the same single-scanline-per-row
+    // case there also needs.
+    const cardAspectRatio = (card, rowCount) => {
+      const isDoubleLine = !!(TITLE_SCREEN_KERNEL_TYPES[card.type] || {}).doubleLine;
+      const ratio = cardWidth(card) / (rowCount || 1);
+      return isDoubleLine ? ratio : ratio * (11 / 24);
+    };
     const cardHasRowColors = (card) => !!(TITLE_SCREEN_KERNEL_TYPES[card.type] || {}).hasRowColors;
     const cardTypeLabel = (card) => {
       if (card.type === 'space') return 'Space';
@@ -1231,6 +1245,13 @@ export default defineComponent({
       heightMenuValue.value = selectedGraphicCard.value.frames[0].pixels.length;
       heightMenuScaleContents.value = false;
     };
+    // The "H" hotkey - see PlayerEditor.vue's own handleSetHeightHotkey for
+    // why this can't just call openHeightMenu alone.
+    const handleSetHeightHotkey = () => {
+      if (!selectedGraphicCard.value) return;
+      openHeightMenu();
+      heightMenuVisible.value = true;
+    };
     const handleUnifiedSetHeight = () => {
       const card = selectedGraphicCard.value;
       if (!card) return;
@@ -1251,7 +1272,7 @@ export default defineComponent({
       isScreenCollapsed, toggleScreenCollapsed,
       testingScreenId, buildInProgress, handleTestTitleScreen,
       screenDragAttrs, screenDragCardClass, screenDragHandleListeners, screenDragTargetListeners,
-      cardWidth, editorWidth, cardHasRowColors, editorRowColors, editorFgColor, cardTypeLabel,
+      cardWidth, editorWidth, cardAspectRatio, cardHasRowColors, editorRowColors, editorFgColor, cardTypeLabel,
       addCardOptions, canAddCardType, maxCopies, maxCopiesForType, playerAnimationOptions,
       handleAddCard, handleDeleteCard,
       handleSetBackgroundColor, handleSetCardColor, handleClearCardColors,
@@ -1268,6 +1289,7 @@ export default defineComponent({
       selectedGraphicCard, activeFrameEditor, setActiveFrame, isFrameActive, frameHighlightState,
       effectiveFrameEditor, pixelEditorRefKey,
       heightMenuVisible, heightMenuValue, heightMenuScaleContents, openHeightMenu, handleUnifiedSetHeight,
+      handleSetHeightHotkey,
     };
   },
 });
@@ -1285,13 +1307,34 @@ export default defineComponent({
 .unified-toolbar-height-btn {
   width: auto !important;
   min-width: 0 !important;
+  margin-left: -6px !important;
   padding: 0 2px;
   font-size: 0.75rem;
   color: rgba(0, 0, 0, 0.55);
+  background-color: transparent !important;
+  box-shadow: none !important;
+}
+
+/* Same rest/hover/press treatment as every icon in GraphicEditorToolbar.vue
+   itself (its own .get-tools >>> .v-btn rules) - this button previously
+   fell back to Vuetify's default "text" button hover (a grey background
+   overlay, not the flat color-only fade the rest of the toolbar uses),
+   reading as a different, out-of-place control sitting right next to them. */
+.unified-toolbar-height-btn::before {
+  display: none;
+}
+
+.unified-toolbar-height-btn:not(.v-btn--disabled):hover {
+  color: rgba(0, 0, 0, 0.87) !important;
+}
+
+.unified-toolbar-height-btn:not(.v-btn--disabled):active {
+  transform: scale(0.92);
 }
 
 .unified-toolbar-height-btn >>> .v-icon {
   font-size: 16px;
+  transition: color 0.15s ease;
   margin-top: -1px;
 }
 

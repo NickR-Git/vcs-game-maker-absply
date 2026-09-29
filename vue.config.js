@@ -12,6 +12,21 @@ module.exports = {
       args[0].title = 'VCS Game Maker';
       return args;
     });
+    // Vuetify's per-component .sass files land in different chunks depending
+    // on which pages/components pull them in, so mini-css-extract-plugin
+    // can't always satisfy one global order across chunks and warns about
+    // it. Their selectors don't overlap between components, so the actual
+    // load order doesn't affect rendering - only the warning is noise.
+    // Only exists for production builds - `vue-cli-service serve` uses
+    // vue-style-loader instead, so tapping unconditionally throws "Cannot
+    // call .tap() on a plugin that has not yet been defined" on dev server
+    // startup.
+    if (config.plugins.has('extract-css')) {
+      config.plugin('extract-css').tap((args) => {
+        args[0].ignoreOrder = true;
+        return args;
+      });
+    }
   },
   pwa: {
     name: 'VCS Game Maker',
@@ -46,9 +61,22 @@ module.exports = {
     // revisioning handles that automatically via content hashing).
     workboxOptions: {
       exclude: [/\.map$/, /manifest\.json$/],
+      // Workbox's default precache cutoff (2MB) is smaller than
+      // gopher2600.wasm (~16MB) - raise it so the emulator actually gets
+      // precached per the intent described above, instead of silently
+      // skipped.
+      maximumFileSizeToCacheInBytes: 20 * 1024 * 1024,
     },
   },
   configureWebpack: {
+    // The bundled toolchain/emulator WASM (bb19/*.wasm, gopher2600.wasm) and
+    // the vendor/app JS chunks that pull them in are expected to exceed
+    // webpack's default 244KiB performance budget - it's not a regression
+    // to chase, so raise the thresholds instead of live with the warning.
+    performance: {
+      maxAssetSize: 16 * 1024 * 1024,
+      maxEntrypointSize: 4 * 1024 * 1024,
+    },
 	  resolve: {
       fallback: {
         'crypto': require.resolve('crypto-browserify'),

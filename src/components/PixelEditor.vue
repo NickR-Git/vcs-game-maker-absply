@@ -17,6 +17,9 @@
             :class="{
               'editor-canvas-tool-pencil': toggledTool === 'pencil',
               'editor-canvas-tool-eraser': toggledTool === 'eraser',
+              'editor-canvas-tool-fill': toggledTool === 'fill',
+              'editor-canvas-tool-line': toggledTool === 'line',
+              'editor-canvas-tool-shape': toggledTool === 'rectangle' || toggledTool === 'oval',
             }"
             @mousedown="handleMouse"
             @mouseenter="handleMouse"
@@ -67,6 +70,10 @@ import {PixelEditor, Pencil} from '@curtishughes/pixel-editor';
 import {chunk, debounce} from 'lodash';
 import {saveAs} from 'file-saver';
 
+import Bucket from '../utils/bucket-tool';
+import Line from '../utils/line-tool';
+import Rectangle from '../utils/rectangle-tool';
+import Oval from '../utils/oval-tool';
 import {isMatrixEqual} from '../utils/array';
 import {getDateInfix} from '../utils/date';
 import {loadImageFromFile, openFileDialog} from '../utils/file';
@@ -112,6 +119,10 @@ export default {
     return {
       pencil: new Pencil(this.fgColor),
       eraser: new Pencil(this.bgColor),
+      fill: new Bucket(this.fgColor),
+      line: new Line(this.fgColor),
+      rectangle: new Rectangle(this.fgColor),
+      oval: new Oval(this.fgColor),
     };
   },
   computed: {
@@ -153,13 +164,25 @@ export default {
     // frame B still drew with frame B's stale Pencil until Eraser was
     // clicked again there too - exactly the bug being fixed here.
     toggledTool(toolName) {
-      if (this.editor) this.editor.tool = toolName === 'eraser' ? this.eraser : this.pencil;
+      if (this.editor) this.editor.tool = this.toolFor(toolName);
     },
     // Recolor the existing pixels when the row colors change (e.g. the user
     // picks a new color in the strip) without disturbing the drawn shape.
+    // logToHistory: false - same reasoning as handleMouse's own recolor
+    // call below: this re-expresses the CURRENT pixel matrix with new
+    // display colors, not a new edit, so it shouldn't consume an undo step.
+    // Left true (the default) here, TitleScreenEditor.vue was a real
+    // reported case where this fired mid-drag - its own @input handler
+    // calls ensureRowColors() on every stroke (unlike Background/Player,
+    // which only do that on frame-add/resize), and editorRowColors()
+    // allocates a fresh array every render, so a fresh `rowColors` prop
+    // reference here is more likely there than elsewhere - each fresh
+    // reference re-pushed a history entry Rectangle/Line/Oval's own
+    // undo()-then-redraw preview didn't expect, leaving old preview
+    // positions never actually erased (a "trail").
     rowColors() {
       if (this.editor) {
-        this.setPixels(this.getPixels());
+        this.setPixels(this.getPixels(), false);
       }
     },
     // The overlay canvas only exists in the DOM while showGrid is true (see
@@ -354,9 +377,22 @@ export default {
       this.$emit('activate', this);
     },
 
+    // 'pencil'/'eraser'/'fill' -> the real tool object driving the
+    // underlying PixelEditor library (see its own Tool interface) -
+    // shared by setTool, the toggledTool watcher above, and initEditor's
+    // initialTool below so all three stay in sync with a single mapping.
+    toolFor(toolName) {
+      if (toolName === 'eraser') return this.eraser;
+      if (toolName === 'fill') return this.fill;
+      if (toolName === 'line') return this.line;
+      if (toolName === 'rectangle') return this.rectangle;
+      if (toolName === 'oval') return this.oval;
+      return this.pencil;
+    },
+
     setTool(toolName) {
       this.toggledTool = toolName;
-      this.editor.tool = toolName === 'eraser' ? this.eraser : this.pencil;
+      this.editor.tool = this.toolFor(toolName);
     },
 
     undo() {
@@ -376,10 +412,20 @@ export default {
         this.$emit('input', pixels);
         // Pixels are drawn in the pencil's fixed color; recolor them so newly
         // drawn cells adopt their row color instead of staying the draw color.
+        // logToHistory: false - this recolor pass doesn't represent a new
+        // edit (see setPixels' own comment); left true here, it silently
+        // pushed an extra history entry on every single stroke, which
+        // undo()-then-redraw preview tools (Rectangle/Line/Oval) rely on
+        // undo() popping exactly the ONE entry their own last move pushed -
+        // the extra entry meant their undo() popped this no-op recolor
+        // instead, leaving the previous preview position's pixels never
+        // actually erased - confirmed as the real cause of a reported
+        // "drawing a rectangle leaves a trail behind" bug on any canvas
+        // with row colors (e.g. Background).
         // eslint-disable-next-line no-invalid-this
         if (this.rowColors) {
           // eslint-disable-next-line no-invalid-this
-          this.setPixels(pixels);
+          this.setPixels(pixels, false);
         }
       }
     }, 10),
@@ -474,7 +520,7 @@ export default {
       // freshly built/resized editor's underlying tool object silently
       // stayed Pencil even while Eraser showed selected on the shared
       // toolbar, until setTool() was called again to actually apply it.
-      const initialTool = this.toggledTool === 'eraser' ? this.eraser : this.pencil;
+      const initialTool = this.toolFor(this.toggledTool);
       this.editor = new PixelEditor(canvas, this.width, rowCount, initialTool, history);
       this.setPixels(pixelMatrix);
       this.handleMouse();
@@ -514,13 +560,19 @@ export default {
       });
       return pixelMatrix;
     },
-    setPixels(pixelMatrix) {
+    // logToHistory: false for handleMouse's own post-stroke recolor pass
+    // below - that call re-expresses the SAME pixel matrix a tool's own
+    // set() just drew, only swapping which CSS color string represents
+    // "on" per row, so it isn't really a separate user edit and shouldn't
+    // consume its own undo step. Left true (an extra history entry) for
+    // every other caller, which is the existing, unchanged behavior.
+    setPixels(pixelMatrix, logToHistory = true) {
       pixelMatrix = pixelMatrix || this.createEmptyPixelMatrix();
       const editorPixels = [];
       pixelMatrix.forEach((line, y) => line.forEach((bit, x) => {
         editorPixels.push({x, y, color: bit ? this.onColorForRow(y) : this.bgColor});
       }));
-      this.editor.set(editorPixels);
+      this.editor.set(editorPixels, logToHistory);
     },
 
     handleClear() {
@@ -587,6 +639,26 @@ export default {
 
 .editor-canvas-tool-eraser {
   cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><path fill='white' stroke='black' stroke-width='1' d='M16.24,3.56L21.19,8.5C21.97,9.29 21.97,10.55 21.19,11.34L12,20.53C10.44,22.09 7.91,22.09 6.34,20.53L2.81,17C2.03,16.21 2.03,14.95 2.81,14.16L13.75,3.56C14.54,2.78 15.8,2.78 16.24,3.56M4.22,15.58L7.76,19.11C8.54,19.9 9.8,19.9 10.59,19.11L14.54,15.16L9.42,10.04L4.22,15.58Z'/></svg>") 4 16, crosshair;
+}
+
+/* Hotspot at the bucket's spout (matching the pencil/eraser cursors' own
+   "point at the exact cell a click would affect" reasoning above). */
+.editor-canvas-tool-fill {
+  cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><path fill='white' stroke='black' stroke-width='1' d='M19,11.5C19,11.5 17,13.67 17,15A2,2 0 0,0 19,17A2,2 0 0,0 21,15C21,13.67 19,11.5 19,11.5M5.21,10L10,5.21L14.79,10M16.56,8.94L7.62,0L6.21,1.41L8.59,3.79L3.44,8.94C2.85,9.5 2.85,10.47 3.44,11.06L8.94,16.56C9.23,16.85 9.62,17 10,17C10.38,17 10.77,16.85 11.06,16.56L16.56,11.06C17.15,10.47 17.15,9.5 16.56,8.94Z'/></svg>") 4 20, crosshair;
+}
+
+/* Hotspot at the line's drawing end (the endpoint that tracks the pointer
+   while dragging), same reasoning as the other tool cursors above. */
+.editor-canvas-tool-line {
+  cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><path fill='white' stroke='black' stroke-width='1' d='M19.5,3.09L20.91,4.5L4.5,20.91L3.09,19.5L19.5,3.09Z'/></svg>") 20 4, crosshair;
+}
+
+/* Rectangle/Oval both drag out a bounding box from a corner rather than
+   tracking a single drawing tip the way Pencil/Line do, so a plain
+   crosshair (no custom glyph/hotspot) already communicates the gesture
+   correctly on its own. */
+.editor-canvas-tool-shape {
+  cursor: crosshair;
 }
 
 /* Layered directly on top of .editor-canvas (same inset/height) - drawn at

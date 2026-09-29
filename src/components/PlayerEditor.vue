@@ -10,7 +10,7 @@
           player size) setting, which will be set automatically when that sprite is activated.
         </p>
 
-        <graphic-editor-toolbar :active-editor="effectiveFrameEditor">
+        <graphic-editor-toolbar :active-editor="effectiveFrameEditor" @height-hotkey="handleSetHeightHotkey">
           <template v-slot:before-tools>
             <editor-zoom v-model="zoom" />
             <pixel-grid-toggle v-model="showPixelGrid" />
@@ -26,7 +26,7 @@
                     text
                     small
                     class="unified-toolbar-height-btn"
-                    title="Set height"
+                    title="Set height (H)"
                     :disabled="!selectedAnimation"
                     v-bind="attrs"
                     v-on="on"
@@ -613,6 +613,16 @@ export default defineComponent({
       heightMenuValue.value = selectedAnimation.value.frames[0].pixels.length;
       heightMenuScaleContents.value = false;
     };
+    // The "H" hotkey (see GraphicEditorToolbar.vue's own handleToolHotkey) -
+    // openHeightMenu alone only prefills the dialog's fields, since normally
+    // it's v-dialog's own activator wiring (v-bind="attrs" v-on="on" on the
+    // "Set height" button) that actually flips heightMenuVisible on; a
+    // hotkey has no activator click to piggyback on, so this does both.
+    const handleSetHeightHotkey = () => {
+      if (!selectedAnimation.value) return;
+      openHeightMenu();
+      heightMenuVisible.value = true;
+    };
     const handleUnifiedSetHeight = () => {
       const animation = selectedAnimation.value;
       if (!animation) return;
@@ -997,7 +1007,7 @@ export default defineComponent({
       activeFrameEditor, setActiveFrame, isFrameActive, frameHighlightState, selectedAnimation,
       effectiveFrameEditor, pixelEditorRefKey,
       heightMenuVisible, heightMenuValue, heightMenuScaleContents,
-      openHeightMenu, handleUnifiedSetHeight,
+      openHeightMenu, handleUnifiedSetHeight, handleSetHeightHotkey,
       props};
   },
 });
@@ -1373,14 +1383,35 @@ export default defineComponent({
 .unified-toolbar-height-btn {
   width: auto !important;
   min-width: 0 !important;
+  margin-left: -6px !important;
   padding: 0 2px;
   font-size: 0.75rem;
   color: rgba(0, 0, 0, 0.55);
+  background-color: transparent !important;
+  box-shadow: none !important;
+}
+
+/* Same rest/hover/press treatment as every icon in GraphicEditorToolbar.vue
+   itself (its own .get-tools >>> .v-btn rules) - this button previously
+   fell back to Vuetify's default "text" button hover (a grey background
+   overlay, not the flat color-only fade the rest of the toolbar uses),
+   reading as a different, out-of-place control sitting right next to them. */
+.unified-toolbar-height-btn::before {
+  display: none;
+}
+
+.unified-toolbar-height-btn:not(.v-btn--disabled):hover {
+  color: rgba(0, 0, 0, 0.87) !important;
+}
+
+.unified-toolbar-height-btn:not(.v-btn--disabled):active {
+  transform: scale(0.92);
 }
 
 .unified-toolbar-height-btn >>> .v-icon {
   font-size: 16px;
   margin-top: -1px;
+  transition: color 0.15s ease;
 }
 
 /* Same reasoning/values as PixelEditor.vue's .pixel-editor-scale-

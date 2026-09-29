@@ -20,7 +20,7 @@
           <v-btn
             icon
             small
-            title="Eraser"
+            title="Eraser (E)"
             value="eraser"
             :disabled="!activeEditor"
             @click="setTool('eraser')"
@@ -30,12 +30,59 @@
           <v-btn
             icon
             small
-            title="Pencil"
+            title="Pencil (B)"
             value="pencil"
             :disabled="!activeEditor"
             @click="setTool('pencil')"
           >
             <v-icon>mdi-pencil</v-icon>
+          </v-btn>
+          <v-btn
+            icon
+            small
+            title="Fill (G)"
+            value="fill"
+            class="get-fill-button"
+            :disabled="!activeEditor"
+            @click="setTool('fill')"
+          >
+            <v-icon>mdi-format-color-fill</v-icon>
+          </v-btn>
+          <v-btn
+            icon
+            small
+            title="Line (L)"
+            value="line"
+            :disabled="!activeEditor"
+            @click="setTool('line')"
+          >
+            <svg class="v-icon get-shape-icon" viewBox="0 0 24 24">
+              <line x1="5" y1="19" x2="19" y2="5" />
+            </svg>
+          </v-btn>
+          <v-btn
+            icon
+            small
+            title="Rectangle (R, hold Shift for a square)"
+            value="rectangle"
+            :disabled="!activeEditor"
+            @click="setTool('rectangle')"
+          >
+            <svg class="v-icon get-shape-icon" viewBox="0 0 24 24">
+              <rect x="3.5" y="3.5" width="17" height="17" />
+            </svg>
+          </v-btn>
+          <v-btn
+            icon
+            small
+            title="Oval (O, hold Shift for a circle)"
+            value="oval"
+            :disabled="!activeEditor"
+            @click="setTool('oval')"
+          >
+            <svg class="v-icon get-shape-icon" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="9.5" />
+            </svg>
           </v-btn>
         </v-btn-toggle>
         <v-divider class="get-inner-divider" vertical />
@@ -54,7 +101,7 @@
         </v-btn>
       </div>
       <template v-if="$slots['after-tools']">
-        <v-divider class="get-inner-divider" vertical />
+        <v-divider class="get-after-tools-divider" vertical />
         <slot name="after-tools" />
       </template>
     </div>
@@ -64,6 +111,18 @@
 <script>
 import {tryUndoQuickColorDeletion, usePendingQuickColorDeletion} from '../hooks/quick-color-undo';
 import {tryUndoCardDeletion, usePendingCardDeletion} from '../hooks/card-delete-undo';
+import {usePixelGridOverlayStorage, usePixelGridLabelsStorage} from '../hooks/project';
+
+// The standard Photoshop/Aseprite-style single-letter tool shortcuts -
+// see handleToolHotkey's own comment for why these specific letters.
+const TOOL_HOTKEYS = {
+  b: 'pencil',
+  e: 'eraser',
+  g: 'fill',
+  l: 'line',
+  r: 'rectangle',
+  o: 'oval',
+};
 
 // The single toolbar shared across every tab with a graphic editor
 // (PlayerEditor/BackgroundEditor/TitleScreenEditor/ScoreFontEditor/
@@ -145,13 +204,64 @@ export default {
     // it is.
     this.scrollContainer = this.$el.closest('.editor-container');
     if (this.scrollContainer) this.scrollContainer.addEventListener('scroll', this.handleScroll);
+    // Only one GraphicEditorToolbar is ever mounted at a time (each tab's
+    // route unmounts the previous one - no <keep-alive> wrapping
+    // <router-view> - see App.vue), so a plain window-level listener here
+    // never has to worry about two tabs' hotkeys firing at once.
+    window.addEventListener('keydown', this.handleToolHotkey);
   },
   beforeDestroy() {
     if (this.scrollContainer) this.scrollContainer.removeEventListener('scroll', this.handleScroll);
+    window.removeEventListener('keydown', this.handleToolHotkey);
   },
   methods: {
     handleScroll(event) {
       this.isScrolled = event.target.scrollTop > 0;
+    },
+    // Handles every graphic-editor hotkey in one place: the (B/E/G/L/R/O)
+    // tool shortcuts (see each tool button's own title), "'" for the pixel
+    // grid overlay, Shift+"'" for its X,Y coordinate labels, and "H" for
+    // Set height - all the common Photoshop/Aseprite-style single-letter
+    // bindings, since users coming from those tools already reach for them
+    // without thinking.
+    handleToolHotkey(event) {
+      // Skip Ctrl/Cmd/Alt combos entirely (e.g. leaves Ctrl+Z/Ctrl+Shift+Z
+      // browser/OS shortcuts alone) - Shift alone is deliberately NOT
+      // excluded, since holding it is also how Line/Rectangle/Oval's own
+      // 45-degree/square/circle snap works (see hooks/shift-key.js), and
+      // it's also needed for the Shift+"'" XY-labels binding below.
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      // Never hijack a key the user is actually typing into a real text
+      // field with (e.g. a frame's Duration number field sitting right next
+      // to this toolbar).
+      const target = event.target;
+      const tag = target && target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (target && target.isContentEditable)) return;
+
+      const key = event.key;
+      if (key === '\'') {
+        event.preventDefault();
+        if (event.shiftKey) {
+          usePixelGridLabelsStorage().value = !usePixelGridLabelsStorage().value;
+        } else {
+          usePixelGridOverlayStorage().value = !usePixelGridOverlayStorage().value;
+        }
+        return;
+      }
+      // Grid/XY work with no card selected at all (see above); everything
+      // below acts on the currently selected card/frame, so there's nothing
+      // to do without one.
+      if (!this.activeEditor) return;
+
+      if (key.toLowerCase() === 'h') {
+        event.preventDefault();
+        this.$emit('height-hotkey');
+        return;
+      }
+      const tool = TOOL_HOTKEYS[key.toLowerCase()];
+      if (!tool) return;
+      event.preventDefault();
+      this.setTool(tool);
     },
     setTool(tool) {
       if (this.activeEditor) this.activeEditor.setTool(tool);
@@ -225,9 +335,16 @@ export default {
   margin: 0 6px;
 }
 
+/* gap (not per-button margins) is what actually guarantees every icon-to-
+   icon/icon-to-divider spacing in this row is identical - the individual
+   margin-left/right !important overrides this replaced had drifted into
+   different values per button through repeated one-off "nudge this one
+   button" tweaks, which is exactly what made the spacing visibly uneven
+   (confirmed as a real reported bug). */
 .get-tools {
   display: flex;
   align-items: center;
+  gap: 4px;
 }
 
 .get-tools >>> .v-btn {
@@ -240,7 +357,23 @@ export default {
   margin: 0;
 }
 
+/* Same gap-based spacing for the Eraser/Pencil/Fill/Line group - v-btn-
+   toggle already renders its buttons as a flex row, so this reaches them
+   the same way .get-tools's own gap reaches its direct children. */
+.get-tools >>> .v-btn-toggle {
+  gap: 4px;
+}
+
 .get-inner-divider {
+  margin: 0;
+}
+
+/* The one divider OUTSIDE .get-tools (before the "after-tools" slot, e.g.
+   TitleScreenEditor.vue's "Set height" button) - kept as its own class
+   (rather than reusing .get-inner-divider) specifically so its margin can
+   stay independent of the gap-based spacing above, since that slot's
+   content isn't a direct flex child of .get-tools the gap could reach. */
+.get-after-tools-divider {
   margin: 0 2px;
 }
 
@@ -252,6 +385,39 @@ export default {
   font-size: 19px;
   color: var(--editor-icon-rest-color, rgba(0, 0, 0, 0.38)) !important;
   transition: color 0.15s ease, transform 0.08s ease;
+}
+
+/* Line/Rectangle/Oval are all plain inline SVGs, not MDI glyphs - no set
+   of existing MDI icons draws all three at a guaranteed, matchable stroke
+   width the way hand-built ones sharing one stroke-width can.
+   stroke-width 2 on this shared 24x24 viewBox is what actually GUARANTEES
+   every outline reads as the exact same thickness, rather than
+   approximating it by eye per icon the way font-based icons would need.
+   Sized to the same 19px as Pencil (the one icon here still a real MDI
+   glyph - .get-tools >>> .v-btn .v-icon's own font-size, just expressed as
+   width/height since an SVG has no font-size to size itself by) so they
+   match at a glance rather than looking like a different icon set.
+   fill: none + stroke: currentColor is what lets the existing hover/active/
+   rest color rules below (all targeting ".v-icon", a class added directly
+   to these plain SVGs for exactly this reason) reach them the same way
+   they reach a real MDI glyph's font color. */
+/* mdi-format-color-fill's glyph sits smaller within its own icon box than
+   mdi-pencil's does at the same font-size, rendering visibly smaller
+   alongside it - bumped up to actually match instead of just matching the
+   (misleading) shared font-size. */
+.get-tools >>> .get-fill-button .v-icon {
+  font-size: 24px;
+  transform: translateY(2px);
+}
+
+.get-tools >>> .get-shape-icon {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .get-tools >>> .v-btn:not(.v-btn--disabled):hover .v-icon {

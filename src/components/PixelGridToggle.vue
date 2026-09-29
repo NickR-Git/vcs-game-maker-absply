@@ -34,8 +34,8 @@ export default {
     value: {type: Boolean, default: false},
     icon: {type: String, default: 'mdi-grid'},
     label: {type: String, default: null},
-    titleOn: {type: String, default: 'Hide pixel grid'},
-    titleOff: {type: String, default: 'Show pixel grid'},
+    titleOn: {type: String, default: 'Hide pixel grid (\')'},
+    titleOff: {type: String, default: 'Show pixel grid (\')'},
     // Lets a caller gate this toggle behind some OTHER condition (see
     // BackgroundEditor.vue's  XY-label toggle, disabled unless the grid
     // overlay itself is on - the labels have no visible effect without it,
@@ -49,10 +49,12 @@ export default {
 <style scoped>
 /* Same flat-icon, fade-in-on-hover/blue-when-active color pattern as every
    other icon button in the app (e.g. Project.vue's own
-   .project-flat-icon-btn) - transparent background, no ripple overlay,
-   faint grey at rest, near-black on hover, and the app's own blue while the
-   grid overlay is actually on (a genuine toggle state, unlike those other
-   buttons' own transient "press" flash). */
+   .project-flat-icon-btn), and now (since this button sits right next to
+   GraphicEditorToolbar.vue's own tool icons and picked up a hotkey of its
+   own) the exact same rest/hover/press treatment as those - transparent
+   background, no ripple overlay, faint grey at rest, near-black on hover,
+   a brief press-squish on click, and the app's own blue while the grid
+   overlay is actually on. */
 .pixel-grid-toggle-btn {
   background-color: transparent !important;
   box-shadow: none !important;
@@ -66,12 +68,17 @@ export default {
 .pixel-grid-toggle-btn >>> .v-icon,
 .pixel-grid-toggle-label {
   color: rgba(0, 0, 0, 0.38) !important;
-  transition: color 0.15s ease;
+  transition: color 0.15s ease, transform 0.08s ease;
 }
 
-.pixel-grid-toggle-btn:hover >>> .v-icon,
-.pixel-grid-toggle-btn:hover .pixel-grid-toggle-label {
+.pixel-grid-toggle-btn:not(.v-btn--disabled):hover >>> .v-icon,
+.pixel-grid-toggle-btn:not(.v-btn--disabled):hover .pixel-grid-toggle-label {
   color: rgba(0, 0, 0, 0.87) !important;
+}
+
+.pixel-grid-toggle-btn:not(.v-btn--disabled):active >>> .v-icon,
+.pixel-grid-toggle-btn:not(.v-btn--disabled):active .pixel-grid-toggle-label {
+  transform: scale(0.82);
 }
 
 /* Vuetify's own disabled styling normally dims a button's icon/text color,

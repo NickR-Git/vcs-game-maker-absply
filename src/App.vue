@@ -482,7 +482,8 @@ import {buildRom, useRomCapacity, useRomOutdated, useHasCompiledRom, useCompiled
 import {safeWithGopher2600} from './hooks/emulator';
 import {escapeHtml} from './utils/build-error';
 import KeyMappingDialog from './components/KeyMappingDialog.vue';
-import {productName, version} from '../package.json';
+import pkg from '../package.json';
+const {productName, version} = pkg;
 
 // Below this fraction of the bank's usable space remaining, the capacity
 // display switches to a warning color.
@@ -873,6 +874,22 @@ export default {
       screen.style.display = '';
       this.observeEmulatorSize(container, screen);
       this.updateEmulatorScale();
+    },
+    // Fires on every 'gopher2600-ready' event - the real first page load,
+    // a full "Refresh emulator" reload, and (see public/index.html's own
+    // error listener) an automatic reinstantiation after a fatal WASM trap.
+    // A fresh instance resets the canvas to a small default size before its
+    // first real frame renders (see gopher2600-wasm's newConsole), which is
+    // exactly the transient-zero-size window updateEmulatorScale's own
+    // bounded retry budget can lose the race against - without re-running
+    // this here, a crash-recovery landing in that window left the emulator
+    // pane collapsed to 0px height with nothing left to ever re-measure it,
+    // i.e. the reported "emulator preview sometimes disappears". Re-running
+    // the same attach/observe logic used on mount and after a build is a
+    // cheap, safe way to resync (re-attaching an already-attached element or
+    // re-observing an already-observed one is a no-op).
+    handleGopher2600Ready() {
+      this.attachEmulator();
     },
     // A single measurement is fragile: if it runs while the container's width
     // has not settled to the drawer width yet, the scale comes out too large,
