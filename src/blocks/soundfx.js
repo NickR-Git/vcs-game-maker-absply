@@ -145,13 +145,16 @@ export const DEFAULT_SOUND_EFFECTS = {
       // for "auto-assigned" - see utils/instrument-colors.js. Used by the
       // Music tab to color this sound's notes in the piano roll.
       color: null,
-      // Purely a display tag for the Sound tab's own "show all/instruments/
-      // sounds" filter (see SoundFXEditor.vue) - every sound effect preset
-      // is already usable BOTH as a soundfx_play trigger and as a Music tab
-      // instrument regardless of this flag, so it doesn't gate or change
-      // anything else. Defaults false (a plain "sound effect") since that's
-      // what every preset already was before this existed.
-      isInstrument: false,
+      // A display tag for the Sound tab's own "show all/instruments/sounds"
+      // filter (see SoundFXEditor.vue), but also the actual gate on the
+      // Music tab's own Instrument dropdown (see MusicEditor.vue's
+      // soundEffectOptions, which only lists isInstrument sounds there) -
+      // true here (not the usual "off by default" a brand new flag would
+      // get) so a fresh project's one default sound card is actually
+      // pickable as an instrument out of the box, instead of the Music tab
+      // silently showing no instruments at all until the user remembers to
+      // flip this on manually - confirmed as a real reported bug.
+      isInstrument: true,
     },
   ],
 };

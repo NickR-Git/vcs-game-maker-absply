@@ -44,13 +44,27 @@
         title="Attack - drag to change how many frames it takes to reach full volume"
         @mousedown="startDrag('attack', $event)"
       />
+      <!-- decayX equals attackX whenever decay is 0 (see its own
+           computed) - without this guard, this dot sat exactly on top of
+           the Attack dot above, reading as one oddly-thick point instead
+           of a genuine vertex on the curve. Decay is still editable either
+           way (see SoundFXEditor.vue's own dropdown field for it) - this
+           only hides the redundant on-graph handle for it. -->
       <div
+        v-if="decay > 0"
         class="envelope-graph-dot envelope-graph-dot-handle"
         :style="dotStyle(decayX, sustainPercent)"
         title="Decay/Sustain - drag horizontally to change Decay, vertically to change Sustain level"
         @mousedown="startDrag('decaySustain', $event)"
       />
+      <!-- sustainEndX equals decayX whenever sustainLength is 0 (same
+           overlapping-vertex reasoning as the decaySustain dot's own
+           guard above, and the same condition the "Sus" label just below
+           already uses) - Release is still editable either way (see
+           SoundFXEditor.vue's own dropdown field for it), this only hides
+           the redundant on-graph handle for it. -->
       <div
+        v-if="sustainLength > 0"
         class="envelope-graph-dot envelope-graph-dot-handle"
         :style="dotStyle(sustainEndX, sustainPercent)"
         title="Release/Sustain - drag horizontally to change Release, vertically to change Sustain level"

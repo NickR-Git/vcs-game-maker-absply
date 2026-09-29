@@ -9,6 +9,7 @@ import {ref} from '@vue/composition-api';
 // tab is left and revisited.
 const ACTIVE_PATTERN_KEY = 'vcs-game-maker.music.activePatternIds';
 const ACTIVE_TRACK_KEY = 'vcs-game-maker.music.activeTrackIds';
+const ACTIVE_SONG_KEY = 'vcs-game-maker.music.activeSongId';
 
 const loadStored = (key) => {
   try {
@@ -20,16 +21,22 @@ const loadStored = (key) => {
 
 let activePatternIdsRef = null;
 let activeTrackIdsRef = null;
+let activeSongIdRef = null;
 
 /**
- * Persisted, per-song active pattern id and per-pattern active track id for
- * the Music tab.
+ * Persisted, per-song active pattern id, per-pattern active track id, and
+ * the single active song id, for the Music tab.
  * @return {{activePatternIdsRef: Object, activeTrackIdsRef: Object,
- *     setActivePatternId: Function, setActiveTrackId: Function}}
+ *     activeSongIdRef: Object, setActivePatternId: Function,
+ *     setActiveTrackId: Function, setActiveSongId: Function}}
  */
 export const useMusicEditorActiveState = () => {
   if (!activePatternIdsRef) activePatternIdsRef = ref(loadStored(ACTIVE_PATTERN_KEY));
   if (!activeTrackIdsRef) activeTrackIdsRef = ref(loadStored(ACTIVE_TRACK_KEY));
+  // A plain scalar id, not a {[key]: value} map like the two above - there's
+  // only ever one active song at a time (unlike a per-song pattern or
+  // per-pattern track), so no outer key is needed.
+  if (!activeSongIdRef) activeSongIdRef = ref(JSON.parse(localStorage.getItem(ACTIVE_SONG_KEY) || 'null'));
 
   const setActivePatternId = (songId, patternId) => {
     activePatternIdsRef.value = {...activePatternIdsRef.value, [songId]: patternId};
@@ -39,8 +46,13 @@ export const useMusicEditorActiveState = () => {
     activeTrackIdsRef.value = {...activeTrackIdsRef.value, [patternId]: trackId};
     localStorage.setItem(ACTIVE_TRACK_KEY, JSON.stringify(activeTrackIdsRef.value));
   };
+  const setActiveSongId = (songId) => {
+    activeSongIdRef.value = songId;
+    localStorage.setItem(ACTIVE_SONG_KEY, JSON.stringify(songId));
+  };
 
-  return {activePatternIdsRef, activeTrackIdsRef, setActivePatternId, setActiveTrackId};
+  return {activePatternIdsRef, activeTrackIdsRef, activeSongIdRef,
+    setActivePatternId, setActiveTrackId, setActiveSongId};
 };
 
 // Which song/pattern is currently playing, if any - a plain in-memory
@@ -85,6 +97,8 @@ export const usePlaybackStatusState = () => {
 export const resetMusicEditorActiveState = () => {
   if (activePatternIdsRef) activePatternIdsRef.value = {};
   if (activeTrackIdsRef) activeTrackIdsRef.value = {};
+  if (activeSongIdRef) activeSongIdRef.value = null;
   localStorage.removeItem(ACTIVE_PATTERN_KEY);
   localStorage.removeItem(ACTIVE_TRACK_KEY);
+  localStorage.removeItem(ACTIVE_SONG_KEY);
 };

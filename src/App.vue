@@ -1170,8 +1170,9 @@ export default {
    base stylesheet (plain classes there, not inline styles, so a plain
    override without !important would otherwise just lose a specificity tie
    to a same-specificity rule that happens to be loaded after this one). */
+/* 2% darker than the original #eeeeee, at the user's own request. */
 .desaturate-app-colors .theme--light.v-card {
-  background-color: #eeeeee !important;
+  background-color: #e9e9e9 !important;
 }
 
 /* Vuetify's own .theme--light.v-list default (white) isn't covered by the
@@ -1186,7 +1187,7 @@ export default {
    box sitting behind that tab's cards instead (also confirmed as a real
    reported bug once tried unscoped). */
 .desaturate-app-colors .v-menu__content .theme--light.v-list {
-  background-color: #eeeeee !important;
+  background-color: #e9e9e9 !important;
 }
 
 .desaturate-app-colors.v-application,
