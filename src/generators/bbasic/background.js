@@ -9,7 +9,7 @@ import {effectiveBackgroundRows, backgroundFadeTimerVarName, backgroundFadePaceV
   collisionPixelNudgedColumnVarName, collisionPixelNudgedRowVarName,
   backgroundScrollRowVarName, backgroundScrollRowMaxVarName} from '../../blocks/background';
 import {pfRowDivisorFor} from '../../utils/playfield-coords';
-import {ctrlpfShadowVarName} from './sprites';
+import {ctrlpfShadowVarName, spriteScrollFlagsVarName, spriteScrollActiveBit} from './sprites';
 
 // FADE_STEPS (4) is fixed rather than user-choosable - see its  comment
 // in blocks/background.js. floor(14 / 4) = 3, rounded down to the nearest
@@ -1150,13 +1150,15 @@ export default (Blockly) => {
 
   // Up/Down/Up (2x)/Down (2x) update backgroundScrollRow (see
   // backgroundScrollRowVarName's own comment in blocks/background.js)
-  // whenever ANY background_scroll/background_scroll_position block is
-  // used anywhere in the project (backgroundScrollUsed, set by bbasic.js's
-  // own pre-scan) - not just when THIS block's own STOPATEDGE is checked -
-  // so a getter, or a DIFFERENT scroll block that does check STOPATEDGE,
-  // always sees an accurate position regardless of which specific block
-  // last moved it. Left/Right never touch it (no edge concept - see this
-  // block's own tooltip).
+  // whenever ANY background_scroll/background_scroll_position block OR any
+  // sprite_scroll_with_playfield_set/_get block is used anywhere in the
+  // project (backgroundScrollUsed, set by bbasic.js's own pre-scan) - not
+  // just when THIS block's own STOPATEDGE is checked - so a getter, or a
+  // DIFFERENT scroll block that does check STOPATEDGE, always sees an
+  // accurate position regardless of which specific block last moved it.
+  // Left/Right never touch it (no edge concept - see this block's own
+  // tooltip) - so a sprite flagged to follow scroll only ever moves along
+  // with Up/Down/Up (2x)/Down (2x), never Left/Right.
   const BACKGROUND_SCROLL_ROW_DELTA = {up: -1, down: 1, upup: -2, downdown: 2};
 
   Blockly.BBasic[`background_scroll`] = function(block) {
@@ -1182,6 +1184,24 @@ export default (Blockly) => {
     }
     lines.push(` pfscroll ${direction}`);
     lines.push(` ${rowVar} = ${rowVar} ${delta < 0 ? '-' : '+'} ${Math.abs(delta)}`);
+    // Nudges every sprite currently flagged (a RUNTIME bit, checked here
+    // every call, not a compile-time decision - see sprite_scroll_with_
+    // playfield_set's own generator in generators/bbasic/sprites.js) to
+    // follow this same row move, one "if flag then nudge" line per NAME
+    // that has a "set/is scrolling with playfield" block anywhere in the
+    // project (spriteScrollUsedFor - only those names' check code is ever
+    // emitted, so a project not using the feature at all pays nothing extra
+    // here). Reuses rowVar's own delta directly rather than a second,
+    // separate per-sprite offset - see backgroundScrollRowVarName's own
+    // comment in blocks/background.js for why.
+    const spriteScrollUsedFor = Blockly.BBasic.spriteScrollUsedFor || new Set();
+    if (spriteScrollUsedFor.size) {
+      const flagsVar = resolveVar(spriteScrollFlagsVarName());
+      spriteScrollUsedFor.forEach((name) => {
+        const bit = spriteScrollActiveBit(name);
+        lines.push(` if ${flagsVar}{${bit}} then ${name}y = ${name}y ${delta < 0 ? '-' : '+'} ${Math.abs(delta)}`);
+      });
+    }
     // "@ label" (not a bare label), same reasoning as collision_check_
     // position/object_bounce's own labels elsewhere in this codebase - this
     // whole block can end up nested inside an "if...then" body (e.g. an

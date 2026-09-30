@@ -2,7 +2,7 @@
 
 import * as Blockly from 'blockly/core';
 
-import {useBackgroundsStorage} from '../hooks/project';
+import {useBackgroundsStorage, useConfigurationStorage} from '../hooks/project';
 import {playfieldToMatrix} from '../utils/pixels';
 import {BACKGROUND_ICON, COLOR_ICON, CHECKBOX_CHECKED_ICON, CHECKBOX_CLEAR_ICON, FLIP_ICON, BACKGROUND_PFSCROLL_LEFT_ICON, BACKGROUND_PFSCROLL_RIGHT_ICON, BACKGROUND_PFSCROLL_UP_ICON, BACKGROUND_PFSCROLL_DOWN_ICON, BACKGROUND_PFSCROLL_DOWN2X_ICON, BACKGROUND_PFSCROLL_UP2X_ICON, PLAYER_ICON, MISSILE_ICON, BALL_ICON} from './icon';
 
@@ -322,14 +322,60 @@ const BACKGROUND_LINE_DIRECTION_OPTIONS = [
   [`Vertically`, 'pfvline'],
 ];
 
+// Up first (not Left) - a plain field_dropdown's own default selected value
+// is always whichever option is FIRST in this list (FieldDropdown has no
+// separate "default value" of its own to set independently - see node_modules/
+// blockly/core/field_dropdown.js's constructor), and Up works unconditionally
+// (Left/Right don't, once Superchip RAM is on - see background_scroll_
+// direction_sync's own comment below), so it's the only choice that's always
+// a valid default regardless of that setting.
 const BACKGROUND_PFSCROLL_OPTIONS = [
-  [`${BACKGROUND_PFSCROLL_LEFT_ICON} Left`, 'left'],
-  [`${BACKGROUND_PFSCROLL_RIGHT_ICON} Right`, 'right'],
   [`${BACKGROUND_PFSCROLL_UP_ICON} Up`, 'up'],
   [`${BACKGROUND_PFSCROLL_DOWN_ICON} Down`, 'down'],
+  [`${BACKGROUND_PFSCROLL_LEFT_ICON} Left`, 'left'],
+  [`${BACKGROUND_PFSCROLL_RIGHT_ICON} Right`, 'right'],
   [`${BACKGROUND_PFSCROLL_UP2X_ICON} Up (2x)`, 'upup'],
   [`${BACKGROUND_PFSCROLL_DOWN2X_ICON} Down (2x)`, 'downdown'],
 ];
+
+// Real batari Basic doesn't support horizontal (Left/Right) playfield
+// scrolling once Superchip RAM is on (see Configuration.vue's own
+// "Enable Superchip RAM" hint text) - a function menuGenerator (rather
+// than the plain static array every other JSON-defined dropdown in this
+// file uses) so the option list is recomputed live every time the
+// dropdown is actually opened (FieldDropdown.getOptions(false) always
+// calls a function generator fresh, unlike its cached array path - see
+// node_modules/blockly/core/field_dropdown.js), instead of needing a
+// toolbox-rebuild/watcher plumbing like ActionEditor.vue's Player 0/1
+// sprite-colors toggle uses.
+//
+// Also corrects the field's OWN current value at init time if it's
+// already Left/Right while Superchip is on - covers a block freshly
+// dragged out of the flyout (which otherwise defaulted to Left, the
+// filtered menuGenerator's first entry no longer including it, but the
+// field's own already-set value never re-validated against that on its
+// own - confirmed as a real reported bug, "scroll left is still showing
+// as the default"), AND a project loaded with an existing Left/Right
+// choice from before Superchip was turned on - unlike the toolbox-only
+// sprite-colors gate this pattern is modeled on, Left/Right genuinely
+// doesn't function under Superchip's kernel at all, so there's no
+// "keeps working as it did" case worth preserving here.
+Blockly.Extensions.register('background_scroll_direction_sync', function() {
+  // eslint-disable-next-line no-invalid-this
+  const block = this;
+  const field = block.getField('DIRECTION');
+  if (!field) return;
+  const optionsForCurrentConfig = () => {
+    const cfg = useConfigurationStorage().value || {};
+    if (!cfg.enableSuperchip) return BACKGROUND_PFSCROLL_OPTIONS;
+    return BACKGROUND_PFSCROLL_OPTIONS.filter(([, value]) => value !== 'left' && value !== 'right');
+  };
+  field.menuGenerator_ = optionsForCurrentConfig;
+  const validValues = new Set(optionsForCurrentConfig().map(([, value]) => value));
+  if (!validValues.has(field.getValue())) {
+    field.setValue('up');
+  }
+});
 
 export const DEFAULT_BACKGROUNDS = {
   backgrounds: [
@@ -830,7 +876,10 @@ Blockly.defineBlocksWithJsonArray([
     'previousStatement': null,
     'nextStatement': null,
     'colour': BACKGROUND_COLOR,
-    'tooltip': `Scrolls the background in the given direction. "stop at top/bottom edge", when checked, ` +
+    'extensions': ['background_scroll_direction_sync'],
+    'tooltip': `Scrolls the background in the given direction. Left/Right aren't offered while Superchip ` +
+      `RAM is enabled (Options tab) - real batari Basic doesn't support horizontal playfield scrolling ` +
+      `on that kernel. "stop at top/bottom edge", when checked, ` +
       `tracks how far Up/Down/Up (2x)/Down (2x) scrolling has moved within the CURRENT background's ` +
       `own real row count (not just the fixed 12-row window batari Basic's own pfscroll rotates through) ` +
       `and skips the scroll instead of continuing past the top (row 0) or the bottom (this background's ` +

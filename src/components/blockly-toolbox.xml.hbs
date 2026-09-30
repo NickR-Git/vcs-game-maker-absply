@@ -442,6 +442,16 @@
 
         <block type="object_seek_arrived"></block>
 
+        <block type="sprite_scroll_with_playfield_set">
+            <value name="VALUE">
+                <shadow type="logic_boolean">
+                    <field name="BOOL">TRUE</field>
+                </shadow>
+            </value>
+        </block>
+
+        <block type="sprite_scroll_with_playfield_get"></block>
+
         <block type="sprite_inertia_accelerate">
             <value name="DIRECTION">
                 <shadow type="math_number">
@@ -575,6 +585,7 @@
             </value>
         </block>
         <block type="background_scroll">
+            <field name="DIRECTION">up</field>
         </block>
         <block type="background_scroll_position"></block>
         <block type="background_get_resolution"></block>
@@ -596,7 +607,6 @@
         <block type="background_collision_pixel_column"></block>
         <block type="background_collision_pixel_row"></block>
         <block type="background_clear"></block>
-        <block type="draw_screen"></block>
         <block type="screen_shake">
             <value name="FRAMES">
                 <shadow type="math_number">
@@ -604,6 +614,7 @@
                 </shadow>
             </value>
         </block>
+        <block type="draw_screen"></block>
     </category>
     <category name="Sound" colour="rgb(156, 39, 176)">
         <block type="simple_sound_set"></block>

@@ -50,7 +50,7 @@ import {processPlayerAnimationsStorageDefaults, generateRomNoiseChecks, generate
   generateMissileFireChecks, reserveMissileFireDevVars, reserveMissileBounceDevVars,
   generateSeekChecks, reserveSeekDevVars, reserveSeekArrivedDevVars,
   reserveCtrlpfShadowDevVar, generateCtrlpfShadowSetup, resolveUsedPlayerAnimations,
-  generateInertiaChecks, reserveInertiaDevVars} from './bbasic/sprites';
+  generateInertiaChecks, reserveInertiaDevVars, reserveSpriteScrollDevVars} from './bbasic/sprites';
 import {resolveSeekArrivedWatches} from '../blocks/sprites';
 import {resolveProjectMusic, MUSIC_PLAY_RESET_NAME, MUSIC_PLAY_BY_ID_NAME,
   musicPlayByIdArgVarName, musicPlaySongResetName,
@@ -602,6 +602,18 @@ Blockly.BBasic.init = function(workspace) {
   workspace.getAllBlocks(false).forEach((block) => {
     if (block.type === 'object_seek_to' && block.isEnabled()) {
       this.seekUsedFor.add(block.getFieldValue('OBJECT'));
+    }
+  });
+
+  // Same shape as seekUsedFor above, for sprite_scroll_with_playfield_set/
+  // _get (see reserveSpriteScrollDevVars' own comment in generators/bbasic/
+  // sprites.js) - both block types share one OBJECT dropdown, so either one
+  // counts toward a name being "in use."
+  this.spriteScrollUsedFor = new Set();
+  workspace.getAllBlocks(false).forEach((block) => {
+    if ((block.type === 'sprite_scroll_with_playfield_set' ||
+        block.type === 'sprite_scroll_with_playfield_get') && block.isEnabled()) {
+      this.spriteScrollUsedFor.add(block.getFieldValue('OBJECT'));
     }
   });
 
@@ -1745,14 +1757,23 @@ Blockly.BBasic.init = function(workspace) {
   // since a getter needs the same tracked position a scroll block updates,
   // and a scroll block updates it regardless of whether ITS OWN checkbox
   // is on (so other scroll blocks/getters in the project stay accurate).
+  // Also reserved whenever a sprite_scroll_with_playfield_set/_get block is
+  // used anywhere (spriteScrollUsedFor, pre-scanned above), even with no
+  // "Background scroll" block in the project at all - that feature reuses
+  // THIS SAME row var directly to nudge a flagged sprite's Y (see
+  // background_scroll's own generator in generators/bbasic/background.js),
+  // rather than keeping a separate per-sprite scroll offset of its own, so
+  // it needs the var reserved regardless of what else is using it.
   this.backgroundScrollUsed = workspace.getAllBlocks(false)
-      .some((block) => block.type === 'background_scroll' || block.type === 'background_scroll_position');
+      .some((block) => block.type === 'background_scroll' || block.type === 'background_scroll_position') ||
+      this.spriteScrollUsedFor.size > 0;
   if (this.backgroundScrollUsed) {
     reserveDevVar(backgroundScrollRowVarName(), undefined,
         'how far Up/Down scrolling has moved the current background from its own top row');
     reserveDevVar(backgroundScrollRowMaxVarName(), undefined,
         'the current background\'s furthest valid scroll row (its row count minus the visible rows)');
   }
+  reserveSpriteScrollDevVars(reserveDevVar, this.spriteScrollUsedFor);
 
   // Add user variables, but only ones that are being used. Their own FINAL
   // routed names are tracked separately (userVarNames) so the ROM capacity

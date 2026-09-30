@@ -240,6 +240,17 @@ export const seekXVarName = (name) => `${name}SeekX`;
 export const seekYVarName = (name) => `${name}SeekY`;
 export const seekSpeedVarName = (name) => `${name}SeekSpeed`;
 
+// sprite_scroll_with_playfield_set/_get's shared runtime flags byte - one
+// bit per sprite name (same bits as seekActiveBit above, reused directly
+// rather than a duplicate map, since there's no reason the two features'
+// bit layouts need to differ). This is the ONLY dedicated state the
+// feature needs - the actual per-frame Y nudge (background_scroll's own
+// generator, generators/bbasic/background.js) reuses backgroundScrollRow
+// directly rather than keeping a second, per-sprite scroll offset of its
+// own; see backgroundScrollRowVarName's comment in blocks/background.js.
+export const spriteScrollFlagsVarName = () => 'spriteScrollFlags';
+export const spriteScrollActiveBit = (name) => seekActiveBit(name);
+
 // object_seek_arrived's own "finished" bits - deliberately a SEPARATE byte
 // from seekFlagsVarName's  active bits above (not packed into the same
 // byte the way background.js's  fadeFlagsVarName does for its 4
@@ -564,6 +575,19 @@ export const reserveSeekDevVars = (reserveDevVar, reserveDevVarRW, usedFor) => {
     reserveDevVarRW(seekThrottleResetVarName(name),
         'this sprite\'s "throttle movement" countdown reset value');
   });
+};
+
+// One shared byte, reserved only when at least one sprite_scroll_with_
+// playfield_set/_get block is used anywhere in the project (spriteScrollUsedFor,
+// bbasic.js's own pre-scan - same shape as seekUsedFor). Also forces
+// backgroundScrollRow/backgroundScrollRowMax to be reserved even without any
+// "Background scroll" block present, since a "set/is scrolling with
+// playfield" block on its own still needs somewhere to read/nudge - see
+// bbasic.js's own init().
+export const reserveSpriteScrollDevVars = (reserveDevVar, usedFor) => {
+  if (!usedFor || !usedFor.size) return;
+  reserveDevVar(spriteScrollFlagsVarName(), undefined,
+      'shared active-bit byte for sprites following playfield scroll');
 };
 
 // One shared byte, reserved only when at least one object_seek_arrived
@@ -1808,6 +1832,40 @@ export default (Blockly) => {
       Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
     const flagBit = `${resolveVar(seekArrivedFlagsVarName())}{${seekArrivedBit(name)}}`;
     return [flagBit, Blockly.BBasic.ORDER_ATOMIC];
+  };
+
+  // A literal can be assigned straight to the bit; anything else has to be
+  // branched on, since a batari Basic condition is not a value - same
+  // reasoning/shape as bit_set's own BIT_LITERALS in generators/bbasic/bit.js
+  // (duplicated locally rather than imported, since it's a 4-entry map not
+  // worth coupling the two files over).
+  const SPRITE_SCROLL_VALUE_LITERALS = {'true': '1', '1': '1', 'false': '0', '0': '0'};
+
+  // sprite_scroll_with_playfield_set's generator - just flips this object's
+  // own bit in the shared flags byte; background_scroll's own generator
+  // (generators/bbasic/background.js) is what actually reads it to decide
+  // whether to nudge this object's Y alongside the playfield each scroll.
+  Blockly.BBasic['sprite_scroll_with_playfield_set'] = function(block) {
+    const name = block.getFieldValue('OBJECT');
+    const resolveVar = (canonicalName) =>
+      Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+    const target = `${resolveVar(spriteScrollFlagsVarName())}{${spriteScrollActiveBit(name)}}`;
+    const argument0 = Blockly.BBasic.valueToCode(block, 'VALUE', Blockly.BBasic.ORDER_ASSIGNMENT) || 'true';
+    const literal = SPRITE_SCROLL_VALUE_LITERALS[argument0.trim()];
+    if (literal) {
+      return `${target} = ${literal}\n`;
+    }
+    return `if ${argument0} then ${target} = 1 else ${target} = 0\n`;
+  };
+
+  // sprite_scroll_with_playfield_get's generator - a plain, always-current
+  // boolean read of the same bit the setter above writes.
+  Blockly.BBasic['sprite_scroll_with_playfield_get'] = function(block) {
+    const name = block.getFieldValue('OBJECT');
+    const resolveVar = (canonicalName) =>
+      Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+    const code = `${resolveVar(spriteScrollFlagsVarName())}{${spriteScrollActiveBit(name)}}`;
+    return [code, Blockly.BBasic.ORDER_ATOMIC];
   };
 
   // Captures direction/rate/max speed and sets the accel-active bit for

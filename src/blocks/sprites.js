@@ -975,6 +975,57 @@ Blockly.defineBlocksWithJsonArray([
       'target X/Y, and stays true until that object is given a new Seek target. Always false ' +
       'if no matching Seek block ever runs anywhere in the project.',
   },
+  // Same "one block, OBJECT dropdown covers all 5 names" shape as object_
+  // seek_to above, reusing the same SEEK_OBJECT_OPTIONS/object_seek_colour_
+  // sync. A runtime on/off toggle (not a compile-time checkbox) - lets a
+  // project turn scroll-following on for one sprite mid-game (e.g. only
+  // once gameplay actually starts scrolling) and off for another (e.g. a
+  // HUD-like sprite that should stay fixed on screen). VALUE accepts
+  // Boolean or Number, same convention as bit_set's own VALUE input in
+  // blocks/bit.js.
+  {
+    'type': 'sprite_scroll_with_playfield_set',
+    'message0': `${SEEK_ICON} %1 set scroll with playfield to %2`,
+    'args0': [
+      {
+        'type': 'field_dropdown',
+        'name': 'OBJECT',
+        'options': SEEK_OBJECT_OPTIONS,
+      },
+      {
+        'type': 'input_value',
+        'name': 'VALUE',
+        'check': ['Boolean', 'Number'],
+      },
+    ],
+    'inputsInline': true,
+    'previousStatement': null,
+    'nextStatement': null,
+    'colour': 'purple',
+    'extensions': ['object_seek_colour_sync'],
+    'tooltip': 'Turns automatic playfield-scroll following on or off for this object. While on, every ' +
+      '"Background scroll" block using Up/Down/Up (2x)/Down (2x) also shifts this object\'s Y position ' +
+      'by the same amount, so it stays in the same spot relative to the scrolling background instead of ' +
+      'the screen. Has no effect on Left/Right scrolling. Accepts true/false or 1/0.',
+  },
+  // Read-only companion to the setter above - same OBJECT dropdown/colour
+  // extension, just reading the same runtime bit back instead of writing it.
+  {
+    'type': 'sprite_scroll_with_playfield_get',
+    'message0': `${SEEK_ICON} Is %1 scrolling with playfield?`,
+    'args0': [
+      {
+        'type': 'field_dropdown',
+        'name': 'OBJECT',
+        'options': SEEK_OBJECT_OPTIONS,
+      },
+    ],
+    'output': 'Boolean',
+    'colour': 'purple',
+    'extensions': ['object_seek_colour_sync'],
+    'tooltip': 'True while this object currently has playfield-scroll following turned on (see ' +
+      '"set scroll with playfield to").',
+  },
   // Same "one block, OBJECT dropdown covers all 5 names" shape as
   // object_seek_to above, and the same per-choice colour extension
   // (object_seek_colour_sync is already OBJECT-dropdown-generic, so it's
