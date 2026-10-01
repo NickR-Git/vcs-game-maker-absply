@@ -578,6 +578,21 @@ export default defineComponent({
   min-width: max-content;
 }
 
+/* duotone-sea.css's base "code[class*='language-']" rule (meant for an
+   inline <code> snippet OUTSIDE a <pre>, where a faint tint helps it read
+   as code against surrounding prose) sets background-color: rgba(0, 0, 0,
+   .05) - harmless there, but a real reported bug here: this <code> is
+   display: inline (never overridden), so that tint only wraps tightly
+   around each line's actual text instead of spanning the full pane width,
+   reading as every line having a slightly different background color
+   against .code-container's real rgb(29, 38, 47) behind it. Removed
+   outright - this pane's lines were never meant to have a background at
+   all. >>> pierces vue-code-highlight's rendered <code>, which never
+   carries this component's scope attribute. */
+.code-container >>> code {
+  background: none;
+}
+
 </style>
 <!-- Styles the CSS Custom Highlight this component sets via
      CSS.highlights.set() in selectMatch() (see its own comment for why

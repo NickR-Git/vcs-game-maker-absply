@@ -105,7 +105,6 @@
           </v-btn>
         </div>
       </div>
-      <v-divider />
       <v-card-text class="song-list-section">
         <template v-for="song in activeSongArray">
           <div
@@ -131,33 +130,13 @@
                     <v-btn icon small class="music-icon-btn-size" title="Duplicate this song" @click="() => handleDuplicateSong(song)">
                       <v-icon small>mdi-content-duplicate</v-icon>
                     </v-btn>
-                    <v-menu v-if="state.songs.length > 1" top>
-                      <template v-slot:activator="{ on, attrs }">
-                        <v-btn
-                          title="Delete this song"
-                          icon
-                          small
-                          class="music-icon-btn-size"
-                          v-bind="attrs"
-                          v-on="on"
-                        >
-                          <v-icon small>mdi-delete</v-icon>
-                        </v-btn>
-                      </template>
-                      <v-card>
-                        <v-card-title>Delete this song?</v-card-title>
-                        <v-list>
-                          <v-list-item @click="handleDeleteSong(song)">
-                            <v-list-item-icon><v-icon>mdi-check</v-icon></v-list-item-icon>
-                            <v-list-item-title>Yes, delete</v-list-item-title>
-                          </v-list-item>
-                          <v-list-item link>
-                            <v-list-item-icon><v-icon>mdi-cancel</v-icon></v-list-item-icon>
-                            <v-list-item-title>No, don't delete</v-list-item-title>
-                          </v-list-item>
-                        </v-list>
-                      </v-card>
-                    </v-menu>
+                    <confirm-delete-menu
+                      v-if="state.songs.length > 1"
+                      title="Delete this song?"
+                      activator-title="Delete this song"
+                      icon-btn-class="music-icon-btn-size"
+                      @confirm="handleDeleteSong(song)"
+                    />
                   </div>
                   <v-text-field
                     class="tempo-field"
@@ -269,33 +248,13 @@
                         <v-btn icon small class="music-icon-btn-size" title="Duplicate this pattern" @click="() => handleDuplicatePattern(song, activePattern(song))">
                           <v-icon small>mdi-content-duplicate</v-icon>
                         </v-btn>
-                        <v-menu v-if="song.patterns.length > 1" top>
-                          <template v-slot:activator="{ on, attrs }">
-                            <v-btn
-                              title="Delete this pattern"
-                              icon
-                              small
-                              class="music-icon-btn-size"
-                              v-bind="attrs"
-                              v-on="on"
-                            >
-                              <v-icon small>mdi-delete</v-icon>
-                            </v-btn>
-                          </template>
-                          <v-card>
-                            <v-card-title>Delete this pattern?</v-card-title>
-                            <v-list>
-                              <v-list-item @click="() => handleDeletePattern(song, activePattern(song))">
-                                <v-list-item-icon><v-icon>mdi-check</v-icon></v-list-item-icon>
-                                <v-list-item-title>Yes, delete</v-list-item-title>
-                              </v-list-item>
-                              <v-list-item link>
-                                <v-list-item-icon><v-icon>mdi-cancel</v-icon></v-list-item-icon>
-                                <v-list-item-title>No, don't delete</v-list-item-title>
-                              </v-list-item>
-                            </v-list>
-                          </v-card>
-                        </v-menu>
+                        <confirm-delete-menu
+                          v-if="song.patterns.length > 1"
+                          title="Delete this pattern?"
+                          activator-title="Delete this pattern"
+                          icon-btn-class="music-icon-btn-size"
+                          @confirm="handleDeletePattern(song, activePattern(song))"
+                        />
                       </div>
                       <div class="pattern-length-tempo-group">
                         <v-text-field
@@ -818,6 +777,7 @@ import {
 import {saveAs} from 'file-saver';
 import {max} from 'lodash';
 
+import ConfirmDeleteMenu from '../components/ConfirmDeleteMenu.vue';
 import {useCollapsedIds} from '../hooks/collapse';
 import {useMusicEditorActiveState, usePlaybackStatusState} from '../hooks/music-editor-state';
 import {useDimSoundFxPercentStorage, useDimSoundFxStorage, useSongsStorage,
@@ -932,6 +892,7 @@ const emptyTrack = (id, soundEffectId, channel = 0) => ({
 });
 
 export default defineComponent({
+  components: {ConfirmDeleteMenu},
   setup() {
     const songsStorage = useSongsStorage();
     const soundEffectsStorage = useSoundEffectsStorage();
@@ -1290,18 +1251,34 @@ export default defineComponent({
     // leaves the piano roll and zoom/playback controls visible).
     const patternCollapseEntry = (song, pattern) => ({id: `${song.id}:${pattern.id}`});
     const {isCollapsed: isPatternCollapsedRaw, toggleCollapsed: togglePatternCollapsedRaw,
-      ensureExpanded: ensurePatternExpanded, collapseAll: collapseAllPatterns} =
-      useCollapsedIds('music-pattern', true);
+      ensureExpanded: ensurePatternExpanded, setCollapsed: setPatternCollapsedRaw,
+      collapseAll: collapseAllPatterns} = useCollapsedIds('music-pattern', true);
     collapseAllPatterns();
     const isPatternCollapsed = (song, pattern) => isPatternCollapsedRaw(patternCollapseEntry(song, pattern));
     const togglePatternCollapsed = (song, pattern) => togglePatternCollapsedRaw(patternCollapseEntry(song, pattern));
+    // See handleAddSong/handleDuplicateSong's use of this - copies a
+    // NEW song's first pattern's collapsed state from an EXISTING pattern,
+    // rather than unconditionally forcing it open the way ensurePatternExpanded
+    // does (used elsewhere, for handleAddPattern/handleDuplicatePattern,
+    // where forcing a brand new pattern open within the SAME song is still
+    // the wanted behaviour - only the new-SONG case needed this instead, a
+    // real reported refinement: "the sequencer section shouldn't open, just
+    // leave sequencer and pattern editor in whatever their current state
+    // is").
+    const setPatternCollapsed = (song, pattern, value) => setPatternCollapsedRaw(patternCollapseEntry(song, pattern), value);
     // Keyed by song alone (not song+pattern like patternCollapseEntry above)
     // - one shared expanded/collapsed state for the whole song's Instruments
-    // section, not a separate one remembered per pattern. song.id is
-    // already globally unique (see toggleSequenceCollapsed's  comment
-    // just below), so no synthetic compound entry is needed here either.
+    // section, not a separate one remembered per pattern (so creating/
+    // duplicating a PATTERN within an existing song never touches this at
+    // all - its key, the song, hasn't changed - already exactly matching a
+    // real reported requirement, "when a new pattern is created/duplicated,
+    // don't change the state of the instrument section", with no extra code
+    // needed for it). song.id is already globally unique (see
+    // toggleSequenceCollapsed's  comment just below), so no synthetic
+    // compound entry is needed here either.
     const {isCollapsed: isInstrumentsCollapsedRaw, toggleCollapsed: toggleInstrumentsCollapsedRaw,
-      collapseAll: collapseAllInstruments} = useCollapsedIds('music-instruments', true);
+      setCollapsed: setInstrumentsCollapsed, collapseAll: collapseAllInstruments} =
+      useCollapsedIds('music-instruments', true);
     collapseAllInstruments();
     const isInstrumentsCollapsed = (song) => isInstrumentsCollapsedRaw(song);
     const toggleInstrumentsCollapsed = (song) => toggleInstrumentsCollapsedRaw(song);
@@ -1313,7 +1290,8 @@ export default defineComponent({
     // key off the song object directly instead of needing a synthetic
     // compound entry.
     const {isCollapsed: isSequenceCollapsed, toggleCollapsed: toggleSequenceCollapsed,
-      collapseAll: collapseAllSequences} = useCollapsedIds('music-sequence', true);
+      setCollapsed: setSequenceCollapsed, collapseAll: collapseAllSequences} =
+      useCollapsedIds('music-sequence', true);
     collapseAllSequences();
 
     const instance = getCurrentInstance();
@@ -1597,6 +1575,16 @@ export default defineComponent({
       const songs = state.value.songs;
       const maxId = max(songs.map((o) => o.id)) || 0;
       const firstSoundEffectId = soundEffects().length ? soundEffects()[0].id : 1;
+      // Captured BEFORE pushing the new song - the song the user is
+      // actually looking at right now, whose sequence/instruments/pattern
+      // section states the new song's brand new (otherwise-defaulted-
+      // collapsed) sections should match. A real reported refinement over
+      // an earlier version of this fix, which force-expanded all three
+      // instead: "the sequencer section shouldn't open, just leave
+      // sequencer and pattern editor in whatever their current state is" -
+      // copying whatever's already showing, not assuming "expanded" is
+      // always wanted.
+      const previousSong = activeSong();
       const newSong = {
         id: maxId + 1,
         name: `Song ${maxId + 1}`,
@@ -1611,6 +1599,12 @@ export default defineComponent({
         sequence: [{id: 1, patternId: 1, count: 1}],
       };
       songs.push(newSong);
+      if (previousSong) {
+        setSequenceCollapsed(newSong, isSequenceCollapsed(previousSong));
+        setInstrumentsCollapsed(newSong, isInstrumentsCollapsed(previousSong));
+        setPatternCollapsed(newSong, newSong.patterns[0],
+            isPatternCollapsed(previousSong, activePattern(previousSong)));
+      }
       setActiveSong(newSong.id);
       handleChildChange();
       forceUpdate();
@@ -1637,6 +1631,19 @@ export default defineComponent({
         name: `${song.name || 'Song'} copy`,
       };
       songs.push(newSong);
+      // Same reasoning as handleAddSong's setCollapsed calls - copies
+      // the state from the song actually being duplicated (not some other
+      // active song), since that's the state the user would reasonably
+      // expect its copy to start in. Reads from/writes to patterns[0]
+      // specifically on both sides (not activePattern(song), which could be
+      // a different pattern than patterns[0] if the user had navigated
+      // elsewhere first) - activePattern(newSong) just below falls back to
+      // newSong.patterns[0] regardless, since a brand new song.id has no
+      // remembered "active pattern" yet, so patterns[0] is the one
+      // actually shown either way.
+      setSequenceCollapsed(newSong, isSequenceCollapsed(song));
+      setInstrumentsCollapsed(newSong, isInstrumentsCollapsed(song));
+      setPatternCollapsed(newSong, newSong.patterns[0], isPatternCollapsed(song, song.patterns[0]));
       setActiveSong(newSong.id);
       handleChildChange();
       // Same DOM-not-ready-yet reasoning as handleAddSong's own nextTick.
@@ -3880,7 +3887,19 @@ export default defineComponent({
    padding down the left/right edges compared to the rest of the tab. Those
    inner sections' own padding is what actually insets the content now. */
 .song-list-section {
-  padding-top: 0;
+  /* 8px, not 0 - matches the content inset every other tab's card list
+     naturally has (Vuetify's default v-list padding-top, left unoverridden
+     on PlayerEditor.vue's .animation-list/DataEditor.vue's .data-list/
+     SoundFXEditor.vue's .soundfx-list), on top of .music-toolbar's 4px
+     margin-bottom - 4 + 8 = 12px toolbar-to-card-content, matching
+     GraphicEditorToolbar.vue's measured gap exactly instead of the
+     flat 4px this used to read as (a real reported case: "spacing below
+     music toolbar and music cards looks too close, matching spacing from
+     graphic editor toolbar and sprite card"... "yes use same padding
+     everywhere for consistency"). This section is a plain v-card-text
+     (not a v-list, unlike every other tab's card container), so it
+     never had that default to rely on - explicit here instead. */
+  padding-top: 8px;
   padding-left: 0;
   padding-right: 0;
 }
@@ -4032,21 +4051,44 @@ export default defineComponent({
   top: 0;
   z-index: 2;
   background-color: #fff;
-  padding: 4px 16px 16px;
+  /* 4px/4px top/bottom (was 4px/16px) and an explicit margin-top (was
+     none) - a real reported case of this tab's toolbar being the
+     actual odd one out across the app's toolbars ("space above/below
+     sound tab toolbar still isn't consistent with other toolbars... stop
+     and play look even farther apart now on the sound tab AND music
+     toolbar" - DataEditor.vue's/SoundFXEditor.vue's toolbars had already
+     been matched to GraphicEditorToolbar.vue's measured 16px-above/4px-
+     below exactly; this one, still at its original 0px-above/16px-bottom-
+     padding, was the mismatch being compared against, not the other way
+     around).
+     margin-top is 4px, not a flat 16px - .dim-section right above this
+     already has a 12px padding-bottom (unrelated, spacing its hint text
+     from its edge), which a flat 16px margin-top stacked on top of for a
+     real 28px total visual gap, not 16px - a real reported
+     follow-up ("still too much space above music toolbar"). 12 + 4 = 16,
+     matching GraphicEditorToolbar.vue's measured gap exactly once that
+     existing padding is accounted for instead of ignored. */
+  padding: 4px 16px;
+  margin-top: 4px;
+  /* Also removed the plain, always-visible <v-divider> this used to have
+     right after it in the template - sandwiched between this toolbar's
+     padding-bottom and .song-list-section's zero padding-top, it left
+     literally 0px of breathing room on either side of that divider line,
+     reading as cramped compared to every other toolbar's clean gap (a
+     real reported case: "space above/below music toolbar now looks
+     wrong"). An explicit margin-bottom instead, matching
+     GraphicEditorToolbar.vue's measured 4px gap below its toolbar - that
+     component has no such divider either, relying on the scrolled-state
+     border-bottom (.music-toolbar-scrolled, already matched to it) to
+     show a line only once actually scrolled, the same way this toolbar
+     already does now that the redundant static one is gone. */
+  margin-bottom: 4px;
   transition: padding 0.15s ease;
 }
 
 /* Same "grows + gains a bottom border once actually scrolled" treatment as
-   GraphicEditorToolbar.vue's own .graphic-editor-toolbar-scrolled (+6px on
-   both the top and bottom padding there; matched here even though this
-   toolbar's own baseline bottom padding is a different value, tuned
-   separately for the divider below it). */
-/* Matches GraphicEditorToolbar.vue's own .graphic-editor-toolbar-scrolled
-   exactly (10px/10px) - this toolbar's unscrolled bottom padding is taller
-   than that component's (16px vs 4px, tuned separately for the divider
-   below it), but once actually locked to the top it should read as the
-   same height as every other locked toolbar in the app, not still carry
-   that extra height along with it. */
+   GraphicEditorToolbar.vue's .graphic-editor-toolbar-scrolled, matched
+   exactly (10px/10px). */
 .music-toolbar-scrolled {
   border-bottom: 1px solid rgba(0, 0, 0, 0.24);
   padding-top: 10px;

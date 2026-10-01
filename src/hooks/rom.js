@@ -69,7 +69,13 @@ const withHeadlessWorkspace = (callback, xmlOverride) => {
   const xmlText = xmlOverride !== undefined ? xmlOverride : useWorkspaceStorage().value;
   const workspace = new Blockly.Workspace();
   try {
-    const dom = Blockly.Xml.textToDom(
+    // Blockly.Xml.textToDom moved to Blockly.utils.xml.textToDom somewhere
+    // between Blockly 8 and 10 - confirmed directly against the installed
+    // package's xml.d.ts files (gone from core/xml.d.ts, now only declared
+    // in core/utils/xml.d.ts). domToWorkspace's argument order is
+    // unaffected here - (dom, workspace) already matches the installed
+    // package's real signature, confirmed directly against core/xml.d.ts.
+    const dom = Blockly.utils.xml.textToDom(
         xmlText && xmlText !== 'null' ? xmlText : EMPTY_WORKSPACE);
     Blockly.Xml.domToWorkspace(dom, workspace);
     return callback(workspace);

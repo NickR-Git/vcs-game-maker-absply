@@ -35,8 +35,81 @@
 import Blockly from 'blockly';
 import {debounce} from 'lodash';
 import {WorkspaceSearch} from '@blockly/plugin-workspace-search';
+import {Multiselect, MultiselectBlockDragger} from '@mit-app-inventor/blockly-plugin-workspace-multiselect';
+// Side-effecting only - registers a 'search' toolbox item kind via
+// Blockly.registry.register() at module load (node_modules/@blockly/
+// toolbox-search/src/toolbox_search.ts), the same self-registering pattern
+// the @blockly/field-grid-dropdown import already uses elsewhere in this
+// app (src/blocks/color.js/input.js) - nothing to call directly here, the
+// actual search category comes from the <category kind="search" ...> entry
+// in blockly-toolbox.xml.hbs.
+import '@blockly/toolbox-search';
 
-import {useBlocklyControlsHorizontalStorage, useDesaturateBlocklyColorsStorage} from '../hooks/project';
+import {useDarkModeStorage, useDesaturateBlocklyColorsStorage} from '../hooks/project';
+
+// @blockly/toolbox-search indexes EVERY registered block type for its
+// search category (BlockSearcher.indexBlocks, node_modules/@blockly/
+// toolbox-search/src/block_searcher.ts) by constructing a blank instance of
+// each on a throwaway headless workspace and reading every field's text -
+// including, for a FieldDropdown, each option's text. An "image"-style
+// dropdown option (an {src, alt, width, height} object rather than a plain
+// string) is expected to always carry a real `alt` string there
+// (indexDropdownOption reads option[0].alt directly, with no fallback) -
+// confirmed as a real crash this app actually hits ("Cannot read properties
+// of undefined (reading 'toLowerCase')", thrown inside generateTrigrams
+// once it gets handed that undefined alt) the moment Blockly.inject() first
+// builds the toolbox and this plugin's indexing runs, aborting BOTH the
+// rest of that injection (losing the whole toolbox sidebar) and whatever
+// later mounted() steps position the trashcan/zoom/grid-snap/multiselect
+// icons (left wherever their un-positioned SVG default happens to be - the
+// top-left corner). Rather than track down which of this app's many
+// dropdown fields has an image option with a missing/undefined alt (every
+// one the normal rendering/tooltip code already tolerates happily, since
+// nothing else reads it as strictly as this plugin does), this guarantees
+// every FieldDropdown always hands back a real string there - BlockSearcher
+// itself isn't exported from the plugin's package, so there's no way to
+// patch its indexDropdownOption/generateTrigrams directly instead.
+if (!Blockly.FieldDropdown.prototype.getOptions.isAltTextGuardPatch) {
+  const originalGetOptions = Blockly.FieldDropdown.prototype.getOptions;
+  Blockly.FieldDropdown.prototype.getOptions = function(...args) {
+    const options = originalGetOptions.apply(this, args);
+    options.forEach((option) => {
+      if (option[0] && typeof option[0] === 'object' && typeof option[0].alt !== 'string') {
+        option[0].alt = '';
+      }
+    });
+    return options;
+  };
+  Blockly.FieldDropdown.prototype.getOptions.isAltTextGuardPatch = true;
+}
+
+// Same path geometry as the multiselect plugin's default icons
+// (node_modules/@mit-app-inventor/blockly-plugin-workspace-multiselect/
+// test/media/unselect.svg and select.svg - fetched directly from its repo,
+// not guessed), but with fill recoloured to exactly match the grid-snap
+// icon's rest (black) and active (the app's primary blue) colors instead
+// of their stock #455A64 - the plugin only ever offers "which image to
+// show," not a CSS-targetable fill, since <image> elements are a fixed
+// raster/vector reference, not a fill-able inline shape the way
+// grid-snap's hand-drawn glyph is. Supplied via multiselectIcon.
+// disabledIcon/enabledIcon below, a real plugin option (see its README),
+// rather than trying to force a color via a CSS filter.
+const MULTISELECT_ICON_INACTIVE = 'data:image/svg+xml,' + encodeURIComponent(
+    '<svg fill="#000000" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">' +
+    '<path d="M 4 2 C 2.895 2 2 2.895 2 4 L 2 16 C 2 17.105 2.895 18 4 18 L 16 18 C 17.105 18 18 17.105 18 16 ' +
+    'L 18 4 C 18 2.895 17.105 2 16 2 L 4 2 z M 4 4 L 16 4 L 16 16 L 4 16 L 4 4 z M 20 6 L 20 20 L 6 20 L 6 22 ' +
+    'L 20 22 C 21.105 22 22 21.105 22 20 L 22 6 L 20 6 z M 13.292969 6.2929688 L 9 10.585938 L 6.7070312 ' +
+    '8.2929688 L 5.2929688 9.7070312 L 9 13.414062 L 14.707031 7.7070312 L 13.292969 6.2929688 z"/></svg>');
+const MULTISELECT_ICON_ACTIVE = 'data:image/svg+xml,' + encodeURIComponent(
+    '<svg fill="#1976d2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">' +
+    '<path d="M 4 2 C 2.895 2 2 2.895 2 4 L 2 16 C 2 17.105 2.895 18 4 18 L 16 18 C 17.105 18 18 17.105 18 16 ' +
+    'L 18 4 C 18 2.895 17.105 2 16 2 L 4 2 z M 14 6 C 14.256 6 14.512031 6.0979687 14.707031 6.2929688 ' +
+    'C 15.097031 6.6829687 15.097031 7.3170312 14.707031 7.7070312 L 9.7070312 12.707031 ' +
+    'C 9.3170313 13.098031 8.6829687 13.098031 8.2929688 12.707031 L 5.2929688 9.7070312 ' +
+    'C 4.9029688 9.3170312 4.9029687 8.6829688 5.2929688 8.2929688 C 5.6829687 7.9029688 6.3170313 7.9029687 ' +
+    '6.7070312 8.2929688 L 9 10.585938 L 13.292969 6.2929688 C 13.487969 6.0979687 13.744 6 14 6 z M 21 6 ' +
+    'C 20.448 6 20 6.448 20 7 L 20 20 L 7 20 C 6.448 20 6 20.448 6 21 C 6 21.552 6.448 22 7 22 L 20 22 ' +
+    'C 21.105 22 22 21.105 22 20 L 22 7 C 22 6.448 21.552 6 21 6 z"/></svg>');
 
 // Blockly's  default for a block style's colourTertiary (the outline/
 // border stroke colour - see renderers/common/path_object.js's own
@@ -121,41 +194,93 @@ const desaturateHex = (hex, saturationFactor) => {
   return rgbToHex(r, g, b);
 };
 
-// Blockly.utils.parseBlockColour is the single funnel every block's own
-// colour - a Classic-theme hue NUMBER (see generateTertiaryColour_'s own
-// comment above) or a raw hex/CSS colour name string alike - resolves
-// through on its way to becoming colourPrimary (see renderers/common/
-// constants.js's  validatedBlockStyle_), so patching THIS one function
-// covers every block regardless of which of those two forms defined its
-// colour, with no per-block-file changes needed - and colourSecondary/
-// colourTertiary (generateSecondaryColour_/generateTertiaryColour_ above)
-// both derive FROM colourPrimary, so they pick up the same desaturated
-// base automatically too, with no separate patch of their  required.
-// Read live (not cached) on every call, same "just check the stored value
-// directly, no reactive binding needed" pattern isBlocklyControlsHorizontal
-// below already uses - this only ever actually runs while a workspace is
-// being (re)injected, once per tab visit, so there's no live-toggle-
-// mid-session case to handle here.
+// Dark Mode's block-color treatment - see the .blocklyBlockCanvas exclusion
+// rule's comment in App.vue for why blocks get this dedicated JS handling
+// instead of the blanket CSS invert() every other tab uses: a plain RGB
+// channel invert approximates an HSL lightness flip, but block colors
+// (generateTertiaryColour_/hueToHex above) already sit at a roughly 50% HSL
+// lightness by construction - too close to that transform's fixed point
+// (1 - 0.5 = 0.5) to actually read as darker, confirmed as a real reported
+// "blocks are too bright" once Subdued Palette's desaturation (which leaves
+// lightness untouched) made that flat, washed-out midtone impossible to
+// miss against the newly-darkened workspace around it. A real lightness
+// reduction in HSL space instead - lightnessFactor multiplies L the same
+// way desaturateHex's saturationFactor multiplies S.
+const darkenHex = (hex, lightnessFactor) => {
+  const [h, s, l] = rgbToHsl(...hexToRgb(hex));
+  const [r, g, b] = hslToRgb(h, s, clamp01(l * lightnessFactor));
+  return rgbToHex(r, g, b);
+};
+
+// Every block's colour - a Classic-theme hue NUMBER or a raw hex/CSS
+// colour name string alike - used to fully resolve through
+// Blockly.utils.parsing.parseBlockColour on its way to becoming
+// colourPrimary (see renderers/common/constants.js's
+// validatedBlockStyle_), so patching THAT one function used to cover every
+// block with no per-block-file changes needed. Confirmed directly against
+// the installed v10 bundle (blockly_compressed.js) that this is no longer
+// true: Blockly's build pipeline inlines parseBlockColour as a MODULE-LOCAL
+// function reference inside the compiled bundle (named
+// `parseBlockColour$$module$build$src$core$utils$parsing` there), and both
+// BlockSvg.prototype.setColour (via the base Block.prototype.setColour) and
+// ConstantProvider.prototype.validatedBlockStyle_ call that LOCAL reference
+// directly, never through the Blockly.utils.parsing.parseBlockColour
+// property this patch reassigns - so reassigning the export is now a
+// complete no-op for actual block colours. The exact same "exported
+// property patch silently does nothing because the real caller holds a
+// captured local reference instead" issue already diagnosed for
+// Blockly.Variables.flyoutCategoryBlocks below, just hitting a different
+// function this time.
+//
+// Patching ConstantProvider.prototype.getBlockStyleForColour instead -
+// confirmed via the same bundle read that BlockSvg.prototype.setColour
+// calls it as a genuine `this.workspace.getRenderer().getConstants().
+// getBlockStyleForColour(...)` property access (not a captured local), so
+// wrapping it here reliably runs for every block. It returns a cached
+// {style, name} pair (style has colourPrimary/colourSecondary/
+// colourTertiary) keyed by the block's ALREADY-fully-resolved
+// (non-desaturated) hex colour, generated and cached once per distinct
+// colour - desaturating the three colour fields on that same style object,
+// in place, the first time each distinct colour is seen covers every block
+// using it from then on, including the ones already cached. Read live (not
+// cached) on every call, same "just check the stored value directly, no
+// reactive binding needed" pattern the dark-mode/desaturation reads
+// throughout this file already use - this only ever actually runs while a
+// workspace is being
+// (re)injected, once per tab visit, so there's no live-toggle-mid-session
+// case to handle here.
 //
 // Guarded (isDesaturationPatch) against re-wrapping itself - the 'blockly'
-// module instance persists across this FILE's  dev-server hot-reloads,
-// but this file's  module-level code (this patch included) re-executes
-// on every one of them; without the guard, each edit-triggered reload
-// wrapped whatever the PREVIOUS reload had already wrapped, compounding the
+// module instance persists across this FILE's dev-server hot-reloads, but
+// this file's module-level code (this patch included) re-executes on every
+// one of them; without the guard, each edit-triggered reload wrapped
+// whatever the PREVIOUS reload had already wrapped, compounding the
 // desaturation further with every single edit made during a dev session -
 // confirmed as the actual cause of a real reported "the colors just
 // changed, they looked right and now don't" mid-session, with no code
 // change of the actual 0.5 factor involved at all.
-if (!Blockly.utils.parseBlockColour.isDesaturationPatch) {
-  const originalParseBlockColour = Blockly.utils.parseBlockColour;
-  Blockly.utils.parseBlockColour = function(colour) {
-    const result = originalParseBlockColour.call(this, colour);
-    if (useDesaturateBlocklyColorsStorage().value) {
-      result.hex = desaturateHex(result.hex, 0.5);
+if (!Blockly.blockRendering.ConstantProvider.prototype.getBlockStyleForColour.isDesaturationPatch) {
+  const originalGetBlockStyleForColour =
+      Blockly.blockRendering.ConstantProvider.prototype.getBlockStyleForColour;
+  Blockly.blockRendering.ConstantProvider.prototype.getBlockStyleForColour = function(colour) {
+    const result = originalGetBlockStyleForColour.call(this, colour);
+    const desaturate = useDesaturateBlocklyColorsStorage().value;
+    // See darkenHex's comment above for why Dark Mode darkens block colors
+    // directly here instead of relying on the app-wide CSS invert every
+    // other tab uses.
+    const darken = useDarkModeStorage().value;
+    if ((desaturate || darken) && !result.style.isAdjustedForPreferences) {
+      ['colourPrimary', 'colourSecondary', 'colourTertiary'].forEach((key) => {
+        let hex = result.style[key];
+        if (desaturate) hex = desaturateHex(hex, 0.5);
+        if (darken) hex = darkenHex(hex, 0.5);
+        result.style[key] = hex;
+      });
+      result.style.isAdjustedForPreferences = true;
     }
     return result;
   };
-  Blockly.utils.parseBlockColour.isDesaturationPatch = true;
+  Blockly.blockRendering.ConstantProvider.prototype.getBlockStyleForColour.isDesaturationPatch = true;
 }
 
 // Same reasoning/guard as the parseBlockColour patch just above, for the
@@ -212,33 +337,54 @@ if (!Blockly.WorkspaceSvg.prototype.setScale.isKeepFlyoutOpenPatch) {
 // The handle's cross-axis size/offset (normally (thickness - 5) wide with a
 // fixed 2.5px offset from each edge) doesn't land on the app's 12px thumb
 // width no matter what scrollbarThickness is set to - and can't be fixed by
-// overriding createDom_ (tried first): the Scrollbar CONSTRUCTOR itself
-// re-sets svgHandle_'s width/x (and height/y for horizontal) right after
-// calling createDom_, clobbering anything createDom_ set. Wrapping the whole
-// constructor instead, so this runs after ALL of the original construction
-// logic (not just createDom_). Static properties (scrollbarThickness,
+// overriding Scrollbar's internal DOM-building step (tried first): the
+// Scrollbar CONSTRUCTOR itself re-sets svgHandle's width/x (and height/y
+// for horizontal) right after building that DOM, clobbering anything set
+// there. Wrapping the whole constructor instead, so this runs after ALL of
+// the original construction logic. Static properties (scrollbarThickness,
 // DEFAULT_SCROLLBAR_MARGIN) are copied across since other Blockly modules
 // read them off Blockly.Scrollbar directly.
+// Blockly 8 rewrote Scrollbar as a real ES6 class (node_modules/blockly/
+// core/scrollbar.js) - a plain function body calling it via
+// OriginalScrollbar.apply(this, args) (Blockly 6's shape, which this used
+// to be) throws "Class constructor Scrollbar cannot be invoked without
+// 'new'" in v8+, since a class constructor can only ever be called through
+// `new`/`super(...)`, never .apply()/.call(). A real `class ... extends`
+// with `super(...args)` is the only way to both still run the original
+// constructor AND run this patch's code right after it. svgHandle (below)
+// is still named without a trailing underscore the same way in Blockly 10
+// (TypeScript's `private` keyword replaced the old Closure-style `_`
+// suffix convention somewhere between 8 and 10 - confirmed directly against
+// the installed package's scrollbar.d.ts).
 const OriginalScrollbar = Blockly.Scrollbar;
 // eslint-disable-next-line require-jsdoc
-function PatchedScrollbar(...args) {
-  OriginalScrollbar.apply(this, args);
-  const horizontal = args[1];
-  const inset = 2;
-  const handleSize = Blockly.Scrollbar.scrollbarThickness - inset * 2;
-  const radius = handleSize / 2;
-  if (horizontal) {
-    this.svgHandle_.setAttribute('height', handleSize);
-    this.svgHandle_.setAttribute('y', inset);
-  } else {
-    this.svgHandle_.setAttribute('width', handleSize);
-    this.svgHandle_.setAttribute('x', inset);
+class PatchedScrollbar extends OriginalScrollbar {
+  // eslint-disable-next-line require-jsdoc
+  constructor(...args) {
+    super(...args);
+    const horizontal = args[1];
+    const inset = 2;
+    const handleSize = Blockly.Scrollbar.scrollbarThickness - inset * 2;
+    const radius = handleSize / 2;
+    if (horizontal) {
+      this.svgHandle.setAttribute('height', handleSize);
+      this.svgHandle.setAttribute('y', inset);
+    } else {
+      this.svgHandle.setAttribute('width', handleSize);
+      this.svgHandle.setAttribute('x', inset);
+    }
+    this.svgHandle.setAttribute('rx', radius);
+    this.svgHandle.setAttribute('ry', radius);
   }
-  this.svgHandle_.setAttribute('rx', radius);
-  this.svgHandle_.setAttribute('ry', radius);
 }
-PatchedScrollbar.prototype = OriginalScrollbar.prototype;
-Object.assign(PatchedScrollbar, OriginalScrollbar);
+// scrollbarThickness/DEFAULT_SCROLLBAR_MARGIN are real static properties on
+// the Scrollbar class itself (Scrollbar.scrollbarThickness = 15, set right
+// after the class body - node_modules/blockly/core/scrollbar.js), not
+// instance properties - `class ... extends` already inherits a parent
+// class's static properties through its prototype chain, so
+// PatchedScrollbar.scrollbarThickness already resolves correctly with no
+// separate Object.assign needed (unlike the old plain-function version,
+// which had no prototype chain to inherit through).
 Blockly.Scrollbar = PatchedScrollbar;
 Blockly.Scrollbar.scrollbarThickness = 13;
 
@@ -252,37 +398,50 @@ Blockly.Scrollbar.scrollbarThickness = 13;
 // after the fact.
 //
 // bit_get/bit_set/system_variable_get (see blocks/bit.js) are also spliced
-// in here, at the very front of whatever flyoutCategoryBlocks itself
-// returns - Blockly.Variables.flyoutCategory (the outer function a
+// in here, right after the "Create variable..." button and before any of
+// the user's variables. They belong in the Variables category alongside the
+// standard get/set/change blocks, but a plain <block> listed as that
+// category's XML child in the toolbox is silently ignored (the "custom"
+// attribute hands its entire flyout content to flyoutCategory instead) -
+// this is the only way to place a static block inside a dynamic category at
+// all.
+//
+// Patches Blockly.Variables.flyoutCategory (the OUTER function a
 // "custom=VARIABLE" toolbox category actually calls - see
-// blockly-toolbox.xml.hbs) builds the "Create variable..." button ITSELF
-// and prepends it before ever calling this function (confirmed directly
-// against node_modules/blockly/core/variables.js), so flyoutCategoryBlocks
-// only ever returns the per-variable get/set/change blocks, never the
-// button - prepending here lands the three extra blocks right after the
-// button and before any of the user's variables, as intended. They belong
-// in the Variables category alongside the standard get/set/change blocks,
-// but a plain <block> listed as that category's XML child in the toolbox
-// is silently ignored (the "custom" attribute hands its entire flyout
-// content to flyoutCategory/flyoutCategoryBlocks instead) - this is the
-// only way to place a static block inside a dynamic category at all.
+// blockly-toolbox.xml.hbs), not flyoutCategoryBlocks (the inner helper this
+// used to patch instead) - confirmed directly against
+// node_modules/blockly/core/variables.js that flyoutCategory's body
+// calls flyoutCategoryBlocks as a plain local function reference captured
+// at module-load time, not through the exported Blockly.Variables.
+// flyoutCategoryBlocks property, so reassigning that property (like this
+// patch used to) silently has no effect at all - a side effect of Blockly's
+// ES module rewrite, not something flagged in any changelog. flyoutCategory
+// itself builds the button, then concats flyoutCategoryBlocks(workspace)
+// onto it (confirmed via the same source read) - wrapping the OUTER
+// function and post-processing its full return value (button at index 0,
+// everything else right after) achieves the exact same end result as the
+// old inner-function patch did.
 //
 // Guarded (isExtraBlocksPatch) against re-wrapping itself, same reasoning
 // as the parseBlockColour/ToolboxCategory.parseColour_ guards below - this
 // one was originally left unguarded, which would re-append another VALUE
 // child and another copy of the three extra blocks on every dev-server
 // hot-reload of this file, compounding with each edit.
-if (!Blockly.Variables.flyoutCategoryBlocks.isExtraBlocksPatch) {
-  const originalFlyoutCategoryBlocks = Blockly.Variables.flyoutCategoryBlocks;
-  Blockly.Variables.flyoutCategoryBlocks = function(workspace) {
-    const xmlList = originalFlyoutCategoryBlocks.call(this, workspace);
+if (!Blockly.Variables.flyoutCategory.isExtraBlocksPatch) {
+  const originalFlyoutCategory = Blockly.Variables.flyoutCategory;
+  Blockly.Variables.flyoutCategory = function(workspace) {
+    const xmlList = originalFlyoutCategory.call(this, workspace);
     xmlList.forEach((element) => {
       if (element.tagName !== 'block' || element.getAttribute('type') !== 'variables_set') return;
-      const value = Blockly.Xml.textToDom(
+      // Blockly.Xml.textToDom moved to Blockly.utils.xml.textToDom
+      // somewhere between Blockly 8 and 10 - confirmed directly against the
+      // installed package's xml.d.ts files (gone from core/xml.d.ts, now
+      // only declared in core/utils/xml.d.ts).
+      const value = Blockly.utils.xml.textToDom(
           '<value name="VALUE"><shadow type="math_number"><field name="NUM">0</field></shadow></value>');
       element.appendChild(value);
     });
-    const extraBlocks = Blockly.Xml.textToDom(
+    const extraBlocks = Blockly.utils.xml.textToDom(
         '<xml>' +
         '<block type="bit_get"></block>' +
         '<block type="bit_set">' +
@@ -291,211 +450,10 @@ if (!Blockly.Variables.flyoutCategoryBlocks.isExtraBlocksPatch) {
         '<block type="system_variable_get"></block>' +
         '</xml>',
     ).children;
-    return [...extraBlocks, ...xmlList];
+    return [xmlList[0], ...extraBlocks, ...xmlList.slice(1)];
   };
-  Blockly.Variables.flyoutCategoryBlocks.isExtraBlocksPatch = true;
+  Blockly.Variables.flyoutCategory.isExtraBlocksPatch = true;
 }
-
-// See Configuration.vue's "Arrange Blockly zoom controls horizontally along
-// the bottom edge" switch - a live read (not cached at patch time, since
-// this module only ever runs once but the setting can change any time
-// afterward) of that setting. A standing app preference (see
-// useBlocklyControlsHorizontalStorage's  comment in hooks/project.js),
-// not part of the project itself.
-const isBlocklyControlsHorizontal = () => {
-  try {
-    return !!useBlocklyControlsHorizontalStorage().value;
-  } catch (e) {
-    return false;
-  }
-};
-
-// Stock Blockly (this bundled version, 6.20210701.0 - see node_modules/
-// blockly/core/zoom_controls.js) only ever stacks the zoom in/out/reset
-// buttons VERTICALLY, anchored to whichever corner is opposite the toolbox -
-// there's no injection option for a horizontal row instead (confirmed
-// directly by reading zoom_controls.js: WIDTH_/HEIGHT_ and the Y-only
-// translate math in position() are hardcoded). Patched at the shared
-// prototype level (same reasoning as moveDuringDrag below - no per-workspace
-// hook exists for this), falling back to the ORIGINAL vertical
-// implementation whenever the setting is off, so default behavior is
-// byte-for-byte unchanged.
-//
-// getBoundingRectangle() and position() both need overriding together: the
-// former is what OTHER positionable elements (the trashcan) bump themselves
-// away from, so it has to report the same swapped width/height shape the
-// horizontal layout actually occupies, or the trashcan could end up
-// overlapping it.
-//
-// Only bumpDirection.UP/DOWN exist in this Blockly version (see
-// positionable_helpers.js's  bumpDirection enum - no LEFT/RIGHT) - collision
-// bumping is always vertical regardless of which axis the buttons themselves
-// are laid out along, so that part of the original logic (verticalPosition/
-// bumpDirection/bumpPositionRect) is kept completely unchanged here; only the
-// WIDTH_/HEIGHT_ swap (for sizing) and the button-layout axis (X instead of Y,
-// using horizontalPosition instead of verticalPosition to decide which end
-// zoomOut anchors nearest, mirroring the original's  vertical version
-// exactly) actually differ.
-const originalZoomControlsGetBoundingRectangle = Blockly.ZoomControls.prototype.getBoundingRectangle;
-Blockly.ZoomControls.prototype.getBoundingRectangle = function() {
-  if (!isBlocklyControlsHorizontal()) return originalZoomControlsGetBoundingRectangle.call(this);
-  let width = this.SMALL_SPACING_ + 2 * this.WIDTH_;
-  if (this.zoomResetGroup_) width += this.LARGE_SPACING_ + this.WIDTH_;
-  const right = this.left_ + width;
-  const bottom = this.top_ + this.HEIGHT_;
-  return new Blockly.utils.Rect(this.top_, bottom, this.left_, right);
-};
-
-const originalZoomControlsPosition = Blockly.ZoomControls.prototype.position;
-Blockly.ZoomControls.prototype.position = function(metrics, savedPositions) {
-  if (!isBlocklyControlsHorizontal()) return originalZoomControlsPosition.call(this, metrics, savedPositions);
-  if (!this.initialized_) return;
-
-  const cornerPosition = Blockly.uiPosition.getCornerOppositeToolbox(this.workspace_, metrics);
-  let width = this.SMALL_SPACING_ + 2 * this.WIDTH_;
-  if (this.zoomResetGroup_) width += this.LARGE_SPACING_ + this.WIDTH_;
-  // ActionEditor.vue's  grid-snap toggle (see setupGridSnapZoomButton,
-  // which sets this.gridSnapGroup_ directly rather than this file having to
-  // go hunting through this.svgGroup_'s  children by index - a previous
-  // version did that, and broke the moment anything about sibling order
-  // assumptions was even slightly off) gets counted as a genuine 4th slot in
-  // the row's  reserved width from the start, sitting FIRST (local x=0,
-  // the leftmost icon in the row) with the 3 real buttons all shifted right
-  // by realButtonsOffset to make room - rather than appended AFTER the 3
-  // real buttons, which is what let it either overlap the trashcan or
-  // render outside the row's  actual on-screen box in earlier attempts
-  // at this.
-  const hasGridSnap = !!this.gridSnapGroup_;
-  const realButtonsOffset = hasGridSnap ? this.LARGE_SPACING_ + this.WIDTH_ : 0;
-  if (hasGridSnap) width += realButtonsOffset;
-  const startRect = Blockly.uiPosition.getStartPositionRect(
-      cornerPosition, new Blockly.utils.Size(width, this.HEIGHT_),
-      this.MARGIN_HORIZONTAL_, this.MARGIN_VERTICAL_, metrics, this.workspace_);
-
-  // The trashcan (weight 1, positioned before zoom controls'  weight 2 -
-  // see workspace_svg.js's  position-pass loop, which runs every
-  // POSITIONABLE component in ascending weight order) claims this same
-  // corner first, so the stock bump logic below - vertical-only, see this
-  // override's  top comment - always stacks the zoom row ABOVE or BELOW
-  // it rather than beside it. Read the trashcan's  already-computed
-  // top_/left_/size directly instead, and sit alongside it in the SAME row
-  // (vertically centered against its  height) whenever it exists, rather
-  // than bumping away from it - the normal bump path below is kept purely as
-  // a fallback for the (currently never exercised in this app) case where a
-  // workspace has no trashcan at all.
-  const trashcan = this.workspace_.trashcan;
-  let positionRect;
-  if (trashcan) {
-    // trashcanScaledWidth_ is set by this file's  Trashcan.position
-    // override below whenever it actually shrank the icon to match this row
-    // - falls back to the real, unscaled width otherwise. trashcan.top_ IS
-    // where its  nominal (lid+body) box starts, but the drawn trash
-    // sprite itself doesn't fill that box - measured directly (drew the
-    // actual sprite sheet to an offscreen canvas and scanned for the first
-    // non-transparent row) rather than assumed: the lid graphic's own
-    // visible pixels start about 37% of the way down the lid's  nominal
-    // height, well below y=0, while the zoom icons'  sprites fill their
-    // box with zero padding - aligning box-tops (this override's own
-    // previous approach) therefore left the zoom row looking higher than
-    // the trashcan's  visible ink. TRASHCAN_VISIBLE_TOP_FRACTION (see
-    // TRASHCAN_SCALE below) encodes that measured padding as a fraction of
-    // LID_HEIGHT_, so it stays correct even if LID_HEIGHT_ itself changes.
-    const trashWidth = trashcan.trashcanScaledWidth_ || trashcan.WIDTH_;
-    const top = trashcan.top_ + trashcan.LID_HEIGHT_ * TRASHCAN_VISIBLE_TOP_FRACTION *
-      (trashcan.trashcanScaledWidth_ ? TRASHCAN_SCALE : 1);
-    const left = cornerPosition.horizontal === Blockly.uiPosition.horizontalPosition.LEFT ?
-      trashcan.left_ + trashWidth + this.MARGIN_HORIZONTAL_ :
-      trashcan.left_ - this.MARGIN_HORIZONTAL_ - width;
-    positionRect = new Blockly.utils.Rect(top, top + this.HEIGHT_, left, left + width);
-  } else {
-    const verticalPosition = cornerPosition.vertical;
-    const bumpDirection = verticalPosition === Blockly.uiPosition.verticalPosition.TOP ?
-      Blockly.uiPosition.bumpDirection.DOWN : Blockly.uiPosition.bumpDirection.UP;
-    positionRect = Blockly.uiPosition.bumpPositionRect(
-        startRect, this.MARGIN_VERTICAL_, bumpDirection, savedPositions);
-  }
-
-  if (cornerPosition.horizontal === Blockly.uiPosition.horizontalPosition.LEFT) {
-    this.zoomInGroup_.setAttribute('transform', `translate(${realButtonsOffset}, 0)`);
-    const zoomOutTranslateX = realButtonsOffset + this.SMALL_SPACING_ + this.WIDTH_;
-    this.zoomOutGroup_.setAttribute('transform', `translate(${zoomOutTranslateX}, 0)`);
-    if (this.zoomResetGroup_) {
-      const zoomResetTranslateX = zoomOutTranslateX + this.LARGE_SPACING_ + this.WIDTH_;
-      this.zoomResetGroup_.setAttribute('transform', `translate(${zoomResetTranslateX}, 0)`);
-    }
-  } else {
-    const zoomOutTranslateX = realButtonsOffset + (this.zoomResetGroup_ ? this.LARGE_SPACING_ + this.WIDTH_ : 0);
-    this.zoomOutGroup_.setAttribute('transform', `translate(${zoomOutTranslateX}, 0)`);
-    const zoomInTranslateX = zoomOutTranslateX + this.SMALL_SPACING_ + this.WIDTH_;
-    this.zoomInGroup_.setAttribute('transform', `translate(${zoomInTranslateX}, 0)`);
-    if (this.zoomResetGroup_) {
-      this.zoomResetGroup_.setAttribute('transform', `translate(${realButtonsOffset}, 0)`);
-    }
-  }
-  if (hasGridSnap) {
-    this.gridSnapGroup_.setAttribute('transform', 'translate(0, 0)');
-  }
-
-  this.top_ = positionRect.top;
-  this.left_ = positionRect.left;
-  this.svgGroup_.setAttribute('transform', `translate(${this.left_},${this.top_})`);
-};
-
-// The stock trashcan (WIDTH_ 47, BODY_HEIGHT_ 44 + LID_HEIGHT_ 16 = 60 tall -
-// see node_modules/blockly/core/trashcan.js) is visibly taller than the
-// 32px-square zoom buttons it now sits beside in a row (see the
-// ZoomControls.position override above) - shrunk here to match ZoomControls'
-// own HEIGHT_ exactly, only when horizontal mode is on, by appending a plain
-// SVG "scale(...)" after trashcan's  real translate (SVG applies
-// transforms right-to-left, so this scales around the group's  local
-// origin FIRST, then places that already-shrunk icon at left_/top_ - the
-// same anchor point the unscaled version would have used, so top_/left_
-// still mean what every other reader of them - this file's own
-// ZoomControls.position override included - expects).
-//
-// getClientRect (the actual drag-and-drop hit-test, a different method from
-// getBoundingRectangle - see its  use in dragged_connection_manager.js)
-// is deliberately left unpatched: it derives its  base rect from
-// svgGroup_.getBoundingClientRect(), which already reflects this scale
-// automatically, then pads it by a few constants for a generous drop
-// hotspot - shrinking those pad constants too would be extra risk for a
-// purely cosmetic fix, since a slightly oversized (rather than undersized)
-// drop target is the safe direction to be wrong in.
-const TRASHCAN_SCALE = Blockly.ZoomControls.prototype.HEIGHT_ /
-  (Blockly.Trashcan.prototype.BODY_HEIGHT_ + Blockly.Trashcan.prototype.LID_HEIGHT_);
-
-// Measured directly against the real sprite sheet (media/sprites.png, via
-// the ZoomControls.position override's  trashcan.top_ comment above) -
-// drew it to an offscreen canvas and scanned for the first non-transparent
-// row within the lid's  clip region: its visible pixels start about 37%
-// of the way down the lid's  nominal height. Expressed as a fraction of
-// LID_HEIGHT_ (rather than a flat pixel count) so it stays correct if
-// LID_HEIGHT_ itself ever changes.
-const TRASHCAN_VISIBLE_TOP_FRACTION = 0.371;
-
-const originalTrashcanPosition = Blockly.Trashcan.prototype.position;
-Blockly.Trashcan.prototype.position = function(metrics, savedPositions) {
-  originalTrashcanPosition.call(this, metrics, savedPositions);
-  if (!isBlocklyControlsHorizontal() || !this.svgGroup_) {
-    this.trashcanScaledWidth_ = null;
-    this.trashcanScaledHeight_ = null;
-    return;
-  }
-  this.trashcanScaledWidth_ = this.WIDTH_ * TRASHCAN_SCALE;
-  this.trashcanScaledHeight_ = (this.BODY_HEIGHT_ + this.LID_HEIGHT_) * TRASHCAN_SCALE;
-  this.trashcanScaledLidHeight_ = this.LID_HEIGHT_ * TRASHCAN_SCALE;
-  this.trashcanScaledBodyHeight_ = this.BODY_HEIGHT_ * TRASHCAN_SCALE;
-  this.svgGroup_.setAttribute('transform',
-      `translate(${this.left_},${this.top_}) scale(${TRASHCAN_SCALE})`);
-};
-
-const originalTrashcanGetBoundingRectangle = Blockly.Trashcan.prototype.getBoundingRectangle;
-Blockly.Trashcan.prototype.getBoundingRectangle = function() {
-  if (!this.trashcanScaledWidth_) return originalTrashcanGetBoundingRectangle.call(this);
-  const bottom = this.top_ + this.trashcanScaledHeight_;
-  const right = this.left_ + this.trashcanScaledWidth_;
-  return new Blockly.utils.Rect(this.top_, bottom, this.left_, right);
-};
 
 // A "live-snap-while-dragging" patch (rounding a block's live position to
 // the nearest grid vertex on every mousemove, via BlockSvg.prototype.
@@ -556,6 +514,7 @@ export default {
     return {
       workspace: null,
       workspaceSearch: null,
+      multiselect: null,
       lastSavedWorkspace: null,
     };
   },
@@ -576,8 +535,33 @@ export default {
     if (!options.toolbox) {
       options.toolbox = this.$refs['blocklyToolbox'];
     }
+    // The multiselect plugin's README is explicit that this has to be
+    // set at injection time ("Required to work") - Multiselect.init() below
+    // (which runs after inject()) only wires up selection/keyboard/context-
+    // menu behavior, it doesn't swap the block dragger itself.
+    if (!options.plugins) options.plugins = {};
+    options.plugins.blockDragger = MultiselectBlockDragger;
 
     this.workspace = Blockly.inject(this.$refs['blocklyDiv'], options);
+    // WorkspaceSvg's constructor (node_modules/blockly/blockly_
+    // compressed.js) auto-registers the "custom=VARIABLE" toolbox
+    // category's callback itself, as
+    // `this.registerToolboxCategoryCallback(CATEGORY_NAME, flyoutCategory)`
+    // - but, confirmed directly against that compiled bundle, `flyoutCategory`
+    // there is the SAME module-local function reference the
+    // Blockly.Variables.flyoutCategory patch above reassigns, not the
+    // exported property the patch actually overwrites - so by the time this
+    // line runs, the workspace has already bound the toolbox's "Variables"
+    // category to the ORIGINAL, unpatched function, silently dropping the
+    // bit_get/bit_set/system_variable_get blocks and the variables_set
+    // VALUE shadow that patch exists to add, no matter how early the patch
+    // itself ran. Re-registering here, now that the workspace instance
+    // actually exists, overwrites that auto-registered callback with the
+    // patched one - the same captured-local-reference problem the
+    // flyoutCategory patch's comment already describes for
+    // flyoutCategoryBlocks, just one level further out.
+    this.workspace.registerToolboxCategoryCallback(
+        Blockly.Variables.CATEGORY_NAME, Blockly.Variables.flyoutCategory);
     // Kept as an instance field (not a local/inline function) so
     // beforeDestroy() below can flush() it - lodash's debounce defaults to
     // a 0ms wait, so a field edit immediately followed by navigating to a
@@ -600,6 +584,86 @@ export default {
     // created once.
     this.workspaceSearch = new WorkspaceSearch(this.workspace);
     this.workspaceSearch.init();
+
+    // Lets the user drag a rubber-band selection box (or ctrl/shift-click)
+    // over several blocks and move/delete/duplicate them as one group -
+    // same "rebuild every mount, since it registers against the workspace
+    // instance mounted() just created" reasoning as workspaceSearch above.
+    // No double-click-to-collapse behavior, and neighbour-bumping on drop
+    // is left at Blockly's stock behavior (not suppressed).
+    this.multiselect = new Multiselect(this.workspace);
+    this.multiselect.init({
+      multiselectIcon: {disabledIcon: MULTISELECT_ICON_INACTIVE, enabledIcon: MULTISELECT_ICON_ACTIVE},
+    });
+    // The plugin's built-in selection-mode toggle button
+    // (this.multiselect.controls_, a MultiselectControls instance - not
+    // itself an exported class from the plugin's package, so this reaches
+    // it off the Multiselect instance's plain "controls_" property
+    // instead) registers as an independent POSITIONABLE component in the
+    // corner OPPOSITE the toolbox, via the exact same getCornerOppositeToolbox/
+    // bumpPositionRect system the trashcan/zoom controls/grid-snap row
+    // already use for that same corner - but this app's position()
+    // overrides for those three hand-build a single custom horizontal row
+    // with no awareness of this plugin's 4th icon, confirmed as a real
+    // reported overlap ("grid and multiselect icons are overlapping")
+    // otherwise. Overridden here (on this ONE instance, not the shared
+    // MultiselectControls.prototype some other workspace might use - there's
+    // only ever one of these per workspace anyway) to sit in the SAME corner
+    // as the toolbox instead - the corner that row never uses at all - so
+    // there's no possible overlap with it, without having to hand-integrate
+    // a 4th slot into that row's custom layout math.
+    //
+    // WIDTH/HEIGHT/MARGIN_HORIZONTAL/MARGIN_VERTICAL (32/32/20/20) are
+    // copied from the plugin's multiselect_controls.js - private
+    // module-scope consts there too, same reasoning as TRASHCAN_WIDTH/etc.
+    // in trashcan-size.js for why they have to be hardcoded here instead of
+    // read off the plugin directly.
+    const controls = this.multiselect.controls_;
+    if (controls) {
+      controls.position = function(metrics, savedPositions) {
+        if (!this.initialized_) return;
+        const opposite = Blockly.uiPosition.getCornerOppositeToolbox(this.workspace_, metrics);
+        const cornerPosition = {
+          horizontal: opposite.horizontal === Blockly.uiPosition.horizontalPosition.LEFT ?
+            Blockly.uiPosition.horizontalPosition.RIGHT : Blockly.uiPosition.horizontalPosition.LEFT,
+          vertical: opposite.vertical === Blockly.uiPosition.verticalPosition.TOP ?
+            Blockly.uiPosition.verticalPosition.BOTTOM : Blockly.uiPosition.verticalPosition.TOP,
+        };
+        const startRect = Blockly.uiPosition.getStartPositionRect(
+            cornerPosition, new Blockly.utils.Size(32, 32), 20, 20, metrics, this.workspace_);
+        const bumpDirection = cornerPosition.vertical === Blockly.uiPosition.verticalPosition.TOP ?
+          Blockly.uiPosition.bumpDirection.DOWN : Blockly.uiPosition.bumpDirection.UP;
+        const positionRect = Blockly.uiPosition.bumpPositionRect(startRect, 20, bumpDirection, savedPositions);
+        this.top_ = positionRect.top;
+        this.left_ = positionRect.left;
+        if (this.svgGroup_) {
+          this.svgGroup_.setAttribute('transform', `translate(${this.left_},${this.top_})`);
+        }
+      };
+      controls.getBoundingRectangle = function() {
+        const bottom = this.top_ + 32;
+        const right = this.left_ + 32;
+        return new Blockly.utils.Rect(this.top_, bottom, this.left_, right);
+      };
+      // Matches the grid-snap icon's "active (toggled on) is always full
+      // opacity, solid blue, regardless of hover" rule (see
+      // ActionEditor.vue's setupGridSnapZoomButton) - confirmed as a real
+      // reported request ("when multiselect is active, it should have the
+      // same active state as the grid icon"). The plugin's
+      // updateMultiselectIcon only ever swaps which image is shown
+      // (enabled_img/disabled_img - both the same #455A64 by default,
+      // see multiselectIcon.enabledIcon/disabledIcon below), with no class
+      // or style change to hook a CSS rule onto - wrapped here (not
+      // overwritten outright) so its swap-the-image-source behavior stays
+      // untouched, this just also toggles a class App.vue's CSS can target.
+      const originalUpdateIcon = controls.updateMultiselectIcon.bind(controls);
+      controls.updateMultiselectIcon = function(enable) {
+        originalUpdateIcon(enable);
+        if (this.multiselectGroup_) {
+          this.multiselectGroup_.classList.toggle('blockly-multiselect-active', !!enable);
+        }
+      };
+    }
 
     this.ensureBlockFontSizing();
 
@@ -654,11 +718,12 @@ export default {
       this.debouncedHandleChange.flush();
     }
     if (this.workspaceSearch) {
-      // This plugin version's dispose() (see node_modules/@blockly/
+      // This plugin's dispose() (see node_modules/@blockly/
       // plugin-workspace-search/src/WorkspaceSearch.js) nulls out its DOM
       // refs but never unregisters itself from the workspace's
-      // ComponentManager (a real bug, only fixed in much later plugin
-      // versions this old Blockly can't run) - left registered, ANY later
+      // ComponentManager (a real bug, confirmed still present as of 5.0.16,
+      // the latest release still compatible with this app's Blockly
+      // version) - left registered, ANY later
       // resize (e.g. this same tab remounting, or just the window/pane
       // resizing again) calls its position() method against those
       // now-null refs and throws "Cannot read properties of null (reading
@@ -671,6 +736,15 @@ export default {
       this.workspaceSearch.dispose();
       this.workspaceSearch = null;
     }
+    if (this.multiselect) {
+      // Unlike workspaceSearch above, this plugin's dispose() DOES
+      // correctly unregister its controls from the ComponentManager itself
+      // (confirmed directly against node_modules/@mit-app-inventor/
+      // blockly-plugin-workspace-multiselect/src/multiselect_controls.js) -
+      // no manual removeComponent() workaround needed here.
+      this.multiselect.dispose();
+      this.multiselect = null;
+    }
     // Captured here (not just read live from this.workspace whenever
     // mounted() next needs it) since the workspace itself - along with
     // scrollX/scrollY/scale - is torn down entirely once this component is
@@ -681,6 +755,27 @@ export default {
         scrollY: this.workspace.scrollY,
         scale: this.workspace.scale,
       };
+      // Never actually disposed before - harmless as long as nothing a
+      // fresh Blockly.inject() creates later collides with anything the
+      // old, still-alive workspace left registered. @blockly/toolbox-search
+      // broke that assumption: its ToolboxSearchCategory registers a
+      // keyboard shortcut ("startSearch", Ctrl+B - see toolbox_search.ts)
+      // on Blockly.ShortcutRegistry.registry, a GLOBAL singleton shared by
+      // every workspace, not something scoped to the one being built - and
+      // only unregisters it from its dispose(), which only runs if the
+      // WORKSPACE's dispose() runs (Toolbox.dispose() cascades to disposing
+      // every ToolboxItem, including this one). Confirmed as a real crash
+      // (`Error: Shortcut named "startSearch" already exists.`, thrown from
+      // ShortcutRegistry.register) the moment this tab is revisited (Vue
+      // Router destroys and recreates this component - see savedScrollState
+      // 's comment above) and mounted() calls Blockly.inject() again
+      // while the previous mount's workspace/toolbox/search category was
+      // still alive and still held that same registration - aborting the
+      // rest of Toolbox init, with the exact same "missing toolbox sidebar,
+      // every canvas icon piled in the top-left corner" symptom already
+      // diagnosed once this upgrade for a different inject()-time crash
+      // (see the FieldDropdown.getOptions alt-text guard above).
+      this.workspace.dispose();
     }
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
@@ -831,11 +926,16 @@ export default {
     // it decremented one short on an exception would silently disable
     // events for the rest of the session.
     loadWorkspace(value) {
-      const xml = Blockly.Xml.textToDom(value && value !== 'null' ?
+      // Blockly.Xml.textToDom moved to Blockly.utils.xml.textToDom, and
+      // domToWorkspace's argument order flipped from (workspace, xml) to
+      // (xml, workspace) - both somewhere between Blockly 8 and 10,
+      // confirmed directly against the installed package's xml.d.ts files
+      // (core/xml.d.ts's domToWorkspace declaration takes xml first).
+      const xml = Blockly.utils.xml.textToDom(value && value !== 'null' ?
           value : '<xml xmlns="https://developers.google.com/blockly/xml"/>');
       Blockly.Events.disable();
       try {
-        Blockly.Xml.domToWorkspace(this.workspace, xml);
+        Blockly.Xml.domToWorkspace(xml, this.workspace);
       } finally {
         Blockly.Events.enable();
       }
@@ -916,6 +1016,17 @@ export default {
   height: 100%;
   width: 100%;
   text-align: left;
+}
+
+/* Blockly's stock CSS (node_modules/blockly/blockly_compressed.js:
+   ".blocklyMainBackground { stroke-width: 1; stroke: #c6c6c6; }") draws a
+   thin grey border around the inner edge of the workspace background rect
+   - a real reported request to remove it. >>> (deep combinator) reaches
+   this SVG element despite it being injected by Blockly at runtime, never
+   carrying this component's scope attribute (same reasoning as
+   .blocklyText/.blocklyFlyoutLabelText just below). */
+.blocklyDiv >>> .blocklyMainBackground {
+  stroke: none;
 }
 
 /* Options tab's own "Desaturate Blockly block colors" toggle, the text/

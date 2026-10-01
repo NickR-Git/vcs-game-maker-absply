@@ -1,6 +1,11 @@
 <template>
   <div class="envelope-graph-wrapper">
     <div class="envelope-graph" ref="container">
+      <!-- Total Attack+Decay+Sustain+Release frame count - same visual
+           style as the Atk/Dec/Sus/Rel stage labels below, just centered
+           above the graph instead of under one specific segment, since it
+           describes the envelope as a whole rather than any one stage. -->
+      <span class="envelope-graph-frame-label">{{ totalUnits }} frames</span>
       <div class="envelope-graph-scale">
         <span
           v-for="tick in scaleTicks"
@@ -30,6 +35,24 @@
       >
         <polyline class="envelope-graph-line" :points="polylinePoints" />
       </svg>
+      <!-- Grabs the Sustain segment itself (not either endpoint dot) -
+           vertical-only drag that shifts Decay End and Release Start
+           TOGETHER by the same amount, keeping whatever slope/shape the
+           ramp between them already had rather than pivoting around one
+           fixed end the way dragging either dot alone does. Placed BEFORE
+           the decay/release dots below (not after) so those dots still
+           paint on top of this band and stay independently grabbable at
+           their exact position, even though this band's hit area
+           spans the full height underneath them. Only shown alongside them
+           (sustainLength > 0) - with no Sustain segment to speak of, there's
+           nothing here to grab. -->
+      <div
+        v-if="sustainLength > 0"
+        class="envelope-graph-sustain-drag"
+        :style="{left: decayX + '%', width: (sustainEndX - decayX) + '%'}"
+        title="Sustain - drag vertically to shift Decay End and Release Start together"
+        @mousedown="startDrag('sustainShift', $event)"
+      />
       <!-- Every vertex gets a dot (matching the classic ADSR diagram's own
            corners), but only the three whose position actually maps to a
            DRAGGABLE field are draggable - the start (always silence at time
@@ -53,8 +76,8 @@
       <div
         v-if="decay > 0"
         class="envelope-graph-dot envelope-graph-dot-handle"
-        :style="dotStyle(decayX, sustainPercent)"
-        title="Decay/Sustain - drag horizontally to change Decay, vertically to change Sustain level"
+        :style="dotStyle(decayX, decayEndPercent)"
+        title="Decay/Decay End - drag horizontally to change Decay, vertically to change the Decay End level"
         @mousedown="startDrag('decaySustain', $event)"
       />
       <!-- sustainEndX equals decayX whenever sustainLength is 0 (same
@@ -66,8 +89,8 @@
       <div
         v-if="sustainLength > 0"
         class="envelope-graph-dot envelope-graph-dot-handle"
-        :style="dotStyle(sustainEndX, sustainPercent)"
-        title="Release/Sustain - drag horizontally to change Release, vertically to change Sustain level"
+        :style="dotStyle(sustainEndX, releaseStartPercent)"
+        title="Release/Release Start - drag horizontally to change Release, vertically to change the Release Start level"
         @mousedown="startDrag('release', $event)"
       />
       <!-- Always sits at the graph's  right edge (releaseX is 100% by
@@ -93,7 +116,7 @@
 <script>
 import {defineComponent} from '@vue/composition-api';
 import {ENVELOPE_STAGE_FRAME_OPTIONS, ENVELOPE_ATTACK_RELEASE_FRAME_OPTIONS,
-  ENVELOPE_SUSTAIN_PERCENT_OPTIONS} from '../blocks/soundfx';
+  ENVELOPE_VOLUME_PERCENT_OPTIONS} from '../blocks/soundfx';
 
 // Purely a visual shape indicator (straight ramp lines matching the classic
 // ADSR diagram/FL Studio's Fruity Envelope Controller reference), not a
@@ -108,8 +131,9 @@ export default defineComponent({
   props: {
     attack: {type: Number, required: true},
     decay: {type: Number, required: true},
-    sustainPercent: {type: Number, required: true},
+    decayEndPercent: {type: Number, required: true},
     sustainLength: {type: Number, required: true},
+    releaseStartPercent: {type: Number, required: true},
     release: {type: Number, required: true},
   },
   data() {
@@ -118,10 +142,10 @@ export default defineComponent({
       dragStartX: 0,
       dragStartY: 0,
       dragStartValues: null,
-      // 0-100%, this preset's  peak volume - see the class-level comment
-      // on ENVELOPE_SUSTAIN_PERCENT_OPTIONS in blocks/soundfx.js for why
-      // Sustain (and so this whole graph's  Y axis) is a percentage of
-      // that, not a raw AUDV value.
+      // 0-100%, this preset's peak volume - see the class-level comment
+      // on ENVELOPE_VOLUME_PERCENT_OPTIONS in blocks/soundfx.js for why
+      // Decay End/Release Start (and so this whole graph's Y axis) are a
+      // percentage of that, not a raw AUDV value.
       scaleTicks: [100, 75, 50, 25, 0],
     };
   },
@@ -167,11 +191,16 @@ export default defineComponent({
     // "100%" (peak volume) draw at the top and "0%" (silence) at the
     // bottom, matching the reference diagram's  Amplitude axis.
     polylinePoints() {
+      // No flat Sustain plateau anymore - decayEndPercent and
+      // releaseStartPercent are two independently settable endpoints, so
+      // the straight line this draws between them already IS the Sustain
+      // ramp, same as every other stage here is just a straight line
+      // between its two endpoints.
       const pts = [
         [0, 100],
         [this.attackX, 0],
-        [this.decayX, 100 - this.sustainPercent],
-        [this.sustainEndX, 100 - this.sustainPercent],
+        [this.decayX, 100 - this.decayEndPercent],
+        [this.sustainEndX, 100 - this.releaseStartPercent],
         [this.releaseX, 100],
       ];
       return pts.map(([x, y]) => `${x},${y}`).join(' ');
@@ -209,7 +238,17 @@ export default defineComponent({
       event.stopPropagation();
       this.dragHandle = handle;
       this.dragStartValues = {attack: this.attack, decay: this.decay,
-        sustainPercent: this.sustainPercent, release: this.release};
+        decayEndPercent: this.decayEndPercent, releaseStartPercent: this.releaseStartPercent, release: this.release};
+      // Only 'sustainShift' (below) actually reads this - it drags by
+      // RELATIVE amount (both Decay End and Release Start shift together by
+      // the same delta) rather than snapping straight to the cursor's
+      // absolute position the way every other handle here does, so it needs
+      // to know where the drag itself started, not just where the values
+      // started.
+      const container = this.$refs.container;
+      const rect = container && container.getBoundingClientRect();
+      this.dragStartY = rect && rect.height ? Math.max(0, Math.min(100, 100 - (event.clientY - rect.top) /
+        rect.height * 100)) : 0;
       window.addEventListener('mousemove', this.onDrag);
       window.addEventListener('mouseup', this.stopDrag);
     },
@@ -227,9 +266,9 @@ export default defineComponent({
         this.$emit('update:attack', attack);
       } else if (this.dragHandle === 'decaySustain') {
         const decay = this.snapTo(ENVELOPE_STAGE_FRAME_OPTIONS, Math.max(0, xUnits - this.attack));
-        const sustainPercent = this.snapTo(ENVELOPE_SUSTAIN_PERCENT_OPTIONS, yPercent);
+        const decayEndPercent = this.snapTo(ENVELOPE_VOLUME_PERCENT_OPTIONS, yPercent);
         this.$emit('update:decay', decay);
-        this.$emit('update:sustainPercent', sustainPercent);
+        this.$emit('update:decayEndPercent', decayEndPercent);
       } else if (this.dragHandle === 'release') {
         // This handle sits at sustainEndX, which - unlike attack/decay's
         // own handles - ISN'T measured from x=0: it's measured from the
@@ -247,9 +286,27 @@ export default defineComponent({
         // it, same self-correcting approximation decaySustain's  drag
         // already relies on).
         const release = this.snapTo(ENVELOPE_ATTACK_RELEASE_FRAME_OPTIONS, Math.max(0, totalUnits - xUnits));
-        const sustainPercent = this.snapTo(ENVELOPE_SUSTAIN_PERCENT_OPTIONS, yPercent);
+        const releaseStartPercent = this.snapTo(ENVELOPE_VOLUME_PERCENT_OPTIONS, yPercent);
         this.$emit('update:release', release);
-        this.$emit('update:sustainPercent', sustainPercent);
+        this.$emit('update:releaseStartPercent', releaseStartPercent);
+      } else if (this.dragHandle === 'sustainShift') {
+        // Relative, not absolute - unlike every other handle here, which
+        // snaps straight to wherever the cursor itself is, this one shifts
+        // BOTH values by how far the cursor has moved from where the drag
+        // itself started (dragStartY), preserving whatever gap the ramp
+        // already had between them instead of collapsing it onto the
+        // cursor's position. Each is still clamped/snapped
+        // independently, so if one hits 0 or 100 first it simply stops
+        // there while the other keeps moving - no attempt to keep a FIXED
+        // gap once a bound is hit, the same "independent, not rigidly
+        // coupled" simplicity snapTo's shared use elsewhere already accepts.
+        const delta = yPercent - this.dragStartY;
+        const decayEndPercent = this.snapTo(ENVELOPE_VOLUME_PERCENT_OPTIONS,
+            Math.max(0, Math.min(100, this.dragStartValues.decayEndPercent + delta)));
+        const releaseStartPercent = this.snapTo(ENVELOPE_VOLUME_PERCENT_OPTIONS,
+            Math.max(0, Math.min(100, this.dragStartValues.releaseStartPercent + delta)));
+        this.$emit('update:decayEndPercent', decayEndPercent);
+        this.$emit('update:releaseStartPercent', releaseStartPercent);
       }
     },
     stopDrag() {
@@ -269,7 +326,11 @@ export default defineComponent({
   display: flex;
   width: 100%;
   gap: 4px;
-  margin-top: 4px;
+  /* Bumped from 4px - the frame-count label (.envelope-graph-frame-label)
+     sits absolutely positioned just above the graph's top edge, which at
+     the old 4px left it overlapping SoundFXEditor.vue's Reset/Undo/Redo
+     toolbar row directly above. */
+  margin-top: 16px;
   /* Breathing room from whatever follows (e.g. SoundFXEditor.vue's own
      Delete button row, which sits flush with zero top padding) - without
      this the graph's own bottom edge and the next control below it touch
@@ -278,9 +339,9 @@ export default defineComponent({
   margin-bottom: 8px;
 }
 
-/* 0-100%, not a raw AUDV value - Sustain (and so this whole graph) is
-   always a percentage of this preset's own peak volume, matching how
-   ENVELOPE_SUSTAIN_PERCENT_OPTIONS itself is defined (see blocks/
+/* 0-100%, not a raw AUDV value - Decay End/Release Start (and so this whole
+   graph) are always a percentage of this preset's peak volume, matching how
+   ENVELOPE_VOLUME_PERCENT_OPTIONS itself is defined (see blocks/
    soundfx.js). Sits INSIDE the graph now, just past the left border,
    overlaid on the curve/grid rather than its own separate column outside
    the frame - each tick is absolutely positioned (see
@@ -384,6 +445,24 @@ export default defineComponent({
   vector-effect: non-scaling-stroke;
 }
 
+/* Invisible hit area over the Sustain segment, spanning its full height
+   (not just a thin strip around the line itself) so it's easy to grab
+   without needing to land precisely on a diagonal line - see this
+   element's template comment for why it's a vertical-only drag rather
+   than a third positioned dot. ns-resize (not grab/grabbing like the dots)
+   communicates up-front that this only moves vertically, before the user
+   even starts dragging. */
+.envelope-graph-sustain-drag {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  cursor: ns-resize;
+}
+
+.envelope-graph-sustain-drag:hover {
+  background: rgba(25, 118, 210, 0.08);
+}
+
 .envelope-graph-dot {
   position: absolute;
   width: 8px;
@@ -429,6 +508,20 @@ export default defineComponent({
   /* Flat grey (was opacity: 0.6) - same visual result, but a real color
      the y-axis ticks can match exactly (see .envelope-graph-scale-tick's
      own comment for why they use color instead of opacity). */
+  color: #666;
+  white-space: nowrap;
+}
+
+/* Same look as .envelope-graph-stage-label above, just anchored to the
+   graph's top edge (bottom: 100%, margin-bottom) and centered (left: 50%)
+   instead of sitting under one specific segment. */
+.envelope-graph-frame-label {
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  transform: translateX(-50%);
+  margin-bottom: 2px;
+  font-size: 11px;
   color: #666;
   white-space: nowrap;
 }

@@ -339,8 +339,18 @@ export default (Blockly) => {
           block);
     }
     if (Blockly.BBasic.STATEMENT_PREFIX) {
-      const loop = Blockly.Constants.Loops
-          .CONTROL_FLOW_IN_LOOP_CHECK_MIXIN.getSurroundLoop(block);
+      // Blockly 8 made CONTROL_FLOW_IN_LOOP_CHECK_MIXIN (this used to read
+      // getSurroundLoop off of) a local, unexported closure const in
+      // node_modules/blockly/blocks/loops.js - Blockly.Constants.Loops no
+      // longer exists at all. getSurroundLoop is still reachable the way
+      // it's actually meant to be used, though: the stock
+      // controls_flow_statements block's JSON definition lists
+      // 'controls_flow_in_loop_check' in its extensions, which mixes
+      // getSurroundLoop directly onto every real instance of this block -
+      // block.getSurroundLoop() (no arguments; it reads `this` internally)
+      // is the same method, just called the way Blockly actually calls
+      // it internally, not through a now-gone static namespace path.
+      const loop = block.getSurroundLoop();
       if (loop && !loop.suppressPrefixSuffix) {
       // Inject loop's statement prefix here since the regular one at the end
       // of the loop will not get executed if 'continue' is triggered.

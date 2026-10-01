@@ -185,41 +185,13 @@
                       <v-icon>mdi-content-paste</v-icon>
                       <span class="copy-paste-color-badge">C</span>
                     </v-btn>
-                    <v-menu
-                          top
-                          v-if="state.backgrounds.length > 1"
-                        >
-                      <template v-slot:activator="{ on, attrs }">
-                        <v-btn
-                          title="Delete this background"
-                          icon
-                          small
-                          class="delete-icon-btn player-icon-btn-size"
-                          v-bind="attrs"
-                          v-on="on"
-                        >
-                          <v-icon>mdi-delete</v-icon>
-                        </v-btn>
-                      </template>
-
-                      <v-card>
-                        <v-card-title>Delete this background?</v-card-title>
-                        <v-list>
-                          <v-list-item @click="handleDeleteBackground(background)">
-                            <v-list-item-icon>
-                              <v-icon>mdi-check</v-icon>
-                            </v-list-item-icon>
-                            <v-list-item-title>Yes, delete</v-list-item-title>
-                          </v-list-item>
-                          <v-list-item link>
-                            <v-list-item-icon>
-                              <v-icon>mdi-cancel</v-icon>
-                            </v-list-item-icon>
-                            <v-list-item-title>No, don't delete</v-list-item-title>
-                          </v-list-item>
-                        </v-list>
-                      </v-card>
-                    </v-menu>
+                    <confirm-delete-menu
+                      v-if="state.backgrounds.length > 1"
+                      title="Delete this background?"
+                      activator-title="Delete this background"
+                      icon-btn-class="player-icon-btn-size"
+                      @confirm="handleDeleteBackground(background)"
+                    />
                   </div>
                 </v-list-item-title>
                 <v-list-item-subtitle v-if="!isCollapsed(background)">
@@ -326,6 +298,7 @@ import {max} from 'lodash';
 
 import {useCollapsedIds} from '../hooks/collapse';
 import {CSS_CLASS_DRAGGING} from '../hooks/drag-reorder';
+import ConfirmDeleteMenu from '../components/ConfirmDeleteMenu.vue';
 import EditorZoom from '../components/EditorZoom.vue';
 import GraphicEditorToolbar from '../components/GraphicEditorToolbar.vue';
 import PixelEditor from '../components/PixelEditor.vue';
@@ -363,7 +336,7 @@ const copiedBackgroundRowColors = ref(null);
 const copiedBackgroundData = ref(null);
 
 export default defineComponent({
-  components: {EditorZoom, GraphicEditorToolbar, PixelEditor, PixelGridToggle, PlayfieldColorStrip, QuickColorPalette},
+  components: {ConfirmDeleteMenu, EditorZoom, GraphicEditorToolbar, PixelEditor, PixelGridToggle, PlayfieldColorStrip, QuickColorPalette},
   setup() {
     const instance = getCurrentInstance();
     const backgroundsStorage = useBackgroundsStorage();

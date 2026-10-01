@@ -367,7 +367,7 @@ export const registerDropdownFieldSyncExtension = (extensionName, dropdownFieldN
           const translated = (typeof current === 'string' && current.includes(oldName)) ?
             current.replace(oldName, newName) : current;
           if (translated === current) return;
-          varField.generatedOptions_ = null;
+          varField.generatedOptions = null;
           varField.setValue(translated);
         }, 0);
       }

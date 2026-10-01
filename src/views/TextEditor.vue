@@ -98,44 +98,16 @@
                 <div class="text-id-badge" title="The number to use with &quot;Show text ID&quot; - stays the same no matter how cards are rearranged below.">
                   ID:{{ entry.id }}
                 </div>
-                <v-menu
+                <confirm-delete-menu
                   v-if="state.textStrings.length > 1"
+                  title="Delete this message?"
+                  activator-title="Delete this message"
+                  icon-btn-class="text-delete-btn text-icon-btn-size"
+                  absolute
                   top
-                >
-                  <template v-slot:activator="{ on, attrs }">
-                    <v-btn
-                      title="Delete this message"
-                      icon
-                      small
-                      absolute
-                      top
-                      right
-                      class="text-delete-btn delete-icon-btn text-icon-btn-size"
-                      v-bind="attrs"
-                      v-on="on"
-                    >
-                      <v-icon>mdi-delete</v-icon>
-                    </v-btn>
-                  </template>
-
-                  <v-card>
-                    <v-card-title>Delete this message?</v-card-title>
-                    <v-list>
-                      <v-list-item @click="handleDeleteEntry(entry)">
-                        <v-list-item-icon>
-                          <v-icon>mdi-check</v-icon>
-                        </v-list-item-icon>
-                        <v-list-item-title>Yes, delete</v-list-item-title>
-                      </v-list-item>
-                      <v-list-item link>
-                        <v-list-item-icon>
-                          <v-icon>mdi-cancel</v-icon>
-                        </v-list-item-icon>
-                        <v-list-item-title>No, don't delete</v-list-item-title>
-                      </v-list-item>
-                    </v-list>
-                  </v-card>
-                </v-menu>
+                  right
+                  @confirm="handleDeleteEntry(entry)"
+                />
 
                 <v-card-text class="text-name-section">
                   <v-text-field
@@ -211,6 +183,7 @@ import {computed, defineComponent, getCurrentInstance, ref} from '@vue/compositi
 import {max} from 'lodash';
 
 import ColorSwatchPicker from '../components/ColorSwatchPicker.vue';
+import ConfirmDeleteMenu from '../components/ConfirmDeleteMenu.vue';
 import TextFontEditor from '../components/TextFontEditor.vue';
 import {useCollapsedIds} from '../hooks/collapse';
 import {CSS_CLASS_DRAGGING} from '../hooks/drag-reorder';
@@ -221,7 +194,7 @@ import {DEFAULT_TEXT_JUSTIFY, DEFAULT_TEXT_STRINGS, DEFAULT_TEXT_MAX_DISPLAY_WID
 import {BLINK_SPEED_OPTIONS, DEFAULT_BLINK_SPEED} from '../utils/text-font';
 
 export default defineComponent({
-  components: {ColorSwatchPicker, TextFontEditor},
+  components: {ColorSwatchPicker, ConfirmDeleteMenu, TextFontEditor},
   setup() {
     const textStringsStorage = useTextStringsStorage();
     const configurationStorage = useConfigurationStorage();
@@ -672,8 +645,15 @@ export default defineComponent({
 
 /* Vuetify's fab+absolute+top combo centers the button on the card's top
    edge, poking half of it out (and clipped there); pull it down so the whole
-   button sits inside the card instead. */
-.text-delete-btn {
+   button sits inside the card instead.
+   ">>>" deep combinator, not a plain selector - this class now lands on
+   ConfirmDeleteMenu.vue's internal activator button (passed down via
+   its "icon-btn-class" prop), a CHILD component's element that never
+   carries this file's scope attribute, so a plain scoped ".text-delete-btn"
+   selector would silently never match it at all - the same cross-component
+   scoping gap already hit elsewhere in this app (e.g. BlocklyComponent.vue's
+   deep-selector rules for Blockly's runtime-injected markup). */
+.text-card >>> .text-delete-btn {
   top: 8px !important;
   right: 8px !important;
   box-shadow: none !important;

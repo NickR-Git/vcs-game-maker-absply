@@ -213,41 +213,13 @@
                       </v-card>
                     </v-menu>
 
-                    <v-menu
-                          top
-                          v-if="state.animations.length > 1"
-                        >
-                      <template v-slot:activator="{ on, attrs }">
-                        <v-btn
-                          title="Delete this animation"
-                          icon
-                          small
-                          class="delete-icon-btn player-icon-btn-size"
-                          v-bind="attrs"
-                          v-on="on"
-                        >
-                          <v-icon>mdi-delete</v-icon>
-                        </v-btn>
-                      </template>
-
-                      <v-card>
-                        <v-card-title>Delete this animation?</v-card-title>
-                        <v-list>
-                          <v-list-item @click="handleDeleteAnimation(animation)">
-                            <v-list-item-icon>
-                              <v-icon>mdi-check</v-icon>
-                            </v-list-item-icon>
-                            <v-list-item-title>Yes, delete</v-list-item-title>
-                          </v-list-item>
-                          <v-list-item link>
-                            <v-list-item-icon>
-                              <v-icon>mdi-cancel</v-icon>
-                            </v-list-item-icon>
-                            <v-list-item-title>No, don't delete</v-list-item-title>
-                          </v-list-item>
-                        </v-list>
-                      </v-card>
-                    </v-menu>
+                    <confirm-delete-menu
+                      v-if="state.animations.length > 1"
+                      title="Delete this animation?"
+                      activator-title="Delete this animation"
+                      icon-btn-class="player-icon-btn-size"
+                      @confirm="handleDeleteAnimation(animation)"
+                    />
                   </div>
 
                 </v-list-item-title>
@@ -345,38 +317,13 @@
                               <v-icon>mdi-content-paste</v-icon>
                               <span class="copy-paste-color-badge">C</span>
                             </v-btn>
-                            <v-menu v-if="animation.frames.length > 1" top>
-                              <template v-slot:activator="{ on, attrs }">
-                                <v-btn
-                                  title="Delete this frame"
-                                  icon
-                                  small
-                                  class="delete-icon-btn player-icon-btn-size"
-                                  v-bind="attrs"
-                                  v-on="on"
-                                >
-                                  <v-icon>mdi-delete</v-icon>
-                                </v-btn>
-                              </template>
-
-                              <v-card>
-                                <v-card-title>Delete this frame?</v-card-title>
-                                <v-list>
-                                  <v-list-item @click="handleDeleteFrame(animation, frame)">
-                                    <v-list-item-icon>
-                                      <v-icon>mdi-check</v-icon>
-                                    </v-list-item-icon>
-                                    <v-list-item-title>Yes, delete</v-list-item-title>
-                                  </v-list-item>
-                                  <v-list-item link>
-                                    <v-list-item-icon>
-                                      <v-icon>mdi-cancel</v-icon>
-                                    </v-list-item-icon>
-                                    <v-list-item-title>No, don't delete</v-list-item-title>
-                                  </v-list-item>
-                                </v-list>
-                              </v-card>
-                            </v-menu>
+                            <confirm-delete-menu
+                              v-if="animation.frames.length > 1"
+                              title="Delete this frame?"
+                              activator-title="Delete this frame"
+                              icon-btn-class="player-icon-btn-size"
+                              @confirm="handleDeleteFrame(animation, frame)"
+                            />
                           </div>
                         </template>
                       </pixel-editor>
@@ -420,6 +367,7 @@
 import {computed, defineComponent, getCurrentInstance, ref} from '@vue/composition-api';
 import {chunk, max} from 'lodash';
 
+import ConfirmDeleteMenu from '../components/ConfirmDeleteMenu.vue';
 import EditorZoom from '../components/EditorZoom.vue';
 import GraphicEditorToolbar from '../components/GraphicEditorToolbar.vue';
 import PixelEditor from '../components/PixelEditor.vue';
@@ -459,7 +407,7 @@ const copiedFrameRowColors = ref(null);
 const copiedFrameData = ref(null);
 
 export default defineComponent({
-  components: {EditorZoom, GraphicEditorToolbar, PixelEditor, PixelGridToggle, PlayfieldColorStrip, QuickColorPalette},
+  components: {ConfirmDeleteMenu, EditorZoom, GraphicEditorToolbar, PixelEditor, PixelGridToggle, PlayfieldColorStrip, QuickColorPalette},
   props: ['storageFactory', 'title', 'fgColor', 'name'],
   setup(props) {
     const instance = getCurrentInstance();

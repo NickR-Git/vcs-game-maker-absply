@@ -1,10 +1,9 @@
 <template>
-  <v-app id="inspire" :class="{'hide-description-text': hideDescriptionText, 'desaturate-app-colors': desaturateAppColors}">
+  <v-app id="inspire" :class="{'hide-description-text': hideDescriptionText, 'desaturate-app-colors': desaturateAppColors, 'dark-mode': darkMode}">
     <div class="app-logo">
       <img src="./assets/logo.svg" alt="VCS Game Maker" class="app-logo-img" />
       <div class="app-logo-version">{{ version }}</div>
     </div>
-    <div class="app-logo-divider" />
 
     <v-app-bar
       app
@@ -13,7 +12,6 @@
       height="72"
       color="white"
       class="navigation-list top-toolbar"
-      :class="{'top-toolbar-no-drawer': hideSidebar || !drawer}"
     >
         <v-btn to="/" link text class="actions-item" title="Actions" elevation="0">
           <v-icon>mdi-chart-scatter-plot</v-icon>
@@ -474,7 +472,7 @@
 </template>
 
 <script>
-import {useCompileLog, useDesaturateBlocklyColorsStorage, useErrorBannerHighlight, useErrorStorage,
+import {useCompileLog, useDarkModeStorage, useDesaturateBlocklyColorsStorage, useErrorBannerHighlight, useErrorStorage,
   useHideDescriptionTextStorage, useHideSidebarStorage, useStellaPathStorage,
   markSkipLoadLastProjectCheckOnce} from './hooks/project';
 import {buildRom, useRomCapacity, useRomOutdated, useHasCompiledRom, useCompiledRomBytes,
@@ -579,6 +577,7 @@ export default {
       productName, version, hideDescriptionTextStorage: useHideDescriptionTextStorage(),
       hideSidebarStorage: useHideSidebarStorage(),
       desaturateAppColorsStorage: useDesaturateBlocklyColorsStorage(),
+      darkModeStorage: useDarkModeStorage(),
       stellaPathStorage: useStellaPathStorage(),
     };
   },
@@ -627,6 +626,12 @@ export default {
     // mute along with the blocks instead of staying fully saturated.
     desaturateAppColors() {
       return !!this.desaturateAppColorsStorage;
+    },
+    // Bound as a class on the root v-app below (.dark-mode) - see that
+    // class's CSS comment (right below the Subdued Palette :root rule in
+    // the unscoped <style> block) for how it actually recolors the app.
+    darkMode() {
+      return !!this.darkModeStorage;
     },
     // Same "window.electronAPI's mere presence" check as Configuration.vue's
     // own isElectron - see preload.js's  comment. Gates the "Test in
@@ -1159,6 +1164,457 @@ export default {
      moved into this component's DOM by attachEmulator(), so it never
      carries this component's scope attribute. -->
 <style>
+/* Dark Mode (see Configuration.vue's switch, bound to darkMode below) -
+   one blanket CSS filter on the whole app, Dark Reader's (github.com/
+   darkreader/darkreader) "filter" dark-theme technique: invert every
+   rendered pixel's lightness, then rotate hue 180deg to bring an inverted
+   blue back to looking roughly blue again (a plain invert() alone turns
+   blue into orange, every warm color cold and vice versa). This recolors
+   literally everything inside #inspire for free - every Vuetify component,
+   every hardcoded color below, the whole Blockly canvas - with no per-color
+   authoring needed, since it transforms final rendered pixels rather than
+   any particular color declaration. Composes automatically with Subdued
+   Palette below: none of ITS filter rules target this same top-level
+   .v-application element (they're all on nested descendants), so both
+   apply correctly together regardless of which is toggled on first - CSS
+   filters compose hierarchically down the DOM tree, not by merging two
+   rules that target the same element. */
+/* Scoped to .v-application--wrap's direct children, excluding
+   .emulator-drawer, rather than one blanket rule on .v-application itself -
+   a real reported bug ("the default red and blue of player0 and player1
+   are still changing"), confirmed by eye (screenshots showing a visibly
+   darker/desaturated navy and maroon instead of true blue/red) even though
+   the emulator's game-screen canvas was already "excluded" via the
+   standard double-invert cancellation trick used everywhere else on this
+   page (filter: invert(1) hue-rotate(180deg) applied a second time to
+   #gopher2600-target-container, which should cancel the ancestor's
+   identical filter out exactly). That trick is mathematically exact for
+   ordinary content, but this canvas is painted continuously by a WASM/Go
+   program via requestAnimationFrame, entirely outside this page's paint
+   cycle - confirmed as a real case where the two nested filter passes
+   don't round-trip with full precision for that kind of GPU-composited,
+   continuously-repainted content (color banding/rounding loss across two
+   separate filter compositing passes, not a logical inversion bug -
+   getImageData() on the canvas's pixel buffer reads back byte-identical
+   either way, since that reads the raw bitmap before any CSS filter is
+   ever applied, completely bypassing the very thing actually in question
+   here). The only way to guarantee a real console's true output is to make
+   sure NO filter - cancelling or not - ever applies to that canvas or any
+   of its ancestors, not to rely on two filters exactly undoing each
+   other. */
+.dark-mode.v-application > .v-application--wrap > *:not(.emulator-drawer):not(.error-message):not(.nav-drawer):not(.top-toolbar) {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+/* Vuetify portals v-dialog/v-menu content (.v-dialog__content/
+   .v-menu__content) OUT of .v-application--wrap entirely - confirmed live,
+   they render as siblings of .v-application--wrap, direct children of
+   .v-application itself - so the blanket rule above, scoped to
+   .v-application--wrap's children, never reaches them at all. A real
+   reported gap ("app popup windows should also be affected by dark mode"):
+   every dialog/menu rendered as its stock, un-inverted light theme
+   regardless of Dark Mode. .v-overlay (the dark scrim behind them, also a
+   direct .v-application child - see its z-index comment further below)
+   is deliberately left alone here - it's already a dark, semi-transparent
+   backdrop (theme="dark" by default) appropriate behind either a light or
+   dark dialog, and inverting it would turn it a jarring white instead. */
+.dark-mode.v-application > .v-dialog__content,
+.dark-mode.v-application > .v-menu__content {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+/* .nav-drawer and .top-toolbar are excluded from the
+   blanket rule above too, for the same reason as .emulator-drawer and
+   .error-message: each one sets a semi-transparent border/background
+   directly on itself (not on a separately-excluded descendant), and filter
+   composites an element's content against the element as ONE flattened
+   image BEFORE inverting - so a literal rgba(255, 255, 255, 0.24) authored
+   on a still-filtered element doesn't survive as that exact value, it gets
+   composited against that element's (still light-mode) background first,
+   then the whole thing inverts together, landing on whatever THAT composite
+   inverts to rather than the literal value authored - confirmed as the real
+   cause of repeated border-color mismatches no amount of reworking the
+   authored value alone could fix, since the value was never the thing being
+   rendered unmodified. Excluding these three the same way guarantees every
+   color declared on them from here down renders as the exact literal value
+   written, with zero filter reprocessing - the only technique proven
+   reliable for this throughout Dark Mode so far (the console log's
+   .error-message background, .emulator-drawer's whole subtree). Content
+   inside them that should still follow Dark Mode gets an explicit filter
+   below instead of inheriting this blanket one. */
+.dark-mode .nav-drawer-inner,
+.dark-mode .top-toolbar .v-toolbar__content {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+/* .v-application itself (Vuetify's white background on the outermost
+   #inspire element) is no longer covered by any filter either, now that
+   the blanket rule above moved down to .v-application--wrap's children
+   instead of sitting on .v-application directly - a real reported bug
+   ("the color behind the logo [top-left corner] is wrong"): any gap a
+   filtered child doesn't fully cover (e.g. around .app-logo, which has a
+   transparent background, sitting right over this element in that corner)
+   let this stock white show through unfiltered.
+   These two values are deliberately NOT an arbitrary dark pick - a real
+   reported follow-up ("match the bg color to the same colors used in
+   other bg areas of the top toolbar") - they're what .top-toolbar's
+   background (a real .v-app-bar, still covered by the blanket invert,
+   unlike .v-application itself now) actually computes to in each state:
+   plain white inverted (dark mode alone) is exactly #000 (invert(1) maps
+   #fff -> #000; hue-rotate has no effect on a saturation-less grayscale
+   value), and Subdued Palette's #e1e1e1 app-bar override (see
+   .desaturate-app-colors.v-application's rule further below) inverted the
+   same way is exactly #1e1e1e - not an approximation, the literal
+   invert(#e1e1e1) result.
+   Both need !important - .desaturate-app-colors.v-application's plain
+   #e1e1e1 rule further below already carries it, so without matching
+   !important here, THAT rule (same specificity, 2 classes) kept winning
+   the dark+Subdued combination by source order, a real reported case of
+   this not actually taking effect ("the bg color is wrong... with both
+   dark mode and dark mode + subdued"). */
+.dark-mode.v-application {
+  background-color: #000 !important;
+}
+
+.dark-mode.desaturate-app-colors.v-application {
+  background-color: #1e1e1e !important;
+}
+
+/* .emulator-drawer is deliberately left OUT of the blanket rule above
+   (excluded by the :not() there), so none of its CSS properties -
+   including this background - come from inheriting an ancestor's filter
+   anymore; Vuetify's stock .theme--light.v-navigation-drawer white
+   background needs an explicit dark replacement instead, the same
+   direct-property technique (not filter-based) already used for Blockly's
+   workspace background above.
+   Same two derived values as .v-application just above (a real reported
+   follow-up - "the bg color is wrong in the emulator pane as well", the
+   same hardcoded-flat-#1e1e1e-regardless-of-Subdued mismatch) and for the
+   identical reason: .emulator-drawer is ALSO a plain .theme--light.
+   v-navigation-drawer, so Subdued Palette's #e1e1e1 drawer override
+   (the exact same rule .v-application's comment already points at) applies
+   to it too whenever Subdued is active - #000 when only Dark Mode is on
+   (invert(#fff)), #1e1e1e when both are (invert(#e1e1e1)). */
+.dark-mode .emulator-drawer.theme--light.v-navigation-drawer {
+  background-color: #000 !important;
+}
+
+.dark-mode.desaturate-app-colors .emulator-drawer.theme--light.v-navigation-drawer {
+  background-color: #1e1e1e !important;
+}
+
+/* The drawer's chrome - toolbar row (Refresh Emulator button, key mapping
+   dialog), front-panel switches (power/color/difficulty/select/reset), ROM
+   build buttons, the "X bytes free" line and its progress bar
+   (.rom-capacity/.rom-capacity-bar), and the ROM capacity/variable-usage
+   log - still needs to follow Dark Mode like every other control on the
+   page. Each is a direct child of .emulator-drawer-inner, a SIBLING of
+   #gopher2600-target-container (confirmed directly against the live
+   rendered DOM, every single one of that element's children individually,
+   after a real reported gap here already missed .rom-capacity/
+   .rom-capacity-bar on the first pass), never an ancestor of it - so
+   filtering them individually here can't touch the canvas's rendering at
+   all, not even through the two-cancelling-filters mechanism the comment
+   above diagnosed as imprecise. This is what actually keeps the drawer's
+   UI chrome following Dark Mode now that the blanket rule above no longer
+   reaches it. */
+.dark-mode .emulator-toolbar-row,
+.dark-mode .panel-switches-row,
+.dark-mode .rom-buttons-row,
+.dark-mode .rom-capacity,
+.dark-mode .rom-capacity-bar,
+.dark-mode .rom-capacity-log {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+/* .v-navigation-drawer__border (Vuetify's internal divider line, see its
+   rule further below) is shared by BOTH .nav-drawer (still covered by the
+   blanket invert above, so its copy already lands on white-based
+   naturally) and .emulator-drawer (excluded from that same blanket invert
+   now, so its copy would otherwise stay stuck at the plain rgba(0, 0, 0,
+   0.24) that rule sets - a real reported case of the same "black-based
+   rgba invisible against a now-dark surface" issue already fixed for the
+   console log's border/handle, just for this drawer's left edge instead).
+   Scoped to .emulator-drawer specifically so .nav-drawer's
+   (already-correct) border is untouched. */
+.dark-mode .emulator-drawer .v-navigation-drawer__border {
+  background-color: rgba(255, 255, 255, 0.24) !important;
+}
+
+/* .nav-drawer is now excluded from the blanket rule too (see above), so its
+   copy of this same border - like .emulator-drawer's - needs this same
+   explicit, filter-independent override instead of relying on inheriting
+   any ancestor's invert. Literally the same CSS value as .emulator-drawer's
+   copy just above and as .top-toolbar's border-bottom below - all three are
+   meant to read as one continuous line/color around the same chrome, so
+   all three use this exact literal rgba(), not three separately-derived
+   approximations of it. */
+.dark-mode .nav-drawer .v-navigation-drawer__border {
+  background-color: rgba(255, 255, 255, 0.24) !important;
+}
+
+/* .nav-drawer's border-top and .top-toolbar's border-bottom - same
+   literal value again, now safe to set directly since both are excluded
+   from the blanket rule above (no filter left anywhere in their rendering
+   to reprocess it). A real reported case of this NOT working
+   while still under the blanket filter ("the top border is still the wrong
+   color", "left toolbar top border/logo bottom border color is still
+   wrong") - setting it directly on a still-filtered element doesn't survive
+   as the literal value authored (see the long comment on the blanket rule's
+   :not() list above for why), so the two had to be structurally excluded
+   first, not just given a more insistent override.
+   ".dark-mode.v-application", not just ".dark-mode", on both - a real
+   follow-up report of this STILL not working even once excluded ("it gets
+   darker instead of lighter") traced to a genuine specificity tie: Vue's
+   scoped-style compiler turns .nav-drawer/.top-toolbar's rules into
+   ".nav-drawer[data-v-xxxxx]"/".top-toolbar[data-v-xxxxx]" behind the
+   scenes, an attribute selector that counts the same as a class for
+   specificity - exactly two selectors, tying ".dark-mode .nav-drawer"/
+   ".dark-mode .top-toolbar" (also two), with the scoped original winning
+   the tie by appearing later in the compiled stylesheet. Confirmed directly
+   via document.styleSheets, not assumed. Adding ".v-application" (always
+   true here, .dark-mode only ever applies alongside it on the same root
+   element) makes it three selectors, breaking the tie outright rather than
+   hoping source order favors this rule. */
+.dark-mode.v-application .nav-drawer {
+  border-top-color: rgba(255, 255, 255, 0.24) !important;
+}
+
+.dark-mode.v-application .top-toolbar {
+  border-bottom-color: rgba(255, 255, 255, 0.24) !important;
+}
+
+/* .nav-drawer's and .top-toolbar's backgrounds - same derived two-value
+   pattern as .v-application/.emulator-drawer above, for the identical
+   reason: now excluded from the blanket invert, Vuetify's stock white (or
+   Subdued Palette's #e1e1e1 .theme--light.v-navigation-drawer/.v-app-bar
+   override) needs an explicit dark replacement instead of inheriting one. */
+.dark-mode .nav-drawer.theme--light.v-navigation-drawer,
+.dark-mode .top-toolbar.theme--light.v-app-bar.v-toolbar.v-sheet {
+  background-color: #000 !important;
+}
+
+.dark-mode.desaturate-app-colors .nav-drawer.theme--light.v-navigation-drawer,
+.dark-mode.desaturate-app-colors .top-toolbar.theme--light.v-app-bar.v-toolbar.v-sheet {
+  background-color: #1e1e1e !important;
+}
+
+/* Counter-inverted (the identical filter, applied a second time, cancels
+   the ancestor's filter out) - every element here shows a REAL, meaningful
+   color that Dark Mode must leave untouched rather than recolor. The
+   emulator's game-screen canvas no longer needs an entry here at all (see
+   the .emulator-drawer exclusion above - it's structurally outside the
+   filtered subtree now, not relying on a cancellation that turned out
+   imprecise for it specifically) - every pixel/graphics editor's canvas
+   and real-palette color swatch/picker dot app-wide still use the plain
+   cancellation approach, since none of them are continuously-repainted
+   WASM content the way the emulator is, and each is a single element with
+   no similar nesting risk either way. */
+.dark-mode .editor-canvas,
+.dark-mode .grid-overlay-canvas,
+.dark-mode .palette-swatch,
+.dark-mode .quick-color-swatch,
+.dark-mode .row-swatch,
+.dark-mode .color-swatch-picker-dot {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+/* Same cancellation technique, for a different reason: GeneratedCode.vue's
+   code pane (.code-scroll-wrapper, covering the line-number gutter and the
+   syntax-highlighted code itself) already has a fixed dark theme
+   (duotone-sea.css) completely independent of this app's Dark Mode -
+   a real reported requirement ("the generated code background and text
+   colors shouldn't change when dark mode is on... the text area that shows
+   the generated code"). Inverting an already-dark, already-colour-coded
+   syntax theme doesn't produce a lighter version of it the way inverting
+   this app's light-mode UI does - it just scrambles syntax-highlighting
+   colours that were never meant to invert in the first place, so this
+   cancels Dark Mode out entirely for that one pane rather than trying to
+   pick individual colours to leave alone within it. */
+.dark-mode .code-scroll-wrapper {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+/* The top app toolbar's per-tab icon/text colors - a real reported
+   requirement ("don't invert app toolbar icon and text colors"). Scoped to
+   .top-toolbar specifically (not the left sidebar's identically-named
+   classes, see the .nav-drawer rule elsewhere) and to just these per-item
+   classes (not the whole toolbar), so the bar's background still darkens
+   normally with everything else - only each tab's brand color stays true.
+   Same class list Subdued Palette's tab-color rules already use further
+   below. */
+.dark-mode .top-toolbar .actions-item,
+.dark-mode .top-toolbar .titlescreen-item,
+.dark-mode .top-toolbar .player-item,
+.dark-mode .top-toolbar .background-item,
+.dark-mode .top-toolbar .sound-item,
+.dark-mode .top-toolbar .music-item,
+.dark-mode .top-toolbar .text-tab-item,
+.dark-mode .top-toolbar .data-item,
+.dark-mode .top-toolbar .scorefont-item,
+.dark-mode .top-toolbar .configuration-item,
+.dark-mode .top-toolbar .generated-item,
+.dark-mode .top-toolbar .project-item {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+/* The ENTIRE Blockly component (workspace, blocks, toolbox sidebar, flyout
+   drawer) is excluded from the blanket invert as ONE rule on its outermost
+   element - not as several separate rules on its individual pieces, which
+   is what this used to do (.blocklyBlockCanvas/.blocklyFlyout separately)
+   until a real reported bug ("blocks in the toolbox drawer are still
+   inverted") traced back to exactly that: .blocklyFlyout wraps a nested
+   .blocklyBlockCanvas (the flyout is really just a lightweight second
+   workspace, with the same block-canvas structure as the main one - confirmed
+   directly against the installed Blockly bundle), so giving BOTH of them
+   their identical cancel-filter stacked TWO deep inside the ancestor's
+   invert (3 inversions total: ancestor + flyout + nested block canvas) is
+   net INVERTED again, the same parity bug already hit once for the
+   emulator above. One rule on the single outermost ancestor (.blocklyDiv)
+   has no such nesting to get wrong. Blocks already have their
+   dedicated, more precise JS-based color handling anyway
+   (desaturateHex/getBlockStyleForColour in BlocklyComponent.vue) - RGB
+   channel inversion only approximates an HSL lightness flip, and a block's
+   color sits at a roughly 50% HSL lightness by construction, too close to
+   that transform's fixed point to actually read as darker, confirmed as a
+   real reported "blocks are too bright" once Subdued Palette's
+   desaturation made that flat midtone impossible to miss. See
+   BlocklyComponent.vue's darkenHex for how block colors handle Dark Mode
+   instead - and the .blocklyMainBackground rule right below for how the
+   plain workspace grid still gets a dark background despite the whole
+   component otherwise sitting outside the blanket invert. */
+.dark-mode .blocklyDiv {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+/* Not filter-based (unlike every exclusion above) - .blocklyDiv's blanket
+   exclusion just above means nothing inside it inverts anymore at all, so
+   the plain workspace grid needs an explicit dark background instead to
+   still read as "this tab is in Dark Mode too" the way every other tab's
+   background does.
+   Targets .blocklySvg, confirmed directly against the installed Blockly
+   bundle to be the element actually carrying this background in Blockly's
+   stock CSS (`.blocklySvg { background-color: #fff; ... }`, a real class
+   rule, not an inline style) - a real reported regression chain: a first
+   attempt set `fill: #1e1e1e !important` directly on .blocklyMainBackground,
+   which replaced that element's inline `style.fill = "url(#blocklyGrid
+   Pattern...)"` (confirmed via WorkspaceSvg.prototype.createDom - the grid
+   pattern IS that rect's entire fill, not a separate solid color sitting
+   behind the grid, and the
+   pattern's tile has no solid base either, only the <line> elements below),
+   hiding the grid dots behind a flat fill instead of coexisting with them.
+   Switching the background to .blocklyDiv (this component's outer wrapper)
+   instead fixed the grid, but left the canvas showing light-mode white
+   regardless (confirmed live via getComputedStyle: .blocklySvg's
+   opaque white background paints directly over .blocklyDiv's, since the
+   SVG covers 100% of it) - this is the actual fix, on the actual element
+   responsible. */
+.dark-mode .blocklySvg {
+  background-color: #1e1e1e !important;
+}
+
+/* The grid dots/lines Blockly draws across that background are a <line>
+   inside a <pattern id="blocklyGridPattern...">, with their colour set as a
+   plain SVG "stroke" attribute (confirmed directly against the installed
+   Blockly bundle, Grid.createDom) rather than through a CSS class - a real
+   reported bug ("can't see the grid dots in dark mode") once the
+   background above went dark while these kept their original light-mode
+   stroke colour. CSS always wins over a presentation attribute regardless
+   of selector specificity, so a plain attribute-prefix selector is enough
+   to override it (the "Pattern" suffix is a random per-injection string,
+   hence the ^= prefix match instead of a plain ID selector). Lighter than
+   the dark background, not darker - a dot has to stand out AGAINST that
+   background, the same reason light-mode's default stroke colour is a
+   light grey sitting on white, just inverted here (dark background, light
+   dots) instead. */
+.dark-mode .blocklyDiv [id^="blocklyGridPattern"] line {
+  stroke: #595959 !important;
+}
+
+/* Same reasoning as .blocklyMainBackground/the grid lines above, not the
+   filter re-invert trick the rule just below this one uses - a real
+   reported requirement ("the background behind the blocks in drawers
+   needs to be updated as well"): the flyout/drawer's background shape
+   (.blocklyFlyoutBackground, "fill: #ddd" by default) is a SIBLING of its
+   block canvas, not an ancestor of it, so a plain direct fill override
+   here has no effect at all on whether the blocks sitting on top of it
+   stay excluded from the blanket invert - those two are independent. */
+.dark-mode .blocklyFlyoutBackground {
+  fill: #1e1e1e !important;
+}
+
+/* Re-included (a THIRD invert, nested two deep inside the already-excluded
+   .blocklyDiv, nets back to inverted - see .blocklyDiv's comment above for
+   the parity math) - these three pieces DO still need to follow Dark Mode
+   despite living inside the otherwise-excluded Blockly component: the
+   toolbox sidebar's background (a real reported requirement - blocks/
+   flyout stay excluded, but .blocklyToolboxDiv itself isn't a block), the
+   flyout's non-block label text (.blocklyFlyoutLabelText - e.g. the
+   Variables category's "Create variable..." button - distinct from
+   .blocklyFlyoutLabel's block-colored siblings, which stay excluded), and
+   the zoom/grid-snap/multiselect control icons (.blocklyZoom/
+   .blocklyMultiselect/.grid-snap-icon-group - plain <image>/hand-drawn
+   <rect> icons, not block-colored SVG paths, so inverting them is exactly
+   the same safe, icon-appropriate treatment every other tab's icons
+   already get - .grid-snap-icon-group specifically needs a dedicated class
+   for this to even reach it, confirmed live that it does NOT end up a
+   descendant of .blocklyMultiselect despite ActionEditor.vue's comment
+   there suggesting otherwise - see that class's comment for the live DOM
+   check that found this). */
+.dark-mode .blocklyToolboxDiv,
+.dark-mode .blocklyFlyoutLabelText,
+.dark-mode .blocklyZoom,
+.dark-mode .blocklyMultiselect,
+.dark-mode .grid-snap-icon-group,
+.dark-mode .blockly-ws-search {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+/* .blockly-ws-search is @blockly/plugin-workspace-search's search-bar
+   panel (BlocklyComponent.vue's ">>> .blockly-ws-search { box-shadow: none
+   }" comment has its full background/border details) - a plain white box
+   with plain black text, same as the toolbox's search field, and a
+   real reported gap the same way ("the colors of the search drawer text
+   need to be inverted when dark mode is on... the search drawer text on
+   the Actions tab"). Included above rather than left excluded, since
+   unlike the generated-code pane just above, this one has no fixed theme
+   worth preserving - it's ordinary UI chrome the same as every other
+   panel Dark Mode already recolors. */
+
+/* Direct color overrides, not relying on .blocklyToolboxDiv's filter above
+   to reach it - a real reported case ("type to search for blocks" text
+   needs to be inverted) where it didn't: this is @blockly/toolbox-search's
+   native <input> (confirmed live its text/placeholder stayed plain black
+   despite sitting inside .blocklyToolboxDiv, which does correctly show
+   filter: invert(1) hue-rotate(180deg) in the computed style of every one
+   of its ancestors in between - a browser rendering quirk where native
+   form control text/placeholder doesn't always composite through an
+   ancestor's CSS filter the way regular rendered content does, the same
+   category of issue already hit once for the emulator's WASM canvas).
+   Direct, filter-independent color properties instead, the same pattern
+   already used everywhere else that turned out to need it. */
+.dark-mode .blocklyTreeRowContentContainer input {
+  color: #fff !important;
+}
+
+.dark-mode .blocklyTreeRowContentContainer input::placeholder {
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+
+/* Same native-<input>-doesn't-composite-through-filter quirk, same direct
+   fix, now for @blockly/plugin-workspace-search's search box
+   (.blockly-ws-search-input input - see node_modules/@blockly/
+   plugin-workspace-search/src/css.js) - it sits inside .blockly-ws-search,
+   which gets this exact filter declared directly on itself just above,
+   the same situation .blocklyToolboxDiv's search input was in. */
+.dark-mode .blockly-ws-search-input input {
+  color: #fff !important;
+}
+
+.dark-mode .blockly-ws-search-input input::placeholder {
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+
 /* All gated behind "Soft Colors" (see Configuration.vue's switch,
    bound to desaturateAppColors below) - off means plain stock Vuetify
    white everywhere, on mutes both block/tab colors (see the filter rules
@@ -1175,18 +1631,24 @@ export default {
   background-color: #e9e9e9 !important;
 }
 
-/* Vuetify's own .theme--light.v-list default (white) isn't covered by the
-   v-card rule above - a v-list nested inside a v-menu's popup card (e.g.
-   the Set height popup's title/slider rows) kept a plain white background
-   even with Subdued Palette on, while the rest of that same popup (rows
-   with no v-list wrapper) correctly picked up the card's grey - confirmed
-   as a real reported bug, visibly inconsistent within one popup. Scoped to
-   .v-menu__content specifically - every tab's own card-list container
-   (.background-list, .animation-list, .titlescreen-card-list, ...) is
-   ALSO a v-list, and painting those the same grey showed as a stray light
-   box sitting behind that tab's cards instead (also confirmed as a real
-   reported bug once tried unscoped). */
-.desaturate-app-colors .v-menu__content .theme--light.v-list {
+/* Vuetify's .theme--light.v-list default (white) isn't covered by the
+   v-card rule above - a v-list nested inside a popup card (e.g. the Set
+   height popup's title/slider rows - TitleScreenEditor.vue/PlayerEditor.vue/
+   BackgroundEditor.vue's v-dialog, despite this rule's older comment
+   describing it as a v-menu) kept a plain white background even with
+   Subdued Palette on, while the rest of that same popup (rows with no
+   v-list wrapper, e.g. the Cancel/Set height button row) correctly picked
+   up the card's grey - confirmed as a real reported bug, visibly
+   inconsistent within one popup ("popup colors should also be affected by
+   subdued color toggle", "the bottom portion of the set height popup
+   behind the cancel and set height buttons is the wrong color"). Scoped to
+   .v-menu__content/.v-dialog__content specifically - every tab's card-list
+   container (.background-list, .animation-list, .titlescreen-card-list,
+   ...) is ALSO a v-list, and painting those the same grey showed as a
+   stray light box sitting behind that tab's cards instead (also confirmed
+   as a real reported bug once tried unscoped). */
+.desaturate-app-colors .v-menu__content .theme--light.v-list,
+.desaturate-app-colors .v-dialog__content .theme--light.v-list {
   background-color: #e9e9e9 !important;
 }
 
@@ -1209,6 +1671,46 @@ export default {
 .desaturate-app-colors .theme--light.v-footer.error-message,
 .desaturate-app-colors .compile-log-error {
   color: #c62828 !important;
+}
+
+/* Dark Mode - the error/build console gets an explicit black background
+   (not just whatever inverting its normal light background happens to
+   produce) and keeps its red error text truly red, not hue-rotated into
+   looking orange/cyan - a real reported requirement. .error-message is
+   excluded from the blanket invert entirely now (see that rule's
+   :not(.error-message) further up, added after a real reported "the
+   console log is now all white" regression - once the blanket invert was
+   scoped directly onto .v-application--wrap's children instead of their
+   shared ancestor, this element started receiving that filter directly
+   rather than cancelling an ancestor's copy of it, so the forced-black
+   background below was getting inverted to white by this element's
+   now-redundant copy of the exact same filter), so its light-mode text
+   colors - including Subdued Palette's red/background overrides just
+   above, when also active - already apply normally with no filter
+   involved at all; the background is then forced black regardless (this
+   rule's selector ties Subdued's background rule above on specificity, so
+   it has to come AFTER it in source order to win when both are on), and
+   the otherwise near-black info/stage text is brightened to stay readable
+   against that new black background. */
+.dark-mode .error-message.theme--light.v-footer {
+  background-color: #000 !important;
+}
+
+.dark-mode .compile-log-info {
+  color: rgba(255, 255, 255, 0.87) !important;
+}
+
+/* .error-message's border-top (rgba(0, 0, 0, 0.24), see its rule further
+   below) goes invisible against the forced-black background above for the
+   same reason the resize handle did - .error-message is excluded from the
+   blanket invert entirely now (see the comment further up), so this plain
+   color property needs an explicit value, not a filter to rely on. Matches
+   the emulator pane's left border once that one got an explicit fix too
+   (.emulator-drawer .v-navigation-drawer__border further below) - both
+   ended up needing the identical direct value for the identical reason,
+   now that neither lives inside the blanket invert anymore. */
+.dark-mode .error-message {
+  border-top-color: rgba(255, 255, 255, 0.24) !important;
 }
 
 /* Every v-switch's OFF-state thumb (the little knob) defaults to plain
@@ -1375,10 +1877,42 @@ export default {
    elevation/shadow separating them from whatever's behind. Matches the
    same darkened border color as the main per-entry cards above, so any
    popup reads as consistent with the rest of the app instead of a
-   borderless white/grey blob. */
+   borderless white/grey blob.
+   box-shadow removed outright, in every mode, not just Dark Mode - Dark
+   Mode's blanket filter was turning Vuetify's stock black-based
+   elevation shadow into a glowing white halo, and CSS filter has no way to
+   exempt just that one property from an ancestor's effect while still
+   inverting the rest of the same popup - the only way to genuinely leave
+   it unaffected was to not have one at all (a real, direct request after
+   a pre-inverted "cancel it out" value still read as a visible glow once
+   actually checked). The border above already gives every popup a visible
+   edge in every mode, so nothing is left undefined without a shadow
+   either.
+   ".v-dialog" itself (not just ".v-dialog > .v-card" below) needs this
+   same override too - confirmed live (getComputedStyle), a v-dialog popup's
+   VISIBLE shadow actually comes from the ".v-dialog" wrapper's
+   elevation (Vuetify defaults dialogs to elevation 24 - a much bigger
+   blur/spread than a plain card's elevation 2), not from the ".v-card"
+   inside it - the ".v-card" rule below was removing the wrong element's
+   shadow this whole time, a real reported case of "the drop shadow is
+   still here" after that fix alone.
+   ".v-menu__content" needs the same thing for the identical reason - its
+   card IS a direct child (confirmed earlier, unlike .v-dialog), but the
+   VISIBLE shadow still turned out to live on ".v-menu__content" itself
+   (elevation 10: "rgba(0, 0, 0, .2) 0px 5px 5px -3px, rgba(0, 0, 0, .14)
+   0px 8px 10px 1px, rgba(0, 0, 0, .12) 0px 3px 14px 2px"), not on its
+   ".v-card" - a real reported case of "delete popups still have a drop
+   shadow" (every tab's "Delete this X?" confirm is a v-menu, not a
+   v-dialog) after the ".v-card"/".v-dialog" fixes alone. */
+.v-dialog,
+.v-menu__content {
+  box-shadow: none !important;
+}
+
 .v-menu__content > .v-card,
 .v-dialog > .v-card {
   border: 1px solid rgba(0, 0, 0, 0.24);
+  box-shadow: none !important;
   /* These cards default to overflow: visible, so a flush-edged child (e.g.
      the Set height popup's v-card-actions row) squares off past the
      card's own rounded corners instead of being clipped to them - right at
@@ -1608,15 +2142,55 @@ export default {
   fill: rgba(0, 0, 0, 0.4);
 }
 
-/* Matches the grid-snap icon's  rest/hover/press opacity steps (see
+/* White-based, not filter-based (unlike .blocklyDiv's blanket exclusion
+   above) - a real reported requirement ("Blockly scrollbars need to be
+   inverted to match the other app scrollbars"): same black-based-rgba-
+   reads-as-invisible-on-a-now-dark-surface issue already fixed for the
+   console log's resize handle, same direct-fill-override fix (Blockly's
+   scrollbars are SVG rects, not real browser scrollbars - the app-wide
+   ::-webkit-scrollbar rules this is meant to visually match never reach
+   them either, which is why this app's rgba(0,0,0,...) override just
+   above exists in the first place). */
+.dark-mode .blocklyScrollbarHandle,
+.dark-mode .blocklyFlyout .blocklyScrollbarHandle {
+  fill: rgba(255, 255, 255, 0.25);
+}
+
+.dark-mode .blocklyScrollbarBackground:hover + .blocklyScrollbarHandle,
+.dark-mode .blocklyScrollbarHandle:hover,
+.dark-mode .blocklyFlyout .blocklyScrollbarBackground:hover + .blocklyScrollbarHandle,
+.dark-mode .blocklyFlyout .blocklyScrollbarHandle:hover {
+  fill: rgba(255, 255, 255, 0.4);
+}
+
+/* Matches the grid-snap icon's rest/hover/press opacity steps (see
    ActionEditor.vue's setupGridSnapZoomButton) - overrides Blockly's own
    stock ".blocklyZoom>image"/"...:hover"/"...:active" rule (css.js,
    .4/.6/.8), which is the SAME selector this app's stylesheet uses, so
    which one wins is otherwise just a source-order coin flip (Blockly injects
    its CSS at runtime, after this file's compiled <style> tag) -
-   !important makes this app's values win unconditionally instead. */
+   !important makes this app's values win unconditionally instead.
+   filter: brightness(0) matches the REST of grid-snap/multiselect's look
+   too, not just their opacity curve - a real reported gap ("give the
+   blockly zoom control buttons the same styles as the multiselect and grid
+   snap buttons... every button state, not just some"): opacity alone was
+   already identical (confirmed live, both read 0.25 at rest), but the zoom
+   icons are a raster clipped from Blockly's media/sprites.png, which
+   bakes in Blockly's stock icon colour - not the near-black grid-snap's
+   hand-drawn glyph and multiselect's recoloured SVG both use instead (see
+   MULTISELECT_ICON_INACTIVE/_ACTIVE in BlocklyComponent.vue). brightness(0)
+   zeroes every RGB channel while leaving alpha untouched, forcing the
+   raster to solid black regardless of its original colour - the same
+   "force a uniform icon colour Blockly doesn't expose a setting for"
+   problem multiselect already solved, just via a filter here instead of a
+   recoloured source image, since this one has no plugin option to swap the
+   source for. Applies uniformly to rest/hover/press alike (not a per-state
+   rule), so there's no separate copy needed on the :hover/:active rules
+   below - once the icon itself is black, the existing opacity steps alone
+   already reproduce grid-snap/multiselect's exact look at every state. */
 .blocklyZoom > image,
 .blocklyZoom > svg > image {
+  filter: brightness(0) !important;
   opacity: .25 !important;
 }
 
@@ -1628,6 +2202,48 @@ export default {
 .blocklyZoom > image:active,
 .blocklyZoom > svg > image:active {
   opacity: .75 !important;
+}
+
+/* Same reasoning/values as .blocklyZoom above, now for the multiselect
+   plugin's toggle icon (BlocklyComponent.vue's mounted()) sitting right
+   next to the grid-snap icon (ActionEditor.vue's setupGridSnapZoomButton) -
+   overrides the plugin's injected .blocklyMultiselect rule (multiselect
+   _controls.js's Blockly.Css.register call, .2/.4/.6) so the two icons read
+   as one consistent set instead of two different opacity curves sitting
+   side by side - confirmed as a real reported mismatch. The icon's color
+   match (black at rest, the app's primary blue once active) comes from
+   BlocklyComponent.vue's MULTISELECT_ICON_INACTIVE/_ACTIVE data URIs
+   instead of a CSS filter here - <image> elements have no fill to override
+   directly, so recoloring the source SVGs themselves was the only way to
+   match grid-snap's hand-drawn glyph exactly. */
+.blocklyMultiselect > image,
+.blocklyMultiselect > svg > image {
+  opacity: .25 !important;
+}
+
+.blocklyMultiselect > image:hover,
+.blocklyMultiselect > svg > image:hover {
+  opacity: .5 !important;
+}
+
+.blocklyMultiselect > image:active,
+.blocklyMultiselect > svg > image:active {
+  opacity: .75 !important;
+}
+
+/* Matches grid-snap's "active (toggled on) is always full opacity,
+   regardless of hover" rule exactly (see ActionEditor.vue's
+   setupGridSnapZoomButton's render()) - blockly-multiselect-active is
+   toggled by BlocklyComponent.vue's wrapped updateMultiselectIcon, the
+   only hook this plugin exposes for "the mode just changed." Higher
+   specificity (two classes) than the plain rest/hover/press rules above
+   would already win without !important, but every other rule here uses it
+   for the same guaranteed-precedence reason (see .blocklyZoom's comment
+   above on Blockly injecting its CSS at runtime), so this stays
+   consistent with them. */
+.blocklyMultiselect.blockly-multiselect-active > image,
+.blocklyMultiselect.blockly-multiselect-active > svg > image {
+  opacity: 1 !important;
 }
 
 /* The handle's exact 12px width/inset (matching the app's global scrollbar
@@ -2143,19 +2759,43 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
    directly (computed style showed this border rendering solid white,
    invisible against the toolbar's white background) rather than assumed. */
 .top-toolbar {
-  /* Matches the darkened .v-sheet--outlined card border color (see its own
-     comment) rather than Vuetify's default rgba(0, 0, 0, 0.12). */
+  /* Matches the darkened .v-sheet--outlined card border color (see that
+     comment) rather than Vuetify's default rgba(0, 0, 0, 0.12). Spans the
+     toolbar's full width (see "left"/"width"/"padding-left" below), so this
+     single border now reads as one continuous line under both the logo and
+     the toolbar's content - no separate divider element needed to fake
+     that continuity (see the removed .app-logo-divider, replaced by this). */
   border-bottom: 1px solid rgba(0, 0, 0, 0.24) !important;
   /* Vuetify's .v-app-bar base styles already transition left/right/
-     width/max-width/transform (its own built-in slide when $vuetify.
+     width/max-width/transform (its built-in slide when $vuetify.
      application.left changes, e.g. when a drawer opens/closes) - removing
      the drawer element entirely via v-if (see "Never show the left
      sidebar") changes that same tracked value, so the toolbar visibly
-     animated into place even after removing this rule's OWN
-     padding-left transition (confirmed directly - the animation was
-     Vuetify's own, not this file's). !important overrides Vuetify's own
-     class-level transition declaration. */
+     animated into place even after removing this rule's padding-left
+     transition (confirmed directly - the animation was Vuetify's,
+     not this file's). !important overrides Vuetify's class-level
+     transition declaration. */
   transition: none !important;
+  /* Always spans the full window width, starting at x: 0, rather than
+     Vuetify's "app" positioning (which normally offsets this past
+     a present drawer's width automatically, via $vuetify.application.left,
+     and falls back to x: 0 only once the drawer's gone - see the removed
+     .top-toolbar-no-drawer, which used to force that same x: 0 case back to
+     x: 200 to avoid sitting underneath .app-logo). Unconditionally
+     overriding "left"/"width" instead, in both the drawer-present and
+     drawer-absent cases alike, means the toolbar's box (so its
+     background and the border-bottom above) always extends under
+     .app-logo's reserved 200px corner too, instead of stopping at its
+     edge - letting the logo and the toolbar share one border instead of
+     needing a second element to visually continue it. padding-left keeps
+     the toolbar's actual content (the tab buttons) clear of that same
+     200px corner, same value .app-logo reserves, regardless of whether a
+     drawer happens to be present. !important is required to win over
+     Vuetify's inline "left"/"width" styles - inline styles normally
+     beat stylesheet rules, but never ones marked !important. */
+  left: 0 !important;
+  width: 100% !important;
+  padding-left: 200px;
 }
 
 /* Vuetify's  default v-btn sizing (min-width: 64px, 0 16px padding) is
@@ -2178,52 +2818,13 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
   margin: 0 4px !important;
 }
 
-/* v-app-bar's "app" positioning normally sets its  inline "left"
-   style past the drawer's width automatically, via Vuetify's shared
-   $vuetify.application.left tracking - which only accounts for space an
-   ACTUALLY PRESENT drawer reserves. Whenever the drawer isn't there to
-   reserve it (removed entirely via v-if - see "Never show the left
-   sidebar" in Configuration.vue - or just transiently closed, e.g. on a
-   narrow viewport), Vuetify sets that inline style to "left: 0px" instead,
-   which would otherwise slide the toolbar all the way to x: 0 and sit
-   directly underneath .app-logo, which is always shown (fixed position,
-   not part of this same "app" system) regardless of whether the drawer
-   itself is currently there - confirmed directly as a real visual overlap
-   once "Never show the left sidebar" first shipped.
-   200px (not padding, and not a smaller value like .app-logo's own
-   184+8=192px reserved area) specifically to exactly match Vuetify's own
-   inline "left: 200px" from the normal (drawer present) case - confirmed
-   directly via computed style in both states. An earlier version of this
-   used "padding-left: 192px" instead, which looked superficially similar
-   but actually left two real, confirmed mismatches against the normal
-   case: the toolbar's box (so its white background/bottom border)
-   still started at x: 0 instead of x: 200 like normal, and its first
-   icon landed 8px further left (208px vs the normal case's 216px) since
-   192 + Vuetify's 16px internal toolbar padding undershoots the
-   normal case's real 200 + 16. Overriding "left" directly instead makes
-   both the box geometry and the icon position match the normal case
-   exactly, not just approximately.
-   !important is required to win over Vuetify's inline "left: 0px" -
-   inline styles normally beat stylesheet rules, but never one marked
-   !important.
-   The template's condition is "hideSidebar || !drawer", not just
-   "!drawer" alone - confirmed directly as a second real overlap bug:
-   toggling "Never show the left sidebar" on while the drawer happened to
-   be open removes the drawer element via v-if without ever flipping its
-   own v-model (drawer) back to false first (nothing in Vue does this
-   automatically for an element that unmounts out from under a v-model
-   binding), so "drawer" itself stays stuck at its last real value. Checking
-   hideSidebar explicitly covers exactly that case, regardless of whatever
-   stale value "drawer" is left holding. */
-.top-toolbar-no-drawer {
-  left: 200px !important;
-}
-
-/* Sits in the empty top-left corner: to the left of .top-toolbar (which
-   only starts at x: 200px, past the navigation drawer's width), above
-   the drawer itself (which is "clipped" and starts at y: 72px, see the
-   template). Fixed positioning (not part of any Vuetify "app" element's
-   own flow) since none of the surrounding chrome has a slot for it. */
+/* Sits in the empty top-left corner, above the drawer itself (which is
+   "clipped" and starts at y: 72px, see the template) and on top of
+   .top-toolbar's box (which, since .top-toolbar's "left"/"width"/
+   "padding-left" above now span its full width unconditionally, extends
+   underneath this same corner too - the logo just paints over it, via a
+   higher z-index below). Fixed positioning (not part of any Vuetify "app"
+   element's flow) since none of the surrounding chrome has a slot for it. */
 .app-logo {
   position: fixed;
   top: 0;
@@ -2253,35 +2854,12 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
   line-height: 1;
 }
 
-/* .app-logo's  divider, independent of the drawer's  border-top
-   below (which only actually renders on-screen while the drawer itself is
-   both present AND open) - confirmed directly as a real gap: the drawer is
-   translated off-screen (not just closed) below Vuetify's responsive
-   mobile-breakpoint regardless of "Never show the left sidebar", and
-   removed from the DOM entirely when that setting IS on, so relying on
-   the drawer's border for this was never reliably visible under the
-   logo to begin with. Same width/x-position .top-toolbar-no-drawer's own
-   "left: 200px" override reserves, same color/thickness as every other
-   divider in this file, positioned to align with .top-toolbar's own
-   border-bottom (72px tall app-bar) regardless of whether that specific
-   border is currently sitting at x: 200 (drawer present) or x: 0 (not) -
-   this one never moves either way. */
-.app-logo-divider {
-  position: fixed;
-  top: 71px;
-  left: 0;
-  width: 200px;
-  height: 1px;
-  background: rgba(0, 0, 0, 0.24);
-  z-index: 21;
-  pointer-events: none;
-}
-
-/* Same divider, same color, on the sidebar's  top edge - now that the
+/* Same color, on the sidebar's top edge - now that the
    drawer is "clipped" (starts below the app-bar instead of the system-bar
    above it, see the template), this lines up exactly with .top-toolbar's
-   own border-bottom above, reading as one continuous line across the whole
-   window instead of two separate borders that happen to match colors. */
+   border-bottom above (which now spans under the logo too, see that
+   comment), reading as one continuous line across the whole window instead
+   of two separate borders that happen to match colors. */
 /* margin-top: -1px nudges the border up a hair from where it'd otherwise
    land - even though the drawer's top (now "clipped" below the app-bar,
    see the template) and .top-toolbar's bottom edge compute to the exact
@@ -3117,5 +3695,32 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
 
 .error-resize-handle:hover::after {
   background-color: rgba(0, 0, 0, 0.4);
+}
+
+/* White-based, not the plain black-based rgba() every rest-state rule above
+   uses - a real reported bug ("the console log top handle and border is
+   disappearing"): unlike .emulator-resize-handle (which sits over a
+   background that never gets specially darkened, so the same black-based
+   rgba() stays visible under both Dark Mode and Subdued Palette with no
+   override needed), .error-message's background gets explicitly forced
+   much darker under both (see its rules elsewhere in this file) -
+   black-based "darken for contrast against a light surface" rgba() reads
+   as invisible once that surface is dark/black itself. Flipped to the same
+   rest/hover/grip values the black-based version uses, just inverted to
+   white, so this handle reads exactly as visibly as .emulator-resize-handle's
+   does, regardless of which of the two is actually on. */
+.dark-mode .error-resize-handle:hover,
+.desaturate-app-colors .error-resize-handle:hover {
+  background-color: rgba(255, 255, 255, 0.15);
+}
+
+.dark-mode .error-resize-handle::after,
+.desaturate-app-colors .error-resize-handle::after {
+  background-color: rgba(255, 255, 255, 0.25);
+}
+
+.dark-mode .error-resize-handle:hover::after,
+.desaturate-app-colors .error-resize-handle:hover::after {
+  background-color: rgba(255, 255, 255, 0.4);
 }
 </style>

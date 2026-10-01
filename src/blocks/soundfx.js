@@ -65,13 +65,20 @@ export const ARPEGGIO_RANGE_OPTIONS = [
 // instant attack, no decay, hold, then release - see utils/envelope.js's
 // buildEnvelopeCurve, which now covers both shapes).
 //
-// Attack/Decay/Release are frame counts; Sustain is a LEVEL (percent of
-// this sound's  peak volume), not a duration - see utils/envelope.js's
-// own comment for why. Small, fixed dropdown option sets (not free-typed
-// numbers) are deliberate, same reasoning the old fade-length dropdowns
-// already established: keeps the total number of DISTINCT envelope shapes
-// a project can generate small, which keeps the compiled ROM's own
-// per-config data tables small too (see generateEnvelopeChecks in
+// Attack/Decay/Release are frame counts; Decay End and Release Start are
+// LEVELS (percent of this sound's peak volume), not durations - see
+// utils/envelope.js's comment for why. There's deliberately no single
+// "sustain level" field: Decay End is where Decay bottoms out (and Sustain
+// starts from), Release Start is where Sustain ends (and Release starts
+// from) - previously these were the same one value, always held flat for
+// Sustain's whole length, which made it impossible for Release to start
+// any higher than wherever Sustain had settled (a real reported request:
+// "increase the volume at the release point above the volume set for
+// sustain"). Small, fixed dropdown option sets (not free-typed numbers) are
+// deliberate, same reasoning the old fade-length dropdowns already
+// established: keeps the total number of DISTINCT envelope shapes a
+// project can generate small, which keeps the compiled ROM's per-config
+// data tables small too (see generateEnvelopeChecks in
 // generators/bbasic/soundfx.js).
 export const ENVELOPE_STAGE_FRAME_OPTIONS = [0, 2, 4, 8, 16];
 // Attack/Release specifically (not Decay, which stays on the smaller set
@@ -85,9 +92,14 @@ export const ENVELOPE_ATTACK_RELEASE_FRAME_OPTIONS = [0, 2, 4, 8, 16, 32];
 export const DEFAULT_ENVELOPE_ATTACK = 0;
 export const DEFAULT_ENVELOPE_DECAY = 0;
 export const DEFAULT_ENVELOPE_RELEASE = 4;
-export const ENVELOPE_SUSTAIN_PERCENT_OPTIONS = [0, 25, 50, 75, 100];
-export const DEFAULT_ENVELOPE_SUSTAIN_PERCENT = 100;
-// How many frames the Sustain hold itself lasts - same small-fixed-dropdown
+// Shared by both Decay End and Release Start (see the class-level comment
+// above) - same option set/default the old single Sustain level field used,
+// so a preset that never touches either new field still sounds the same as
+// it did under the old flat-Sustain model (Decay End === Release Start ===
+// 100% by default, same as Sustain defaulting to 100% used to be).
+export const ENVELOPE_VOLUME_PERCENT_OPTIONS = [0, 25, 50, 75, 100];
+export const DEFAULT_ENVELOPE_VOLUME_PERCENT = 100;
+// How many frames the Sustain ramp itself lasts - same small-fixed-dropdown
 // reasoning as every other stage above, same range as Attack/Release (see
 // ENVELOPE_ATTACK_RELEASE_FRAME_OPTIONS' own comment). Release now always
 // starts immediately after Sustain ends (see clampEnvelopeStages/
@@ -126,7 +138,8 @@ export const DEFAULT_SOUND_EFFECTS = {
       envelope: false,
       envelopeAttack: DEFAULT_ENVELOPE_ATTACK,
       envelopeDecay: DEFAULT_ENVELOPE_DECAY,
-      envelopeSustain: DEFAULT_ENVELOPE_SUSTAIN_PERCENT,
+      envelopeDecayEnd: DEFAULT_ENVELOPE_VOLUME_PERCENT,
+      envelopeReleaseStart: DEFAULT_ENVELOPE_VOLUME_PERCENT,
       envelopeSustainLength: DEFAULT_ENVELOPE_SUSTAIN_FRAMES,
       envelopeRelease: DEFAULT_ENVELOPE_RELEASE,
       // Only used for this preset's notes on the Music tab (see
@@ -203,10 +216,25 @@ export const processSoundEffectsStorageDefaults = (soundEffectsStorage) => {
     } else {
       Vue.set(soundEffect, 'envelopeRelease', Number(soundEffect.envelopeRelease));
     }
-    if (!ENVELOPE_SUSTAIN_PERCENT_OPTIONS.includes(Number(soundEffect.envelopeSustain))) {
-      Vue.set(soundEffect, 'envelopeSustain', DEFAULT_ENVELOPE_SUSTAIN_PERCENT);
+    // Presets saved before Decay End/Release Start replaced the old single
+    // Sustain level won't have either new field yet, but WILL still have
+    // its old envelopeSustain value - used as both new fields' fallback
+    // (instead of DEFAULT_ENVELOPE_VOLUME_PERCENT) so an old project
+    // imports sounding the same as it did under the old flat-Sustain model,
+    // rather than silently resetting to 100% regardless of what it was
+    // actually set to.
+    const legacySustain = Number(soundEffect.envelopeSustain);
+    const legacySustainFallback = ENVELOPE_VOLUME_PERCENT_OPTIONS.includes(legacySustain) ?
+      legacySustain : DEFAULT_ENVELOPE_VOLUME_PERCENT;
+    if (!ENVELOPE_VOLUME_PERCENT_OPTIONS.includes(Number(soundEffect.envelopeDecayEnd))) {
+      Vue.set(soundEffect, 'envelopeDecayEnd', legacySustainFallback);
     } else {
-      Vue.set(soundEffect, 'envelopeSustain', Number(soundEffect.envelopeSustain));
+      Vue.set(soundEffect, 'envelopeDecayEnd', Number(soundEffect.envelopeDecayEnd));
+    }
+    if (!ENVELOPE_VOLUME_PERCENT_OPTIONS.includes(Number(soundEffect.envelopeReleaseStart))) {
+      Vue.set(soundEffect, 'envelopeReleaseStart', legacySustainFallback);
+    } else {
+      Vue.set(soundEffect, 'envelopeReleaseStart', Number(soundEffect.envelopeReleaseStart));
     }
     if (!ENVELOPE_SUSTAIN_FRAME_OPTIONS.includes(Number(soundEffect.envelopeSustainLength))) {
       Vue.set(soundEffect, 'envelopeSustainLength', DEFAULT_ENVELOPE_SUSTAIN_FRAMES);

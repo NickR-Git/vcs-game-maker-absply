@@ -86,11 +86,34 @@ export const useCollapsedIds = (name, defaultCollapsed = false) => {
   // id. Without this, a brand new card silently inherited whatever collapsed
   // state that old, deleted id happened to have in localStorage - a real
   // reported bug ("new text cards should start open").
+  // Checks isCollapsed(entry), not stored.value[entry.id] directly - a real
+  // reported bug for every defaultCollapsed=true caller (e.g. MusicEditor.vue's
+  // "don't collapse the pattern editor" when adding a new pattern/song): a
+  // brand new entry's id has never been written to stored.value at all, so
+  // the old "stored.value[entry.id] is falsy, nothing to do" check bailed
+  // out immediately - correct for a defaultCollapsed=false tab (not being in
+  // the map already means expanded), but exactly backwards here, since not
+  // being in the map means isCollapsed falls back to defaultCollapsed (true),
+  // so there was nothing actually ensuring it open. isCollapsed(entry)
+  // correctly accounts for that fallback either way, and only writes an
+  // explicit "false" override when the entry would otherwise show collapsed.
   const ensureExpanded = (entry) => {
-    if (!stored.value[entry.id]) return;
-    const next = {...stored.value};
-    delete next[entry.id];
+    if (!isCollapsed(entry)) return;
+    const next = {...stored.value, [entry.id]: false};
     stored.value = next;
+    localStorage.setItem(keyOf(name), JSON.stringify(stored.value));
+  };
+  // Explicitly writes a given collapsed/expanded state for an entry,
+  // regardless of what it currently is - unlike ensureExpanded above, which
+  // only ever forces a specific direction (open). Needed for a new/
+  // duplicated entry that should start out MATCHING whatever state an
+  // existing entry currently has, not unconditionally expanded - a real
+  // reported case (MusicEditor.vue's new/duplicated song: "the sequencer
+  // section shouldn't open, just leave sequencer and pattern editor in
+  // whatever their current state is") where forcing them open with
+  // ensureExpanded was one directional assumption too many.
+  const setCollapsed = (entry, value) => {
+    stored.value = {...stored.value, [entry.id]: !!value};
     localStorage.setItem(keyOf(name), JSON.stringify(stored.value));
   };
   // Discards every remembered per-card override, so every card falls back
@@ -111,5 +134,5 @@ export const useCollapsedIds = (name, defaultCollapsed = false) => {
     stored.value = {};
     localStorage.setItem(keyOf(name), JSON.stringify(stored.value));
   };
-  return {isCollapsed, toggleCollapsed, ensureExpanded, collapseAll};
+  return {isCollapsed, toggleCollapsed, ensureExpanded, setCollapsed, collapseAll};
 };

@@ -184,38 +184,13 @@
                     >
                       <v-icon>mdi-play</v-icon>
                     </v-btn>
-                    <v-menu v-if="state.screens.length > 1" top>
-                      <template v-slot:activator="{ on, attrs }">
-                        <v-btn
-                          title="Delete this title screen"
-                          icon
-                          small
-                          class="delete-icon-btn titlescreen-icon-btn-size"
-                          v-bind="attrs"
-                          v-on="on"
-                        >
-                          <v-icon>mdi-delete</v-icon>
-                        </v-btn>
-                      </template>
-
-                      <v-card>
-                        <v-card-title>Delete this title screen?</v-card-title>
-                        <v-list>
-                          <v-list-item @click="() => handleDeleteScreen(screen)">
-                            <v-list-item-icon>
-                              <v-icon>mdi-check</v-icon>
-                            </v-list-item-icon>
-                            <v-list-item-title>Yes, delete</v-list-item-title>
-                          </v-list-item>
-                          <v-list-item link>
-                            <v-list-item-icon>
-                              <v-icon>mdi-cancel</v-icon>
-                            </v-list-item-icon>
-                            <v-list-item-title>No, don't delete</v-list-item-title>
-                          </v-list-item>
-                        </v-list>
-                      </v-card>
-                    </v-menu>
+                    <confirm-delete-menu
+                      v-if="state.screens.length > 1"
+                      title="Delete this title screen?"
+                      activator-title="Delete this title screen"
+                      icon-btn-class="titlescreen-icon-btn-size"
+                      @confirm="handleDeleteScreen(screen)"
+                    />
                   </div>
                 </v-list-item-title>
 
@@ -295,38 +270,12 @@
                                 </v-card>
                               </v-menu>
 
-                              <v-menu top>
-                                <template v-slot:activator="{ on, attrs }">
-                                  <v-btn
-                                    title="Delete this card"
-                                    icon
-                                    small
-                                    class="delete-icon-btn titlescreen-icon-btn-size"
-                                    v-bind="attrs"
-                                    v-on="on"
-                                  >
-                                    <v-icon>mdi-delete</v-icon>
-                                  </v-btn>
-                                </template>
-
-                                <v-card>
-                                  <v-card-title>Delete this card?</v-card-title>
-                                  <v-list>
-                                    <v-list-item @click="() => handleDeleteCard(screen, card)">
-                                      <v-list-item-icon>
-                                        <v-icon>mdi-check</v-icon>
-                                      </v-list-item-icon>
-                                      <v-list-item-title>Yes, delete</v-list-item-title>
-                                    </v-list-item>
-                                    <v-list-item link>
-                                      <v-list-item-icon>
-                                        <v-icon>mdi-cancel</v-icon>
-                                      </v-list-item-icon>
-                                      <v-list-item-title>No, don't delete</v-list-item-title>
-                                    </v-list-item>
-                                  </v-list>
-                                </v-card>
-                              </v-menu>
+                              <confirm-delete-menu
+                                title="Delete this card?"
+                                activator-title="Delete this card"
+                                icon-btn-class="titlescreen-icon-btn-size"
+                                @confirm="handleDeleteCard(screen, card)"
+                              />
                             </div>
                           </v-list-item-title>
 
@@ -503,38 +452,13 @@
                                       <template v-slot:badge>
                                         <div class="frame-number-badge">ID:{{ frameIndex + 1 }}</div>
                                         <div class="frame-corner-toolbar">
-                                          <v-menu v-if="card.frames.length > 1" top>
-                                            <template v-slot:activator="{ on, attrs }">
-                                              <v-btn
-                                                title="Delete this frame"
-                                                icon
-                                                small
-                                                class="delete-icon-btn titlescreen-icon-btn-size"
-                                                v-bind="attrs"
-                                                v-on="on"
-                                              >
-                                                <v-icon>mdi-delete</v-icon>
-                                              </v-btn>
-                                            </template>
-
-                                            <v-card>
-                                              <v-card-title>Delete this frame?</v-card-title>
-                                              <v-list>
-                                                <v-list-item @click="handleDeleteFrame(card, frame)">
-                                                  <v-list-item-icon>
-                                                    <v-icon>mdi-check</v-icon>
-                                                  </v-list-item-icon>
-                                                  <v-list-item-title>Yes, delete</v-list-item-title>
-                                                </v-list-item>
-                                                <v-list-item link>
-                                                  <v-list-item-icon>
-                                                    <v-icon>mdi-cancel</v-icon>
-                                                  </v-list-item-icon>
-                                                  <v-list-item-title>No, don't delete</v-list-item-title>
-                                                </v-list-item>
-                                              </v-list>
-                                            </v-card>
-                                          </v-menu>
+                                          <confirm-delete-menu
+                                            v-if="card.frames.length > 1"
+                                            title="Delete this frame?"
+                                            activator-title="Delete this frame"
+                                            icon-btn-class="titlescreen-icon-btn-size"
+                                            @confirm="handleDeleteFrame(card, frame)"
+                                          />
                                         </div>
                                       </template>
                                     </pixel-editor>
@@ -636,6 +560,7 @@ import {loadImageFromFile, openFileDialogMultiple, sortImportedAnimationFrameFil
 import {createResizedCanvas} from '../utils/image';
 
 import ColorSwatchPicker from '../components/ColorSwatchPicker.vue';
+import ConfirmDeleteMenu from '../components/ConfirmDeleteMenu.vue';
 import EditorZoom from '../components/EditorZoom.vue';
 import GraphicEditorToolbar from '../components/GraphicEditorToolbar.vue';
 import PixelEditor from '../components/PixelEditor.vue';
@@ -671,8 +596,8 @@ const copiedFrameData = ref(null);
 
 export default defineComponent({
   name: 'TitleScreenEditor',
-  components: {ColorSwatchPicker, EditorZoom, GraphicEditorToolbar, PixelEditor, PixelGridToggle,
-    PlayfieldColorStrip, QuickColorPalette},
+  components: {ColorSwatchPicker, ConfirmDeleteMenu, EditorZoom, GraphicEditorToolbar, PixelEditor,
+    PixelGridToggle, PlayfieldColorStrip, QuickColorPalette},
   setup() {
     const instance = getCurrentInstance();
     const titleScreenStorage = useTitleScreenStorage();

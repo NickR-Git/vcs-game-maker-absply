@@ -12,6 +12,20 @@ module.exports = {
       args[0].title = 'VCS Game Maker';
       return args;
     });
+    // @blockly/field-grid-dropdown's published package.json "module" field
+    // (what webpack prefers over "main" for an ES-module-aware resolve,
+    // Vue CLI's default here) points at "./src/index.js" - a file that
+    // doesn't exist in the published package at all, only "./src/index.ts"
+    // does (the real TypeScript source, never meant to be resolved
+    // directly) - confirmed as a real upstream packaging bug present in
+    // both 3.0.0 and 3.0.1 (the only two 3.x releases), not something
+    // specific to this project's setup. Aliased straight to the working
+    // "main" entry (./dist/index.js, the real compiled output every other
+    // consumer actually gets) instead of waiting on an upstream fix.
+    config.resolve.alias.set(
+        '@blockly/field-grid-dropdown',
+        require.resolve('@blockly/field-grid-dropdown/dist/index.js'),
+    );
     // Vuetify's per-component .sass files land in different chunks depending
     // on which pages/components pull them in, so mini-css-extract-plugin
     // can't always satisfy one global order across chunks and warns about

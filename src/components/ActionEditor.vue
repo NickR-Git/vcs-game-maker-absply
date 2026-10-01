@@ -86,7 +86,21 @@ const APP_BLOCKLY_THEME = Blockly.Theme.defineTheme('app', {
   // Classic's simpler single-colour block styles never hit that.
   base: Blockly.Themes.Classic,
   fontStyle: {
-    family: 'IBM Plex Mono, monospace',
+    // Quoted ("IBM Plex Mono", not bare IBM Plex Mono) - this string gets
+    // concatenated directly into a canvas 2D context's font property
+    // (dom.getFastTextWidthWithSizeString, node_modules/blockly/core/
+    // utils/dom.js: `fontWeight + ' ' + fontSize + ' ' + fontFamily`), which
+    // follows the same CSS font-shorthand parsing rules as a real font:
+    // property - an unquoted multi-word family name there is ambiguous
+    // (parses as several single-word fallback names instead of one), so the
+    // canvas silently measured against its default font instead, producing
+    // a NARROWER width than the real font actually renders at - confirmed
+    // as the real reason "block width is computed correctly to begin with"
+    // (this comment's claim, right above) wasn't actually true: text
+    // visibly overflowing its block ("too narrow"), permanently
+    // (not the font-load race this looks like at first - quoting is wrong
+    // regardless of whether the font has finished loading yet).
+    family: '"IBM Plex Mono", monospace',
     weight: 'normal',
     size: 11,
   },
@@ -210,37 +224,65 @@ export default {
   methods: {
     // Two prior approaches (a Vuetify v-btn positioned with a hand-measured
     // "bottom" pixel value, then the same button repositioned via a live
-    // getBoundingClientRect() measurement against Blockly's  rendered
+    // getBoundingClientRect() measurement against Blockly's rendered
     // zoom-controls group) both drifted away from Blockly's actual zoom
     // cluster under layouts other than the one they were tested against -
-    // confirmed repeatedly, not just once. Rather than keep chasing a
-    // measurement-based fix, this button is now a genuine 4th child of
-    // Blockly's OWN zoom-controls SVG group (workspace.zoomControls_.
-    // svgGroup_, the same private field zoom_controls.js itself stores its
-    // reset/in/out button groups in - see its  createDom/position
-    // methods) - positioned with a plain SVG transform in the exact same
-    // coordinate system those three buttons already use, so it's pinned to
-    // them by construction instead of by a separately-computed guess that
-    // can drift. HEIGHT_ (32) + LARGE_SPACING_ (11) from zoom_controls.js
-    // matches the same gap already used between the reset button and the
-    // zoom-in button below it.
+    // confirmed repeatedly, not just once. A THIRD approach (a genuine 4th
+    // child of Blockly's zoom-controls SVG group, pinned by construction to
+    // its WIDTH_/HEIGHT_/LARGE_SPACING_) worked, but only as long as that
+    // row was the only thing sharing its corner - once the multiselect
+    // plugin's icon (see BlocklyComponent.vue's "Lets the user drag a
+    // rubber-band..." comment) also needed a spot there, the two started
+    // overlapping. Grid snap now lives as a plain CHILD of THAT icon's
+    // group instead - see the fixed "translate(36, 0)" below - riding along
+    // with wherever BlocklyComponent.vue's multiselectControls position()
+    // override puts it, in the corner the zoom-controls row never uses at
+    // all, with no separate positioning logic needed.
     setupGridSnapZoomButton() {
       const workspace = this.$refs['foo'] && this.$refs['foo'].workspace;
-      const zoomControls = workspace && workspace.zoomControls_;
-      if (!zoomControls || !zoomControls.svgGroup_ || this.gridSnapSvgGroup_) return;
+      // The multiselect plugin's toggle icon (BlocklyComponent.vue's
+      // mounted() registers it under this exact id - MultiselectControls'
+      // "this.id = 'multiselectControls'", see node_modules/@mit-app-
+      // inventor/blockly-plugin-workspace-multiselect/src/
+      // multiselect_controls.js) - a sibling Vue component, not something
+      // this one builds itself, reached through the workspace's
+      // ComponentManager (the same registry both plugins and this app's
+      // positionable overrides already share) instead of a prop/ref, since
+      // BlocklyComponent.vue owns the Multiselect instance privately.
+      const multiselectControls = workspace && workspace.getComponentManager &&
+        workspace.getComponentManager().getComponent('multiselectControls');
+      if (!multiselectControls || !multiselectControls.svgGroup_ || this.gridSnapSvgGroup_) return;
 
       const NS = 'http://www.w3.org/2000/svg';
       const group = document.createElementNS(NS, 'g');
-      // -43 = -(HEIGHT_ [32] + LARGE_SPACING_ [11]) from zoom_controls.js,
-      // one slot past the reset button (nearest workspace center) - the
-      // DEFAULT (vertical) layout's  final position, set once here since
-      // nothing else ever repositions it in that mode. The horizontal
-      // layout option overrides this via BlocklyComponent.vue's own
-      // ZoomControls.position patch instead (see zoomControls.gridSnapGroup_
-      // just below, and workspace.resize() right after this function
-      // appends the group) - so this initial value only matters, and only
-      // briefly, when that option is off.
-      group.setAttribute('transform', 'translate(0, -43)');
+      // A dedicated class (not just relying on living inside
+      // .blocklyMultiselect's subtree for CSS targeting) - confirmed live,
+      // via the actual rendered DOM, that this group does NOT end up a
+      // descendant of the
+      // .blocklyMultiselect-classed element despite being appended to
+      // multiselectControls.svgGroup_ below (that property apparently
+      // isn't the same node the "blocklyMultiselect" class lands on) - so
+      // App.vue's Dark Mode CSS (.grid-snap-icon-group) needs this class to
+      // have anything stable to select at all, confirmed as a real
+      // reported bug ("grid icon in blockly still needs to be inverted...
+      // inactive state") otherwise.
+      group.setAttribute('class', 'grid-snap-icon-group');
+      // A plain CHILD of the multiselect icon's group (not a second
+      // independently-positioned POSITIONABLE component the way this used
+      // to sit in Blockly's zoom-controls row) - 36 = 32 (that icon's
+      // WIDTH/HEIGHT) + 4px gap, sitting immediately to its right. Only
+      // ever needs this ONE fixed local transform, regardless of layout
+      // mode or window size: BlocklyComponent.vue's position() override for
+      // multiselectControls already recomputes ITS outer translate on every
+      // resize, and this group rides along with it automatically as its
+      // child, with no separate dynamic repositioning needed the way the
+      // old zoom-controls-row slot required (see the git history of this
+      // function for that old approach, and why it needed
+      // BlocklyComponent.vue's involvement just to place a single button -
+      // confirmed as a real reported overlap otherwise, "grid and
+      // multiselect icons are overlapping", once both independently claimed
+      // the same corner).
+      group.setAttribute('transform', 'translate(36, 0)');
       group.style.cursor = 'pointer';
 
       // Plain transparent rect gives this the same 32x32 (WIDTH_/HEIGHT_)
@@ -301,30 +343,8 @@ export default {
         render();
       });
 
-      zoomControls.svgGroup_.appendChild(group);
+      multiselectControls.svgGroup_.appendChild(group);
       this.gridSnapSvgGroup_ = group;
-      // Read directly by BlocklyComponent.vue's  ZoomControls.position
-      // override (horizontal layout only) - a direct reference rather than
-      // making that code go hunting through svgGroup_'s  children by
-      // index, which broke outright once actually tried (fragile: relies on
-      // this being exactly the Nth child, with no error if that assumption
-      // ever stops holding).
-      zoomControls.gridSnapGroup_ = group;
-
-      // Appending a new child here doesn't itself trigger Blockly to
-      // reposition anything - the very first layout pass (triggered by
-      // Blockly.inject itself, in BlocklyComponent's  mounted(), which
-      // runs before this one) already finished before this 4th child even
-      // existed. In the default (vertical) layout that's fine, since this
-      // group's  initial transform above is already its final position -
-      // but the horizontal layout (see BlocklyComponent.vue's own
-      // ZoomControls.position override) recomputes THIS group's own
-      // position dynamically every time position() runs, so without a fresh
-      // pass here it stays wherever it happened to render for the first
-      // (and only, until some later resize) time: nowhere, since it was
-      // never positioned by that logic at all yet. workspace.resize() is
-      // the same method window-resize events themselves trigger.
-      workspace.resize();
     },
     // Blockly (this bundled version, 6.20210701.0) has no public setter for
     // grid snap - Grid.prototype.shouldSnap() only ever reads its own

@@ -90,8 +90,9 @@ const anyMusicChannelHasEnvelope = (generatorThis) => {
   return Object.values(channelHasEnvelope).some(Boolean);
 };
 
-// Every DISTINCT (attack, decay, release, sustainPercent, peakVolume)
-// envelope shape actually used anywhere in the project - one-shot sound
+// Every DISTINCT (attack, decay, release, decayEndPercent,
+// releaseStartPercent, peakVolume) envelope shape actually used anywhere in
+// the project - one-shot sound
 // effects (soundfx_play below) AND Music-tab notes (see
 // generators/bbasic/music.js's  call site) both register into this same
 // pool, so two different presets/notes that happen to resolve to the exact
@@ -107,11 +108,19 @@ export const resetEnvelopeConfigs = () => {
 };
 
 // Builds (and registers, deduped - see registerEnvelopeConfig below) the
-// one data table one distinct envelope SHAPE needs. attack/decay/
-// sustainLength/release here are already CLAMPED to fit within this
-// specific play's  duration (see the caller), so the dedup key doesn't
-// need duration in it at all - none of the four stage SHAPES depend on the
-// sound's  total duration once they already fit inside it.
+// one data table one distinct envelope SHAPE needs. Unlike before
+// `loopSustain` existed, attack/decay/sustainLength/release here are the
+// RAW, unclamped values straight from the instrument preset, not already
+// clamped to this specific play's duration - clamping now happens INSIDE
+// this function (via clampEnvelopeStages/buildEnvelopeCurve, both passed
+// the real totalFrames and loopSustain directly) rather than by the caller
+// beforehand, so that buildEnvelopeCurve's Sustain-loop logic can still
+// tell "the length the preset configured" apart from "the length Sustain
+// actually got extended to" - a distinction a caller that pre-clamped
+// before calling this would otherwise erase. The dedup key (see
+// registerEnvelopeConfig below) includes totalFrames and loopSustain for
+// exactly that reason - this function's result now genuinely depends on
+// them, not just on the four stage shapes.
 //
 // A SINGLE combined table spanning attack+decay+sustain+release together
 // (not split attack/decay vs. release the way this used to be, back when
@@ -135,11 +144,14 @@ export const resetEnvelopeConfigs = () => {
 // padding (the countdown value that means "envelope is over", never
 // actually read - AUDV just stays wherever the last real write left it,
 // same "leave it alone" convention Sustain's own gap already relied on).
-const buildEnvelopeConfigTables = ({attack, decay, sustainLength, release, sustainPercent, peakVolume}) => {
-  const envelopeLength = attack + decay + sustainLength + release;
+const buildEnvelopeConfigTables = ({attack, decay, sustainLength, release, decayEndPercent, releaseStartPercent,
+  peakVolume, totalFrames, loopSustain}) => {
+  const {attack: a, decay: d, sustainLength: s, release: r} =
+    clampEnvelopeStages({attack, decay, sustainLength, release, totalFrames, loopSustain});
+  const envelopeLength = a + d + s + r;
   const curve = buildEnvelopeCurve({
-    attack, decay, sustainPercent, sustainLength, release, peakVolume,
-    totalFrames: Math.max(1, envelopeLength),
+    attack, decay, decayEndPercent, sustainLength, releaseStartPercent, release, peakVolume, totalFrames,
+    loopSustain,
   });
   const envelopeTable = envelopeLength ?
     Array.from({length: envelopeLength + 1}, (_, k) => k === 0 ? 0 : curve[envelopeLength - k]) : null;
@@ -157,8 +169,10 @@ const buildEnvelopeConfigTables = ({attack, decay, sustainLength, release, susta
 // hit than it ever was with Sound Effects alone) would otherwise silently
 // wrap/collide in that shared nibble, corrupting playback for whichever
 // sound loses the collision. Caught here instead, at compile time.
-export const registerEnvelopeConfig = ({attack, decay, sustainLength, release, sustainPercent, peakVolume}) => {
-  const key = `${attack}:${decay}:${sustainLength}:${release}:${sustainPercent}:${peakVolume}`;
+export const registerEnvelopeConfig = ({attack, decay, sustainLength, release, decayEndPercent, releaseStartPercent,
+  peakVolume, totalFrames, loopSustain = false}) => {
+  const key = `${attack}:${decay}:${sustainLength}:${release}:${decayEndPercent}:${releaseStartPercent}:` +
+    `${peakVolume}:${totalFrames}:${loopSustain}`;
   if (envelopeConfigs.has(key)) return envelopeConfigs.get(key).index;
   if (envelopeConfigs.size >= NO_ENVELOPE_SENTINEL) {
     throw new Error(`This project uses ${envelopeConfigs.size + 1} distinct envelope shapes (combinations of ` +
@@ -167,8 +181,8 @@ export const registerEnvelopeConfig = ({attack, decay, sustainLength, release, s
       'envelope-enabled Music instruments, or sharing the same envelope settings across more Sound Effects.');
   }
   const index = envelopeConfigs.size;
-  envelopeConfigs.set(key,
-      {index, key, ...buildEnvelopeConfigTables({attack, decay, sustainLength, release, sustainPercent, peakVolume})});
+  envelopeConfigs.set(key, {index, key, ...buildEnvelopeConfigTables({attack, decay, sustainLength, release,
+    decayEndPercent, releaseStartPercent, peakVolume, totalFrames, loopSustain})});
   return index;
 };
 
@@ -208,8 +222,8 @@ export default (Blockly) => {
     // in the compiled ROM.
     if (config.muteAllAudio) return 'rem Sound muted\n';
 
-    const {audc, audf, audv, duration, envelope, envelopeAttack, envelopeDecay, envelopeSustain,
-      envelopeSustainLength, envelopeRelease} = soundEffect;
+    const {audc, audf, audv, duration, envelope, envelopeAttack, envelopeDecay, envelopeDecayEnd,
+      envelopeReleaseStart, envelopeSustainLength, envelopeRelease} = soundEffect;
     // App-wide preference (see useDimSoundFxStorage's  comment), not part
     // of this project's  saved configuration.
     const effectiveAudv = useDimSoundFxStorage().value ?
@@ -238,12 +252,27 @@ export default (Blockly) => {
       const stageVar = Blockly.BBasic.nameDB_.getName(
           `envelopeStage${channel}`, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
       if (envelope) {
+        // Still clamped here (not just left to registerEnvelopeConfig's
+        // internal clamp) because this needs the resulting stage lengths
+        // directly, for stageVar's countdown below - loopSustain omitted
+        // (defaults false) since Sound Effects never loop Sustain to fill a
+        // too-short Duration (see utils/envelope.js's comment on
+        // clampEnvelopeStages), the same default registerEnvelopeConfig
+        // itself uses, so both calls agree.
         const {attack, decay, sustainLength, release} = clampEnvelopeStages({
           attack: envelopeAttack, decay: envelopeDecay, sustainLength: envelopeSustainLength,
           release: envelopeRelease, totalFrames: duration,
         });
+        // The RAW envelopeAttack/Decay/SustainLength/Release values (not
+        // the clamped ones just above), plus totalFrames - not a redundant
+        // repeat of the clamp above, since buildEnvelopeConfigTables needs
+        // to do that clamp itself to tell "configured length" apart from
+        // "extended length" (see its comment); passing already-clamped
+        // values in would erase that distinction.
         const configIndex = registerEnvelopeConfig({
-          attack, decay, sustainLength, release, sustainPercent: envelopeSustain, peakVolume: effectiveAudv,
+          attack: envelopeAttack, decay: envelopeDecay, sustainLength: envelopeSustainLength,
+          release: envelopeRelease, decayEndPercent: envelopeDecayEnd, releaseStartPercent: envelopeReleaseStart,
+          peakVolume: effectiveAudv, totalFrames: duration,
         });
         envelopeLines = (channel === '1' ?
           `envelopeConfig = (envelopeConfig & $0F) | ${configIndex * 16}\n` :

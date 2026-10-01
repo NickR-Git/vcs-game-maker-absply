@@ -235,8 +235,16 @@ Blockly.BBasic.addReservedWords(
     // passed through nameDB_ elsewhere - it's always spliced in as a raw
     // literal, e.g. generators/bbasic/bit.js).
     'temp1,temp2,temp3,temp4,temp5,temp6,' +
-    // Everything in the current environment (835 items in Chrome, 104 in Node).
-    Object.getOwnPropertyNames(Blockly.utils.global).join(','));
+    // Everything in the current environment (835 items in Chrome, 104 in
+    // Node). Blockly.utils.global (the cross-environment "window in a
+    // browser, global in Node" indirection this used to read) was removed
+    // entirely somewhere between Blockly 8 and 10 - confirmed directly
+    // against the installed package, no file/declaration for it exists at
+    // all any more. globalThis is the standard JS language feature that
+    // makes that indirection unnecessary in the first place (landed in
+    // every environment this app actually runs in well before Blockly
+    // dropped its version of it), so this needs no Blockly API at all.
+    Object.getOwnPropertyNames(globalThis).join(','));
 
 /**
  * Order of operation ENUMs.
@@ -2597,8 +2605,13 @@ Blockly.BBasic.finish = function(code) {
     code = scanlinesDebugScoreCode + '\n\n' + code;
   }
 
-  // Convert the definitions dictionary into a list.
-  const definitions = Blockly.utils.object.values(this.definitions_);
+  // Convert the definitions dictionary into a list. Blockly.utils.object
+  // only exports deepMerge in Blockly 10 (confirmed directly against the
+  // installed package's utils/object.d.ts - values is gone entirely) -
+  // Object.values is the standard JS method it used to wrap, so this needs
+  // no Blockly API at all, same reasoning as the Blockly.utils.global fix
+  // used just above in this same function.
+  const definitions = Object.values(this.definitions_);
 
   // generateTextMinikernelDims() (called later, via generateSystemDims())
   // needs to know whether Score Bar blocks turned pfscore on, but

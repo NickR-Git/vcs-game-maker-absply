@@ -324,8 +324,8 @@ export const stopSoundEffectPreview = () => {
  * utils/music-playback.js uses for the same reason.
  */
 export const previewSoundEffect = ({
-  audc, audf, audv, duration, envelope, envelopeAttack, envelopeDecay, envelopeSustain, envelopeSustainLength,
-  envelopeRelease, arpeggio, arpeggioDivision, arpeggioInterval, arpeggioRange,
+  audc, audf, audv, duration, envelope, envelopeAttack, envelopeDecay, envelopeDecayEnd, envelopeReleaseStart,
+  envelopeSustainLength, envelopeRelease, arpeggio, arpeggioDivision, arpeggioInterval, arpeggioRange,
 }) => {
   const approximation = AUDC_APPROXIMATIONS[`${audc}`];
   const seconds = Math.max(0, Number(duration) || 0) / 60;
@@ -350,8 +350,8 @@ export const previewSoundEffect = ({
   let endValue;
   if (envelope) {
     const curve = buildEnvelopeCurve({
-      attack: envelopeAttack, decay: envelopeDecay, sustainPercent: envelopeSustain,
-      sustainLength: envelopeSustainLength, release: envelopeRelease,
+      attack: envelopeAttack, decay: envelopeDecay, decayEndPercent: envelopeDecayEnd,
+      releaseStartPercent: envelopeReleaseStart, sustainLength: envelopeSustainLength, release: envelopeRelease,
       peakVolume: audv, totalFrames: duration,
     });
     curve.forEach((step, i) => {

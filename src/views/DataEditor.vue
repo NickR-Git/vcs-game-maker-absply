@@ -22,6 +22,101 @@
           />
         </div>
 
+        <!-- Acts on whichever card is currently selected (selectedTable) -
+             same "shared toolbar, not one copy per card" pattern as
+             GraphicEditorToolbar.vue's activeEditor and MusicEditor.vue's
+             activeSong(). Always rendered, buttons disabled rather than the
+             whole bar hidden when nothing's selected - a real reported case
+             of hiding it outright being wrong ("the toolbar isn't showing
+             until a card is open, that's incorrect"), and matches
+             GraphicEditorToolbar.vue's behaviour exactly (that bar never
+             hides itself either, just disables each tool while
+             !activeEditor). @click.stop for the same reason
+             GraphicEditorToolbar.vue's root div has it: .editor-container's
+             "click anywhere to deselect" handler would otherwise fire on
+             every click in here too, deselecting the very card these tools
+             are supposed to act on. -->
+        <div
+          class="data-toolbar"
+          :class="{'data-toolbar-scrolled': isDataToolbarScrolled}"
+          @click.stop
+        >
+          <div class="data-toolbar-row">
+            <v-btn
+              icon
+              small
+              title="Undo"
+              class="data-flat-icon-btn data-icon-btn-size"
+              :disabled="!selectedTable || !canUndoTable(selectedTable)"
+              @click="() => handleUndoTable(selectedTable)"
+            >
+              <v-icon>mdi-undo</v-icon>
+            </v-btn>
+            <v-btn
+              icon
+              small
+              title="Redo"
+              class="data-flat-icon-btn data-icon-btn-size"
+              :disabled="!selectedTable || !canRedoTable(selectedTable)"
+              @click="() => handleRedoTable(selectedTable)"
+            >
+              <v-icon>mdi-redo</v-icon>
+            </v-btn>
+            <v-divider class="data-toolbar-divider" vertical />
+            <v-btn
+              icon
+              small
+              title="Duplicate this table"
+              class="data-flat-icon-btn data-icon-btn-size"
+              :disabled="!selectedTable"
+              @click="() => handleDuplicateTable(selectedTable)"
+            >
+              <v-icon>mdi-content-duplicate</v-icon>
+            </v-btn>
+            <v-btn
+              icon
+              small
+              title="Copy this table's contents (values, columns, and value formats)"
+              class="data-flat-icon-btn data-icon-btn-size"
+              :disabled="!selectedTable"
+              @click="() => handleCopyTable(selectedTable)"
+            >
+              <v-icon>mdi-content-copy</v-icon>
+            </v-btn>
+            <v-btn
+              icon
+              small
+              :disabled="!selectedTable || !copiedTableData"
+              title="Paste copied contents onto this table"
+              class="data-flat-icon-btn data-icon-btn-size"
+              @click="() => handlePasteTable(selectedTable)"
+            >
+              <v-icon>mdi-content-paste</v-icon>
+            </v-btn>
+            <v-divider class="data-toolbar-divider" vertical />
+            <v-btn
+              icon
+              small
+              title="Export to .CSV"
+              class="data-flat-icon-btn data-icon-btn-size"
+              :disabled="!selectedTable"
+              @click="() => handleExportCsv(selectedTable)"
+            >
+              <v-icon>mdi-export</v-icon>
+            </v-btn>
+            <v-btn
+              icon
+              small
+              title="Import from .CSV"
+              class="data-flat-icon-btn data-icon-btn-size"
+              :disabled="!selectedTable"
+              @click="() => handleImportCsv(selectedTable)"
+            >
+              <v-icon>mdi-import</v-icon>
+            </v-btn>
+          </div>
+        </div>
+
         <v-list class="data-list" :class="{'data-list--single-column': !dataColumns}">
           <v-list-item class="entry-list-item" v-for="(table, index) in state.dataTables" v-bind:key="table.id">
             <v-list-item-content>
@@ -54,108 +149,13 @@
                 <div class="data-id-badge">ID:{{ table.id }}</div>
 
                 <div class="data-toolbar-top-right">
-                  <v-btn
-                    icon
-                    small
-                    title="Undo"
-                    class="data-flat-icon-btn data-icon-btn-size"
-                    :disabled="!canUndoTable(table)"
-                    @click="() => handleUndoTable(table)"
-                  >
-                    <v-icon>mdi-undo</v-icon>
-                  </v-btn>
-                  <v-btn
-                    icon
-                    small
-                    title="Redo"
-                    class="data-flat-icon-btn data-icon-btn-size"
-                    :disabled="!canRedoTable(table)"
-                    @click="() => handleRedoTable(table)"
-                  >
-                    <v-icon>mdi-redo</v-icon>
-                  </v-btn>
-                  <v-btn
-                    icon
-                    small
-                    title="Duplicate this table"
-                    class="data-flat-icon-btn data-icon-btn-size"
-                    @click="() => handleDuplicateTable(table)"
-                  >
-                    <v-icon>mdi-content-duplicate</v-icon>
-                  </v-btn>
-                  <v-btn
-                    icon
-                    small
-                    title="Copy this table's contents (values, columns, and value formats)"
-                    class="data-flat-icon-btn data-icon-btn-size"
-                    @click="() => handleCopyTable(table)"
-                  >
-                    <v-icon>mdi-content-copy</v-icon>
-                  </v-btn>
-                  <v-btn
-                    icon
-                    small
-                    :disabled="!copiedTableData"
-                    title="Paste copied contents onto this table"
-                    class="data-flat-icon-btn data-icon-btn-size"
-                    @click="() => handlePasteTable(table)"
-                  >
-                    <v-icon>mdi-content-paste</v-icon>
-                  </v-btn>
-                  <v-btn
-                    icon
-                    small
-                    title="Export to .CSV"
-                    class="data-flat-icon-btn data-icon-btn-size"
-                    @click="() => handleExportCsv(table)"
-                  >
-                    <v-icon>mdi-export</v-icon>
-                  </v-btn>
-                  <v-btn
-                    icon
-                    small
-                    title="Import from .CSV"
-                    class="data-flat-icon-btn data-icon-btn-size"
-                    @click="() => handleImportCsv(table)"
-                  >
-                    <v-icon>mdi-import</v-icon>
-                  </v-btn>
-
-                  <v-menu
+                  <confirm-delete-menu
                     v-if="state.dataTables.length > 1"
-                    top
-                  >
-                    <template v-slot:activator="{ on, attrs }">
-                      <v-btn
-                        title="Delete this table"
-                        icon
-                        small
-                        class="delete-icon-btn data-icon-btn-size"
-                        v-bind="attrs"
-                        v-on="on"
-                      >
-                        <v-icon>mdi-delete</v-icon>
-                      </v-btn>
-                    </template>
-
-                    <v-card>
-                      <v-card-title>Delete this table?</v-card-title>
-                      <v-list>
-                        <v-list-item @click="handleDeleteTable(table)">
-                          <v-list-item-icon>
-                            <v-icon>mdi-check</v-icon>
-                          </v-list-item-icon>
-                          <v-list-item-title>Yes, delete</v-list-item-title>
-                        </v-list-item>
-                        <v-list-item link>
-                          <v-list-item-icon>
-                            <v-icon>mdi-cancel</v-icon>
-                          </v-list-item-icon>
-                          <v-list-item-title>No, don't delete</v-list-item-title>
-                        </v-list-item>
-                      </v-list>
-                    </v-card>
-                  </v-menu>
+                    title="Delete this table?"
+                    activator-title="Delete this table"
+                    icon-btn-class="data-icon-btn-size"
+                    @confirm="handleDeleteTable(table)"
+                  />
                 </div>
 
                 <v-card-text class="data-name-section">
@@ -323,7 +323,7 @@
   </div>
 </template>
 <script>
-import {computed, defineComponent, getCurrentInstance, ref, watch} from '@vue/composition-api';
+import {computed, defineComponent, getCurrentInstance, onBeforeUnmount, onMounted, ref, watch} from '@vue/composition-api';
 import {max} from 'lodash';
 import {saveAs} from 'file-saver';
 
@@ -341,6 +341,7 @@ import {processTextStringsStorageDefaults} from '../blocks/text-strings';
 import {getDateInfix} from '../utils/date';
 import {openFileDialog} from '../utils/file';
 import ColorSwatchPicker from '../components/ColorSwatchPicker.vue';
+import ConfirmDeleteMenu from '../components/ConfirmDeleteMenu.vue';
 
 // A data table is just a flat array of 0-255 bytes (see blocks/data.js), so
 // its CSV form is a single row of comma-separated integers - no header, no
@@ -401,7 +402,7 @@ const DATA_VALUE_CELL_MIN_PX = 120;
 const copiedTableData = ref(null);
 
 export default defineComponent({
-  components: {ColorSwatchPicker},
+  components: {ColorSwatchPicker, ConfirmDeleteMenu},
   setup() {
     const dataTablesStorage = useDataTablesStorage();
     const dataColumns = useDataColumnsStorage();
@@ -463,6 +464,11 @@ export default defineComponent({
     const deselectCard = () => {
       selectedCardId.value = null;
     };
+    // The table the shared toolbar below acts on - whichever card is
+    // currently selected, same pattern as MusicEditor.vue's activeSong()
+    // and GraphicEditorToolbar.vue's activeEditor driving each toolbar.
+    const selectedTable = computed(() =>
+      state.value.dataTables.find(({id}) => id === selectedCardId.value) || null);
 
     const state = computed({
       get() {
@@ -594,6 +600,30 @@ export default defineComponent({
       );
 
     const instance = getCurrentInstance();
+
+    // Same "growing padding + a bottom border once actually scrolled"
+    // treatment as GraphicEditorToolbar.vue's .graphic-editor-toolbar/
+    // isScrolled and MusicEditor.vue's .music-toolbar/
+    // isMusicToolbarScrolled (Composition API version, same reasoning as
+    // that file's comment on why this searches for .editor-container
+    // rather than reading $el directly).
+    const isDataToolbarScrolled = ref(false);
+    let dataToolbarScrollContainer = null;
+    const handleDataToolbarScroll = (event) => {
+      isDataToolbarScrolled.value = event.target.scrollTop > 0;
+    };
+    onMounted(() => {
+      dataToolbarScrollContainer = instance.proxy.$el.querySelector('.editor-container');
+      if (dataToolbarScrollContainer) {
+        dataToolbarScrollContainer.addEventListener('scroll', handleDataToolbarScroll);
+      }
+    });
+    onBeforeUnmount(() => {
+      if (dataToolbarScrollContainer) {
+        dataToolbarScrollContainer.removeEventListener('scroll', handleDataToolbarScroll);
+      }
+    });
+
     const handleAddTable = () => {
       const dataTables = state.value.dataTables;
       const maxId = max(dataTables.map((o) => o.id)) || 0;
@@ -1072,7 +1102,7 @@ export default defineComponent({
 
     return {
       dataColumns,
-      selectedCardId, selectCard, deselectCard,
+      selectedCardId, selectCard, deselectCard, selectedTable, isDataToolbarScrolled,
       state, handleChildChange, handleAddTable, handleDeleteTable, handleDuplicateTable,
       copiedTableData, handleCopyTable, handlePasteTable,
       handleAddValue, handleDeleteValue, handleValueChange, handleSelectValue, handleSubtractValue,
@@ -1143,7 +1173,14 @@ export default defineComponent({
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
   gap: 8px;
-  margin-top: 12px;
+  /* 4px, not the 12px this used to be - matches GraphicEditorToolbar.vue's
+     measured 4px gap below its toolbar exactly, now that .data-toolbar
+     no longer uses a negative margin-bottom to reach that same number (see
+     that comment for why that was wrong - this is the safe way to
+     close the same gap instead, since it reduces this element's margin
+     rather than pulling the sticky bar above it down over this one's top
+     edge). */
+  margin-top: 4px;
   /* Grid items stretch to fill their row's height by default (same fix as
      SoundFXEditor.vue's own .soundfx-list) - a collapsed card next to an
      expanded one (or just a shorter table next to a longer one) in the
@@ -1287,9 +1324,94 @@ export default defineComponent({
   padding-top: 0;
 }
 
-/* Groups Export/Import/Delete into one row in the card's top-right corner,
-   same corner (and offset) .data-collapse-btn uses for the top-left, instead
-   of each button separately fighting over "absolute top right". */
+/* Same visual treatment/sticky behaviour as GraphicEditorToolbar.vue's
+   .graphic-editor-toolbar and MusicEditor.vue's .music-toolbar (that
+   component itself isn't reused here - it's built entirely around a
+   PixelEditor instance's tools, nothing this tab has - but the visual
+   treatment is copied so it reads as the same kind of toolbar). Sticks to
+   the top of the tab's scrolling ancestor (.editor-container) as the card
+   list scrolls past underneath it. */
+.data-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background-color: #fff;
+  padding-top: 4px;
+  padding-bottom: 4px;
+  transition: padding 0.15s ease;
+  /* Matches GraphicEditorToolbar.vue's 16px gap above exactly (measured
+     live against its padding plus its neighbours' margins, not guessed) -
+     a real reported case of this not already matching ("the spacing seems
+     wrong under the columns tab, match spacing similar to graphics editor
+     toolbar above/below"). .data-filter-row (directly above) is a
+     different element than that toolbar's neighbour, so copying its
+     padding alone (already matched above) didn't reproduce the same gap -
+     margin here instead. The gap BELOW is fixed on .data-list's margin-top
+     instead of a negative margin-bottom here - a negative margin on this
+     element specifically caused a real reported bug (a selected card's top
+     border rendering hidden): this toolbar is position: sticky with a
+     raised z-index so it stays above the scrolled-under list, and a
+     negative margin-bottom pulls its box (that z-index layer included)
+     down over the list's top edge, painting over whatever's there rather
+     than just reducing visual distance the way a negative margin normally
+     reads. */
+  margin-top: 16px;
+  /* Same "full-bleed" trick as GraphicEditorToolbar.vue's bleedStyle
+     (margin cancels the parent v-card-text's 16px side padding so this
+     bar's background spans the full window width, padding re-adds the
+     same 16px so the icons inside still line up with everything else on
+     the tab) - a real reported case of this not happening here
+     ("the data tab toolbar show[uld] span the full width of the window...
+     right now it looks like there's padding on the left/right"). A plain
+     static 16px, not a prop-driven bleedStyle - this tab only ever sits in
+     one single 16px-padded v-card-text, unlike that shared component,
+     which has to support whatever padding each different caller's
+     container happens to use. */
+  margin-left: -16px;
+  margin-right: -16px;
+  padding-left: 16px;
+  padding-right: 16px;
+}
+
+.data-toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Zeroes .data-icon-btn-size's margin: 0 1px (needed elsewhere on this
+   tab, where there's no shared flex gap doing the spacing) - same reasoning
+   as MusicEditor.vue's .music-toolbar-row >>> .music-icon-btn-size. */
+.data-toolbar-row >>> .data-icon-btn-size {
+  margin: 0;
+}
+
+.data-toolbar-divider {
+  margin: 0;
+}
+
+/* Same "grows + gains a bottom border once actually scrolled" treatment as
+   GraphicEditorToolbar.vue's .graphic-editor-toolbar-scrolled. */
+.data-toolbar-scrolled {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.24);
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+/* "Soft Colors" (see App.vue's desaturate-app-colors class/comment) -
+   matches the darker .editor-container this bar is pinned inside of once
+   that's on, instead of staying the plain white every other surface swaps
+   away from. */
+.desaturate-app-colors .data-toolbar {
+  background-color: #e1e1e1;
+}
+
+/* Groups just Delete into the card's top-right corner now (Undo/Redo/
+   Duplicate/Copy/Paste/Export/Import all moved into the shared toolbar
+   above, acting on whichever card is selected - a real reported request,
+   "move the buttons on data cards up into a unified toolbar... leave the
+   delete buttons on the cards"), same corner (and offset) .data-collapse-btn
+   uses for the top-left. */
 .data-toolbar-top-right {
   position: absolute;
   top: 8px;

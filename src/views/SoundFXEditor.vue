@@ -52,24 +52,120 @@
             class="soundfx-columns-switch"
           />
         </div>
-        <v-card-actions class="soundfx-bank-actions">
-          <v-btn
-            icon
-            class="soundfx-bank-btn"
-            title="Save every sound effect/instrument in this project to a single .JSON sound bank file"
-            @click="handleExportSoundBank"
-          >
-            <v-icon>mdi-export</v-icon>
-          </v-btn>
-          <v-btn
-            icon
-            class="soundfx-bank-btn"
-            title="Load a .JSON sound bank file - a sound effect whose name matches one already here has its parameters replaced; every other sound effect in the file is added as a new card"
-            @click="handleImportSoundBank"
-          >
-            <v-icon>mdi-import</v-icon>
-          </v-btn>
-        </v-card-actions>
+        <!-- Same sticky/full-bleed toolbar treatment as DataEditor.vue's
+             .data-toolbar (see that file's comments for the full
+             reasoning behind each piece - position: sticky, the bleed
+             margin/padding trick, always rendered with buttons disabled
+             rather than hidden outright). Bank-level actions (act on every
+             sound effect at once) stay first, then a divider, then the
+             Undo/Redo/Export/Import/Stop/Play controls that used to live on
+             each individual card - a real reported request ("add a toolbar
+             to the sound tab, next to the import/export sound bank icons,
+             with the import, export, stop and play controls currently on
+             each sound card... also add undo/redo"), acting on whichever
+             card is selected (selectedSoundEffect) the same way
+             DataEditor.vue's toolbar acts on selectedTable. @click.stop for
+             the same reason GraphicEditorToolbar.vue's root div has it. -->
+        <div
+          class="soundfx-toolbar"
+          :class="{'soundfx-toolbar-scrolled': isSoundFxToolbarScrolled}"
+          @click.stop
+        >
+          <div class="soundfx-toolbar-row">
+            <v-btn
+              icon
+              small
+              class="soundfx-bank-btn soundfx-icon-btn-size"
+              title="Save every sound effect/instrument in this project to a single .JSON sound bank file"
+              @click="handleExportSoundBank"
+            >
+              <!-- mdi-database-export/-import, not the plain mdi-export/
+                   -import the single-sound-effect buttons below use - a
+                   real reported request ("change the icons for sound bank
+                   import/export to be different than single sound import/
+                   export"): this one acts on every sound effect in the
+                   project at once (a whole "bank" file, hence "database"),
+                   not just the one card it's attached to the way the
+                   per-sound buttons below are. mdi-folder-export/-import,
+                   tried first, don't actually exist in this app's loaded
+                   icon set (confirmed directly - every other icon on this
+                   page renders a real glyph, these two rendered nothing at
+                   all) despite reading as a plausible real icon name. -->
+              <v-icon>mdi-database-export</v-icon>
+            </v-btn>
+            <v-btn
+              icon
+              small
+              class="soundfx-bank-btn soundfx-icon-btn-size"
+              title="Load a .JSON sound bank file - a sound effect whose name matches one already here has its parameters replaced; every other sound effect in the file is added as a new card"
+              @click="handleImportSoundBank"
+            >
+              <v-icon>mdi-database-import</v-icon>
+            </v-btn>
+            <v-divider class="soundfx-toolbar-divider" vertical />
+            <v-btn
+              icon
+              small
+              title="Undo"
+              class="soundfx-bank-btn soundfx-icon-btn-size"
+              :disabled="!selectedSoundEffect || !canUndoEnvelope(selectedSoundEffect)"
+              @click="() => handleUndoEnvelope(selectedSoundEffect)"
+            >
+              <v-icon>mdi-undo</v-icon>
+            </v-btn>
+            <v-btn
+              icon
+              small
+              title="Redo"
+              class="soundfx-bank-btn soundfx-icon-btn-size"
+              :disabled="!selectedSoundEffect || !canRedoEnvelope(selectedSoundEffect)"
+              @click="() => handleRedoEnvelope(selectedSoundEffect)"
+            >
+              <v-icon>mdi-redo</v-icon>
+            </v-btn>
+            <v-divider class="soundfx-toolbar-divider" vertical />
+            <v-btn
+              icon
+              small
+              title="Export sound effect to .JSON file"
+              class="soundfx-bank-btn soundfx-icon-btn-size"
+              :disabled="!selectedSoundEffect"
+              @click="() => handleExportSoundEffect(selectedSoundEffect)"
+            >
+              <v-icon>mdi-export</v-icon>
+            </v-btn>
+            <v-btn
+              icon
+              small
+              title="Import sound effect from .JSON file"
+              class="soundfx-bank-btn soundfx-icon-btn-size"
+              :disabled="!selectedSoundEffect"
+              @click="() => handleImportSoundEffect(selectedSoundEffect)"
+            >
+              <v-icon>mdi-import</v-icon>
+            </v-btn>
+            <v-divider class="soundfx-toolbar-divider" vertical />
+            <v-btn
+              icon
+              small
+              title="Stop the sound preview"
+              class="soundfx-bank-btn soundfx-icon-btn-size"
+              @click="handleStopPreview"
+            >
+              <v-icon>mdi-stop</v-icon>
+            </v-btn>
+            <v-btn
+              icon
+              small
+              title="Play this sound effect"
+              class="soundfx-bank-btn soundfx-icon-btn-size"
+              :disabled="!selectedSoundEffect"
+              @click="() => handlePlaySoundEffect(selectedSoundEffect)"
+            >
+              <v-icon>mdi-play</v-icon>
+            </v-btn>
+          </div>
+        </div>
 
         <v-dialog v-model="soundBankImportOpen" width="480">
           <v-card>
@@ -140,43 +236,18 @@
                 </v-btn>
                 <div class="soundfx-id-badge">ID:{{ soundEffect.id }}</div>
 
+                <!-- Same top-right corner/offset as DataEditor.vue's
+                     .data-toolbar-top-right - a real reported request ("move
+                     the delete button to the top right of each card, like
+                     it is on data table cards. use the same positioning"). -->
                 <div class="soundfx-toolbar-top-right">
-                  <v-btn
-                    icon
-                    small
-                    title="Export sound effect to .JSON file"
-                    class="soundfx-stop-btn soundfx-icon-btn-size"
-                    @click="() => handleExportSoundEffect(soundEffect)"
-                  >
-                    <v-icon>mdi-export</v-icon>
-                  </v-btn>
-                  <v-btn
-                    icon
-                    small
-                    title="Import sound effect from .JSON file"
-                    class="soundfx-stop-btn soundfx-icon-btn-size"
-                    @click="() => handleImportSoundEffect(soundEffect)"
-                  >
-                    <v-icon>mdi-import</v-icon>
-                  </v-btn>
-                  <v-btn
-                    icon
-                    small
-                    title="Stop the sound preview"
-                    class="soundfx-stop-btn soundfx-icon-btn-size"
-                    @click="handleStopPreview"
-                  >
-                    <v-icon>mdi-stop</v-icon>
-                  </v-btn>
-                  <v-btn
-                    icon
-                    small
-                    title="Play this sound effect"
-                    class="soundfx-play-btn soundfx-icon-btn-size"
-                    @click="() => handlePlaySoundEffect(soundEffect)"
-                  >
-                    <v-icon>mdi-play</v-icon>
-                  </v-btn>
+                  <confirm-delete-menu
+                    v-if="state.soundEffects.length > 1"
+                    title="Delete this sound effect?"
+                    activator-title="Delete this sound effect"
+                    icon-btn-class="soundfx-delete-btn soundfx-icon-btn-size"
+                    @confirm="handleDeleteSoundEffect(soundEffect)"
+                  />
                 </div>
 
                 <v-card-text class="soundfx-name-section">
@@ -334,7 +405,7 @@
                         />
                         <v-select
                           label="Decay"
-                          title="Frames to ramp down from full volume to the Sustain level."
+                          title="Frames to ramp down from full volume to the Decay End level."
                           v-model="soundEffect.envelopeDecay"
                           :items="envelopeStageFrameOptionItems"
                           hide-details
@@ -342,8 +413,17 @@
                           class="soundfx-envelope-field"
                         />
                         <v-select
+                          label="Decay End Volume"
+                          title="The volume level (percent of full volume) Decay ramps down to, and Sustain ramps from."
+                          v-model="soundEffect.envelopeDecayEnd"
+                          :items="envelopeVolumePercentOptionItems"
+                          hide-details
+                          @change="handleChildChange"
+                          class="soundfx-envelope-field"
+                        />
+                        <v-select
                           label="Sustain length"
-                          title="How many frames the Sustain hold itself lasts before Release begins - 0 skips straight from Decay into Release."
+                          title="How many frames Sustain takes to glide from the Decay End level to the Release Start level, before Release begins - 0 skips straight from Decay into Release."
                           v-model="soundEffect.envelopeSustainLength"
                           :items="envelopeSustainFrameOptionItems"
                           hide-details
@@ -351,17 +431,17 @@
                           class="soundfx-envelope-field"
                         />
                         <v-select
-                          label="Sustain Volume"
-                          title="The volume level (percent of full volume) held after Attack/Decay, until Release begins."
-                          v-model="soundEffect.envelopeSustain"
-                          :items="envelopeSustainPercentOptionItems"
+                          label="Release Start Volume"
+                          title="The volume level (percent of full volume) Sustain ramps to, and Release ramps down from - can be set higher than Decay End, so Sustain glides UP into Release instead of only ever down."
+                          v-model="soundEffect.envelopeReleaseStart"
+                          :items="envelopeVolumePercentOptionItems"
                           hide-details
                           @change="handleChildChange"
                           class="soundfx-envelope-field"
                         />
                         <v-select
                           label="Release"
-                          title="Frames to ramp down from the Sustain level to silence, starting right after Sustain ends."
+                          title="Frames to ramp down from the Release Start level to silence, starting right after Sustain ends."
                           v-model="soundEffect.envelopeRelease"
                           :items="envelopeAttackReleaseFrameOptionItems"
                           hide-details
@@ -402,60 +482,19 @@
                         <EnvelopeGraph
                           :attack="soundEffect.envelopeAttack"
                           :decay="soundEffect.envelopeDecay"
-                          :sustain-percent="soundEffect.envelopeSustain"
+                          :decay-end-percent="soundEffect.envelopeDecayEnd"
                           :sustain-length="soundEffect.envelopeSustainLength"
+                          :release-start-percent="soundEffect.envelopeReleaseStart"
                           :release="soundEffect.envelopeRelease"
                           @update:attack="(value) => handleEnvelopeGraphChange(soundEffect, 'envelopeAttack', value)"
                           @update:decay="(value) => handleEnvelopeGraphChange(soundEffect, 'envelopeDecay', value)"
-                          @update:sustainPercent="(value) => handleEnvelopeGraphChange(soundEffect, 'envelopeSustain', value)"
+                          @update:decayEndPercent="(value) => handleEnvelopeGraphChange(soundEffect, 'envelopeDecayEnd', value)"
+                          @update:releaseStartPercent="(value) => handleEnvelopeGraphChange(soundEffect, 'envelopeReleaseStart', value)"
                           @update:release="(value) => handleEnvelopeGraphChange(soundEffect, 'envelopeRelease', value)"
                         />
                       </template>
                     </div>
                   </div>
-                </v-card-text>
-
-                <!-- Its own row (not inline with soundfx-fields-section above,
-                     where this used to sit next to Fade) so it lands in the
-                     same place - close to the card's bottom edge - whether
-                     expanded or collapsed, instead of being roughly mid-card
-                     while expanded but bottom-edge while collapsed. -->
-                <v-card-text class="soundfx-delete-section">
-                  <v-menu
-                    v-if="state.soundEffects.length > 1"
-                    top
-                  >
-                    <template v-slot:activator="{ on, attrs }">
-                      <v-btn
-                        title="Delete this sound effect"
-                        icon
-                        small
-                        class="soundfx-delete-btn delete-icon-btn soundfx-icon-btn-size"
-                        v-bind="attrs"
-                        v-on="on"
-                      >
-                        <v-icon>mdi-delete</v-icon>
-                      </v-btn>
-                    </template>
-
-                    <v-card>
-                      <v-card-title>Delete this sound effect?</v-card-title>
-                      <v-list>
-                        <v-list-item @click="handleDeleteSoundEffect(soundEffect)">
-                          <v-list-item-icon>
-                            <v-icon>mdi-check</v-icon>
-                          </v-list-item-icon>
-                          <v-list-item-title>Yes, delete</v-list-item-title>
-                        </v-list-item>
-                        <v-list-item link>
-                          <v-list-item-icon>
-                            <v-icon>mdi-cancel</v-icon>
-                          </v-list-item-icon>
-                          <v-list-item-title>No, don't delete</v-list-item-title>
-                        </v-list-item>
-                      </v-list>
-                    </v-card>
-                  </v-menu>
                 </v-card-text>
               </v-card>
             </v-list-item-content>
@@ -479,7 +518,7 @@
   </div>
 </template>
 <script>
-import {computed, defineComponent, getCurrentInstance, ref, watch} from '@vue/composition-api';
+import {computed, defineComponent, getCurrentInstance, onBeforeUnmount, onMounted, ref, watch} from '@vue/composition-api';
 import {saveAs} from 'file-saver';
 import {max} from 'lodash';
 
@@ -491,8 +530,8 @@ import {AUDC_OPTIONS} from '../blocks/sound';
 import {DEFAULT_SOUND_EFFECTS, processSoundEffectsStorageDefaults, ARPEGGIO_DIVISION_OPTIONS,
   DEFAULT_ARPEGGIO_DIVISION, DEFAULT_ARPEGGIO_INTERVAL, MIN_ARPEGGIO_INTERVAL,
   MAX_ARPEGGIO_INTERVAL, DEFAULT_ARPEGGIO_RANGE, ARPEGGIO_RANGE_OPTIONS,
-  ENVELOPE_STAGE_FRAME_OPTIONS, ENVELOPE_ATTACK_RELEASE_FRAME_OPTIONS, ENVELOPE_SUSTAIN_PERCENT_OPTIONS,
-  ENVELOPE_SUSTAIN_FRAME_OPTIONS, DEFAULT_ENVELOPE_ATTACK, DEFAULT_ENVELOPE_DECAY, DEFAULT_ENVELOPE_SUSTAIN_PERCENT,
+  ENVELOPE_STAGE_FRAME_OPTIONS, ENVELOPE_ATTACK_RELEASE_FRAME_OPTIONS, ENVELOPE_VOLUME_PERCENT_OPTIONS,
+  ENVELOPE_SUSTAIN_FRAME_OPTIONS, DEFAULT_ENVELOPE_ATTACK, DEFAULT_ENVELOPE_DECAY, DEFAULT_ENVELOPE_VOLUME_PERCENT,
   DEFAULT_ENVELOPE_SUSTAIN_FRAMES, DEFAULT_ENVELOPE_RELEASE, NOISE_PRIORITY_OPTIONS,
   DEFAULT_NOISE_PRIORITY} from '../blocks/soundfx';
 import {DEFAULT_DIM_PERCENT, dimVolume} from '../generators/bbasic/soundfx';
@@ -502,10 +541,11 @@ import {previewSoundEffect, stopSoundEffectPreview} from '../utils/sound-preview
 import {autoInstrumentColor} from '../utils/instrument-colors';
 import {audcHasTunableNotes, notesForAudc} from '../utils/music-notes';
 import ColorSwatchPicker from '../components/ColorSwatchPicker.vue';
+import ConfirmDeleteMenu from '../components/ConfirmDeleteMenu.vue';
 import EnvelopeGraph from '../components/EnvelopeGraph.vue';
 
 export default defineComponent({
-  components: {ColorSwatchPicker, EnvelopeGraph},
+  components: {ColorSwatchPicker, ConfirmDeleteMenu, EnvelopeGraph},
   setup() {
     const soundEffectsStorage = useSoundEffectsStorage();
     // App-wide preference, not part of this project's  saved
@@ -542,6 +582,11 @@ export default defineComponent({
     const deselectCard = () => {
       selectedCardId.value = null;
     };
+    // The sound effect the shared toolbar below acts on - whichever card is
+    // currently selected, same pattern as DataEditor.vue's selectedTable
+    // and MusicEditor.vue's activeSong().
+    const selectedSoundEffect = computed(() =>
+      state.value.soundEffects.find(({id}) => id === selectedCardId.value) || null);
 
     const state = computed({
       get() {
@@ -558,7 +603,32 @@ export default defineComponent({
       },
     });
 
+    // Envelope-enabled Attack+Decay+Sustain+Release has to actually fit
+    // inside Duration - clampEnvelopeStages (utils/envelope.js) is what
+    // guards the ROM/preview against the opposite problem (stages that
+    // overflow Duration get scaled DOWN to fit at compile/preview time),
+    // but silently shrinking the shape the user just dialed in reads as the
+    // envelope "not working" rather than what it actually is (a sound that
+    // ends before its envelope finishes) - a real reported request:
+    // Duration should grow to fit the envelope instead, not the other way
+    // around. Checked here - inside the one function every single
+    // envelope-affecting mutation already funnels through (every dropdown's
+    // @change, EnvelopeGraph drags via handleEnvelopeGraphChange, Reset,
+    // Undo/Redo, AND Duration's field, all call this - see their
+    // call sites) - rather than duplicating the same check at each of those
+    // call sites individually. Iterates every sound effect (not just
+    // whichever one actually triggered this call) since this function
+    // itself has no way to know which one that was - cheap enough given how
+    // few sound effects a project realistically has.
     const handleChildChange = () => {
+      state.value.soundEffects.forEach((soundEffect) => {
+        if (!soundEffect.envelope) return;
+        const combinedFrames = (Number(soundEffect.envelopeAttack) || 0) + (Number(soundEffect.envelopeDecay) || 0) +
+          (Number(soundEffect.envelopeSustainLength) || 0) + (Number(soundEffect.envelopeRelease) || 0);
+        if (combinedFrames > (Number(soundEffect.duration) || 0)) {
+          soundEffect.duration = combinedFrames;
+        }
+      });
       state.value = state.value;
     };
 
@@ -579,8 +649,8 @@ export default defineComponent({
     // a whole sound effect's every field, since dragging the envelope graph
     // is the one interaction here fiddly enough to want stepping back
     // through.
-    const ENVELOPE_HISTORY_KEYS = ['envelopeAttack', 'envelopeDecay', 'envelopeSustain', 'envelopeSustainLength',
-      'envelopeRelease'];
+    const ENVELOPE_HISTORY_KEYS = ['envelopeAttack', 'envelopeDecay', 'envelopeDecayEnd', 'envelopeSustainLength',
+      'envelopeReleaseStart', 'envelopeRelease'];
     const snapshotEnvelope = (soundEffect) => JSON.stringify(
         ENVELOPE_HISTORY_KEYS.reduce((acc, key) => {
           acc[key] = soundEffect[key]; return acc;
@@ -643,8 +713,9 @@ export default defineComponent({
     const handleResetEnvelope = (soundEffect) => {
       soundEffect.envelopeAttack = DEFAULT_ENVELOPE_ATTACK;
       soundEffect.envelopeDecay = DEFAULT_ENVELOPE_DECAY;
-      soundEffect.envelopeSustain = DEFAULT_ENVELOPE_SUSTAIN_PERCENT;
+      soundEffect.envelopeDecayEnd = DEFAULT_ENVELOPE_VOLUME_PERCENT;
       soundEffect.envelopeSustainLength = DEFAULT_ENVELOPE_SUSTAIN_FRAMES;
+      soundEffect.envelopeReleaseStart = DEFAULT_ENVELOPE_VOLUME_PERCENT;
       soundEffect.envelopeRelease = DEFAULT_ENVELOPE_RELEASE;
       handleChildChange();
     };
@@ -695,6 +766,29 @@ export default defineComponent({
     );
 
     const instance = getCurrentInstance();
+
+    // Same "growing padding + a bottom border once actually scrolled"
+    // treatment as GraphicEditorToolbar.vue's .graphic-editor-toolbar/
+    // isScrolled and DataEditor.vue's .data-toolbar/isDataToolbarScrolled
+    // (same reasoning as that file's comment on why this searches for
+    // .editor-container rather than reading $el directly).
+    const isSoundFxToolbarScrolled = ref(false);
+    let soundFxToolbarScrollContainer = null;
+    const handleSoundFxToolbarScroll = (event) => {
+      isSoundFxToolbarScrolled.value = event.target.scrollTop > 0;
+    };
+    onMounted(() => {
+      soundFxToolbarScrollContainer = instance.proxy.$el.querySelector('.editor-container');
+      if (soundFxToolbarScrollContainer) {
+        soundFxToolbarScrollContainer.addEventListener('scroll', handleSoundFxToolbarScroll);
+      }
+    });
+    onBeforeUnmount(() => {
+      if (soundFxToolbarScrollContainer) {
+        soundFxToolbarScrollContainer.removeEventListener('scroll', handleSoundFxToolbarScroll);
+      }
+    });
+
     const handleAddSoundEffect = () => {
       const soundEffects = state.value.soundEffects;
       const maxId = max(soundEffects.map((o) => o.id)) || 0;
@@ -708,8 +802,9 @@ export default defineComponent({
         envelope: false,
         envelopeAttack: DEFAULT_ENVELOPE_ATTACK,
         envelopeDecay: DEFAULT_ENVELOPE_DECAY,
-        envelopeSustain: DEFAULT_ENVELOPE_SUSTAIN_PERCENT,
+        envelopeDecayEnd: DEFAULT_ENVELOPE_VOLUME_PERCENT,
         envelopeSustainLength: DEFAULT_ENVELOPE_SUSTAIN_FRAMES,
+        envelopeReleaseStart: DEFAULT_ENVELOPE_VOLUME_PERCENT,
         envelopeRelease: DEFAULT_ENVELOPE_RELEASE,
         priority: DEFAULT_NOISE_PRIORITY,
         arpeggio: false,
@@ -929,7 +1024,7 @@ export default defineComponent({
     };
 
     return {
-      selectedCardId, selectCard, deselectCard,
+      selectedCardId, selectCard, deselectCard, selectedSoundEffect, isSoundFxToolbarScrolled,
       state, handleChildChange, handleAddSoundEffect, handleDeleteSoundEffect, handlePlaySoundEffect,
       handleExportSoundEffect, handleImportSoundEffect,
       handleExportSoundBank, handleImportSoundBank,
@@ -945,10 +1040,12 @@ export default defineComponent({
       arpeggioDivisionOptionItems: ARPEGGIO_DIVISION_OPTIONS.map((value) => ({text: `1/${value}`, value})),
       envelopeStageFrameOptionItems: ENVELOPE_STAGE_FRAME_OPTIONS.map((value) => ({text: `${value} frames`, value})),
       // Attack/Release only (Decay stays on the smaller set above) - see
-      // ENVELOPE_ATTACK_RELEASE_FRAME_OPTIONS' own comment in blocks/soundfx.js.
+      // ENVELOPE_ATTACK_RELEASE_FRAME_OPTIONS' comment in blocks/soundfx.js.
       envelopeAttackReleaseFrameOptionItems:
         ENVELOPE_ATTACK_RELEASE_FRAME_OPTIONS.map((value) => ({text: `${value} frames`, value})),
-      envelopeSustainPercentOptionItems: ENVELOPE_SUSTAIN_PERCENT_OPTIONS.map((value) => ({text: `${value}%`, value})),
+      // Shared by both Decay End and Release Start - see
+      // ENVELOPE_VOLUME_PERCENT_OPTIONS' comment in blocks/soundfx.js.
+      envelopeVolumePercentOptionItems: ENVELOPE_VOLUME_PERCENT_OPTIONS.map((value) => ({text: `${value}%`, value})),
       envelopeSustainFrameOptionItems: ENVELOPE_SUSTAIN_FRAME_OPTIONS.map((value) => ({text: `${value} frames`, value})),
       priorityOptionItems: NOISE_PRIORITY_OPTIONS.map((value) => ({text: `${value}`, value})),
       handleEnvelopeGraphChange,
@@ -983,13 +1080,20 @@ export default defineComponent({
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
   gap: 8px;
-  /* No margin-top - v-list's  default padding-top (8px, unlike e.g.
-     TitleScreenEditor.vue's .titlescreen-card-list, which zeroes it
-     out) already supplies the gap here, stacking an 8px margin-top on top
-     of that made the gap under the import/export buttons visibly bigger
-     than the 8px gap above them (Show field to buttons) - a real reported
-     bug. */
-  margin-top: 0;
+  /* 4px margin-top, same fix as DataEditor.vue's .data-list (see that
+     file's comment for why margin on this element, not the sticky toolbar
+     above it, is the safe way to close this gap) - no padding-top
+     override here, unlike an earlier version of this rule, which zeroed
+     v-list's default 8px padding-top out entirely: that left the toolbar-
+     to-first-card gap at a flat 4px, not the 4 + 8 = 12px
+     GraphicEditorToolbar.vue's list (PlayerEditor.vue's
+     .animation-list, left at its default padding-top too) actually
+     measures - a real reported case of this specifically, not just the
+     box-to-box gap, reading as "too close" once actually compared
+     ("spacing below music toolbar and music cards looks too close,
+     matching spacing from graphic editor toolbar and sprite card"...
+     "yes use same padding everywhere for consistency"). */
+  margin-top: 4px;
   /* Grid items stretch to fill their row's height by default - a collapsed
      card next to an expanded one in the same row would otherwise stretch
      tall to match it, instead of sitting flush at the top like its card
@@ -1077,26 +1181,61 @@ export default defineComponent({
   padding-top: 0 !important;
 }
 
-/* Now sits under the Show/Columns filter row (not directly under the tab
-   title - see the template's placement) - padding-left: 0 lines the
-   first icon's left edge up with the Show field beside it above,
-   margin-top separates it from that row (it used to rely on
-   v-card-actions' own default top padding for spacing under the title,
-   which no longer applies here). No margin-bottom override - the sound
-   card list below (.soundfx-list) supplies its own margin-top, matching
-   this same 8px so the gap above the buttons (Show field to buttons) and
-   below them (buttons to cards) read as the same size. gap: 0 because a
-   v-btn immediately following another v-btn gets its own Vuetify-injected
-   margin-left, which .soundfx-bank-btn below zeroes out, matching
-   .project-flat-icon-btn's identical fix. */
-.soundfx-bank-actions {
-  padding-left: 0;
-  padding-top: 0;
-  padding-bottom: 0;
-  margin-top: 8px;
+/* Same sticky/full-bleed toolbar treatment as DataEditor.vue's
+   .data-toolbar (see that file's comments for the full reasoning behind
+   each piece - position: sticky, the bleed margin/padding trick, the
+   measured 16px-above/4px-below gaps). Replaces the old
+   .soundfx-bank-actions (a plain v-card-actions row that only ever held
+   the two bank-level buttons) now that this same bar also holds the
+   Undo/Redo/Export/Import/Stop/Play controls moved off each card - a real
+   reported request ("add a toolbar to the sound tab... with the import,
+   export, stop and play controls currently on each sound card"). */
+.soundfx-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background-color: #fff;
+  padding-top: 4px;
+  padding-bottom: 4px;
+  margin-top: 16px;
+  margin-left: -16px;
+  margin-right: -16px;
+  padding-left: 16px;
+  padding-right: 16px;
+  transition: padding 0.15s ease;
+}
+
+.soundfx-toolbar-row {
   display: flex;
   align-items: center;
-  gap: 0;
+  gap: 4px;
+}
+
+/* Zeroes .soundfx-icon-btn-size's margin: 0 1px (needed elsewhere on this
+   tab, where there's no shared flex gap doing the spacing) - same
+   reasoning as DataEditor.vue's .data-toolbar-row >>> .data-icon-btn-size. */
+.soundfx-toolbar-row >>> .soundfx-icon-btn-size {
+  margin: 0;
+}
+
+.soundfx-toolbar-divider {
+  margin: 0;
+}
+
+/* Same "grows + gains a bottom border once actually scrolled" treatment as
+   GraphicEditorToolbar.vue's .graphic-editor-toolbar-scrolled. */
+.soundfx-toolbar-scrolled {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.24);
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+/* "Soft Colors" (see App.vue's desaturate-app-colors class/comment) -
+   matches the darker .editor-container this bar is pinned inside of once
+   that's on, instead of staying the plain white every other surface swaps
+   away from. */
+.desaturate-app-colors .soundfx-toolbar {
+  background-color: #e1e1e1;
 }
 
 
@@ -1108,14 +1247,14 @@ export default defineComponent({
 }
 
 
-/* Full default Vuetify icon-button size (40px, 24px glyph - no "small"
-   prop), matching Project.vue's .project-flat-icon-btn exactly - same
-   flat, transparent background (no default hover circle), same fade-in-on-
-   hover/blue-on-press icon colour transitions - rather than this card's
-   own smaller, darker .soundfx-icon-btn-size treatment used inside each
-   sound effect card, since these sit in the tab's top-level toolbar
-   row instead. margin-left forced to 0 - see this rule's comment on
-   .soundfx-bank-actions for why. */
+/* Flat, transparent background (no default hover circle), fade-in-on-
+   hover/blue-on-press icon colour transitions - matching Project.vue's
+   .project-flat-icon-btn - now shared by every button in the tab's
+   top-level toolbar row (not just the two bank-level ones this class name
+   still refers to), since all of them sit in the same bar. margin-left
+   forced to 0 is redundant now that .soundfx-toolbar-row's gap/margin
+   fix handles spacing between every button here, but left in place rather
+   than risk a regression for the two sites that already relied on it. */
 .soundfx-bank-btn {
   margin-left: 0 !important;
   background-color: transparent !important;
@@ -1217,21 +1356,6 @@ export default defineComponent({
   box-shadow: none !important;
 }
 
-/* Top-right corner, hugging it the same way .soundfx-collapse-btn hugs the
-   top-left (top: 0, relying on the buttons' own internal padding rather
-   than extra container inset) - stop/play stay reachable with the card
-   collapsed, same reason they were pulled out of the collapsible fields
-   section. */
-.soundfx-toolbar-top-right {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  display: flex;
-  align-items: center;
-  gap: 0;
-  z-index: 1;
-}
-
 /* Same 4px gap as the Music tab's .track-instrument-row, but flex-start
    (not flex-end) - unlike that row's dense, hide-details fields, Sound
    name is a full-size v-text-field with a good deal of reserved underline
@@ -1244,11 +1368,10 @@ export default defineComponent({
   gap: 4px;
 }
 
-/* Clears .soundfx-toolbar-top-right, which would otherwise overlap the name
-   field's label/text at the top of the card - matches the Music tab's
-   own song cards' card-top-to-label gap (measured directly: 36.67px there
-   vs this field's 40.67px at 24px margin-top, so 20px lines the two
-   up) - was 36px originally. */
+/* Clears .soundfx-collapse-btn/.soundfx-id-badge at the top of the card -
+   matches the Music tab's song cards' card-top-to-label gap (measured
+   directly: 36.67px there vs this field's 40.67px at 24px margin-top, so
+   20px lines the two up) - was 36px originally. */
 .soundfx-name-field {
   margin-top: 20px;
   flex: 1 1 auto;
@@ -1361,38 +1484,41 @@ export default defineComponent({
 
 .soundfx-fields-section {
   padding-top: 0;
-  padding-bottom: 0;
-}
-
-/* Its own row, not inline with soundfx-fields-section above (where Delete
-   used to sit, pushed to the row's far right by a v-spacer) - that made
-   Delete land roughly mid-card while expanded but hard against the card's
-   own bottom edge while collapsed (see soundfx-fields-section, which is
-   entirely hidden then), two different positions for the same button.
-   Rendered unconditionally now (not just while collapsed) so it lands in
-   this same bottom-edge spot either way. Always in normal flow rather than
-   absolutely positioned, unlike its previous spot at the card's
-   bottom-right - that put it behind the name field once collapsing
-   shrank the card down around it. */
-.soundfx-delete-section {
-  display: flex;
-  justify-content: flex-end;
-  padding-top: 0;
-  /* Vuetify's v-card-text default padding-bottom (16px) left too much empty
-     space below the last field row, especially once Arpeggio's stacked
-     controls made that row taller - shrunk to a small amount instead of
-     zeroed, so the Delete button itself (rendered here whenever there's
-     more than one sound effect) still has a little clearance from the
-     card's bottom edge rather than sitting flush against it. */
+  /* Was 0 - the card's actual bottom clearance used to come from
+     .soundfx-delete-section's padding-bottom (8px) further below it,
+     back when that was a real section instead of moving into the card's
+     top-right corner. Zero here left this (now the card's last section)
+     with no clearance at all once that moved out - a real reported bug
+     ("the bottom of sound cards is too close to the envelope toggle when
+     the envelope toggle is turned off" - visible specifically then since
+     the Envelope switch, not the taller EnvelopeGraph, is this section's
+     last row in that state). Same 8px the deleted section used to
+     provide. */
   padding-bottom: 8px;
-  /* Matches .soundfx-toolbar-top-right's "right: 8px" (the Play
-     button's horizontal position) - v-card-text's default 16px right
-     padding put this 8px further left than that, so Delete and Play didn't
-     line up vertically despite both being right-aligned. */
-  padding-right: 8px;
 }
 
-.soundfx-delete-btn {
+/* Same top-right corner/offset as DataEditor.vue's .data-toolbar-top-
+   right - a real reported request ("move the delete button to the top
+   right of each card, like it is on data table cards. use the same
+   positioning"), replacing this card's previous spot at the bottom (a
+   plain in-flow row below every field, so it stayed reachable with the
+   card collapsed - that reasoning no longer applies now that this sits
+   outside the collapsible section entirely, same as .soundfx-collapse-btn
+   already does for the top-left corner). */
+.soundfx-toolbar-top-right {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  z-index: 1;
+}
+
+/* ">>>" deep combinator - this class lands on ConfirmDeleteMenu.vue's
+   internal activator button (passed down via its "icon-btn-class" prop), a
+   CHILD component's element that never carries this file's scope
+   attribute, so a plain scoped selector would silently never match it. */
+.soundfx-toolbar-top-right >>> .soundfx-delete-btn {
   box-shadow: none !important;
 }
 

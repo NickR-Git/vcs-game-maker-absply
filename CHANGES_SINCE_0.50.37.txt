@@ -1,0 +1,168 @@
+=== 0.50.37 ===
+Merge remote-tracking branch 'origin/main'
+
+Scrub "own" from the Title tab's Score card hint text
+
+=== 0.50.38 ===
+Add sprite Inertia/Bounce, 16-way Fire directions, missile/ball blank-line filling, music/cycle optimizations; bump version
+
+- Inertia: new accelerate/decelerate blocks (velocity, per-axis max speed,
+  8/16-way) for all 5 sprites, and a unified object_bounce block covering
+  Fire's angle and Inertia's velocity together, replacing the old separate
+  missile/ball bounce blocks (auto-migrated on project load).
+- Fire: 16-directional angle scale with a dynamic "default" dropdown that
+  tracks the 8/16-way toggle; fixed a throttle-countdown seeding bug that
+  made the first post-fire/seek step happen a frame early instead of
+  waiting the full interval.
+- New ball_blank_lines kernel option: lets the ball take over the
+  per-scanline fill slot no_blank_lines otherwise gives to missile0, so
+  missile0 stays usable as a normal sprite. Reuses stock no_blank_lines'
+  real gap-elimination path unchanged; only swaps one filler slot. Full
+  writeup in public/bb19/includes/UPSTREAM_CHANGES.md.
+- "Show blank lines" toggle inverted to "Fill blank lines ... with
+  missile0" for consistency with the new ball option (display-only; the
+  stored config value keeps its original polarity).
+- Music/soundfx/background/sprite generators: several redundant-read/asm
+  cycle-reduction passes (envelope checks, fade checks, note-timer checks,
+  missile fire/seek throttling).
+- Combined Player 0/1 and Missile 0/1 blocks into single dropdown-driven
+  block types (existing projects auto-migrate).
+
+=== 0.51.0 ===
+Replace Javatari preview with gopher2600-wasm; add keyboard/keypad mapping UI
+
+Swaps the emulator preview to a WebAssembly build of gopher2600 (real DPC+/CDF
+coprocessor support, unlike Javatari), pinned to NTSC to avoid a TV-spec
+reclassification bug that caused black-screen freezes on long frames.
+
+Keyboard input is now a configurable mapping instead of a hardcoded switch:
+main.go exposes setKeyMapping/setKeypadMode, and a new keyboard-mapping
+dialog (click a button, press a key) lets joystick and keypad bindings be
+customized and persisted, following the same click-to-capture pattern as
+this project's earlier Javatari-based key remapping.
+
+Also fixes a hover-highlight bug on every "No, don't delete" confirmation
+list item across the editors (missing the `link` prop Vuetify needs to
+apply its interactive/hover styling), and folds in the accumulated
+"own"-wording scrub and dev-var cleanup from recent sessions.
+
+Add unified GraphicEditorToolbar across all tabs; sound bank import picker; nav-drawer polish
+
+- Extract shared GraphicEditorToolbar.vue used by Sprites, Background,
+  Title, Score, and Text tabs, replacing per-tab toolbar duplication and
+  the fully-removed internal PixelEditor toolbar/resize-all-frames code
+- Fix disabled Paste buttons looking clickable across all graphic tabs
+- Fix toolbar clicks deselecting the active card
+- Add a checkbox picker dialog when importing a JSON sound bank
+- Bump Music/Title tab alpha labels, shrink alpha warning box to content
+- Flush the Actions tab to the top of the left nav drawer and replace the
+  selected tab's rounded pill with a square bar reaching the drawer edge
+
+Add Title screen animation/scroll fix, Quick colors + frame import on Title/Sprites tabs, Soft Colors theme, keyboard mapping fix
+
+- Fix Title screen card animation/scrolling: bmp_KEY_index was a raw ROM byte (writes silently no-op'd); now aliased to a real dev var so it lands in RAM
+- Add Quick colors palette to the Title tab, matching Backgrounds/Sprites
+- Add "Import card frames from image files" to Title screen bitmap cards, matching the Sprites tab's animation frame import
+- Fix Title screen row colors not resizing when a card's height changes via "Set height"
+- Add a per-card "Test this title screen" preview button using an isolated build pipeline that can't corrupt the real project's compiled ROM
+- Add a "Soft Colors" desaturated theme option
+- Fix keyboard mapping not applying until the Keyboard Mapping dialog was opened once
+- Give the Text/Score font tabs their own default zoom level
+
+=== 0.51.1 ===
+Fix Title Screen preview builds, project save/load, and reload-triggered UI resets; port shared undo/tool state and swatch styling
+
+- Give the Title Screen preview build its own dedicated bank (matching the Titlescreen Kernel docs) and only bump romsize when the project's real setting can't fit it
+- Fix .vcsgm save/load silently dropping Title Screen pages/graphics
+- Persist the last-loaded ROM across a page reload so "Refresh emulator" doesn't blank the preview
+- Fix collapse-all-on-first-visit re-collapsing every card after a page reload
+- Add shared quick-color-deletion undo and shared pixel tool selection across graphic editors
+- Add a shared square swatch style for Text/Score/Title background color pickers
+
+=== 0.51.2 ===
+Unify UI popup styling, zoom levels, and card delete/undo; drop abandoned 32x2/24x2 title screen kernel prototypes
+
+Polishes Set Height dialogs, popup borders/backgrounds, tab intro spacing, and toolbar padding across editors; adds per-tab zoom level overrides, a shared clear-colors action, and delete-with-undo for title screen/graphic cards.
+
+=== 0.51.4 ===
+Add Fill/Line/Rectangle/Oval graphic editor tools with hotkeys; fix emulator preview disappearing after crash recovery and title screen shape-tool trail bug; clean up build warnings
+
+Adds a flood-fill Bucket tool, a Shift-to-45-degree Line tool, and Shift-to-square/circle Rectangle and Oval tools to the shared graphic editor toolbar, with Photoshop-style hotkeys (B/E/G/L/R/O, '/Shift+', H) and equal icon spacing. Fixes App.vue's dead gopher2600-ready listener so the emulator pane re-syncs after an auto-recovered WASM crash, and fixes two PixelEditor.vue call sites that pushed spurious undo-history entries during a drag, which left a visible trail when drawing shapes on title screen cards with row colors. Also fixes named-export-from-default-export warnings, raises webpack's asset/entrypoint size limits, suppresses benign CSS chunk-order warnings, and raises the PWA precache size limit so the emulator WASM is actually cached.
+
+Rework Music tab to a single-song editor with a dedicated toolbar; fix note volume/envelope-graph/instrument defaults; darken Subdued Palette cards
+
+Replaces the Music tab's list of song cards with a single active-song editor (song select/add/duplicate combobox mirroring the existing pattern picker, persisted activeSongId), moves Export/Import/playback controls into their own sticky toolbar above a full-width divider, and turns the pattern editor into a collapsible section matching the Options screen's own header style instead of a nested card. Fixes a new pattern/song always starting collapsed, a newly placed note inheriting an unrelated instrument's custom volume instead of its own instrument's base volume, the envelope graph drawing a redundant overlapping point when Decay or Sustain length is zero, and the default sound card not being usable as a Music tab instrument out of the box. Also darkens Subdued Palette's card background ~2%.
+
+=== 0.51.5 ===
+Add Move/marquee selection tools, graphic flip, and background aspect-ratio fix
+
+- Add Rectangle/Circle/Polygon marquee selection and a Move tool to the
+  shared graphic toolbar, with Shift-to-add-to-selection, Escape to
+  deselect, and hotkeys (V/M/C/P) for all four
+- Add Flip Horizontal/Flip Vertical (Shift+H/Shift+V)
+- Move Undo/Redo to the front of the toolbar; dim disabled toolbar icons
+  so they read as inactive
+- Match the Music tab piano roll's Undo/Redo spacing/press style to the
+  graphic toolbar's, with a divider before the note-snap toggle
+- Fix Background pixels rendering stretched vertically at non-default
+  Superchip pfres (aspect ratio is a fixed 4:3, not row-count-dependent)
+- Bump Title tab to alpha 0.75
+
+Add sprites-follow-playfield-scroll blocks; restrict Background scroll direction under Superchip; reorder Background toolbox
+
+- Add "set/is scrolling with playfield" blocks for Player 0/1, Missile
+  0/1, and the Ball, reusing the existing vertical backgroundScrollRow
+  tracker directly to nudge a flagged sprite's Y on each Up/Down scroll
+  rather than keeping a separate per-sprite offset
+- Hide Left/Right from Background scroll's direction picker while
+  Superchip RAM is enabled (unsupported on that kernel), and default
+  the direction to Up instead of Left
+- Move "Draw screen" to the bottom of the Background toolbox category
+
+Add piano roll Move/Draw/Erase/Select tools; fix Blockly undo wiping all blocks; unify duplicate icon-button CSS app-wide
+
+- Add Move/Draw/Erase/Select tools to the Music tab's piano roll (same
+  V/B/E/M hotkeys and marquee-select icon as the Graphic Editor Toolbar),
+  with group-move for multi-selected notes and note-length-accurate
+  selection/highlighting
+- Fix note-drag lag and play the dragged note back on pitch/step change
+- Fix Blockly undo sometimes wiping every block: v-model resyncs were
+  firing real BLOCK_CREATE events that polluted Blockly's native undo
+  stack; now wrapped in Blockly.Events.disable()/enable()
+- Fix sprite "Player 1 set" blocks silently writing to Player 0's
+  variables when switching the Player dropdown after duplicating a block,
+  including Horizontal flip specifically missing its own translation
+- Fix sprite pixel aspect ratio (square at 1x) and background pixel
+  aspect ratio (now derived from the real per-background row count and
+  scanline height, not a flat constant)
+- Add a pixel-hover highlight to the Graphic Editor Toolbar's canvas
+- Unify duplicate icon-button CSS (size, flat/hover/disabled treatment)
+  scattered across Player/Background/Title/Score/Data/Sound/Music into
+  App.vue's shared stylesheet; fixes an invalid ">>>" selector bug that
+  had silently dropped this styling everywhere
+- Match the Music toolbar's buttons to the Graphic Editor Toolbar's exactly
+  (press-scale instead of color change, disabled dimming)
+- Add a Grid toggle to the Score/Text tabs' toolbars
+- Add Title tab alpha warning banner; minor Music tab spacing tweak
+
+=== 0.51.6 ===
+Fix a headless-build crash, music preview clicks, Blockly block mis-sizing, and toggle style inconsistencies; add an About tab Kernels/Minikernels section
+
+- Fix "stopTrackingAll is not a function" build crash: two ARG-visibility
+  sync extensions (sprites.js, input.js) called input.setVisible() before
+  checking whether the workspace was headless, not after
+- Fix an audible click at the start of every note during Music tab preview
+  playback: widen the buffer edge fade and add a scheduling lead-in to the
+  single-note preview, both needed for the fade ramps to actually render
+  before output starts
+- Fix Blockly blocks staying undersized after an undo, tab switch, or
+  project load: the IBM Plex Mono font-load re-render fix only ever ran
+  once, at the very first mount
+- Fix the piano roll marquee tool's selection highlight never showing and
+  bleeding over the row-label column during a drag
+- Unify toggle switches app-wide to the Options tab's plain (non-dense)
+  style
+- Add a message naming the configured ROM size to the end of a build
+  failure caused by exceeding it
+- Add a "Supported Kernels/Minikernels" section to the About tab, crediting
+  the Standard/Titlescreen/Text kernels

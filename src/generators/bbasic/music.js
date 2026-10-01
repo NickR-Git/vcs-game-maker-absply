@@ -11,7 +11,6 @@ import {useConfigurationStorage, useDimSoundFxPercentStorage, useDimSoundFxStora
   isMusicTrackMuted} from '../../hooks/project';
 import {effectiveTempo} from '../../utils/music-playback';
 import {audcHasTunableNotes, noteAudv} from '../../utils/music-notes';
-import {clampEnvelopeStages} from '../../utils/envelope';
 import {DEFAULT_DIM_PERCENT, dimVolume, registerEnvelopeConfig, NO_ENVELOPE_SENTINEL,
   getEnvelopeConfigs} from './soundfx';
 
@@ -829,8 +828,8 @@ const flattenPatternEvents = (song, pattern, channels, soundEffects, config = {}
   // fewest possible events instead of inheriting whatever chunk boundaries
   // its original pieces happened to have.
   const pushEvent = (channel, audv, audc, audf, frames, envelope = false, arpeggioSpeed = 0, arpeggioInterval = 0,
-      arpeggioRange = 0, notePlayedIndex = 0, envelopeAttack = 0, envelopeDecay = 0, envelopeSustain = 0,
-      envelopeRelease = 0, envelopeSustainLength = 0) => {
+      arpeggioRange = 0, notePlayedIndex = 0, envelopeAttack = 0, envelopeDecay = 0, envelopeDecayEnd = 0,
+      envelopeRelease = 0, envelopeSustainLength = 0, envelopeReleaseStart = 0) => {
     if (frames <= 0) return;
     const events = perChannel[channel];
     const prev = events[events.length - 1];
@@ -839,12 +838,13 @@ const flattenPatternEvents = (song, pattern, channels, soundEffects, config = {}
       prev.arpeggioSpeed === arpeggioSpeed && prev.arpeggioInterval === arpeggioInterval &&
       prev.arpeggioRange === arpeggioRange && prev.notePlayedIndex === notePlayedIndex &&
       prev.envelopeAttack === envelopeAttack && prev.envelopeDecay === envelopeDecay &&
-      prev.envelopeSustain === envelopeSustain && prev.envelopeRelease === envelopeRelease &&
-      prev.envelopeSustainLength === envelopeSustainLength) {
+      prev.envelopeDecayEnd === envelopeDecayEnd && prev.envelopeRelease === envelopeRelease &&
+      prev.envelopeSustainLength === envelopeSustainLength && prev.envelopeReleaseStart === envelopeReleaseStart) {
       prev.frames += frames;
     } else {
       events.push({audv, audc, audf, frames, envelope, arpeggioSpeed, arpeggioInterval, arpeggioRange,
-        notePlayedIndex, envelopeAttack, envelopeDecay, envelopeSustain, envelopeRelease, envelopeSustainLength});
+        notePlayedIndex, envelopeAttack, envelopeDecay, envelopeDecayEnd, envelopeRelease, envelopeSustainLength,
+        envelopeReleaseStart});
     }
   };
 
@@ -916,7 +916,8 @@ const flattenPatternEvents = (song, pattern, channels, soundEffects, config = {}
         envelope: !!soundEffect.envelope,
         envelopeAttack: soundEffect.envelopeAttack,
         envelopeDecay: soundEffect.envelopeDecay,
-        envelopeSustain: soundEffect.envelopeSustain,
+        envelopeDecayEnd: soundEffect.envelopeDecayEnd,
+        envelopeReleaseStart: soundEffect.envelopeReleaseStart,
         envelopeSustainLength: soundEffect.envelopeSustainLength,
         envelopeRelease: soundEffect.envelopeRelease,
         arpeggioSpeed,
@@ -986,12 +987,14 @@ const flattenPatternEvents = (song, pattern, channels, soundEffects, config = {}
         }
         pushEvent(channel, note.audv, note.audc, note.audf, lengthFrames, note.envelope, note.arpeggioSpeed,
             note.arpeggioInterval, note.arpeggioRange, note.notePlayedIndex, note.envelopeAttack,
-            note.envelopeDecay, note.envelopeSustain, note.envelopeRelease, note.envelopeSustainLength);
+            note.envelopeDecay, note.envelopeDecayEnd, note.envelopeRelease, note.envelopeSustainLength,
+            note.envelopeReleaseStart);
         if (hasTail) {
           const bg = openNote.note;
           pushEvent(channel, bg.audv, bg.audc, bg.audf, openNote.endFrames - (startFrames + lengthFrames),
               bg.envelope, bg.arpeggioSpeed, bg.arpeggioInterval, bg.arpeggioRange, bg.notePlayedIndex,
-              bg.envelopeAttack, bg.envelopeDecay, bg.envelopeSustain, bg.envelopeRelease, bg.envelopeSustainLength);
+              bg.envelopeAttack, bg.envelopeDecay, bg.envelopeDecayEnd, bg.envelopeRelease, bg.envelopeSustainLength,
+              bg.envelopeReleaseStart);
           openNote = {
             event: perChannel[channel][perChannel[channel].length - 1], note: bg,
             startFrames: startFrames + lengthFrames, endFrames: openNote.endFrames,
@@ -1015,7 +1018,7 @@ const flattenPatternEvents = (song, pattern, channels, soundEffects, config = {}
       // ENVELOPE_CHANGE_SENTINEL marker when it actually changes.
       pushEvent(channel, note.audv, note.audc, note.audf, lengthFrames, note.envelope, note.arpeggioSpeed,
           note.arpeggioInterval, note.arpeggioRange, note.notePlayedIndex, note.envelopeAttack, note.envelopeDecay,
-          note.envelopeSustain, note.envelopeRelease, note.envelopeSustainLength);
+          note.envelopeDecayEnd, note.envelopeRelease, note.envelopeSustainLength, note.envelopeReleaseStart);
       cursorFrames = startFrames + lengthFrames;
       openNote = note.audv > 0 ?
         {event: perChannel[channel][perChannel[channel].length - 1], note, startFrames, endFrames: cursorFrames} :
@@ -1065,7 +1068,8 @@ const flattenPatternEvents = (song, pattern, channels, soundEffects, config = {}
       events.some((event) => event.envelope);
     chunked[channel] = [];
     events.forEach(({audv, audc, audf, frames, envelope, arpeggioSpeed, arpeggioInterval, arpeggioRange,
-      notePlayedIndex, envelopeAttack, envelopeDecay, envelopeSustain, envelopeRelease, envelopeSustainLength}) => {
+      notePlayedIndex, envelopeAttack, envelopeDecay, envelopeDecayEnd, envelopeRelease, envelopeSustainLength,
+      envelopeReleaseStart}) => {
       // Only THIS event's  arpeggio use caps it to 15 frames - a rest or
       // non-arpeggiating note on the same channel isn't dragged down to that
       // cap too (see generateMusicChecks' durationRead, which branches on
@@ -1091,9 +1095,10 @@ const flattenPatternEvents = (song, pattern, channels, soundEffects, config = {}
           arpeggioSpeed, arpeggioInterval, arpeggioRange, notePlayedIndex,
           envelopeAttack: isFinalChunk ? envelopeAttack : 0,
           envelopeDecay: isFinalChunk ? envelopeDecay : 0,
-          envelopeSustain: isFinalChunk ? envelopeSustain : 0,
+          envelopeDecayEnd: isFinalChunk ? envelopeDecayEnd : 0,
           envelopeRelease: isFinalChunk ? envelopeRelease : 0,
           envelopeSustainLength: isFinalChunk ? envelopeSustainLength : 0,
+          envelopeReleaseStart: isFinalChunk ? envelopeReleaseStart : 0,
         });
       }
     });
@@ -1213,8 +1218,8 @@ const eventsToPages = (events, getInstrumentIndex) => {
   // a following rest or non-enveloped note, spuriously writing to AUDV.
   let lastEnvelopeSelector = NO_ENVELOPE_SENTINEL;
   events.forEach((event) => {
-    const {audv, audc, arpeggioSpeed, frames, envelope, envelopeAttack, envelopeDecay, envelopeSustain,
-      envelopeRelease, envelopeSustainLength} = event;
+    const {audv, audc, arpeggioSpeed, frames, envelope, envelopeAttack, envelopeDecay, envelopeDecayEnd,
+      envelopeRelease, envelopeSustainLength, envelopeReleaseStart} = event;
     if (Number(audv) > 0) {
       const instrumentByte = Number(audc) | (arpeggioSpeed << 4);
       if (instrumentByte !== lastInstrumentByte) {
@@ -1222,10 +1227,18 @@ const eventsToPages = (events, getInstrumentIndex) => {
         lastInstrumentByte = instrumentByte;
       }
     }
+    // The RAW envelopeAttack/Decay/SustainLength/Release values
+    // (registerEnvelopeConfig does its clamping internally - see its
+    // comment in generators/bbasic/soundfx.js), with loopSustain explicitly
+    // on: a note placed in the piano roll longer than its instrument's
+    // envelope loops the Decay End -> Release Start ramp to fill the gap
+    // instead of falling silent (see utils/envelope.js's comment on
+    // clampEnvelopeStages for why this is Music-only, not shared with
+    // Sound Effects).
     const envelopeSelector = envelope ? registerEnvelopeConfig({
-      ...clampEnvelopeStages({attack: envelopeAttack, decay: envelopeDecay, sustainLength: envelopeSustainLength,
-        release: envelopeRelease, totalFrames: frames}),
-      sustainPercent: envelopeSustain, peakVolume: Number(audv),
+      attack: envelopeAttack, decay: envelopeDecay, sustainLength: envelopeSustainLength,
+      release: envelopeRelease, decayEndPercent: envelopeDecayEnd, releaseStartPercent: envelopeReleaseStart,
+      peakVolume: Number(audv), totalFrames: frames, loopSustain: true,
     }) : NO_ENVELOPE_SENTINEL;
     if (envelopeSelector !== lastEnvelopeSelector) {
       items.push({marker: true, instrument: false, index: envelopeSelector});

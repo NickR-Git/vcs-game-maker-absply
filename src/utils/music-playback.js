@@ -138,16 +138,22 @@ const arpeggioPitchVariants = (audf, arpeggioInterval) => {
 // hardest edge of the waveform enough to not pop.
 const CLICK_GUARD_SECONDS = 0.002;
 const buildGain = (context, {peakGain, peakVolume, startTime, seconds, envelope, envelopeAttack,
-  envelopeDecay, envelopeSustain, envelopeSustainLength, envelopeRelease, dimMultiplier = 1,
+  envelopeDecay, envelopeDecayEnd, envelopeReleaseStart, envelopeSustainLength, envelopeRelease, dimMultiplier = 1,
   destination = getMasterDestination(context)}) => {
   const gainNode = context.createGain();
   let endValue;
   if (envelope) {
     const totalFrames = Math.max(1, Math.round(seconds * FRAMES_PER_SECOND));
+    // loopSustain: true - this is the Music tab's note preview (see this
+    // file's playInstrumentHit), where a note longer than its instrument's
+    // envelope loops Sustain to fill the gap instead of falling silent
+    // (see utils/envelope.js's comment on clampEnvelopeStages for why
+    // that's Music-only, not shared with the Sound tab's previewSoundEffect
+    // in utils/sound-preview.js).
     const curve = buildEnvelopeCurve({
-      attack: envelopeAttack, decay: envelopeDecay, sustainPercent: envelopeSustain,
-      sustainLength: envelopeSustainLength, release: envelopeRelease,
-      peakVolume, totalFrames,
+      attack: envelopeAttack, decay: envelopeDecay, decayEndPercent: envelopeDecayEnd,
+      releaseStartPercent: envelopeReleaseStart, sustainLength: envelopeSustainLength, release: envelopeRelease,
+      peakVolume, totalFrames, loopSustain: true,
     });
     curve.forEach((step, i) => {
       gainNode.gain.setValueAtTime(step / 15 * 0.3 * dimMultiplier, startTime + i / FRAMES_PER_SECOND);
@@ -287,15 +293,15 @@ const buildBufferCached = (context, approximation, chipClockHz, seconds) => {
 //     arpeggiating buffer-based hit schedules several short back-to-back
 //     segments instead - see below).
 const playInstrumentHit = (context, {audc, audf, audv, arpeggioSpeed, arpeggioInterval, arpeggioRange, startTime,
-  seconds, envelope, envelopeAttack, envelopeDecay, envelopeSustain, envelopeSustainLength, envelopeRelease,
-  dimMultiplier = 1, destination}) => {
+  seconds, envelope, envelopeAttack, envelopeDecay, envelopeDecayEnd, envelopeReleaseStart, envelopeSustainLength,
+  envelopeRelease, dimMultiplier = 1, destination}) => {
   const approximation = AUDC_APPROXIMATIONS[`${audc}`];
   if (!approximation) return [];
 
   const peakGain = Math.min(1, Math.max(0, Number(audv) || 0) / 15) * 0.3;
   const gainNode = buildGain(context, {peakGain, peakVolume: audv, startTime, seconds, envelope,
-    envelopeAttack, envelopeDecay, envelopeSustain, envelopeSustainLength, envelopeRelease, dimMultiplier,
-    destination});
+    envelopeAttack, envelopeDecay, envelopeDecayEnd, envelopeReleaseStart, envelopeSustainLength, envelopeRelease,
+    dimMultiplier, destination});
 
   const buildBuffer = (chipClockHz, segmentSeconds) =>
     buildBufferCached(context, approximation, chipClockHz, segmentSeconds);
@@ -656,7 +662,8 @@ const schedulePattern = (context, pattern, soundEffects, startTime, tempo, isTra
         envelope: !!soundEffect.envelope,
         envelopeAttack: soundEffect.envelopeAttack,
         envelopeDecay: soundEffect.envelopeDecay,
-        envelopeSustain: soundEffect.envelopeSustain,
+        envelopeDecayEnd: soundEffect.envelopeDecayEnd,
+        envelopeReleaseStart: soundEffect.envelopeReleaseStart,
         envelopeSustainLength: soundEffect.envelopeSustainLength,
         envelopeRelease: soundEffect.envelopeRelease,
       });
@@ -678,8 +685,8 @@ const schedulePattern = (context, pattern, soundEffects, startTime, tempo, isTra
       startTime: startTime + (audibleStartUnits - startUnits) * unitSeconds,
       seconds: (segEndUnits - audibleStartUnits) * unitSeconds,
       envelope: note.envelope, envelopeAttack: note.envelopeAttack, envelopeDecay: note.envelopeDecay,
-      envelopeSustain: note.envelopeSustain, envelopeSustainLength: note.envelopeSustainLength,
-      envelopeRelease: note.envelopeRelease,
+      envelopeDecayEnd: note.envelopeDecayEnd, envelopeReleaseStart: note.envelopeReleaseStart,
+      envelopeSustainLength: note.envelopeSustainLength, envelopeRelease: note.envelopeRelease,
       destination: note.trackGain,
     }));
   };

@@ -1,12 +1,12 @@
 <template>
-  <v-dialog v-model="open" width="400">
+  <v-menu v-model="open" top>
     <template v-slot:activator="{ on, attrs }">
       <v-btn
         :title="activatorTitle"
         icon
         small
         :class="['delete-icon-btn', iconBtnClass]"
-        v-bind="attrs"
+        v-bind="{...attrs, ...$attrs}"
         v-on="on"
       >
         <v-icon>mdi-delete</v-icon>
@@ -30,15 +30,27 @@
         </v-list-item>
       </v-list>
     </v-card>
-  </v-dialog>
+  </v-menu>
 </template>
 <script>
 // Shared by every tab's own "Delete this X?" confirm popup (Backgrounds,
 // Sprites, Title screens, Sound, Music, Data, Text) - previously each tab
-// duplicated its own near-identical v-menu block. A real v-dialog (not a
-// v-menu) so it darkens the rest of the app the same way KeyMappingDialog.vue
-// already does, rather than floating over an otherwise-interactive page.
+// duplicated a near-identical inline v-menu block. A real v-menu
+// (not a v-dialog, tried first) - a real reported requirement ("the popup
+// should still appear near where the delete button is, like the old
+// version"): v-dialog always centres itself in the viewport regardless of
+// its activator's position, losing the anchored-right-next-to-the-button
+// placement every inline version already had.
 export default {
+  // Any attribute a caller passes that isn't one of the declared props below
+  // (e.g. TextEditor.vue's "absolute top right" positioning props on its
+  // activator button) lands in $attrs instead - false here stops Vue from
+  // also dumping those onto this component's root element (the v-dialog,
+  // where an "absolute"/"top"/"right" prop would mean something entirely
+  // different, or nothing at all), so they can be forwarded deliberately
+  // (see the activator v-btn's "v-bind" below) to the one element they're
+  // actually meant for instead.
+  inheritAttrs: false,
   props: {
     // The confirmation question, e.g. "Delete this frame?".
     title: {type: String, required: true},

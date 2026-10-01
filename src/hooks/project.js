@@ -218,8 +218,6 @@ const useBooleanAppSetting = (key, defaultValue = false) => {
 // space instead of leaving an empty 200px gap.
 export const useHideSidebarStorage = () =>
   useBooleanAppSetting('vcs-game-maker.hideSidebar');
-export const useBlocklyControlsHorizontalStorage = () =>
-  useBooleanAppSetting('vcs-game-maker.blocklyControlsHorizontal');
 // Same "standing app preference" reasoning as the others here - applies a
 // CSS filter across every block (workspace canvas AND the toolbox/flyout,
 // see BlocklyComponent.vue's own .blocklyDiv binding) rather than touching
@@ -227,6 +225,13 @@ export const useBlocklyControlsHorizontalStorage = () =>
 // theme/category colours are actually in play.
 export const useDesaturateBlocklyColorsStorage = () =>
   useBooleanAppSetting('vcs-game-maker.desaturateBlocklyColors');
+// App.vue's .dark-mode class - a blanket filter: invert(1) hue-rotate(180deg)
+// on the whole app, Dark Reader's "filter" dark-theme technique, with a
+// handful of elements (the emulator screen, pixel editor canvases, color
+// swatches, the logo) counter-inverted back to their true colors - see
+// App.vue's comment on .dark-mode for the full reasoning.
+export const useDarkModeStorage = () =>
+  useBooleanAppSetting('vcs-game-maker.darkMode');
 export const useHideDescriptionTextStorage = () =>
   useBooleanAppSetting('vcs-game-maker.hideDescriptionText');
 export const useMuteBlocklySoundsStorage = () =>

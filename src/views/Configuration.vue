@@ -216,9 +216,9 @@
           class="option-switch"
         />
         <v-switch
-          v-model="blocklyControlsHorizontal"
-          label="Arrange Blockly controls horizontally"
-          hint="When off (default), the zoom in/out/reset/grid-snap buttons on the Actions tab's Blockly canvas are stacked vertically along the right edge. When on, they're arranged in a row along the bottom edge instead."
+          v-model="darkMode"
+          label="Dark Mode"
+          hint="Inverts the app's colors for a dark theme. Combines with Subdued Palette below."
           persistent-hint
           class="option-switch"
         />
@@ -266,8 +266,8 @@
 import {computed, defineComponent, ref, watch} from '@vue/composition-api';
 
 import {USER_VARIABLE_LETTERS_WITHOUT_SUPERCHIP} from '../generators/bbasic';
-import {useBackgroundsStorage, useBlocklyControlsHorizontalStorage, useConfigurationStorage,
-  useDesaturateBlocklyColorsStorage, useErrorStorage,
+import {useBackgroundsStorage, useConfigurationStorage,
+  useDarkModeStorage, useDesaturateBlocklyColorsStorage, useErrorStorage,
   useHideDescriptionTextStorage, useHideSidebarStorage, useLoadLastProjectStorage, useMuteBlocklySoundsStorage,
   useProjectAutoIncrementVersionStorage, useStellaPathStorage} from '../hooks/project';
 import {BANK_COUNT_BY_ROMSIZE, countUsedVariables, usesPlayer0RainbowColors} from '../hooks/rom';
@@ -354,7 +354,7 @@ export default defineComponent({
     // every time you switched or started a new project.
     const muteBlocklySounds = useMuteBlocklySoundsStorage();
     const hideSidebar = useHideSidebarStorage();
-    const blocklyControlsHorizontal = useBlocklyControlsHorizontalStorage();
+    const darkMode = useDarkModeStorage();
     const desaturateBlocklyColors = useDesaturateBlocklyColorsStorage();
     const hideDescriptionText = useHideDescriptionTextStorage();
     // "Never show the left sidebar" is disabled (see its own :disabled
@@ -584,7 +584,6 @@ export default defineComponent({
 
       loadLastProject.value = false;
       muteBlocklySounds.value = false;
-      blocklyControlsHorizontal.value = false;
       hideDescriptionText.value = false;
       projectAutoIncrementVersion.value = false;
     };
@@ -601,7 +600,7 @@ export default defineComponent({
       player0RainbowColorsActive,
       enableMissile0BlankLines,
       loadLastProject,
-      muteBlocklySounds, hideSidebar, blocklyControlsHorizontal, desaturateBlocklyColors,
+      muteBlocklySounds, hideSidebar, darkMode, desaturateBlocklyColors,
       hideDescriptionText,
       stellaPathStorage, isElectron, handleBrowseForStella,
       isSectionCollapsed,
@@ -700,11 +699,27 @@ export default defineComponent({
 /* Reads as a sub-option of the Superchip switch above it, so it's indented to
    line up under that switch's label text rather than its toggle track.
    margin-top adds a bit of breathing room from that switch's hint text
-   directly above - the two otherwise sat flush against each other. */
+   directly above - the two otherwise sat flush against each other. The
+   field itself stays full-width (no max-width here) - only the actual
+   input BOX is capped, via the deep .v-input__slot rule below - a real
+   reported request: the number box (same width as MusicEditor.vue's
+   .tempo-field) shouldn't stretch the whole window, but the hint text
+   underneath it still should, same as every other field's hint on this
+   tab, rather than wrapping narrowly beneath a tiny box. */
 .pfres-field {
   margin-left: 46px;
   margin-top: 12px;
-  max-width: calc(100% - 46px);
+}
+
+/* >>> (deep combinator) reaches Vuetify's internal .v-input__slot - the
+   actual bordered input box - without pulling .v-text-field__details (the
+   hint/error text right below it, a SIBLING of .v-input__slot, not a
+   descendant) along with it, which capping .pfres-field itself (see the
+   comment above) would otherwise do, since that outer element is the
+   shared ancestor of both. 110px matches MusicEditor.vue's .tempo-field's
+   fixed width. */
+.pfres-field >>> .v-input__slot {
+  max-width: 110px;
 }
 
 /* See App.vue's "Hide small description text" support - with that
@@ -715,13 +730,16 @@ export default defineComponent({
   margin-top: 0;
 }
 
-/* Same reasoning as .pfres-field above, one level further down - it reads
-   as a sub-option of the "Override playfield row height" switch right
-   above it. */
+/* Same reasoning as .pfres-field above (including the deep .v-input__slot
+   cap), one level further down - it reads as a sub-option of the "Override
+   playfield row height" switch right above it. */
 .pfrowheight-field {
   margin-left: 46px;
   margin-top: 12px;
-  max-width: calc(100% - 46px);
+}
+
+.pfrowheight-field >>> .v-input__slot {
+  max-width: 110px;
 }
 
 .hide-description-text .pfrowheight-field {
