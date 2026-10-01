@@ -1497,6 +1497,19 @@ export default {
   margin-top: 0;
 }
 
+/* Shared by every alpha-stage tab's own warning banner, directly under its
+   v-card-title (Music, Title) - shrinks to fit the warning text itself
+   instead of stretching the full card width (Vuetify's v-alert default);
+   width: fit-content keeps its own internal padding symmetric left/right
+   either way, so this doesn't need any padding override of its own to
+   match. Moved here (not left as a MusicEditor.vue-only scoped rule) once
+   a second tab needed the exact same treatment - see .tab-intro-section's
+   own comment just below for the same "duplicated, then shared" history. */
+.alpha-notice {
+  width: fit-content;
+  margin: 0 16px 8px;
+}
+
 /* The v-card-text wrapping every tab's intro paragraph (Background/Sprites/
    Title screen/Sound/Music/Score/Text/Data/Project/Generated) - one shared
    class/rule here instead of each tab picking its own padding-bottom to
@@ -1993,6 +2006,122 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
 
 .import-icon-btn::before {
   background-color: transparent !important;
+}
+
+/* Shared 26x26 flat icon-button sizing, moved here once it turned up
+   byte-identical under 6 different per-tab class names (PlayerEditor.vue's
+   .player-icon-btn-size, reused verbatim as-is by BackgroundEditor.vue;
+   TitleScreenEditor.vue's .titlescreen-icon-btn-size; DataEditor.vue's
+   .data-icon-btn-size; SoundFXEditor.vue's .soundfx-icon-btn-size;
+   MusicEditor.vue's .music-icon-btn-size) - scoped CSS can't share a rule
+   across components even under the exact same class name (each component's
+   <style scoped> only ever matches elements IT rendered), so every one of
+   those tabs had independently copy-pasted this same recipe into its own
+   local stylesheet. Kept as two groups (not one) since the two real
+   differences that exist are margin (Player/Background/Title use a plain
+   0; Data/Sound/Music use 0 1px, each tuned for how tightly packed that
+   tab's own toolbar row is) and whether a disabled button dims via opacity
+   (only Player/Background/Title ever needed that fix - see the next rule
+   below). Every tab keeps its own original class name in its own template;
+   only the duplicated DECLARATIONS moved here. */
+.player-icon-btn-size,
+.titlescreen-icon-btn-size {
+  min-width: 0;
+  height: 26px !important;
+  width: 26px !important;
+  margin: 0;
+}
+
+.data-icon-btn-size,
+.soundfx-icon-btn-size,
+.music-icon-btn-size {
+  min-width: 0;
+  height: 26px !important;
+  width: 26px !important;
+  margin: 0 1px;
+}
+
+/* No ">>>" here (unlike every per-tab scoped copy this replaced) -
+   deep-combinator syntax only means anything inside a component's own
+   <style scoped> block (where it pierces that component's own scoping
+   attribute boundary); this is a plain unscoped block with no such
+   boundary to pierce in the first place. ">>>" was mistakenly kept when
+   these rules were first moved here - a bare ">>>" is not valid CSS syntax
+   outside Vue's own scoped-style preprocessing, so every selector using it
+   failed to parse and the browser silently dropped the whole rule,
+   confirmed directly against the compiled output - a real reported bug
+   ("the import/export buttons on the music tab look larger than they do
+   on the graphic editor toolbar" - actually every tab's icons silently
+   losing this sizing, not just Music's). */
+.player-icon-btn-size .v-icon,
+.titlescreen-icon-btn-size .v-icon,
+.data-icon-btn-size .v-icon,
+.soundfx-icon-btn-size .v-icon,
+.music-icon-btn-size .v-icon {
+  font-size: 19px !important;
+}
+
+/* Vuetify's disabled styling normally dims a button's icon color, but the
+   icon's rest-state color elsewhere is forced with !important (matching
+   PixelEditor.vue's toolbar icons), which also blocks Vuetify's disabled
+   color from ever showing through - confirmed as a real reported bug (a
+   disabled Paste button read as clickable, no different from the enabled
+   Copy button next to it). Opacity reaches it without needing to fight
+   that !important. Only Player/Background/Title ever hit this specific bug
+   (Data/Sound/Music's own disabled buttons weren't reported this way) -
+   left scoped to just those two class names rather than widening it to
+   every icon-btn-size tab speculatively. */
+.player-icon-btn-size.v-btn--disabled,
+.titlescreen-icon-btn-size.v-btn--disabled {
+  opacity: 0.35;
+}
+
+/* mdi-delete's own glyph sits smaller within its own icon box than this
+   app's other toolbar icons at the same font-size (more built-in padding
+   around the trash-can shape), reading noticeably smaller alongside them -
+   bumped a couple pixels past the shared 19px above so a delete button
+   reads as the same visual size as its neighbors at a glance. Same
+   Player/Background/Title-only scope as the disabled-opacity rule above. */
+.delete-icon-btn.player-icon-btn-size .v-icon,
+.delete-icon-btn.titlescreen-icon-btn-size .v-icon {
+  font-size: 21px !important;
+}
+
+/* Flat, fade-in-on-hover icon-button treatment (no grey box/elevation, dim
+   at rest, darker on hover) instead of Vuetify's default hover circle -
+   moved here once MusicEditor.vue's .music-flat-icon-btn and
+   TitleScreenEditor.vue's .titlescreen-play-btn turned up byte-identical
+   for these 4 rules (confirmed directly against compiled CSS - see
+   TitleScreenEditor.vue's own comment). Each file's own "currently active/
+   playing" persistent tint (:active, loading, or an explicit active class)
+   stays local to that file - those trigger conditions genuinely differ per
+   tab, even though they land on the same blue. */
+.music-flat-icon-btn,
+.titlescreen-play-btn {
+  background-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.music-flat-icon-btn::before,
+.titlescreen-play-btn::before {
+  display: none;
+}
+
+/* transition includes "transform 0.08s ease" (not just "color") to exactly
+   match GraphicEditorToolbar.vue's own .get-tools >>> .v-btn .v-icon rule -
+   MusicEditor.vue's own :active rule (its own <style scoped> block) applies
+   a transform: scale() press effect that needs this same transition to
+   animate smoothly, the same way Graphic's own buttons do. Harmless on
+   titlescreen-play-btn, which never sets a transform of its own. */
+.music-flat-icon-btn .v-icon,
+.titlescreen-play-btn .v-icon {
+  color: rgba(0, 0, 0, 0.38) !important;
+  transition: color 0.15s ease, transform 0.08s ease;
+}
+
+.music-flat-icon-btn:hover .v-icon,
+.titlescreen-play-btn:hover .v-icon {
+  color: rgba(0, 0, 0, 0.87) !important;
 }
 </style>
 <style scoped>

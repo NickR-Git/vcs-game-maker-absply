@@ -223,25 +223,36 @@
                   </div>
                 </v-list-item-title>
                 <v-list-item-subtitle v-if="!isCollapsed(background)">
-                  <!-- aspectRatio is a fixed 4:3 (not (32 / background.pixels.length) *
-                       (11/24), which this used to be) - the real playfield's TOTAL height
-                       stays a constant 96 scanlines regardless of pfres/row count (see
-                       pfRowDivisorFor's own comment in utils/playfield-coords.js: each
-                       row's real height is 96/pfres scanlines, so pfres rows * 96/pfres
-                       scanlines/row = 96 always) - only how many rows subdivide that same
-                       fixed height changes, not the height itself. Dividing by the CURRENT
-                       row count instead (the old formula) only happened to give the right
-                       4:3 ratio at exactly the non-Superchip default (11 rows, where
-                       32/11 * 11/24 reduces to 32/24 = 4/3) - at any other pfres, it
-                       scaled the whole canvas taller or shorter for no reason, confirmed
-                       as a real reported bug ("background graphic looks stretched
-                       vertically when Superchip pfres is higher than the default"). -->
+                  <!-- aspectRatio is (32 * PF_COLUMN_WIDTH_PX) / (background.pixels.length *
+                       pfRowDivisorFor(config)) - real screen width (32 columns *
+                       PF_COLUMN_WIDTH_PX = 160px, always, regardless of pfres/Superchip - see
+                       that constant's own comment in utils/playfield-coords.js) over THIS
+                       background's own real total height (its own row count * that row
+                       count's real scanline height - pfRowDivisorFor's own comment explains
+                       why that per-row height isn't a flat constant either). Deliberately NOT
+                       a flat ratio (an earlier fix used a fixed 96-scanline total, assuming
+                       every background's own row count always exactly matches pfres) - that
+                       broke the one case a background's row count DOESN'T match pfres: a
+                       background the user explicitly resized taller via "Set height"
+                       (background.customHeight - see reflowBackgroundsToHeight's own comment
+                       in blocks/background.js, which deliberately leaves such a background's
+                       row count alone on every pfres change) genuinely has MORE real scanlines
+                       than a fixed 96 assumes, so it needs its own actual row count factored
+                       back in - confirmed as a real reported bug ("aspect ratio is not
+                       updating when background graphic is taller than pfres value"). An
+                       ordinary (non-custom-height) background's own row count already tracks
+                       pfres automatically, so this still lands on the exact same ratio that
+                       background would have gotten from a pfres-only calculation - this isn't
+                       a regression back to the ORIGINAL row-count-dependent bug (dividing by
+                       row count while using a FIXED per-row height, which is what actually
+                       broke for other pfres values before - see git history), since
+                       pfRowDivisorFor itself already accounts for pfres correctly. -->
                   <div class="pixel-editor-container" :style="{width: editorWidth, maxWidth: editorWidth}">
                     <pixel-editor
                       :ref="pixelEditorRefKey(background)"
                       :width="32"
                       :height="background.pixels.length"
-                      :aspectRatio="4 / 3"
+                      :aspectRatio="backgroundAspectRatio(background)"
                       name="background"
                       :value="background.pixels"
                       fgColor="orange"
@@ -325,6 +336,7 @@ import {useBackgroundsStorage, useColorPaletteStorage, useConfigurationStorage,
   usePixelGridOverlayStorage, usePixelGridLabelsStorage} from '../hooks/project';
 import {useEditorZoom} from '../hooks/zoom';
 import {colorByteToCss} from '../utils/palette';
+import {PF_COLUMN_WIDTH_PX, pfRowDivisorFor} from '../utils/playfield-coords';
 import {resizePixelMatrixHeight} from '../utils/pixels';
 import {DEFAULT_BACKGROUNDS, DEFAULT_ROW_COLOR, clearRowColors, effectiveBackgroundRows,
   processBackgroundStorageDefaults} from '../blocks/background';
@@ -358,6 +370,13 @@ export default defineComponent({
     const configurationStorage = useConfigurationStorage();
     const zoom = useEditorZoom('background');
     const editorWidth = computed(() => `${Math.round(EDITOR_BASE_WIDTH * zoom.value)}px`);
+    // See the template's own comment on where this background pixel editor's
+    // aspectRatio comes from - real screen width (always 160px) over THIS
+    // background's own real total height (its own row count, not
+    // necessarily pfres's - see customHeight - times that row count's real
+    // scanline height).
+    const backgroundAspectRatio = (background) =>
+      (32 * PF_COLUMN_WIDTH_PX) / (background.pixels.length * pfRowDivisorFor(configurationStorage.value));
     // Shared with PlayerEditor.vue's  Player 0/1 tabs (see
     // PixelGridToggle.vue's  comment).
     const showPixelGrid = usePixelGridOverlayStorage();
@@ -712,7 +731,7 @@ export default defineComponent({
       instance.proxy.$forceUpdate();
     };
 
-    return {selectedCardId, selectCard, deselectCard,
+    return {selectedCardId, selectCard, deselectCard, backgroundAspectRatio,
       state, handleChildChange, handleBackgroundPixelsInput, handleAddBackground, handleDeleteBackground,
       selectedQuickColor, quickColorPalette,
       handleRowColorsInput, handleClearRowColors, editorRowColors, isCollapsed, toggleCollapsed,
@@ -936,34 +955,12 @@ export default defineComponent({
   pointer-events: none;
 }
 
-/* margin: 0 (not "0 1px") to match PixelEditor.vue's  base toolbar
-   button trim - see its own comment on why every bit of width matters for
-   this row to fit without wrapping at higher zoom. */
-.player-icon-btn-size {
-  min-width: 0;
-  height: 26px !important;
-  width: 26px !important;
-  margin: 0;
-}
-
-/* Same fix as PlayerEditor.vue's identical rule - without it, a disabled
-   Paste button read as clickable, no different from the enabled Copy
-   button next to it. */
-.player-icon-btn-size.v-btn--disabled {
-  opacity: 0.35;
-}
-
-.player-icon-btn-size >>> .v-icon {
-  font-size: 19px !important;
-}
-
-/* Same reasoning/values as PlayerEditor.vue's  identical rule -
-   mdi-delete reads visually smaller than mdi-content-copy/mdi-content-paste
-   at the same font-size, so it needs a couple extra pixels to look the same
-   size as its neighbors at a glance. */
-.delete-icon-btn.player-icon-btn-size >>> .v-icon {
-  font-size: 21px !important;
-}
+/* .player-icon-btn-size's own size/disabled-opacity/icon-font-size rules,
+   and .delete-icon-btn.player-icon-btn-size's own mdi-delete size bump -
+   see App.vue's shared, unscoped copy (moved there once confirmed
+   byte-identical to PlayerEditor.vue's own copy of this exact class name -
+   scoped CSS can't share a rule across components even under the same
+   class name, so each tab using it still has to apply it here). */
 
 /* The "Set height" button passed into GraphicEditorToolbar.vue's own
    "after-tools" slot - see PlayerEditor.vue's identical rule for why this

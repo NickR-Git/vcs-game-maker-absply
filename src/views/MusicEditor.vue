@@ -441,16 +441,33 @@
                             >
                               <v-icon small>mdi-content-paste</v-icon>
                             </v-btn>
-                            <v-btn
-                              v-if="activePattern(song).tracks.length > 1"
-                              icon
-                              small
-                              class="music-flat-icon-btn music-icon-btn-size"
-                              title="Remove this instrument row"
-                              @click="() => handleDeleteTrack(activePattern(song), track)"
-                            >
-                              <v-icon small>mdi-delete</v-icon>
-                            </v-btn>
+                            <v-menu v-if="activePattern(song).tracks.length > 1" top>
+                              <template v-slot:activator="{ on, attrs }">
+                                <v-btn
+                                  icon
+                                  small
+                                  class="music-flat-icon-btn music-icon-btn-size"
+                                  title="Remove this instrument row"
+                                  v-bind="attrs"
+                                  v-on="on"
+                                >
+                                  <v-icon small>mdi-delete</v-icon>
+                                </v-btn>
+                              </template>
+                              <v-card>
+                                <v-card-title>Remove this instrument row?</v-card-title>
+                                <v-list>
+                                  <v-list-item @click="() => handleDeleteTrack(activePattern(song), track)">
+                                    <v-list-item-icon><v-icon>mdi-check</v-icon></v-list-item-icon>
+                                    <v-list-item-title>Yes, remove</v-list-item-title>
+                                  </v-list-item>
+                                  <v-list-item link>
+                                    <v-list-item-icon><v-icon>mdi-cancel</v-icon></v-list-item-icon>
+                                    <v-list-item-title>No, don't remove</v-list-item-title>
+                                  </v-list-item>
+                                </v-list>
+                              </v-card>
+                            </v-menu>
                           </div>
                         </div>
                       </div>
@@ -499,6 +516,49 @@
                             @click="() => handleRedoPattern(song, activePattern(song))"
                           >
                             <v-icon small>mdi-redo</v-icon>
+                          </v-btn>
+                          <v-divider class="music-toolbar-divider" vertical />
+                          <v-btn
+                            icon
+                            small
+                            title="Move (V, drag a placed note to a different pitch/step)"
+                            class="music-flat-icon-btn music-icon-btn-size piano-roll-tool-btn"
+                            :class="{'music-icon-btn-active': pianoRollTool === 'move'}"
+                            @click="() => setPianoRollTool('move')"
+                          >
+                            <v-icon small>mdi-cursor-move</v-icon>
+                          </v-btn>
+                          <v-btn
+                            icon
+                            small
+                            title="Draw (B, click to place a note)"
+                            class="music-flat-icon-btn music-icon-btn-size piano-roll-tool-btn"
+                            :class="{'music-icon-btn-active': pianoRollTool === 'draw'}"
+                            @click="() => setPianoRollTool('draw')"
+                          >
+                            <v-icon small>mdi-pencil</v-icon>
+                          </v-btn>
+                          <v-btn
+                            icon
+                            small
+                            title="Erase (E, click a placed note to remove it)"
+                            class="music-flat-icon-btn music-icon-btn-size piano-roll-tool-btn"
+                            :class="{'music-icon-btn-active': pianoRollTool === 'erase'}"
+                            @click="() => setPianoRollTool('erase')"
+                          >
+                            <v-icon small>mdi-eraser</v-icon>
+                          </v-btn>
+                          <v-btn
+                            icon
+                            small
+                            title="Rectangle select (M, drag to select multiple notes - use Move to drag them together)"
+                            class="music-flat-icon-btn music-icon-btn-size piano-roll-tool-btn"
+                            :class="{'music-icon-btn-active': pianoRollTool === 'select'}"
+                            @click="() => setPianoRollTool('select')"
+                          >
+                            <svg class="v-icon piano-roll-marquee-icon" viewBox="0 0 24 24">
+                              <rect x="3.5" y="3.5" width="17" height="17" />
+                            </svg>
                           </v-btn>
                           <v-divider class="music-toolbar-divider" vertical />
                           <v-btn
@@ -603,6 +663,11 @@
 
                       <div class="piano-roll-wrapper" v-if="activePattern(song).tracks.length">
                       <div
+                        class="piano-roll-height-resize-handle"
+                        title="Drag to resize the pitch grid"
+                        @mousedown.prevent="startPianoRollResizeTop"
+                      />
+                      <div
                         class="piano-roll-scroll"
                         :style="{maxHeight: `${pianoRollHeight}px`}"
                         @scroll="(event) => handlePianoRollScroll(song, event)"
@@ -642,9 +707,12 @@
                               v-bind:key="stepIndex"
                               class="piano-roll-cell"
                               :style="[patternCellStyle(song, activePattern(song), row, stepIndex - 1), {flex: `0 0 ${cellWidthPx()}px`}]"
-                              :class="patternCellClasses(activePattern(song), row, stepIndex - 1, stepsFor(activePattern(song)))"
+                              :class="[patternCellClasses(activePattern(song), row, stepIndex - 1, stepsFor(activePattern(song))),
+                                {'piano-roll-cell-move-cursor': pianoRollTool === 'move',
+                                  'piano-roll-cell-select-cursor': pianoRollTool === 'select'}]"
                               :title="patternCellTitle(activePattern(song), row, stepIndex - 1, stepsFor(activePattern(song)))"
                               @click="(event) => handlePatternCellClick(song, activePattern(song), row, stepIndex - 1, stepsFor(activePattern(song)), event)"
+                              @mousedown="(event) => handleCellMouseDown(song, activePattern(song), row, stepIndex - 1, stepsFor(activePattern(song)), event)"
                               @mousemove="(event) => handleCellHover(activePattern(song), row, stepIndex - 1, stepsFor(activePattern(song)), event)"
                               @mouseleave="handleCellLeave"
                             >
@@ -662,6 +730,24 @@
                           </div>
                         </div>
                       </div>
+
+                      <!-- Live preview of the Select tool's own in-progress
+                           drag (see marqueeSelecting/handleMarqueeSelectMove) -
+                           position: fixed (see its own CSS) sized directly off
+                           the drag's raw clientX/clientY corners, so it needs
+                           no container-relative math at all; the actual
+                           selection itself is only computed once on mouseup
+                           (stopMarqueeSelect). -->
+                      <div
+                        v-if="marqueeSelecting"
+                        class="piano-roll-marquee-box"
+                        :style="{
+                          left: `${Math.min(marqueeSelecting.startClientX, marqueeSelecting.currentClientX)}px`,
+                          top: `${Math.min(marqueeSelecting.startClientY, marqueeSelecting.currentClientY)}px`,
+                          width: `${Math.abs(marqueeSelecting.currentClientX - marqueeSelecting.startClientX)}px`,
+                          height: `${Math.abs(marqueeSelecting.currentClientY - marqueeSelecting.startClientY)}px`,
+                        }"
+                      />
 
                       <div
                         class="piano-roll-height-resize-handle"
@@ -809,6 +895,18 @@ const clampPianoRollHeight = (value) =>
 // on/off hit per note event.
 const HIT_ROW = [{midi: 'hit', label: 'Hit'}];
 
+// Same array the template's own "sharedNoteRows" binding builds (see the
+// return statement below) - hoisted to module scope so the Move tool's own
+// drag logic can look up a row by index/offset too, not just render them.
+const SHARED_NOTE_ROWS = [...CANONICAL_NOTE_ROWS, ...HIT_ROW];
+// .piano-roll-cell's own fixed CSS height (see its rule further down) -
+// duplicated here as a named constant (not read from the DOM) since the
+// Move tool's vertical drag needs to convert a pixel Y-delta into a row
+// count entirely in JS, and this value never actually changes (unlike the
+// pattern's own per-step width, which DOES scale with pianoRollZoom and so
+// has to come from cellWidthPx() instead).
+const PIANO_ROLL_ROW_HEIGHT_PX = 20;
+
 // The piano roll only zooms horizontally (steps get wider) - there's no
 // vertical zoom, so this is the step width at 100% zoom; multiply by the
 // current zoom factor (see pianoRollZoom below) to get the actual width.
@@ -937,8 +1035,8 @@ export default defineComponent({
     const pianoRollResizing = ref(null);
     const handlePianoRollResizeMove = (event) => {
       if (!pianoRollResizing.value) return;
-      const {startClientY, startHeight} = pianoRollResizing.value;
-      pianoRollHeight.value = startHeight + (event.clientY - startClientY);
+      const {startClientY, startHeight, sign} = pianoRollResizing.value;
+      pianoRollHeight.value = startHeight + sign * (event.clientY - startClientY);
     };
     const stopPianoRollResize = () => {
       pianoRollResizing.value = null;
@@ -946,7 +1044,16 @@ export default defineComponent({
       window.removeEventListener('mouseup', stopPianoRollResize);
     };
     const startPianoRollResize = (event) => {
-      pianoRollResizing.value = {startClientY: event.clientY, startHeight: pianoRollHeight.value};
+      pianoRollResizing.value = {startClientY: event.clientY, startHeight: pianoRollHeight.value, sign: 1};
+      window.addEventListener('mousemove', handlePianoRollResizeMove);
+      window.addEventListener('mouseup', stopPianoRollResize);
+    };
+    // Same drag, from the grid's TOP edge instead of its bottom one - sign
+    // is flipped (dragging UP, a negative clientY delta, has to GROW the
+    // grid here, the opposite of the bottom handle) since this handle sits
+    // above the content instead of below it.
+    const startPianoRollResizeTop = (event) => {
+      pianoRollResizing.value = {startClientY: event.clientY, startHeight: pianoRollHeight.value, sign: -1};
       window.addEventListener('mousemove', handlePianoRollResizeMove);
       window.addEventListener('mouseup', stopPianoRollResize);
     };
@@ -1283,6 +1390,32 @@ export default defineComponent({
       snapEnabled.value = !snapEnabled.value;
       forceUpdate();
     };
+
+    // Which gesture a click/drag on the piano roll grid performs right now -
+    // a page-local UI preference (not project data), shared across every
+    // song/pattern the same way snapEnabled/pianoRollZoom already are, not
+    // one per pattern. 'draw' is the default, matching this grid's
+    // historical plain-click-to-place behavior before these tools existed.
+    const pianoRollTool = ref('draw');
+    const setPianoRollTool = (tool) => {
+      // Switching away from Select (to Draw/Erase, or back to Select on a
+      // DIFFERENT track - see setActiveTrack) drops whatever was selected -
+      // a stale selection from a tool/track switch away and back would
+      // otherwise silently still be there for the NEXT Move drag to grab,
+      // with no visual trace of it left on screen to explain why several
+      // notes suddenly moved together.
+      if (tool !== 'move') pianoRollSelection.value = new Set();
+      pianoRollTool.value = tool;
+    };
+    // The active track's own notes currently marquee-selected (Select
+    // tool - see handleSelectMouseDown/stopMarqueeSelect below), as a Set of
+    // direct note-object references (stable for a note's own lifetime - a
+    // note is never replaced in place, only pushed/spliced - so reference
+    // equality is all this needs, no separate id scheme). Checked by the
+    // Move tool (handleCellMouseDown) to move every selected note together
+    // instead of just whichever one was actually clicked.
+    const pianoRollSelection = ref(new Set());
+    const isNoteSelected = (note) => pianoRollSelection.value.has(note);
     // The slice count actually in effect for note placement/resizing and
     // the grid lines that reflect it - the dropdown's  value when snap
     // is on, or 1 (the whole step, i.e. no sub-step snapping at all) when
@@ -1787,6 +1920,11 @@ export default defineComponent({
     const isActiveTrack = (pattern, track) => activeTrackFor(pattern) === track;
     const setActiveTrack = (pattern, track) => {
       setActiveTrackId(pattern.id, track.id);
+      // The marquee selection (see pianoRollSelection) only ever holds the
+      // PREVIOUSLY active track's own notes - switching tracks would
+      // otherwise leave a Move drag grabbing a different track's notes than
+      // whichever one the user can currently see/intend to edit.
+      pianoRollSelection.value = new Set();
     };
 
     // Which instrument rows' notes are hidden from the shared piano roll - a
@@ -2819,6 +2957,15 @@ export default defineComponent({
     // would arm/seek to (see seekHover), shown on the ruler itself so it
     // never gets mistaken for either playhead color above.
     const SEEK_HOVER_COLOR = 'rgba(25, 118, 210, 0.15)';
+    // The Select tool's own marquee result (see pianoRollSelection) -
+    // painted as a segmentGradient layer over the EXACT note range, same as
+    // every other per-note layer below, rather than a plain CSS class
+    // covering the whole cell (an earlier version of this did that) -
+    // confirmed as a real reported bug otherwise ("only notes should be
+    // selected, not the steps they're in... accurately show selection based
+    // on music note length, not step length") for any note shorter than a
+    // full step, or not starting exactly on a step boundary.
+    const SELECTION_COLOR = 'rgba(33, 150, 243, 0.45)';
 
     // Shared by patternCellStyle (the piano roll itself) and rulerCellStyle
     // (the step-number row above it) so both always agree on exactly which
@@ -2889,6 +3036,9 @@ export default defineComponent({
               const color = isTrackMuted(song, pattern, track) ?
                 mutedNoteColor(instrumentColor(track)) : instrumentColor(track);
               layers.push(segmentGradient(stepStartUnits, note.step, note.step + note.length, color));
+              if (isNoteSelected(note)) {
+                layers.push(segmentGradient(stepStartUnits, note.step, note.step + note.length, SELECTION_COLOR));
+              }
             });
       }
       // Only the exact ranges another same-channel track already occupies -
@@ -3001,10 +3151,17 @@ export default defineComponent({
       const endUnits = startUnits + newNoteLength();
       const ownNoteHere = (activeTrack.notes || [])
           .find((note) => startUnits >= note.step && startUnits < note.step + note.length);
-      if (ownNoteHere && ownNoteHere.midi === row.midi) {
-        // Clicking this exact note (same pitch) removes it.
-        hoverPreview.value = {mode: 'remove', trackId: activeTrack.id, midi: row.midi, step,
-          startUnits: ownNoteHere.step, endUnits: ownNoteHere.step + ownNoteHere.length};
+      // Move and Select are both pure drag gestures (see handleNoteDragStart/
+      // handleMarqueeSelectStart below) - no placement/removal preview,
+      // since a plain click does nothing in either.
+      if (pianoRollTool.value === 'move' || pianoRollTool.value === 'select') {
+        hoverPreview.value = null;
+        return;
+      }
+      if (pianoRollTool.value === 'erase') {
+        hoverPreview.value = (ownNoteHere && ownNoteHere.midi === row.midi) ?
+          {mode: 'remove', trackId: activeTrack.id, midi: row.midi, step,
+            startUnits: ownNoteHere.step, endUnits: ownNoteHere.step + ownNoteHere.length} : null;
         return;
       }
       // A different pitch where this instrument already has a note falls
@@ -3034,7 +3191,9 @@ export default defineComponent({
       // handle. Without this guard, that stray click hit the "clicking an
       // existing own note removes it" branch below, deleting the note the
       // user had just finished resizing. See stopResize, which sets this
-      // flag right as the drag ends and clears it shortly after.
+      // flag right as the drag ends and clears it shortly after. Also set
+      // by stopNoteDrag below, same reasoning - a Move drag's own mouseup
+      // fires this same stray click too.
       if (suppressNextCellClick) return;
       if (step >= stepCount) return;
       const activeTrack = activeTrackFor(pattern);
@@ -3042,15 +3201,27 @@ export default defineComponent({
 
       const noteStartUnits = step * LENGTH_UNITS_PER_STEP + clickedSliceOffsetUnits(event);
       const noteEndUnits = noteStartUnits + newNoteLength();
-
-      // Clicking on top of the active track's  note (at the clicked
-      // slice, not just anywhere in the step) removes it, with nothing
-      // replacing it, if it's the exact same pitch already there.
       const ownNoteHere = (activeTrack.notes || [])
           .find((note) => noteStartUnits >= note.step && noteStartUnits < note.step + note.length);
-      if (ownNoteHere && ownNoteHere.midi === row.midi) {
-        activeTrack.notes = activeTrack.notes.filter((note) => note !== ownNoteHere);
-        handleChildChange();
+
+      // Move and Select are both pure drag gestures (see handleNoteDragStart/
+      // handleNoteDragMove/stopNoteDrag and handleMarqueeSelectStart/
+      // handleMarqueeSelectMove/stopMarqueeSelect below) - a plain click
+      // with no real drag does nothing in either, rather than falling
+      // through to Draw's placement behavior.
+      if (pianoRollTool.value === 'move' || pianoRollTool.value === 'select') return;
+
+      // Erase removes whatever this track's own note occupies THIS exact
+      // row at the clicked slice - unlike Draw's own placement below, this
+      // doesn't require the note to be at the SAME pitch as the row clicked
+      // (Erase only ever "sees" its own track's notes on the row they're
+      // actually drawn on anyway, since that's the only place a user could
+      // click to trigger this in the first place).
+      if (pianoRollTool.value === 'erase') {
+        if (ownNoteHere && ownNoteHere.midi === row.midi) {
+          activeTrack.notes = activeTrack.notes.filter((note) => note !== ownNoteHere);
+          handleChildChange();
+        }
         return;
       }
       // Blocking is checked against the EXACT slice range being placed, not
@@ -3113,6 +3284,232 @@ export default defineComponent({
           tempo: effectiveTempo(song, pattern),
         });
       }
+    };
+
+    // Move tool - repositions an existing note to a different pitch/step,
+    // rather than resizing it (startResize/handleResizeMove/stopResize
+    // below) or toggling it on/off (handlePatternCellClick's Draw/Erase
+    // branches). Same window-level mousedown/mousemove/mouseup shape as
+    // those, and the same "capture once at drag start, re-derive from a
+    // live clientX/clientY delta every move" reasoning startResize's own
+    // comment gives - startRowIndex/startStep never change mid-drag, only
+    // the live delta does.
+    const movingNote = ref(null);
+    // Plays the note's own sound at its CURRENT (post-move) pitch - same
+    // audio feedback placing a fresh note already gives (see
+    // handlePatternCellClick's own previewPatternNote call), so dragging an
+    // existing one to a new pitch/step is just as audible as placing it
+    // there fresh would have been.
+    const playDraggedNotePreview = (moving) => {
+      const {note, track, pattern, song} = moving;
+      const soundEffect = trackSoundEffect(track);
+      if (!soundEffect || isTrackMuted(song, pattern, track)) return;
+      const audf = rowAudf(track, {midi: note.midi});
+      previewPatternNote({
+        audc: soundEffect.audc,
+        audf: audf == null ? soundEffect.audf : audf,
+        audv: noteAudv(note, soundEffect),
+        arpeggio: soundEffect.arpeggio,
+        arpeggioDivision: soundEffect.arpeggioDivision,
+        arpeggioInterval: soundEffect.arpeggioInterval,
+        arpeggioRange: soundEffect.arpeggioRange,
+        tempo: effectiveTempo(song, pattern),
+      });
+    };
+    const handleNoteDragMove = (event) => {
+      if (!movingNote.value) return;
+      const {note, track, pattern, startClientX, startClientY, stepCount, group} = movingNote.value;
+      // Both deltas are always measured from the FIXED drag-start point
+      // (startClientX/startClientY/startStep/startRowIndex, captured once
+      // in handleCellMouseDown and never rebased mid-drag) - same "re-derive
+      // from the live total delta, don't accumulate tick-to-tick" reasoning
+      // startResize's own handleResizeMove already uses. Rebasing those on
+      // every move (an earlier version of this code did) rounds each
+      // individual tick's tiny delta to zero against snapUnits/one row
+      // independently, instead of letting a slow drag's movement actually
+      // accumulate across ticks - confirmed as a real reported bug ("note
+      // drag isn't keeping up with mouse position"). Both deltas are
+      // computed ONCE here, from the clicked (primary) note's own start
+      // position, then applied identically to every note in the group below
+      // - that's what keeps a multi-note selection moving as one rigid
+      // shape instead of each note re-deriving its own delta independently.
+      const snapUnits = subdivisionUnitLength();
+      const rawDeltaUnits = ((event.clientX - startClientX) / cellWidthPx()) * LENGTH_UNITS_PER_STEP;
+      const deltaUnits = Math.round(rawDeltaUnits / snapUnits) * snapUnits;
+      // Rows read top-to-bottom in SHARED_NOTE_ROWS order, same as the
+      // template's own v-for - dragging DOWN on screen means a LATER row
+      // index, so the row delta (not the step delta above) is added, not
+      // subtracted.
+      const deltaRows = Math.round((event.clientY - startClientY) / PIANO_ROLL_ROW_HEIGHT_PX);
+      group.forEach((member) => {
+        const maxStartUnits = Math.max(0, stepCount * LENGTH_UNITS_PER_STEP - member.note.length);
+        member.note.step = Math.max(0, Math.min(maxStartUnits, member.startStep + deltaUnits));
+        const newRowIndex = Math.max(0, Math.min(SHARED_NOTE_ROWS.length - 1, member.startRowIndex + deltaRows));
+        const newRow = SHARED_NOTE_ROWS[newRowIndex];
+        // A row this track's instrument can't actually play (rowIsAvailable -
+        // see canPlaceNoteAt) is skipped rather than landing there anyway -
+        // this one note just stops following the cursor vertically past
+        // that point (independently of the rest of the group), same as it's
+        // blocked from ever being PLACED on such a row in the first place.
+        // Still measured from the same fixed startRowIndex origin every
+        // time, so it picks back up immediately once the cursor returns to
+        // a valid row, rather than staying stuck offset from wherever it
+        // last successfully landed.
+        if (canPlaceNoteAt(pattern, track, newRow, member.note.step, member.note.step + member.note.length)) {
+          member.note.midi = newRow.midi;
+          member.note.audf = rowAudf(track, newRow);
+        }
+      });
+      // Only the primary (actually clicked) note plays back, even when
+      // dragging a whole group - every selected note retriggering together
+      // on each tick would read as a noisy chord smear, not useful feedback
+      // about where THIS drag is landing.
+      if (note.step !== movingNote.value.lastPlayedStep || note.midi !== movingNote.value.lastPlayedMidi) {
+        movingNote.value.lastPlayedStep = note.step;
+        movingNote.value.lastPlayedMidi = note.midi;
+        playDraggedNotePreview(movingNote.value);
+      }
+      forceUpdate();
+    };
+    const stopNoteDrag = () => {
+      if (!movingNote.value) return;
+      const {track, group} = movingNote.value;
+      const movedNotes = group.map((member) => member.note);
+      // Same "clean up whatever this note now overlaps" reasoning
+      // handlePatternCellClick's own ownOverlapping removal uses when
+      // PLACING a note - a note dragged on top of another of this same
+      // track would otherwise leave two overlapping notes behind, which
+      // nothing else in this file expects to ever exist. Every OTHER moved
+      // note is exempted from this check (not just the one being tested
+      // against) - two selected notes dragged so they now overlap EACH
+      // OTHER should stay exactly as dragged, not have one silently delete
+      // the other.
+      track.notes = track.notes.filter((other) => movedNotes.includes(other) ||
+        movedNotes.every((note) => other.step >= note.step + note.length || other.step + other.length <= note.step));
+      const primary = movingNote.value.note;
+      lastNoteLength.value = primary.length;
+      lastNoteAudv.value = primary.audv === undefined ? null : primary.audv;
+      movingNote.value = null;
+      handleChildChange();
+      window.removeEventListener('mousemove', handleNoteDragMove);
+      window.removeEventListener('mouseup', stopNoteDrag);
+      // See handlePatternCellClick's  comment - suppresses the stray
+      // click this same mouseup generates on the cell underneath it.
+      suppressNextCellClick = true;
+      window.setTimeout(() => {
+        suppressNextCellClick = false;
+      }, 0);
+    };
+    // Select tool - drags a rectangular marquee across the grid and selects
+    // every one of the ACTIVE TRACK's own notes it overlaps, for the Move
+    // tool (handleCellMouseDown above) to drag as one group afterward. Same
+    // window-level mousedown/mousemove/mouseup shape as every other piano
+    // roll drag here, but doesn't touch any note directly itself - purely a
+    // selection gesture.
+    const marqueeSelecting = ref(null);
+    const handleMarqueeSelectMove = (event) => {
+      if (!marqueeSelecting.value) return;
+      marqueeSelecting.value.currentClientX = event.clientX;
+      marqueeSelecting.value.currentClientY = event.clientY;
+      forceUpdate();
+    };
+    const stopMarqueeSelect = () => {
+      if (!marqueeSelecting.value) return;
+      const {track, startClientX, startClientY, currentClientX, currentClientY, startRowIndex, startUnits} =
+        marqueeSelecting.value;
+      // Same fixed-origin delta math as the Move tool's own drag (see
+      // handleNoteDragMove) - converts the live end corner back into a row-
+      // index range and a unit range, both inclusive of whichever corner is
+      // actually "first" (a marquee can be dragged in any of the 4
+      // directions from its own starting corner).
+      const deltaRows = Math.round((currentClientY - startClientY) / PIANO_ROLL_ROW_HEIGHT_PX);
+      const endRowIndex = Math.max(0, Math.min(SHARED_NOTE_ROWS.length - 1, startRowIndex + deltaRows));
+      const minRowIndex = Math.min(startRowIndex, endRowIndex);
+      const maxRowIndex = Math.max(startRowIndex, endRowIndex);
+      const deltaUnits = ((currentClientX - startClientX) / cellWidthPx()) * LENGTH_UNITS_PER_STEP;
+      const minUnits = Math.min(startUnits, startUnits + deltaUnits);
+      const maxUnits = Math.max(startUnits, startUnits + deltaUnits);
+      const selectedMidis = new Set(SHARED_NOTE_ROWS.slice(minRowIndex, maxRowIndex + 1).map((r) => r.midi));
+      // note.step < maxUnits && note.step + note.length > minUnits - tests
+      // each note's own REAL [step, step+length) range against the marquee,
+      // not the step column(s) it happens to sit in, so a short note only
+      // gets selected once the marquee actually overlaps ITS OWN extent
+      // (see startUnits' own comment on why the marquee's start corner is
+      // slice-accurate rather than step-accurate too - confirmed as a real
+      // reported bug otherwise, "only notes should be selected, not the
+      // steps they're in").
+      pianoRollSelection.value = new Set((track.notes || []).filter((note) =>
+        selectedMidis.has(note.midi) && note.step < maxUnits && note.step + note.length > minUnits));
+      marqueeSelecting.value = null;
+      window.removeEventListener('mousemove', handleMarqueeSelectMove);
+      window.removeEventListener('mouseup', stopMarqueeSelect);
+    };
+    const handleMarqueeSelectStart = (pattern, track, row, step, event) => {
+      const startRowIndex = SHARED_NOTE_ROWS.findIndex((candidate) => candidate.midi === row.midi);
+      marqueeSelecting.value = {
+        pattern, track, startRowIndex,
+        // The precise slice-snapped unit position within the clicked step
+        // (same helper handlePatternCellClick/handleCellHover already use
+        // for note placement itself), not just that step's own left edge -
+        // confirmed as a real reported bug otherwise: starting the marquee
+        // from a whole step boundary made its selection effectively
+        // step-granular instead of note-granular, even though the final
+        // note-overlap test (stopMarqueeSelect) already compared against
+        // each note's own real length.
+        startUnits: step * LENGTH_UNITS_PER_STEP + clickedSliceOffsetUnits(event),
+        startClientX: event.clientX, startClientY: event.clientY,
+        currentClientX: event.clientX, currentClientY: event.clientY,
+      };
+      window.addEventListener('mousemove', handleMarqueeSelectMove);
+      window.addEventListener('mouseup', stopMarqueeSelect);
+    };
+
+    // Wired to the cell's own @mousedown (not @click - a drag has to start
+    // capturing movement from the very first pixel, not wait for a full
+    // click to complete) - same "resolve the note under this exact
+    // row/slice by hand" lookup handlePatternCellClick's own ownNoteHere
+    // uses, since nothing else already has this note reference in hand at
+    // mousedown time.
+    const handleCellMouseDown = (song, pattern, row, step, stepCount, event) => {
+      if (step >= stepCount) return;
+      const track = activeTrackFor(pattern);
+      if (!track) return;
+      const startUnits = step * LENGTH_UNITS_PER_STEP + clickedSliceOffsetUnits(event);
+      const note = (track.notes || [])
+          .find((candidate) => startUnits >= candidate.step && startUnits < candidate.step + candidate.length);
+      if (pianoRollTool.value === 'select') {
+        handleMarqueeSelectStart(pattern, track, row, step, event);
+        return;
+      }
+      if (pianoRollTool.value !== 'move') return;
+      if (!note || note.midi !== row.midi) return;
+      // Dragging a note that's part of a bigger marquee selection (Select
+      // tool - see pianoRollSelection/isNoteSelected) moves the WHOLE
+      // selection together, not just the one actually clicked - a lone
+      // selected note (or clicking one NOT in the current selection at all)
+      // still just moves itself, same as before Select existed.
+      const notesToMove = (isNoteSelected(note) && pianoRollSelection.value.size > 1) ?
+        [...pianoRollSelection.value] : [note];
+      const group = notesToMove.map((groupNote) => ({
+        note: groupNote,
+        startStep: groupNote.step,
+        startRowIndex: SHARED_NOTE_ROWS.findIndex((candidate) => candidate.midi === groupNote.midi),
+      }));
+      movingNote.value = {
+        note, track, row, pattern, song, group,
+        startClientX: event.clientX,
+        startClientY: event.clientY,
+        stepCount,
+        // The (step, midi) pair last actually sounded during this drag -
+        // see handleNoteDragMove's own playDraggedNotePreview, which only
+        // re-triggers playback when either actually changes, not on every
+        // single mousemove tick.
+        lastPlayedStep: note.step,
+        lastPlayedMidi: note.midi,
+      };
+      playDraggedNotePreview(movingNote.value);
+      window.addEventListener('mousemove', handleNoteDragMove);
+      window.addEventListener('mouseup', stopNoteDrag);
     };
 
     // Dragging a held note's right edge changes its length, independent of
@@ -3265,6 +3662,11 @@ export default defineComponent({
       window.removeEventListener('resize', handleWindowResize);
       window.removeEventListener('mousemove', handlePianoRollResizeMove);
       window.removeEventListener('mouseup', stopPianoRollResize);
+      window.removeEventListener('mousemove', handleNoteDragMove);
+      window.removeEventListener('mouseup', stopNoteDrag);
+      window.removeEventListener('mousemove', handleMarqueeSelectMove);
+      window.removeEventListener('mouseup', stopMarqueeSelect);
+      window.removeEventListener('keydown', handlePianoRollToolHotkey);
     });
 
     // So 100% already reads as "fit" on first load/navigation too, not only
@@ -3275,14 +3677,37 @@ export default defineComponent({
       const song = activeSong();
       if (song) recalculateFitBaseWidth(song, activePattern(song));
     };
+
+    // Same letters as GraphicEditorToolbar.vue's own Move/Pencil/Eraser/
+    // Rectangle select hotkeys (V/B/E/M) - see that component's own
+    // TOOL_HOTKEYS - so a user who already reaches for those on the graphic
+    // tabs doesn't have to learn a second set just for the piano roll's own
+    // Move/Draw/Erase/Rectangle select.
+    const PIANO_ROLL_TOOL_HOTKEYS = {v: 'move', b: 'draw', e: 'erase', m: 'select'};
+    const handlePianoRollToolHotkey = (event) => {
+      // Same "skip Ctrl/Cmd/Alt combos and real text fields" guards as
+      // GraphicEditorToolbar.vue's own handleToolHotkey.
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      const target = event.target;
+      const tag = target && target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (target && target.isContentEditable)) return;
+      const tool = PIANO_ROLL_TOOL_HOTKEYS[event.key.toLowerCase()];
+      if (!tool) return;
+      event.preventDefault();
+      setPianoRollTool(tool);
+    };
+
     onMounted(() => {
       handleWindowResize();
       window.addEventListener('resize', handleWindowResize);
+      window.addEventListener('keydown', handlePianoRollToolHotkey);
     });
 
     return {
       dimSoundFx, dimSoundFxPercent, dimSoundFxPercentDisplay,
       state, handleChildChange, handleChangeSubdivision, snapEnabled, handleToggleSnap,
+      pianoRollTool, setPianoRollTool, handleCellMouseDown,
+      pianoRollSelection, isNoteSelected, marqueeSelecting,
       handleTempoChange, minTempo: MIN_TEMPO, maxTempo: MAX_TEMPO,
       handleAddSong, handleDeleteSong, handleDuplicateSong, handleExportSong, handleImportSong,
       activeSongId, activeSong, activeSongArray, setActiveSong, songName, songOptions, handleSongFieldChange,
@@ -3329,9 +3754,9 @@ export default defineComponent({
       maxPatternSteps: MAX_PATTERN_STEPS,
       pianoRollZoom, stepPianoRollZoom, cellWidthPx, handleFitZoom,
       volumeRowHeight, startVolumeRowResize,
-      pianoRollHeight, startPianoRollResize,
+      pianoRollHeight, startPianoRollResize, startPianoRollResizeTop,
       isMusicToolbarScrolled,
-      sharedNoteRows: [...CANONICAL_NOTE_ROWS, ...HIT_ROW],
+      sharedNoteRows: SHARED_NOTE_ROWS,
       isBlackKeyRow, labelRowUnavailable,
       isPatternCollapsed, togglePatternCollapsed, isInstrumentsCollapsed, toggleInstrumentsCollapsed,
       isSequenceCollapsed, toggleSequenceCollapsed,
@@ -3341,14 +3766,7 @@ export default defineComponent({
 });
 </script>
 <style scoped>
-/* Shrinks to fit the warning text itself instead of stretching the full
-   card width (Vuetify's v-alert default) - width: fit-content keeps its
-   own internal padding symmetric left/right either way, so this doesn't
-   need any padding override of its own to match. */
-.alpha-notice {
-  width: fit-content;
-  margin: 0 16px 8px;
-}
+/* .alpha-notice - see App.vue's shared, unscoped rule. */
 
 .editor-container {
   position: absolute;
@@ -3374,6 +3792,13 @@ export default defineComponent({
 .dim-section {
   padding-bottom: 12px;
   padding-top: 0;
+  /* Pulls the DIM controls up slightly closer to the intro paragraph above
+     - App.vue's shared .tab-intro-section rule already zeroes that
+     paragraph's own trailing padding, leaving just its standard 16px
+     v-messages__message margin-bottom as the gap (deliberately the same
+     everywhere else - see that rule's own comment), but that still read as
+     a little too much space specifically above this tab's own DIM row. */
+  margin-top: -6px;
 }
 
 .dim-controls {
@@ -3618,33 +4043,45 @@ export default defineComponent({
   margin: 0;
 }
 
-/* Same flat-icon, fade-in-on-hover treatment as the Sound tab's own
-   play/stop buttons (SoundFXEditor.vue's .soundfx-play-btn/.soundfx-stop-btn)
-   instead of Vuetify's default grey circle. */
+/* .music-flat-icon-btn's own background/shadow/before/rest-hover-color
+   rules - see App.vue's shared, unscoped copy (moved there once confirmed
+   byte-identical to TitleScreenEditor.vue's own .titlescreen-play-btn, see
+   that file's own comment). border: none kept local rather than folded
+   into that shared rule - GraphicEditorToolbar.vue's own .get-tools >>>
+   .v-btn has it, and this tab's buttons were specifically asked to match
+   that toolbar's buttons in every state, but TitleScreenEditor.vue's own
+   button was never reported as needing it (Vuetify's "icon" v-btn has no
+   border by default anyway, so this is a no-op there either way - just
+   kept scoped to what was actually asked). */
 .music-flat-icon-btn {
-  background-color: transparent !important;
-  box-shadow: none !important;
+  border: none !important;
 }
 
-.music-flat-icon-btn::before {
-  display: none;
+/* Momentary press feedback - a shrink, not a color change, matching
+   GraphicEditorToolbar.vue's own .get-tools >>> .v-btn:not(.v-btn--disabled):active
+   rule exactly (per an explicit request to match that toolbar's buttons in
+   every state) - color is reserved for the PERSISTENT "currently on/
+   playing" tint below instead, so a one-shot action button (Undo, zoom
+   reset, etc.) with no ongoing state of its own to show doesn't read as
+   if it just turned "on". :not(.v-btn--disabled), same as Graphic's own
+   rule - a disabled button shouldn't visibly react to a click it can't
+   actually receive in the first place. */
+.music-flat-icon-btn:not(.v-btn--disabled):active >>> .v-icon {
+  transform: scale(0.82);
 }
 
-.music-flat-icon-btn >>> .v-icon {
-  color: rgba(0, 0, 0, 0.38) !important;
-  transition: color 0.15s ease;
-}
-
-.music-flat-icon-btn:hover >>> .v-icon {
-  color: rgba(0, 0, 0, 0.87) !important;
-}
-
-/* Momentary press feedback - the same blue as the "currently on" tint right
-   below (.music-icon-btn-active), just while the mouse button's actually
-   down, for a one-shot action button (Undo, zoom reset, etc.) that has no
-   ongoing on/off state of its own to show that color persistently. */
-.music-flat-icon-btn:active >>> .v-icon {
-  color: var(--v-primary-base, #1976d2) !important;
+/* Disabled dimming, matching GraphicEditorToolbar.vue's own
+   .get-tools >>> .v-btn--disabled .v-icon rule exactly - icon color, not
+   button opacity (the shared .player-icon-btn-size-style tabs elsewhere in
+   this app use opacity instead - see App.vue's own comment - left as-is
+   there; only this tab's buttons were asked to match Graphic's specific
+   treatment). Needed at all because the rest-color rule just above
+   (App.vue's shared .music-flat-icon-btn >>> .v-icon) already forces
+   rgba(0,0,0,0.38) with !important, which would otherwise block Vuetify's
+   own default disabled dimming from ever showing through - a disabled
+   button would read as identically clickable to an enabled, unhovered one. */
+.music-flat-icon-btn.v-btn--disabled >>> .v-icon {
+  color: rgba(0, 0, 0, 0.18) !important;
 }
 
 /* "This is currently on/playing" tint for any .music-flat-icon-btn toggle -
@@ -3659,15 +4096,31 @@ export default defineComponent({
   color: var(--v-primary-base, #1976d2) !important;
 }
 
-.music-icon-btn-size {
-  min-width: 0;
-  height: 26px !important;
-  width: 26px !important;
-  margin: 0 1px;
-}
+/* .music-icon-btn-size's own size/icon-font-size rules - see App.vue's
+   shared, unscoped copy. */
 
-.music-icon-btn-size >>> .v-icon {
-  font-size: 19px !important;
+/* Same plain-inline-SVG dotted marquee icon as GraphicEditorToolbar.vue's
+   own Rectangle select button (.get-shape-icon/.get-marquee-icon there) -
+   duplicated rather than shared across components since GraphicEditorToolbar's
+   own copy is reached via its own >>> deep combinator, not exposed for
+   reuse. fill: none + stroke: currentColor is what lets this same button's
+   .v-icon color rules just above (rest/hover/active tint) reach a plain SVG
+   the same way they reach a real MDI glyph's font colour; width/height
+   stand in for font-size, which has no effect on an SVG. !important + the
+   same >>> .music-icon-btn-size specificity every other icon-sizing rule in
+   this file already uses - confirmed as a real reported bug otherwise
+   ("the marquee icon looks too big") - Vuetify's own .v-icon.v-icon rule
+   sets width/height off ITS OWN font-size with a specificity this plain
+   class alone couldn't out-rank. */
+.music-icon-btn-size >>> .piano-roll-marquee-icon {
+  width: 19px !important;
+  height: 19px !important;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 0.1 4.5;
 }
 
 /* Matches GraphicEditorToolbar.vue's own Undo/Redo spacing/press-feedback
@@ -4574,6 +5027,35 @@ export default defineComponent({
   border-left: 1px solid rgba(0, 0, 0, 0.22);
   border-bottom: 1px solid rgba(0, 0, 0, 0.06);
   cursor: pointer;
+}
+
+/* The Move tool drags a note rather than placing/erasing one on a plain
+   click - a move cursor reads as "drag this" at a glance, the same reason
+   PixelEditor.vue's own Move tool swaps its cursor this way. */
+.piano-roll-cell-move-cursor {
+  cursor: move;
+}
+
+/* The Select tool drags a marquee box rather than placing/moving/erasing a
+   note on a plain click - crosshair reads as "drag to select" the same way
+   GraphicEditorToolbar.vue's own marquee select tools already do. */
+.piano-roll-cell-select-cursor {
+  cursor: crosshair;
+}
+
+/* Fixed (not absolute) - sized directly off the drag's raw viewport
+   clientX/clientY corners (see the template's own :style binding), so it
+   needs no container-relative offset math at all, unlike every other
+   positioned element on this grid (which all measure against the
+   scrolling .piano-roll-scroll instead). pointer-events: none so the drag
+   this box is PREVIEWING (window-level mousemove/mouseup, not anything on
+   the box itself) is never accidentally intercepted by it. */
+.piano-roll-marquee-box {
+  position: fixed;
+  border: 1px solid rgba(33, 150, 243, 0.95);
+  background-color: rgba(33, 150, 243, 0.15);
+  pointer-events: none;
+  z-index: 20;
 }
 
 /* A faint alternating tint per step column (odd-numbered steps only - the

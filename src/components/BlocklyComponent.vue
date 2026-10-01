@@ -568,7 +568,16 @@ export default {
     }
 
     this.workspace = Blockly.inject(this.$refs['blocklyDiv'], options);
-    this.workspace.addChangeListener(debounce(() => this.handleChange()));
+    // Kept as an instance field (not a local/inline function) so
+    // beforeDestroy() below can flush() it - lodash's debounce defaults to
+    // a 0ms wait, so a field edit immediately followed by navigating to a
+    // different tab (unmounting this component, disposing the workspace)
+    // can lose that edit entirely if the debounced call never gets to fire
+    // before teardown - confirmed as a real reported bug ("changing the
+    // set field to Y isn't remembered when navigating away from the
+    // Actions tab - it keeps going back to X").
+    this.debouncedHandleChange = debounce(() => this.handleChange());
+    this.workspace.addChangeListener(this.debouncedHandleChange);
     this.loadWorkspace(this.value);
 
     // Finds/highlights blocks already placed on the canvas - Ctrl+F (Cmd+F
@@ -657,6 +666,13 @@ export default {
     this.resizeObserver.observe(this.$refs['blocklyDiv']);
   },
   beforeDestroy() {
+    // Flushes any pending debounced save (see mounted()'s own comment on
+    // debouncedHandleChange) before the workspace below is disposed and
+    // this component's "value" prop's last-known state becomes the
+    // project's permanent record of this tab's blocks.
+    if (this.debouncedHandleChange && this.debouncedHandleChange.flush) {
+      this.debouncedHandleChange.flush();
+    }
     if (this.workspaceSearch) {
       // This plugin version's dispose() (see node_modules/@blockly/
       // plugin-workspace-search/src/WorkspaceSearch.js) nulls out its DOM
@@ -759,10 +775,32 @@ export default {
         audioMgr.SOUNDS_ = {};
       }
     },
+    // Blockly.Events.disable()/enable() around domToWorkspace - without
+    // this, every one of these calls fired real BLOCK_CREATE (etc.) events
+    // for the whole re-synced XML, which Blockly's own workspace listens to
+    // ITSELF (separately from this component's own addChangeListener) to
+    // build its native undo/redo stack. This call is a programmatic resync
+    // (the v-model round trip, or loading a different project), never a
+    // real user edit - letting it reach the undo stack anyway meant a
+    // user's later Ctrl+Z could end up reversing "recreate this entire
+    // workspace" instead of their own last real action, wiping every block
+    // at once - confirmed as a real reported bug ("sometimes when undoing a
+    // block move or edit, all blockly blocks vanish from the canvas").
+    // try/finally guarantees events are re-enabled even if domToWorkspace
+    // itself throws partway through (a malformed/corrupt XML, for
+    // instance) - Events.disable()/enable() are a bare increment/decrement
+    // counter (see node_modules/blockly/core/events/events.js), so leaving
+    // it decremented one short on an exception would silently disable
+    // events for the rest of the session.
     loadWorkspace(value) {
       const xml = Blockly.Xml.textToDom(value && value !== 'null' ?
           value : '<xml xmlns="https://developers.google.com/blockly/xml"/>');
-      Blockly.Xml.domToWorkspace(this.workspace, xml);
+      Blockly.Events.disable();
+      try {
+        Blockly.Xml.domToWorkspace(this.workspace, xml);
+      } finally {
+        Blockly.Events.enable();
+      }
     },
     // Entry point for the 'value' watch below - skipped outright (not
     // deferred/retried) whenever a drag is in progress, so a v-model round
@@ -783,6 +821,17 @@ export default {
       }
       if (newVal !== this.lastSavedWorkspace) {
         this.loadWorkspace(newVal);
+        // Previously an incidental side effect of loadWorkspace's own
+        // domToWorkspace call firing real change events (which handleChange
+        // then captured into lastSavedWorkspace itself) - now that
+        // loadWorkspace deliberately disables events (see its own comment),
+        // that side effect no longer happens, so this has to be set
+        // explicitly instead. Without it, this same (already fully synced)
+        // value would still look "new" on the NEXT comparison too, calling
+        // domToWorkspace again on data the workspace already has - which
+        // (per this method's own comment above) duplicates every block,
+        // since domToWorkspace never clears the workspace first.
+        this.lastSavedWorkspace = newVal;
       }
     },
     handleChange() {

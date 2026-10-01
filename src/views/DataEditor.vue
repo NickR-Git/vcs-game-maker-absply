@@ -1299,22 +1299,12 @@ export default defineComponent({
   z-index: 1;
 }
 
-/* Same icon/button sizing as the Player Sprite tab's toolbar icons
-   (PixelEditor.vue's .pixel-editor-tools rules) - split out from
-   .data-flat-icon-btn below so it can also apply to the Delete button
-   without pulling in that class's own hover colour, which would override
-   .delete-icon-btn's red-on-hover convention. Use this same sizing for any
-   new icon buttons added elsewhere going forward. */
-.data-icon-btn-size {
-  min-width: 0;
-  height: 26px !important;
-  width: 26px !important;
-  margin: 0 1px;
-}
-
-.data-icon-btn-size >>> .v-icon {
-  font-size: 19px !important;
-}
+/* .data-icon-btn-size's own size/icon-font-size rules - see App.vue's
+   shared, unscoped copy (moved there once confirmed byte-identical to
+   SoundFXEditor.vue's .soundfx-icon-btn-size/MusicEditor.vue's
+   .music-icon-btn-size). Split out from .data-flat-icon-btn below so it can
+   also apply to the Delete button without pulling in that class's own hover
+   colour, which would override .delete-icon-btn's red-on-hover convention. */
 
 /* Same flat icon-button treatment as the Player Sprite tab's Export/Import
    image buttons (PixelEditor.vue's .pixel-editor-tools rules): no grey box,

@@ -2,6 +2,9 @@
   <div>
     <v-card flat class="editor-container" :ripple="false" @click="deselectCard">
       <v-card-title>Title (alpha 0.75)</v-card-title>
+      <v-alert type="warning" dense outlined :icon="false" class="alpha-notice">
+        This feature is in alpha. Things may change or break. You've been warned!
+      </v-alert>
       <v-card-text class="tab-intro-section">
         <p class="v-messages theme--light v-messages__message titlescreen-intro-paragraph">
           Compose a title screen from stacked image strips (top to bottom). 48x1 images are
@@ -1586,66 +1589,23 @@ export default defineComponent({
   box-shadow: none !important;
 }
 
-.titlescreen-icon-btn-size {
-  min-width: 0;
-  height: 26px !important;
-  width: 26px !important;
-  margin: 0;
-}
+/* .titlescreen-icon-btn-size's own size/disabled-opacity/icon-font-size
+   rules, and .delete-icon-btn.titlescreen-icon-btn-size's own mdi-delete
+   size bump - see App.vue's shared, unscoped copy (moved there once
+   confirmed byte-identical to PlayerEditor.vue's own .player-icon-btn-size -
+   scoped CSS can't share a rule across components even under the same
+   class name, so each tab using it still has to apply it here). */
 
-.titlescreen-icon-btn-size >>> .v-icon {
-  font-size: 19px !important;
-}
-
-/* Exact match of MusicEditor.vue's .music-flat-icon-btn (background/
-   shadow/before/icon-color/hover/active rules, confirmed directly against
-   its compiled CSS) and .music-icon-btn-active (persistent "currently
-   active" tint - here, "currently building" via :loading, the closest
-   equivalent this button has to Music's "currently playing"). */
-.titlescreen-play-btn {
-  background-color: transparent !important;
-  box-shadow: none !important;
-}
-
-.titlescreen-play-btn::before {
-  display: none;
-}
-
-.titlescreen-play-btn >>> .v-icon {
-  transition: color 0.15s;
-  color: rgba(0, 0, 0, 0.38) !important;
-}
-
-.titlescreen-play-btn:hover >>> .v-icon {
-  color: rgba(0, 0, 0, 0.87) !important;
-}
-
+/* .titlescreen-play-btn's own background/shadow/before/rest-hover-color
+   rules - see App.vue's shared, unscoped .music-flat-icon-btn copy (moved
+   there once confirmed byte-identical to MusicEditor.vue's own, see that
+   file's own comment). The "currently active" persistent tint below stays
+   here rather than also moving - its OWN trigger condition (:loading) is
+   genuinely different from Music's (an explicit "currently playing" class),
+   even though the resulting color declaration is the same. */
 .titlescreen-play-btn:active >>> .v-icon,
 .titlescreen-play-btn.v-btn--loading >>> .v-icon {
   color: var(--v-primary-base, #1976d2) !important;
-}
-
-/* Same fix as PlayerEditor.vue's identical rule - without it, a disabled
-   Paste button read as clickable, no different from the enabled Copy
-   button next to it. */
-.titlescreen-icon-btn-size.v-btn--disabled {
-  opacity: 0.35;
-}
-
-/* Same reasoning/values as PlayerEditor.vue's identical rules - without an
-   explicit icon font-size, mdi-delete rendered at Vuetify's default
-   (larger than this 26px button was actually sized for), overlapping the
-   graphic/ID badge next to it instead of sitting cleanly inside its own
-   corner. mdi-delete specifically needs a couple extra pixels over the
-   other icons here (copy/paste, etc.) to read as the same visual size -
-   its own glyph has more built-in padding around the trash-can shape at
-   the same font-size. */
-.titlescreen-icon-btn-size >>> .v-icon {
-  font-size: 19px !important;
-}
-
-.delete-icon-btn.titlescreen-icon-btn-size >>> .v-icon {
-  font-size: 21px !important;
 }
 
 /* Rest/hover/no-filled-circle treatment lives in App.vue's global

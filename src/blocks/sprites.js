@@ -314,15 +314,62 @@ export const registerDropdownFieldSyncExtension = (extensionName, dropdownFieldN
     dropdownField.setValidator(function(newValue) {
       block.setColour(colourFor(newValue));
       const varField = block.getField('VAR');
-      if (varField) {
-        // eslint-disable-next-line no-invalid-this
-        const oldName = namePrefixFor(this.getValue());
-        const newName = namePrefixFor(newValue);
-        const current = varField.getValue();
-        const translated = (typeof current === 'string' && current.indexOf(oldName) === 0) ?
-          newName + current.slice(oldName.length) : current;
-        varField.getOptions();
-        varField.setValue(translated);
+      // eslint-disable-next-line no-invalid-this
+      const oldValue = this.getValue();
+      // Only when the dropdown is ACTUALLY changing - XML deserialization
+      // (loading a saved project) calls setValue for every field tag
+      // regardless of whether it differs from the field's just-constructed
+      // default, so a block whose PLAYER/MISSILE tag happens to match its
+      // own default (e.g. "0", same as a fresh block's own starting value)
+      // would otherwise still schedule a "correction" below - see this
+      // whole block's own comment for why that's applied AFTER the fact,
+      // and why applying it unconditionally clobbered the VALUE this same
+      // block's own explicit VAR tag had already (correctly) set moments
+      // later in the same deserialization pass (confirmed as a real
+      // reported bug - see git history for this block).
+      if (varField && oldValue !== newValue) {
+        // Deferred via setTimeout (same "run after the current Blockly
+        // field-update cascade finishes" pattern as blocks/function.js's
+        // own fixFunctionCallNames/updateFunctionCallArgVisibility), AND
+        // re-reading VAR's value fresh only once deferred, not captured
+        // synchronously here - confirmed as a real reported bug otherwise
+        // ("Player 1 set" blocks silently moving Player 0"): this
+        // validator runs BEFORE the dropdown field's own value actually
+        // commits (Field.prototype.setValue calls the local validator,
+        // then only afterwards updates this.value_ - see node_modules/
+        // blockly/core/field.js), so reading/translating VAR's value
+        // synchronously here uses a STILL-STALE menuGenerator result (it
+        // reads this block's PLAYER/MISSILE field LIVE, still the OLD
+        // value at this exact moment) - and, if this block has ITS OWN
+        // separate VAR field tag still to come later in the same XML
+        // deserialization pass, a translated value captured NOW would go
+        // stale the instant that later, legitimate tag applies, and then
+        // silently overwrite it right back out from under it once this
+        // deferred callback finally runs. Reading everything fresh here
+        // instead - by now PLAYER/MISSILE's own value has genuinely
+        // committed AND any of this block's own later field tags have
+        // already applied - avoids both problems at once.
+        setTimeout(() => {
+          const oldName = namePrefixFor(oldValue);
+          const newName = namePrefixFor(newValue);
+          const current = varField.getValue();
+          // A plain .replace() (first occurrence anywhere), not an
+          // indexOf(...)===0/slice pair - confirmed as a real reported bug
+          // otherwise ("Horizontal flip" left untranslated switching
+          // Player 0/1): buildPlayerOptions' own Horizontal flip option
+          // value is `__${name}size_3_` (the player name embedded after a
+          // leading "__", not at the very start of the string, unlike every
+          // other property's `${name}...` shape), so an indexOf(...)===0
+          // check never matched it at all. Every raw value this can ever
+          // see is one of this app's own generated option strings (never
+          // user input), so a first-occurrence replace is safe - there's
+          // no risk of coincidentally matching unrelated text.
+          const translated = (typeof current === 'string' && current.includes(oldName)) ?
+            current.replace(oldName, newName) : current;
+          if (translated === current) return;
+          varField.generatedOptions_ = null;
+          varField.setValue(translated);
+        }, 0);
       }
       return newValue;
     });

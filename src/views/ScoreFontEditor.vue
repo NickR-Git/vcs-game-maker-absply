@@ -62,6 +62,7 @@
         <graphic-editor-toolbar class="score-editor-toolbar-row" :active-editor="activeEditor">
           <template v-slot:before-tools>
             <editor-zoom v-model="zoom" class="score-editor-zoom" />
+            <pixel-grid-toggle v-model="showPixelGrid" />
           </template>
         </graphic-editor-toolbar>
         <div class="digit-list" :class="{'digit-list-tools-hidden': zoom <= 0.5}">
@@ -88,6 +89,7 @@
                 :name="'score-font-digit-' + index"
                 :allowChangingHeight="false"
                 :hideToolbar="true"
+                :showGrid="showPixelGrid"
                 @input="handleChange"
                 @activate="(editorInstance) => setActiveEditor(editorInstance, index)"
               >
@@ -131,7 +133,9 @@ import ColorSwatchPicker from '../components/ColorSwatchPicker.vue';
 import EditorZoom from '../components/EditorZoom.vue';
 import GraphicEditorToolbar from '../components/GraphicEditorToolbar.vue';
 import PixelEditor from '../components/PixelEditor.vue';
-import {useConfigurationStorage, useScoreFontStorage, useSquishCustomScoreFontStorage} from '../hooks/project';
+import PixelGridToggle from '../components/PixelGridToggle.vue';
+import {useConfigurationStorage, usePixelGridOverlayStorage, useScoreFontStorage,
+  useSquishCustomScoreFontStorage} from '../hooks/project';
 import {useEditorZoom} from '../hooks/zoom';
 import {colorByteToCss} from '../utils/palette';
 import {SCORE_FONT_NAMES} from '../generators/score-fonts';
@@ -177,12 +181,15 @@ const BACKGROUND_DEFAULT_COLOR_BYTE = 0xC4;
 const copiedDigitData = ref(null);
 
 export default defineComponent({
-  components: {ColorSwatchPicker, EditorZoom, GraphicEditorToolbar, PixelEditor},
+  components: {ColorSwatchPicker, EditorZoom, GraphicEditorToolbar, PixelEditor, PixelGridToggle},
   setup() {
     const scoreFontStorage = useScoreFontStorage();
     const squishCustomScoreFontStorage = useSquishCustomScoreFontStorage();
     const configurationStorage = useConfigurationStorage();
     const zoom = useEditorZoom('scorefont', 1.5);
+    // Shared with every other tab's pixel grid toggle (see
+    // PixelGridToggle.vue's own comment) - not per-tab state of its own.
+    const showPixelGrid = usePixelGridOverlayStorage();
     const digitWidth = computed(() => `${Math.round(DIGIT_BASE_WIDTH * zoom.value)}px`);
 
     // Squish (and Squish Custom, which starts from Squish's  digits and is
@@ -457,6 +464,7 @@ export default defineComponent({
       resetToken,
       PIXEL_ASPECT,
       zoom,
+      showPixelGrid,
       digitWidth,
       showExtraGlyphs,
       extraGlyphsEnabled,
@@ -589,23 +597,6 @@ export default defineComponent({
   margin-top: 24px;
 }
 
-/* Same sizing as PlayerEditor.vue's identical .player-icon-btn-size -
-   the Copy/Paste buttons under each digit's graphic. */
-.player-icon-btn-size {
-  min-width: 0;
-  height: 26px !important;
-  width: 26px !important;
-  margin: 0;
-}
-
-/* Same fix as PlayerEditor.vue's identical rule - without it, a disabled
-   Paste button read as clickable, no different from the enabled Copy
-   button next to it. */
-.player-icon-btn-size.v-btn--disabled {
-  opacity: 0.35;
-}
-
-.player-icon-btn-size >>> .v-icon {
-  font-size: 19px !important;
-}
+/* .player-icon-btn-size's own size/disabled-opacity/icon-font-size rules -
+   see App.vue's shared, unscoped copy. */
 </style>

@@ -24,13 +24,13 @@
               'editor-canvas-tool-move': toggledTool === 'move',
             }"
             @mousedown="handleMouse"
-            @mouseenter="handleMouse"
+            @mouseenter="(e) => { handleMouse(e); handleHover(e); }"
             @mouseleave="handleMouseLeave"
             @mouseup="handleMouse"
-            @mousemove="handleMouse"
+            @mousemove="(e) => { handleMouse(e); handleHover(e); }"
           />
           <canvas
-            v-if="showGrid || selection || polygonPreview"
+            v-if="showGrid || selection || polygonPreview || hoverCell"
             ref="gridOverlay"
             class="grid-overlay-canvas"
           />
@@ -151,6 +151,15 @@ export default {
       // rendering these as they're placed, every click looked like it did
       // nothing at all until a polygon happened to actually close.
       polygonPreview: null,
+      // The cell ({x,y}) the pointer is currently hovering, or null while
+      // it's outside the canvas - lets drawGridOverlay() highlight exactly
+      // which pixel a click would affect right now, regardless of which
+      // tool is active (draw, erase, fill, select, ...). Updated directly
+      // by handleHover below, not through handleMouse's own debounced tool-
+      // driven path - a hover highlight that lagged behind the cursor by
+      // handleMouse's 10ms debounce would feel noticeably laggy for
+      // something meant to track the pointer in real time.
+      hoverCell: null,
     };
   },
   computed: {
@@ -176,7 +185,7 @@ export default {
     // TODO: Just for testing
     window.isMatrixEqual = isMatrixEqual;
 
-    if (this.showGrid || this.selection || this.polygonPreview) this.setupGridOverlay();
+    if (this.showGrid || this.selection || this.polygonPreview || this.hoverCell) this.setupGridOverlay();
   },
   beforeDestroy() {
     this.teardownGridOverlay();
@@ -222,7 +231,7 @@ export default {
     // showGrid off but an active selection (or in-progress polygon) still
     // needs it mounted.
     showGrid(value) {
-      if (value || this.selection || this.polygonPreview) {
+      if (value || this.selection || this.polygonPreview || this.hoverCell) {
         this.$nextTick(() => this.setupGridOverlay());
       } else {
         this.teardownGridOverlay();
@@ -232,7 +241,7 @@ export default {
     // other direction - a selection tool can make this go from null to a
     // real Set (or back) at any time, independent of showGrid.
     selection(value) {
-      if (value || this.showGrid || this.polygonPreview) {
+      if (value || this.showGrid || this.polygonPreview || this.hoverCell) {
         this.$nextTick(() => {
           if (!this.gridResizeObserver) this.setupGridOverlay();
           else this.drawGridOverlay();
@@ -244,7 +253,23 @@ export default {
     // Same overlay-lifecycle reasoning again, for the polygon tool's own
     // in-progress vertex list (see PolygonSelect's onPreview callback).
     polygonPreview(value) {
-      if (value || this.showGrid || this.selection) {
+      if (value || this.showGrid || this.selection || this.hoverCell) {
+        this.$nextTick(() => {
+          if (!this.gridResizeObserver) this.setupGridOverlay();
+          else this.drawGridOverlay();
+        });
+      } else {
+        this.teardownGridOverlay();
+      }
+    },
+    // Same overlay-lifecycle reasoning again, for the hover highlight -
+    // fires on essentially every mousemove while over the canvas (see
+    // handleHover), so the common case (overlay already mounted from a
+    // previous hover) takes the cheap drawGridOverlay()-only branch; only
+    // the very first hover (or one starting after everything else that
+    // keeps the overlay mounted has cleared) pays for a real setup.
+    hoverCell(value) {
+      if (value || this.showGrid || this.selection || this.polygonPreview) {
         this.$nextTick(() => {
           if (!this.gridResizeObserver) this.setupGridOverlay();
           else this.drawGridOverlay();
@@ -454,6 +479,22 @@ export default {
         });
       }
 
+      // Hover highlight - a subtle, tool-agnostic "this is the pixel a
+      // click would affect right now" cue (draw, erase, fill, select,
+      // move, ...), drawn last so it always reads on top of the grid/
+      // selection/polygon-preview layers above rather than getting
+      // visually lost under a selection's own tint. A light, neutral
+      // overlay (not the selection's blue) so it never looks like an
+      // actual selection of its own - just a cursor-following highlight.
+      if (this.hoverCell) {
+        const {x: hx, y: hy} = this.hoverCell;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.fillRect(hx * cellWidth, hy * cellHeight, cellWidth, cellHeight);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(hx * cellWidth + 0.5, hy * cellHeight + 0.5, cellWidth - 1, cellHeight - 1);
+      }
+
       if (!this.showCellIds) return;
       // "X,Y" - matches the two arguments every "Background: pixel at X/Y"
       // block already uses, so a cell's  coordinates can be read
@@ -510,6 +551,31 @@ export default {
     handleMouseLeave(event) {
       if (this.editor) this.editor.mouseup(event);
       this.handleMouse();
+      this.hoverCell = null;
+    },
+
+    // Tracks the cell under the pointer for the hover highlight (see
+    // drawGridOverlay's own comment) - separate from handleMouse (which
+    // drives the actual tool and is debounced), so the highlight tracks
+    // the cursor in real time rather than lagging behind by handleMouse's
+    // own 10ms debounce. Same offsetX/offsetY-against-the-canvas's-own-
+    // intrinsic-vs-rendered-size math @curtishughes/pixel-editor's own
+    // mousePosition() uses internally (see node_modules/@curtishughes/
+    // pixel-editor/dist/PixelEditor.js) - kept in sync by hand here since
+    // that library has no public API of its own to just ask "what cell is
+    // this event over."
+    handleHover(event) {
+      if (!this.editor) return;
+      const canvas = this.$refs.editor;
+      if (!canvas.clientWidth || !canvas.clientHeight) return;
+      const x = Math.floor((event.offsetX * canvas.width) / canvas.clientWidth);
+      const y = Math.floor((event.offsetY * canvas.height) / canvas.clientHeight);
+      if (x < 0 || y < 0 || x >= this.editor.width || y >= this.editor.height) {
+        this.hoverCell = null;
+        return;
+      }
+      if (this.hoverCell && this.hoverCell.x === x && this.hoverCell.y === y) return;
+      this.hoverCell = {x, y};
     },
 
     // Reports that this frame was just interacted with, so a caller driving

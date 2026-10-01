@@ -278,7 +278,7 @@
                         :ref="pixelEditorRefKey(animation, frame)"
                         :width="8"
                         :height="frame.pixels.length || 1"
-                        :aspectRatio="(8 / (frame.pixels.length || 1)) * 160/192 * (animation.previewWidthScale || 1)"
+                        :aspectRatio="(8 / (frame.pixels.length || 1)) * (animation.previewWidthScale || 1)"
                         v-model="frame.pixels"
                         :fgColor="fgColor"
                         :rowColors="editorRowColors(frame)"
@@ -1331,34 +1331,11 @@ export default defineComponent({
   outline: 2px solid rgba(0, 0, 0, 0.24) !important;
 }
 
-/* Same icon/button sizing as the Player Sprite tab's  toolbar icons
-   (PixelEditor.vue's .pixel-editor-tools rules) - size only, no colour
-   changes, so .delete-icon-btn's red-on-hover convention is untouched.
-   margin: 0 (not "0 1px") to match that same base component's trim -
-   see its own comment on why every bit of width matters for this row to
-   fit without wrapping at higher zoom. */
-.player-icon-btn-size {
-  min-width: 0;
-  height: 26px !important;
-  width: 26px !important;
-  margin: 0;
-}
-
-/* Vuetify's disabled styling normally dims a button's icon color, but
-   the icon's rest-state color elsewhere is forced with !important
-   (matching PixelEditor.vue's toolbar icons), which also blocks
-   Vuetify's disabled color from ever showing through - confirmed as a real
-   reported bug (a disabled Paste button read as clickable, no different
-   from the enabled Copy button next to it). Opacity reaches it without
-   needing to fight that !important, same fix as PixelGridToggle.vue's own
-   identical rule. */
-.player-icon-btn-size.v-btn--disabled {
-  opacity: 0.35;
-}
-
-.player-icon-btn-size >>> .v-icon {
-  font-size: 19px !important;
-}
+/* .player-icon-btn-size's own size/disabled-opacity/icon-font-size rules -
+   see App.vue's shared, unscoped copy (moved there once confirmed
+   byte-identical to BackgroundEditor.vue's own duplicate of this exact
+   class name - scoped CSS can't share a rule across components even under
+   the same class name, so each tab using it still has to apply it here). */
 
 /* editor-zoom and pixel-grid-toggle are separate components, each with
    their own inline layout - a flex row keeps them on one visual line and
@@ -1422,14 +1399,8 @@ export default defineComponent({
   padding-left: 16px;
 }
 
-/* mdi-delete's  glyph reads visually smaller than mdi-content-copy/
-   mdi-content-paste at the exact same font-size (more built-in padding
-   around the trash-can shape than those two icons have) - bumped up a
-   couple pixels so all three corner buttons read as the same size at a
-   glance, not just the same CSS font-size. */
-.delete-icon-btn.player-icon-btn-size >>> .v-icon {
-  font-size: 21px !important;
-}
+/* .delete-icon-btn.player-icon-btn-size's own mdi-delete size bump - see
+   App.vue's shared, unscoped copy. */
 
 /* Rest/hover/no-filled-circle treatment lives in App.vue's global
    .import-icon-btn rule (shared with TitleScreenEditor.vue's identical

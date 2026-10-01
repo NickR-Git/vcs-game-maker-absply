@@ -18,6 +18,7 @@
       <graphic-editor-toolbar class="text-font-controls-row" :active-editor="activeEditor" :bleed="16">
         <template v-slot:before-tools>
           <editor-zoom v-model="zoom" :levels="textFontZoomLevels" class="text-font-zoom" />
+          <pixel-grid-toggle v-model="showPixelGrid" />
         </template>
         <template v-slot:after-tools>
           <v-switch
@@ -61,6 +62,7 @@
                 name="text-font-cursor"
                 :allowChangingHeight="false"
                 :hideToolbar="true"
+                :showGrid="showPixelGrid"
                 @input="handleChange"
                 @activate="(editorInstance) => setActiveEditor(editorInstance, 'cursor')"
               />
@@ -114,6 +116,7 @@
                 :name="'text-font-glyph-' + index"
                 :allowChangingHeight="false"
                 :hideToolbar="true"
+                :showGrid="showPixelGrid"
                 @input="handleChange"
                 @activate="(editorInstance) => setActiveEditor(editorInstance, index)"
               >
@@ -190,8 +193,9 @@ import {computed, defineComponent, onMounted, ref} from '@vue/composition-api';
 import EditorZoom from './EditorZoom.vue';
 import GraphicEditorToolbar from './GraphicEditorToolbar.vue';
 import PixelEditor from './PixelEditor.vue';
+import PixelGridToggle from './PixelGridToggle.vue';
 import {useCollapsedIds} from '../hooks/collapse';
-import {useConfigurationStorage, useTextFontStorage} from '../hooks/project';
+import {useConfigurationStorage, usePixelGridOverlayStorage, useTextFontStorage} from '../hooks/project';
 import {useEditorZoom, ZOOM_LEVELS} from '../hooks/zoom';
 
 // Each glyph is a tiny fixed 4x5 grid - unlike every other tab's graphics,
@@ -246,11 +250,14 @@ const CARD_ENTRY = {id: 'glyphs'};
 const copiedGlyphData = ref(null);
 
 export default defineComponent({
-  components: {EditorZoom, GraphicEditorToolbar, PixelEditor},
+  components: {EditorZoom, GraphicEditorToolbar, PixelEditor, PixelGridToggle},
   setup() {
     const textFontStorage = useTextFontStorage();
     const configurationStorage = useConfigurationStorage();
     const zoom = useEditorZoom('textfont', 2, TEXT_FONT_ZOOM_LEVELS);
+    // Shared with every other tab's pixel grid toggle (see
+    // PixelGridToggle.vue's own comment) - not per-tab state of its own.
+    const showPixelGrid = usePixelGridOverlayStorage();
     const glyphWidth = computed(() => `${Math.round(GLYPH_BASE_WIDTH * zoom.value)}px`);
     // Same width, same per-pixel size as a real glyph tile - the cursor is
     // TEXT_CURSOR_WIDTH (4) pixels wide, identical to TEXT_GLYPH_WIDTH.
@@ -377,7 +384,7 @@ export default defineComponent({
 
     return {
       state, handleChange, handleReset, ready, resetToken, glyphLabel,
-      zoom, textFontZoomLevels: TEXT_FONT_ZOOM_LEVELS, glyphWidth, cursorGlyphWidth, isCollapsed, toggleCollapsed, cardEntry: CARD_ENTRY,
+      zoom, showPixelGrid, textFontZoomLevels: TEXT_FONT_ZOOM_LEVELS, glyphWidth, cursorGlyphWidth, isCollapsed, toggleCollapsed, cardEntry: CARD_ENTRY,
       showInGamePreview, interlacedPreviewRows, enableTextScrollCursor,
       TEXT_GLYPH_ORDER, TEXT_GLYPH_WIDTH, TEXT_GLYPH_HEIGHT, TEXT_CURSOR_WIDTH, TEXT_CURSOR_HEIGHT, PIXEL_ASPECT,
       activeEditor, activeEditorKey, setActiveEditor,

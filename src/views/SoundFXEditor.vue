@@ -1344,19 +1344,8 @@ export default defineComponent({
   color: rgba(0, 0, 0, 0.87) !important;
 }
 
-/* Same icon/button sizing as the Player Sprite tab's  toolbar icons
-   (PixelEditor.vue's .pixel-editor-tools rules) - size only, no colour
-   changes, so .delete-icon-btn's red-on-hover convention is untouched. */
-.soundfx-icon-btn-size {
-  min-width: 0;
-  height: 26px !important;
-  width: 26px !important;
-  margin: 0 1px;
-}
-
-.soundfx-icon-btn-size >>> .v-icon {
-  font-size: 19px !important;
-}
+/* .soundfx-icon-btn-size's own size/icon-font-size rules - see App.vue's
+   shared, unscoped copy. */
 
 /* Split from the rest of the card's content (soundfx-fields-section) so the
    name field can stay visible while collapsed - v-card-text's default
