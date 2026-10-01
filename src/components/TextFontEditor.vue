@@ -26,7 +26,6 @@
             label="Preview as in-game"
             title="The kernel actually draws a blank scanline between each row of a glyph's pixels - toggle this to see glyphs that way instead of as a plain, solid pixel grid. Read-only: switch back to Off to keep editing."
             hide-details
-            dense
             class="text-font-preview-switch"
           />
         </template>

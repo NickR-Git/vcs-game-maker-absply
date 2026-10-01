@@ -741,12 +741,7 @@
                       <div
                         v-if="marqueeSelecting"
                         class="piano-roll-marquee-box"
-                        :style="{
-                          left: `${Math.min(marqueeSelecting.startClientX, marqueeSelecting.currentClientX)}px`,
-                          top: `${Math.min(marqueeSelecting.startClientY, marqueeSelecting.currentClientY)}px`,
-                          width: `${Math.abs(marqueeSelecting.currentClientX - marqueeSelecting.startClientX)}px`,
-                          height: `${Math.abs(marqueeSelecting.currentClientY - marqueeSelecting.startClientY)}px`,
-                        }"
+                        :style="marqueeBoxStyle(marqueeSelecting)"
                       />
 
                       <div
@@ -2965,7 +2960,7 @@ export default defineComponent({
     // selected, not the steps they're in... accurately show selection based
     // on music note length, not step length") for any note shorter than a
     // full step, or not starting exactly on a step boundary.
-    const SELECTION_COLOR = 'rgba(33, 150, 243, 0.45)';
+    const SELECTION_COLOR = 'rgba(144, 202, 249, 0.9)';
 
     // Shared by patternCellStyle (the piano roll itself) and rulerCellStyle
     // (the step-number row above it) so both always agree on exactly which
@@ -3033,12 +3028,17 @@ export default defineComponent({
             .slice()
             .sort((a, b) => a.note.step - b.note.step)
             .forEach(({note, track}) => {
-              const color = isTrackMuted(song, pattern, track) ?
-                mutedNoteColor(instrumentColor(track)) : instrumentColor(track);
-              layers.push(segmentGradient(stepStartUnits, note.step, note.step + note.length, color));
+              // The selection tint has to be pushed BEFORE the note's base
+              // color below, not after - CSS stacks multiple background-
+              // image layers with the FIRST one on top, so pushing it last
+              // (as before) buried it under the note's opaque color and it
+              // never actually showed, despite isNoteSelected being true.
               if (isNoteSelected(note)) {
                 layers.push(segmentGradient(stepStartUnits, note.step, note.step + note.length, SELECTION_COLOR));
               }
+              const color = isTrackMuted(song, pattern, track) ?
+                mutedNoteColor(instrumentColor(track)) : instrumentColor(track);
+              layers.push(segmentGradient(stepStartUnits, note.step, note.step + note.length, color));
             });
       }
       // Only the exact ranges another same-channel track already occupies -
@@ -3407,6 +3407,30 @@ export default defineComponent({
     // roll drag here, but doesn't touch any note directly itself - purely a
     // selection gesture.
     const marqueeSelecting = ref(null);
+    // Clamps the drawn box to the grid's rect (see handleMarqueeSelect-
+    // Start's gridRect comment) - the drag's raw clientX/clientY corners
+    // are otherwise free to run past the grid into the row-label column or
+    // the step-ruler header above, which looked like it was "highlighting"
+    // that text even though neither is actually part of the selection.
+    const marqueeBoxStyle = (marquee) => {
+      const {startClientX, startClientY, currentClientX, currentClientY, gridRect} = marquee;
+      let left = Math.min(startClientX, currentClientX);
+      let right = Math.max(startClientX, currentClientX);
+      let top = Math.min(startClientY, currentClientY);
+      let bottom = Math.max(startClientY, currentClientY);
+      if (gridRect) {
+        left = Math.max(left, gridRect.left);
+        right = Math.min(right, gridRect.right);
+        top = Math.max(top, gridRect.top);
+        bottom = Math.min(bottom, gridRect.bottom);
+      }
+      return {
+        left: `${left}px`,
+        top: `${top}px`,
+        width: `${Math.max(0, right - left)}px`,
+        height: `${Math.max(0, bottom - top)}px`,
+      };
+    };
     const handleMarqueeSelectMove = (event) => {
       if (!marqueeSelecting.value) return;
       marqueeSelecting.value.currentClientX = event.clientX;
@@ -3446,8 +3470,15 @@ export default defineComponent({
     };
     const handleMarqueeSelectStart = (pattern, track, row, step, event) => {
       const startRowIndex = SHARED_NOTE_ROWS.findIndex((candidate) => candidate.midi === row.midi);
+      // Captured once up front (fixed-positioned, so it needs no re-
+      // measuring mid-drag - internal scrolling moves the grid's content,
+      // not the grid's viewport rect) and used to clamp the drawn box below:
+      // without this, the box's raw clientX/clientY corners could extend
+      // past the grid into the row-label column or the step-ruler header,
+      // visually "highlighting" text that was never actually selectable.
+      const gridEl = event.currentTarget.closest('.piano-roll');
       marqueeSelecting.value = {
-        pattern, track, startRowIndex,
+        pattern, track, startRowIndex, gridRect: gridEl ? gridEl.getBoundingClientRect() : null,
         // The precise slice-snapped unit position within the clicked step
         // (same helper handlePatternCellClick/handleCellHover already use
         // for note placement itself), not just that step's own left edge -
@@ -3471,6 +3502,13 @@ export default defineComponent({
     // uses, since nothing else already has this note reference in hand at
     // mousedown time.
     const handleCellMouseDown = (song, pattern, row, step, stepCount, event) => {
+      // Without this, dragging a Move/Select gesture across the grid also
+      // runs the browser's native text-selection drag underneath it -
+      // highlighting the row labels' note names (and anything else text
+      // under the cursor) and fighting the custom drag for every mousemove,
+      // which is what made the marquee box/dragged note visibly lag behind
+      // the real cursor position.
+      event.preventDefault();
       if (step >= stepCount) return;
       const track = activeTrackFor(pattern);
       if (!track) return;
@@ -3707,7 +3745,7 @@ export default defineComponent({
       dimSoundFx, dimSoundFxPercent, dimSoundFxPercentDisplay,
       state, handleChildChange, handleChangeSubdivision, snapEnabled, handleToggleSnap,
       pianoRollTool, setPianoRollTool, handleCellMouseDown,
-      pianoRollSelection, isNoteSelected, marqueeSelecting,
+      pianoRollSelection, isNoteSelected, marqueeSelecting, marqueeBoxStyle,
       handleTempoChange, minTempo: MIN_TEMPO, maxTempo: MAX_TEMPO,
       handleAddSong, handleDeleteSong, handleDuplicateSong, handleExportSong, handleImportSong,
       activeSongId, activeSong, activeSongArray, setActiveSong, songName, songOptions, handleSongFieldChange,
@@ -4896,6 +4934,13 @@ export default defineComponent({
      regardless of the surrounding (now border-less) pattern section. */
   border: 1px solid rgba(0, 0, 0, 0.24);
   border-radius: 2px;
+  /* Dragging a Move/Select gesture across the grid otherwise also runs the
+     browser's native text-selection drag underneath it, highlighting the
+     row labels' note names (and the step ruler's numbers) blue - the
+     mousedown-side event.preventDefault() in handleCellMouseDown already
+     stops this for drags that start on a cell, but this covers every other
+     starting point (e.g. a drag that starts on a label or the ruler) too. */
+  user-select: none;
 }
 
 /* Groups the (scrollable) pitch-row grid with the (horizontally-mirrored,

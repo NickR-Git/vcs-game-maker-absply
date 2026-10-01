@@ -201,7 +201,6 @@
                             v-model="replaceFramesOnImport"
                             label="Replace existing frames"
                             hide-details
-                            dense
                           />
                           <v-btn
                             color="primary"

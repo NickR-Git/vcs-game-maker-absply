@@ -196,20 +196,26 @@ const buildGain = (context, {peakGain, peakVolume, startTime, seconds, envelope,
 // fade-out landing exactly on a plain note's own CLICK_GUARD_SECONDS
 // fade-out) just compounds smoothly, not a conflict.
 //
-// 3ms - short enough that several of these in a row (this can fire many
-// times per note, once per arpeggio flip, which can be as fast as every
-// ~16ms) don't add up to an audible wobble in the note's own volume, but
-// long enough to give a clean two-level square wave (AUDC 4/5/12/13 - "pure
-// tone") real headroom to round off - confirmed as a real reported gap: a
-// pop at 1ms was still clearly audible specifically on pure tone (no
-// arpeggio needed to hear it, just an ordinary short note), since a clean
-// periodic waveform makes ANY edge discontinuity far more perceptually
-// obvious than the exact same size jump is against a buzzy/noisy waveform's
-// own already-irregular signal (the same physical edge, just psycho-
-// acoustically masked for the buzzy types) - this fade is already applied
-// uniformly to every AUDC type here, not just pure tone, so widening it
-// helps all of them, pure tone most audibly.
-const EDGE_FADE_SECONDS = 0.003;
+// Widened from 3ms to 6ms - still short enough that several of these in a
+// row (this can fire many times per note, once per arpeggio flip, which can
+// be as fast as every ~16ms) don't add up to an audible wobble in a note's
+// volume, but 3ms turned out to still leave an audible click on pure tone
+// (AUDC 4/5/12/13) specifically during real pattern/song preview playback
+// (not an ordinary single click-to-place preview, and not the compiled ROM,
+// which has no such fade at all - a real hardware register write is
+// instant). A clean periodic waveform makes ANY edge discontinuity far more
+// perceptually obvious than the exact same size jump is against a buzzy/
+// noisy waveform's already-irregular signal (the same physical edge, just
+// psychoacoustically masked for the buzzy types) - on top of that, pure
+// tone's buffer (built at TIA_SAMPLE_RATE, 31440Hz, well below a real
+// AudioContext's 44100/48000Hz) also needs Web Audio's automatic
+// resampling to reach the real output rate, and a raw, unfiltered square
+// wave's hard edges are exactly the signal shape that resampling filter
+// handles worst - every edge, not just this fade's, picks up a little
+// ringing, which a longer fade gives more room to average out. This fade is
+// already applied uniformly to every AUDC type here, not just pure tone, so
+// widening it helps all of them, pure tone most audibly.
+const EDGE_FADE_SECONDS = 0.006;
 const connectWithEdgeFade = (context, source, destination, segStartTime, segSeconds) => {
   const fade = Math.min(EDGE_FADE_SECONDS, segSeconds / 2);
   if (fade <= 0) {
@@ -482,7 +488,16 @@ export const previewPatternNote = ({audc, audf, audv, arpeggio, arpeggioDivision
   // constraint that doesn't apply to this preview's own Web Audio gain.
   const dimMultiplier = useDimSoundFxStorage().value ?
     (Number(useDimSoundFxPercentStorage(DEFAULT_DIM_PERCENT).value) || 0) / 100 : 1;
-  const startTime = context.currentTime;
+  // Same 50ms lead-in playPattern/playSequence already schedule their
+  // startTime at (see their comment on this), not context.currentTime
+  // directly - without it, buildGain/connectWithEdgeFade's fade-in ramps
+  // get scheduled at (or behind) the audio clock's current instant, so the
+  // engine has no room left to actually render them before output starts
+  // and the ramp collapses into the exact instant jump it exists to avoid -
+  // confirmed as the real remaining cause of a reported "popping" that
+  // only happened on this instant single-note preview (click-to-place/
+  // drag), never during pattern/song playback, which already had this lead-in.
+  const startTime = context.currentTime + 0.05;
   const seconds = 0.18;
 
   // Same tempo-relative-to-frames conversion playPattern/playSequence use

@@ -181,7 +181,6 @@
                     label="Multiline"
                     title="When this message is longer than 12 characters, shows its second line automatically underneath the first, with no scrolling needed. Off (or for a message with more than 2 lines), only the first line shows until a &quot;Scroll text lines&quot; block is used to reveal the rest. Only the plain &quot;Show text&quot; blocks support this - the &quot;(scrolling)&quot; blocks always scroll a single line and ignore it."
                     hide-details
-                    dense
                     class="text-wrap-switch"
                     @change="handleChildChange"
                   />

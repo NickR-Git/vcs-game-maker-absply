@@ -42,6 +42,30 @@
           </v-list-item-content>
         </v-list-item>
       </v-list>
+
+      <span class="text-subtitle-1 about-label">Supported Kernels/Minikernels</span>
+      <v-list dense class="about-list">
+        <v-list-item @click="openInNewWindow('https://github.com/batari-Basic/batari-Basic')">
+          <v-list-item-content>
+            <v-list-item-title>Standard Kernel</v-list-item-title>
+            <v-list-item-subtitle>batari Basic's built-in playfield/sprite kernel &middot; github.com/batari-Basic/batari-Basic</v-list-item-subtitle>
+          </v-list-item-content>
+        </v-list-item>
+
+        <v-list-item @click="openInNewWindow('https://forums.atariage.com/topic/169819-the-titlescreen-kernel/')">
+          <v-list-item-content>
+            <v-list-item-title>Titlescreen Kernel</v-list-item-title>
+            <v-list-item-subtitle>By RevEng &middot; forums.atariage.com</v-list-item-subtitle>
+          </v-list-item-content>
+        </v-list-item>
+
+        <v-list-item @click="openInNewWindow('https://forums.atariage.com/topic/287652-text-minikernel/')">
+          <v-list-item-content>
+            <v-list-item-title>Text Minikernel</v-list-item-title>
+            <v-list-item-subtitle>Adapted from Karl G's Text Minikernel &middot; forums.atariage.com</v-list-item-subtitle>
+          </v-list-item-content>
+        </v-list-item>
+      </v-list>
     </v-card-text>
   </v-card>
 </template>

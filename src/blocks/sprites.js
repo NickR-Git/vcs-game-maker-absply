@@ -918,6 +918,13 @@ Blockly.Extensions.register('sprite_inertia_accelerate_action_sync', function() 
     // instant the drag ends, and this validator re-runs for real on the
     // actual dropped block once the drag finishes.
     if (typeof block.isInsertionMarker === 'function' && block.isInsertionMarker()) return;
+    // Same headless-workspace guard as input_fire_pattern_frames_sync,
+    // checked BEFORE any input.setVisible() call below (not just the
+    // render()/resizeContents() calls at the end) - setVisible() is the
+    // call that actually crashes on a headless workspace ("...
+    // stopTrackingAll is not a function" - see function.js's comment for
+    // the full explanation), not just the rendering that follows it.
+    if (!block.workspace || !block.workspace.rendered) return;
     const shouldBeVisible = action !== 'stop';
     let changed = false;
     ['DIRECTION', 'RATE', 'MAXSPEED', 'DIRECTIONS16_INPUT', 'FINE_INPUT'].forEach((name) => {
@@ -926,11 +933,7 @@ Blockly.Extensions.register('sprite_inertia_accelerate_action_sync', function() 
       input.setVisible(shouldBeVisible);
       changed = true;
     });
-    // Same headless-workspace guard as input_fire_pattern_frames_sync -
-    // block.render()/workspace.resizeContents() are RenderedConnection/
-    // WorkspaceSvg-only, and ROM builds run blocks through a plain
-    // headless Blockly.Workspace with no rendering at all.
-    if (!changed || !block.workspace || !block.workspace.rendered) return;
+    if (!changed) return;
     if (typeof block.render === 'function') block.render();
     if (block.workspace.resizeContents) block.workspace.resizeContents();
   };

@@ -539,6 +539,16 @@ Blockly.Trashcan.prototype.getBoundingRectangle = function() {
 // bound in a template, so a plain object is enough - no reactivity needed.
 let savedScrollState = null;
 
+// Whether IBM Plex Mono has already been CONFIRMED loaded at least once this
+// session - module-level (not per-instance) for the same "survives this
+// component's repeated destroy/recreate on tab switches" reason as
+// savedScrollState above. Lets ensureBlockFontSizing below skip straight to
+// document.fonts.check()'s synchronous answer on every call after the
+// first real one - still correct (the font can't un-load), just without
+// re-running the async document.fonts.load() race on every single mount/
+// reload once it's already a known-true fact.
+let blocklyFontConfirmedLoaded = false;
+
 export default {
   name: 'BlocklyComponent',
   props: ['options', 'value'],
@@ -591,37 +601,7 @@ export default {
     this.workspaceSearch = new WorkspaceSearch(this.workspace);
     this.workspaceSearch.init();
 
-    // IBM Plex Mono (--blockly-font-family, see App.vue, and
-    // ActionEditor.vue's  matching "normal 11px" fontStyle) loads
-    // asynchronously via a <link> in public/index.html, same as any web
-    // font - browsers fetch that stylesheet eagerly, but LAZILY defer
-    // actually downloading the font FILE it references until something on
-    // the page needs to render text in it. If Blockly.inject() above is the
-    // very first thing that needs it, every block's initial text
-    // measurement (which sizes its shape) runs against the fallback
-    // ("monospace") font instead - the font then swaps in visually once it
-    // finishes loading, but Blockly never re-measures existing blocks on
-    // its own, so they stay the WRONG size until something forces a
-    // re-render.
-    //
-    // document.fonts.ready (tried first) is NOT the right signal for this:
-    // it resolves once every font ALREADY SCHEDULED to load has finished -
-    // but if the lazy download above hasn't been scheduled yet at the
-    // moment this code runs (a real race - confirmed as why that first
-    // attempt still needed a page refresh), it can resolve before the real
-    // font ever starts loading, let alone finishes. document.fonts.load()
-    // instead actively requests this exact font (deduped by the browser if
-    // it's already loading/cached) and its  returned promise only
-    // resolves once THAT specific load genuinely completes - a real signal,
-    // not an ambient one. Once it resolves, re-rendering every block
-    // re-runs Blockly's  text measurement (a live DOM
-    // getComputedTextLength() call, not something Blockly caches across
-    // renders) against the now-correct font.
-    if (document.fonts && document.fonts.load) {
-      document.fonts.load('normal 11px "IBM Plex Mono"').catch(() => {}).then(() => {
-        this.rerenderForFontLoad();
-      });
-    }
+    this.ensureBlockFontSizing();
 
     // Applied synchronously, right here - BEFORE the browser ever paints
     // this mount's  first frame - rather than from inside the resize-
@@ -709,9 +689,67 @@ export default {
     clearTimeout(this.resizeSettleTimer);
   },
   methods: {
+    // IBM Plex Mono (--blockly-font-family, see App.vue, and
+    // ActionEditor.vue's matching "normal 11px" fontStyle) loads
+    // asynchronously via a <link> in public/index.html, same as any web
+    // font - browsers fetch that stylesheet eagerly, but LAZILY defer
+    // actually downloading the font FILE it references until something on
+    // the page needs to render text in it. The very first thing that needs
+    // it sizes every block's initial text measurement against whatever
+    // fallback font is active at that instant instead - the real font then
+    // swaps in visually once it finishes loading, but Blockly never
+    // re-measures existing blocks by itself, so they stay the WRONG size
+    // until something forces a re-render. Called from both mounted() (the
+    // initial inject) and loadWorkspace() (any later full rebuild - an
+    // undo/redo that recreates blocks, a project reload, switching back to
+    // this tab) rather than just once at mount, since each of those can
+    // independently create blocks that get measured fresh against whatever
+    // the font state happens to be at THAT moment - a single mount-time
+    // check only ever covered the first of these, confirmed as a real
+    // reported recurrence ("undersized blocks" after an undo or a tab
+    // switch, not just on first load).
+    //
+    // document.fonts.check() first (a synchronous, exact "is this specific
+    // font variant already loaded" query, not an ambient "are fonts
+    // settled" guess) - once blocklyFontConfirmedLoaded is true (the module-
+    // level flag above, set the first time this resolves), every later call
+    // short-circuits straight to a render with no async wait at all, which
+    // covers the common case (the font finished loading ages ago) without
+    // re-running a promise chain on every single reload.
+    //
+    // document.fonts.ready (tried first, before document.fonts.load() below
+    // existed) is NOT the right signal for the first, not-yet-confirmed
+    // case: it resolves once every font ALREADY SCHEDULED to load has
+    // finished - but if the lazy download above hasn't been scheduled yet at
+    // the moment this code runs (a real race - confirmed as why that first
+    // attempt still needed a page refresh), it can resolve before the real
+    // font ever starts loading, let alone finishes. document.fonts.load()
+    // instead actively requests this exact font (deduped by the browser if
+    // it's already loading/cached) and its returned promise only resolves
+    // once THAT specific load genuinely completes - a real signal, not an
+    // ambient one.
+    ensureBlockFontSizing() {
+      if (!document.fonts) {
+        this.rerenderForFontLoad();
+        return;
+      }
+      if (blocklyFontConfirmedLoaded || document.fonts.check('normal 11px "IBM Plex Mono"')) {
+        blocklyFontConfirmedLoaded = true;
+        this.rerenderForFontLoad();
+        return;
+      }
+      if (!document.fonts.load) {
+        this.rerenderForFontLoad();
+        return;
+      }
+      document.fonts.load('normal 11px "IBM Plex Mono"').catch(() => {}).then(() => {
+        blocklyFontConfirmedLoaded = true;
+        this.rerenderForFontLoad();
+      });
+    },
     // Re-measures/re-renders every block once the real IBM Plex Mono font
-    // has actually finished loading (see mounted()'s  document.fonts.load
-    // comment for the full race this fixes) - deferred (not run immediately)
+    // has actually finished loading (see ensureBlockFontSizing's comment
+    // for the full race this fixes) - deferred (not run immediately)
     // whenever a drag gesture is in progress at the moment the font-load
     // promise resolves. Confirmed as a real reported bug otherwise: a block
     // currently being dragged lives on Blockly's  separate "drag surface"
@@ -801,6 +839,11 @@ export default {
       } finally {
         Blockly.Events.enable();
       }
+      // See ensureBlockFontSizing's comment - this rebuild can create new
+      // blocks (an undo/redo, a project reload), each needing
+      // the exact same font-race check mounted() already runs once for the
+      // initial inject.
+      this.ensureBlockFontSizing();
     },
     // Entry point for the 'value' watch below - skipped outright (not
     // deferred/retried) whenever a drag is in progress, so a v-model round

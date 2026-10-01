@@ -223,16 +223,20 @@ Blockly.Extensions.register('input_fire_pattern_frames_sync', function() {
   const modeField = block.getField('MODE');
   if (!modeField) return;
   const applyVisibility = (mode) => {
+    // Same headless-workspace guard as updateFunctionCallArgVisibility in
+    // blocks/function.js, but checked BEFORE input.setVisible() itself
+    // (not just the render()/resizeContents() calls below it) - setVisible()
+    // is the call that actually crashes on a headless workspace ("...
+    // stopTrackingAll is not a function" - see function.js's comment for the
+    // full explanation), not just the rendering that follows it. Visibility
+    // is a purely visual concern the generator itself never reads, so
+    // skipping it entirely on a headless workspace is always safe.
+    if (!block.workspace || !block.workspace.rendered) return;
     const input = block.getInput('FRAMES_INPUT');
     if (!input) return;
     const shouldBeVisible = mode !== 'RELEASED';
     if (input.isVisible() === shouldBeVisible) return;
     input.setVisible(shouldBeVisible);
-    // Same headless-workspace guard as updateFunctionCallArgVisibility in
-    // blocks/function.js - block.render()/workspace.resizeContents() are
-    // RenderedConnection/WorkspaceSvg-only, and ROM builds run blocks
-    // through a plain headless Blockly.Workspace with no rendering at all.
-    if (!block.workspace || !block.workspace.rendered) return;
     if (typeof block.render === 'function') block.render();
     if (block.workspace.resizeContents) block.workspace.resizeContents();
   };

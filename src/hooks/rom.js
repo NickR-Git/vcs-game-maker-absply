@@ -166,6 +166,21 @@ export const usesPlayer0RainbowColors = () => {
 const isOverflowError = (e) => /segment overflow|origin reverse-indexed|Unknown Mnemonic 'jmp BS_(jsr|return)'/i
     .test((e && e.message) || '');
 
+// Appended to the end of a build-failure error whenever it's an overflow
+// (see isOverflowError above) that the relocation retry loop either had no
+// bank left to try, or burned through its whole MAX_RELOCATION_ATTEMPTS
+// budget without ever succeeding - both mean the project's content
+// genuinely doesn't fit in the ROM size currently configured, not a
+// transient/relocatable overflow. Named with the actual configured size
+// (config.romSize, e.g. "4k") rather than a generic "doesn't fit" message,
+// so this is immediately actionable without the user having to go check
+// the Configuration tab themselves to find out what's even selected.
+const romSizeOverflowHint = (e, config) => {
+  if (!isOverflowError(e)) return '';
+  return `\n\nThis project may be too large to fit in the configured ROM size ` +
+    `(${(config && config.romSize) || '4k'}) - try a larger ROM size on the Configuration tab.`;
+};
+
 // Every title screen's combined graphics (see generators/bbasic/titlescreen.js's
 // registerTitleScreenSubroutine) compile into ONE subroutine, which - unlike
 // ordinary relocatable content - needs a bank fully to itself (the
@@ -1553,8 +1568,8 @@ const buildRomInner = async () => {
       };
       const titleScreenHint = titleScreenOverflowHint(e);
       const annotatedError = new Error(
-          `${e.message}${titleScreenHint.text}\n\nBank assignments at failure:\n` +
-          `${JSON.stringify(diagnostics, null, 2)}`);
+          `${e.message}${titleScreenHint.text}${romSizeOverflowHint(e, config)}\n\n` +
+          `Bank assignments at failure:\n${JSON.stringify(diagnostics, null, 2)}`);
       showError(errorStorage, 'Error while compiling bBasic code', code, annotatedError, titleScreenHint.highlight);
       return false;
     }
@@ -1582,8 +1597,8 @@ const buildRomInner = async () => {
   showError(errorStorage, 'Error while compiling bBasic code', lastCode,
       new Error(`${(lastFailure && lastFailure.message) || 'Ran out of relocation attempts.'}\n\n` +
         `Gave up after trying ${MAX_RELOCATION_ATTEMPTS} different bank combinations without finding one ` +
-        `that compiles.${titleScreenHint.text}\n\nBank assignments at failure:\n` +
-        `${JSON.stringify(diagnostics, null, 2)}`), titleScreenHint.highlight);
+        `that compiles.${titleScreenHint.text}${romSizeOverflowHint(lastFailure, configurationStorage.value)}\n\n` +
+        `Bank assignments at failure:\n${JSON.stringify(diagnostics, null, 2)}`), titleScreenHint.highlight);
   return false;
 };
 
