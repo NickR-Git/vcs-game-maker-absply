@@ -1,4 +1,4 @@
-const {app, BrowserWindow, Menu, MenuItem, dialog, ipcMain} = require('electron/main');
+const {app, BrowserWindow, Menu, MenuItem, dialog, ipcMain, shell} = require('electron/main');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -28,6 +28,13 @@ const createWindow = () => {
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
     },
+  });
+
+  // A link or window.open() to a web page (the About tab's links, for one)
+  // opens in the system's browser rather than a new Electron window.
+  win.webContents.setWindowOpenHandler(({url}) => {
+    if (/^https?:\/\//i.test(url)) shell.openExternal(url);
+    return {action: 'deny'};
   });
 
   win.loadFile('dist/index.html');
