@@ -280,12 +280,30 @@ export default {
     // <router-view> - see App.vue), so a plain window-level listener here
     // never has to worry about two tabs' hotkeys firing at once.
     window.addEventListener('keydown', this.handleToolHotkey);
+    document.addEventListener('mousedown', this.handleOutsideMouseDown, true);
   },
   beforeDestroy() {
     if (this.scrollContainer) this.scrollContainer.removeEventListener('scroll', this.handleScroll);
     window.removeEventListener('keydown', this.handleToolHotkey);
+    document.removeEventListener('mousedown', this.handleOutsideMouseDown, true);
   },
   methods: {
+    // Every marquee/selection tool (Rectangle, Circle, Polygon, and the
+    // selection Move acts on) deactivates when the user clicks anywhere
+    // outside the active graphic's canvas - clearing the selection and
+    // discarding an unfinished polygon. Clicks inside this toolbar are
+    // exempt, since switching tools (e.g. Rectangle Select -> Move) has to
+    // keep the selection. Capture phase, so this runs before another card's
+    // mousedown handler makes it the active editor.
+    handleOutsideMouseDown(event) {
+      const editor = this.activeEditor;
+      if (!editor || !editor.deselect) return;
+      const target = event.target;
+      if (this.$el && this.$el.contains(target)) return;
+      const canvases = [editor.$refs.editor, editor.$refs.gridOverlay];
+      if (canvases.some((canvas) => canvas && canvas.contains(target))) return;
+      editor.deselect();
+    },
     handleScroll(event) {
       this.isScrolled = event.target.scrollTop > 0;
     },
@@ -333,6 +351,14 @@ export default {
       if (key === 'Escape') {
         event.preventDefault();
         this.activeEditor.deselect();
+        return;
+      }
+
+      // Delete/Backspace clears the pixels inside the current marquee
+      // selection (a no-op with nothing selected).
+      if (key === 'Delete' || key === 'Backspace') {
+        event.preventDefault();
+        this.activeEditor.deleteSelection();
         return;
       }
 

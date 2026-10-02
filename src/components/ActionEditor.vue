@@ -346,21 +346,23 @@ export default {
       multiselectControls.svgGroup_.appendChild(group);
       this.gridSnapSvgGroup_ = group;
     },
-    // Blockly (this bundled version, 6.20210701.0) has no public setter for
-    // grid snap - Grid.prototype.shouldSnap() only ever reads its own
-    // snapToGrid_ field, set once from options.grid.snap at injection time,
-    // with no supported way to change it afterward. shouldSnap() IS read
-    // fresh on every block drag-end (see node_modules/blockly/core/
-    // block_svg.js's  snapToGrid_ call), not cached anywhere else, so
-    // writing straight to that private field still takes effect immediately
-    // for every future placement - the only lever this Blockly version
-    // actually offers for a live toggle.
+    // Blockly 10's Grid class has a public setSnapToGrid() for exactly this
+    // (confirmed against node_modules/blockly/core/grid.d.ts) - its private
+    // field is named "snapToGrid" (no trailing underscore) now, not the
+    // "snapToGrid_" this used to write directly under an older bundled
+    // Blockly version; writing to that old name silently created an unused
+    // property instead of ever reaching the real grid, a real bug (grid snap
+    // toggle doing nothing) confirmed directly against the installed
+    // package's type declarations. shouldSnap() is read fresh on every block
+    // drag-end (see node_modules/blockly/core/block_svg.js's call), not
+    // cached anywhere else, so the setter still takes effect immediately for
+    // every future placement.
     toggleGridSnap() {
       this.gridSnapEnabled = !this.gridSnapEnabled;
       this.gridSnapStorage.value = this.gridSnapEnabled;
       const workspace = this.$refs['foo'] && this.$refs['foo'].workspace;
       const grid = workspace && workspace.getGrid && workspace.getGrid();
-      if (grid) grid.snapToGrid_ = this.gridSnapEnabled;
+      if (grid) grid.setSnapToGrid(this.gridSnapEnabled);
     },
     // Only the bBasic source is refreshed as blocks change; compiling it into a
     // ROM is left to the "Update ROM" button, since a build is slow and a

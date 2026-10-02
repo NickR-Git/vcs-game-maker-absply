@@ -232,7 +232,7 @@
                       :allowChangingHeight="true"
                       :showClearButton="true"
                       :showGrid="showPixelGrid"
-                      :showCellIds="showPixelGridLabels"
+                      :showCellIds="showPixelGrid && showPixelGridLabels"
                       :hideToolbar="true"
                       @input="(pixels) => handleBackgroundPixelsInput(background, pixels)"
                       @clear="() => handleClearRowColors(background)"

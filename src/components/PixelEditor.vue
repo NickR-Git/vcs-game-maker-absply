@@ -23,10 +23,10 @@
                 toggledTool === 'rect-select' || toggledTool === 'circle-select' || toggledTool === 'polygon-select',
               'editor-canvas-tool-move': toggledTool === 'move',
             }"
-            @mousedown="handleMouse"
+            @mousedown="(e) => { handleStrokeStart(); handleMouse(e); }"
+            @mouseup="(e) => { strokeStart = null; handleMouse(e); }"
             @mouseenter="(e) => { handleMouse(e); handleHover(e); }"
             @mouseleave="handleMouseLeave"
-            @mouseup="handleMouse"
             @mousemove="(e) => { handleMouse(e); handleHover(e); }"
           />
           <canvas
@@ -146,6 +146,9 @@ export default {
       // mutated in place) every time it changes, since Vue 2 can't observe
       // a plain Set's own mutations.
       selection: null,
+      // See handleStrokeStart/cancelStroke - the state to roll back to if
+      // the current drag leaves the canvas, or null while no button is down.
+      strokeStart: null,
       // The polygon-select tool's own in-progress vertex list (see its own
       // onPreview callback), or null while it's not mid-polygon - without
       // rendering these as they're placed, every click looked like it did
@@ -331,6 +334,15 @@ export default {
     // change coming back through its  prop.
     value(newValue) {
       if (!this.editor || !newValue) return;
+      // Ignored while a mouse button is down on the canvas: the "value"
+      // coming back mid-stroke is the debounced echo of an OLDER preview
+      // state, and syncing it would redraw that stale state over the live
+      // preview and push an extra undo entry. Line/Rectangle/Oval undo()
+      // their last entry on every move, so they then undid the wrong entry
+      // and left pixels behind (timing-dependent, hence "sometimes"). The
+      // editor is the source of truth until the stroke ends, and the final
+      // post-stroke emit matches it.
+      if (this.strokeStart) return;
       if (newValue.length !== this.editor.height) {
         this.initEditor(newValue.length, newValue);
       } else if (!isMatrixEqual(newValue, this.getPixels())) {
@@ -550,8 +562,42 @@ export default {
     // a mousemove landing before the debounce fires would still draw.
     handleMouseLeave(event) {
       if (this.editor) this.editor.mouseup(event);
+      this.cancelStroke();
       this.handleMouse();
       this.hoverCell = null;
+    },
+
+    // Snapshot taken the instant a mouse button goes down on the canvas
+    // (before the library's mousedown listener runs the tool), so a stroke
+    // that leaves the canvas can be rolled back to exactly this state - see
+    // cancelStroke.
+    handleStrokeStart() {
+      if (!this.editor) return;
+      this.strokeStart = {
+        historyLength: this.editor.history.undoStack.length,
+        redoStack: [...this.editor.history.redoStack],
+        selection: this.selection,
+      };
+    },
+
+    // Dragging a drawing/selection tool off the canvas abandons the whole
+    // stroke instead of committing whatever it had drawn so far: every
+    // history entry the stroke added is rolled back (and the redo stack
+    // restored, so the abandoned stroke can't be "redone" back in), and the
+    // selection returns to what it was before. Tools that act on a single
+    // click rather than a drag (Fill) and the click-by-click Polygon Select
+    // are left alone - leaving the canvas between clicks is normal there.
+    cancelStroke() {
+      const start = this.strokeStart;
+      this.strokeStart = null;
+      if (!start || !this.editor) return;
+      const dragTools = ['pencil', 'eraser', 'line', 'rectangle', 'oval', 'move',
+        'rect-select', 'circle-select'];
+      if (!dragTools.includes(this.toggledTool)) return;
+      const history = this.editor.history;
+      while (history.undoStack.length > start.historyLength) this.editor.undo();
+      history.redoStack = start.redoStack;
+      this.selection = start.selection;
     },
 
     // Tracks the cell under the pointer for the hover highlight (see
@@ -798,6 +844,22 @@ export default {
         editorPixels.push({x, y, color: bit ? this.onColorForRow(y) : this.bgColor});
       }));
       this.editor.set(editorPixels, logToHistory);
+    },
+
+    // Turns every currently-selected cell off - a plain pixel-matrix edit
+    // like any drawing stroke (real history entry, real 'input' emit). The
+    // selection itself is left in place, matching the usual "Delete clears
+    // the selected content, not the selection" behavior. A no-op with
+    // nothing selected.
+    deleteSelection() {
+      if (!this.selection || !this.selection.size) return;
+      const pixels = this.getPixels();
+      this.selection.forEach((key) => {
+        const [x, y] = key.split(',').map(Number);
+        if (pixels[y] && x >= 0 && x < pixels[y].length) pixels[y][x] = 0;
+      });
+      this.setPixels(pixels);
+      this.$emit('input', pixels);
     },
 
     // Mirrors every row left-to-right - a plain pixel-matrix edit like any
