@@ -1,7 +1,7 @@
 {
   "name": "vcs-game-maker",
   "productName": "VCS Game Maker",
-  "version": "0.51.7",
+  "version": "0.51.8",
   "private": true,
   "description": "A no-code environment for creating Atari 2600 games using Blockly and batari Basic.",
   "author": "haroldo-ok, with contributions by AbstractPolygon",
@@ -21,7 +21,7 @@
     "@blockly/plugin-workspace-search": "^7.0.0",
     "@blockly/toolbox-search": "1.2.11",
     "@curtishughes/pixel-editor": "^4.0.1",
-    "@mit-app-inventor/blockly-plugin-workspace-multiselect": "0.1.9",
+    "@mit-app-inventor/blockly-plugin-workspace-multiselect": "0.1.12",
     "@vue/composition-api": "^1.0.0-rc.13",
     "blockly": "^10.0.2",
     "core-js": "^3.6.5",

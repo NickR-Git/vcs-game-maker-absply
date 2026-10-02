@@ -454,7 +454,11 @@
 
                       <v-divider v-if="activePattern(song).tracks.length" class="instruments-piano-divider"></v-divider>
 
-                      <div class="piano-roll-zoom-row" v-if="activePattern(song).tracks.length">
+                      <div
+                        class="piano-roll-zoom-row"
+                        v-if="activePattern(song).tracks.length"
+                        :style="{top: `${musicToolbarHeight}px`}"
+                      >
                         <div class="subdivision-controls">
                           <v-btn
                             icon
@@ -1309,15 +1313,39 @@ export default defineComponent({
     const handleMusicToolbarScroll = (event) => {
       isMusicToolbarScrolled.value = event.target.scrollTop > 0;
     };
+    // The piano roll's toolbar (.piano-roll-zoom-row) is ALSO sticky (see
+    // its CSS) and needs to stack directly below this one rather than
+    // overlapping it - but .music-toolbar's height isn't a fixed constant:
+    // it grows 4px/4px -> 10px/10px padding once actually scrolled (see
+    // .music-toolbar-scrolled's comment), so a single hardcoded "top"
+    // offset for the piano roll toolbar would either leave a gap or
+    // overlap depending on scroll state. Measured live via ResizeObserver
+    // instead (offsetHeight, not entry.contentRect, so this reads the real
+    // border-box height including that padding directly, with no
+    // box-sizing ambiguity) and bound to .piano-roll-zoom-row's "top"
+    // through musicToolbarHeight below.
+    const musicToolbarHeight = ref(0);
+    let musicToolbarResizeObserver = null;
+
     onMounted(() => {
       musicToolbarScrollContainer = instance.proxy.$el.querySelector('.editor-container');
       if (musicToolbarScrollContainer) {
         musicToolbarScrollContainer.addEventListener('scroll', handleMusicToolbarScroll);
       }
+      const musicToolbarEl = instance.proxy.$el.querySelector('.music-toolbar');
+      if (musicToolbarEl && window.ResizeObserver) {
+        musicToolbarResizeObserver = new ResizeObserver(() => {
+          musicToolbarHeight.value = musicToolbarEl.offsetHeight;
+        });
+        musicToolbarResizeObserver.observe(musicToolbarEl);
+      }
     });
     onBeforeUnmount(() => {
       if (musicToolbarScrollContainer) {
         musicToolbarScrollContainer.removeEventListener('scroll', handleMusicToolbarScroll);
+      }
+      if (musicToolbarResizeObserver) {
+        musicToolbarResizeObserver.disconnect();
       }
     });
 
@@ -3800,7 +3828,7 @@ export default defineComponent({
       pianoRollZoom, stepPianoRollZoom, cellWidthPx, handleFitZoom,
       volumeRowHeight, startVolumeRowResize,
       pianoRollHeight, startPianoRollResize, startPianoRollResizeTop,
-      isMusicToolbarScrolled,
+      isMusicToolbarScrolled, musicToolbarHeight,
       sharedNoteRows: SHARED_NOTE_ROWS,
       isBlackKeyRow, labelRowUnavailable,
       isPatternCollapsed, togglePatternCollapsed, isInstrumentsCollapsed, toggleInstrumentsCollapsed,
@@ -4781,13 +4809,31 @@ export default defineComponent({
    .piano-roll-zoom-and-playback to the right when both fit on one line,
    but falls back to flex-start (left-aligned) for a lone item once that
    group wraps onto its own line with nothing left to space "between". */
+/* Sticky, same as .music-toolbar above - "top" is bound to that toolbar's
+   live-measured height (musicToolbarHeight, see the comment on it in
+   setup()) so this stacks directly below it with no gap/overlap as that
+   toolbar's height changes between its scrolled/unscrolled padding.
+   z-index 1 (not 2, .music-toolbar's) so that toolbar stays visually on
+   top at the point where they're both pinned and something else scrolls
+   underneath both. Opaque background for the same "scrolled content
+   shouldn't show through" reason as every other sticky toolbar here. */
 .piano-roll-zoom-row {
+  position: sticky;
+  z-index: 1;
+  background-color: #fff;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 4px 12px;
+  padding: 4px 0;
   margin-bottom: 4px;
+}
+
+/* Same "Soft Colors" override as .music-toolbar's
+   .desaturate-app-colors rule just above. */
+.desaturate-app-colors .piano-roll-zoom-row {
+  background-color: #e1e1e1;
 }
 
 /* Groups the zoom controls with the pattern preview play/stop/loop buttons

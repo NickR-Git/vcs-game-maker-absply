@@ -166,3 +166,51 @@ Fix a headless-build crash, music preview clicks, Blockly block mis-sizing, and 
   failure caused by exceeding it
 - Add a "Supported Kernels/Minikernels" section to the About tab, crediting
   the Standard/Titlescreen/Text kernels
+
+=== 0.51.7 ===
+Add Dark Mode, rename Soft Colors to Subdued Palette, unify toolbar/popup styling across tabs
+
+- Add a Dark Mode toggle in Options (filter-invert technique, same
+  architecture as Subdued Palette), composing with Subdued Palette with
+  no extra combined-state code; excludes real TIA-color content
+  (emulator screen, pixel editor canvases, color swatches, logo) from
+  inversion
+- Rename "Soft Colors" to "Subdued Palette" and extend it to popups
+  (v-menu/v-dialog content)
+- Invert popups (v-menu/v-dialog) under Dark Mode; give them a plain
+  border instead of a drop shadow (shadows can't selectively skip the
+  invert filter)
+- Consolidate every tab's duplicated inline delete-confirmation markup
+  into a single shared ConfirmDeleteMenu component
+- Add a Data tab toolbar (Undo/Redo/Duplicate/Copy/Paste/Export/Import)
+  and a Sound tab toolbar (bank Export/Import, Undo/Redo, sound
+  Export/Import, Stop/Play), matching the Graphic Editor Toolbar's
+  spacing/icon sizing exactly; bring the Music tab's toolbar in line
+  with the same reference
+- Move the Sound tab's delete button to the top-right of each card,
+  matching the Data tab
+- Fix Blockly zoom/trashcan icon sizing and alignment in Dark Mode;
+  exclude the Generated Code pane and workspace-search box from
+  inversion
+
+=== 0.51.8 ===
+Add Aseprite sprite-sheet import, Player animation loop/finished blocks, and a Blockly copy/paste fix
+
+- Add "Import from Aseprite" to the Sprites and Title tabs' graphic
+  editor toolbars - imports a sprite strip + its Aseprite-exported
+  .json as whole new animations (Sprites, one per frame tag) or into
+  the selected card (Title, single animation only), converting frame
+  durations from milliseconds to NTSC frames
+- Add "Player set animation to [name]"/"...to ID" one-step blocks, a
+  "Player current animation ID" getter, and a "Player animation has
+  finished" watch block; add a "loop" checkbox (on by default) to
+  every way of setting a player's animation - off plays it once and
+  fires the finished watch instead of repeating
+- Fix Blockly copy/paste (Ctrl+C/Ctrl+V) throwing "Cannot read
+  properties of undefined (reading 'type')" on every use, caused by
+  the workspace-multiselect plugin's clipboard format going stale
+  against the Blockly 10.4 upgrade - bumped the plugin to 0.1.12
+- Make the Music tab's piano roll toolbar sticky, stacking below the
+  main Music toolbar as both scroll
+- Tighten the gap between the alpha warning banner and the intro text
+  on the Music/Title tabs

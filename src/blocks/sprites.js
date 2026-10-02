@@ -54,6 +54,127 @@ const buildAnimationSelectBlock = ({icon, colour, storageFactory}) => {
   };
 };
 
+// Statement block: combines picking the player AND picking the animation by
+// name into a single block - a real reported gap, since the generic
+// sprite_player_set block (see buildCombinedPlayerVarBlocks) plugged with
+// sprite_player_animation_select above makes the user pick the SAME player
+// twice (once on each block) to do the single, extremely common "set this
+// player's animation" action. Kept as a separate block rather than undoing
+// the Player 0/1 combination everywhere else - every other property still
+// benefits from the generic get/set/change pattern; only "pick an animation
+// by name" is common/awkward enough to deserve this shortcut.
+const buildAnimationSetBlock = ({icon, colour, storageFactory}) => {
+  Blockly.Blocks['sprite_player_set_animation'] = {
+    init: function() {
+      this.appendDummyInput()
+          .appendField(`${icon} Player`)
+          .appendField(new Blockly.FieldDropdown(PLAYER_OPTIONS), 'PLAYER')
+          .appendField(`${ANIMATION_ICON} set animation to`)
+          .appendField(
+              new Blockly.FieldDropdown(buildAnimationOptions(storageFactory)), 'VAR')
+          .appendField(new Blockly.FieldCheckbox('TRUE'), 'LOOP')
+          .appendField('loop');
+      this.setPreviousStatement(true);
+      this.setNextStatement(true);
+      this.setColour(colour);
+      // Same "VAR translation naturally no-ops" reasoning as
+      // sprite_player_animation_select's comment just above - VAR here is
+      // an animation-list index too, never a "player0..."-prefixed name.
+      Blockly.Extensions.apply('sprite_player_field_sync', this, false);
+      this.setTooltip('Sets the chosen player\'s active animation by name, in one step. "loop" ' +
+        'on (the default) replays it from the start every time it ends; off plays it once and ' +
+        'leaves it on its last frame (see "Player animation has finished" to react to that ' +
+        'moment).');
+    },
+  };
+};
+
+// Same one-step shortcut as buildAnimationSetBlock above, but for an
+// animation's raw numeric list position (its 0-based index, matching
+// sprite_player_animation_select's VAR value) instead of its name - a
+// plugged expression/variable/Data table lookup can't be resolved to a
+// fixed name the way the dropdown block above needs, so this takes a VALUE
+// input instead of a VAR dropdown. The generic sprite_player_set block
+// (VAR = Animation) already supports this too, for a value plugged into
+// ITS VALUE input, but needs picking "Animation" from VAR first - this
+// skips that extra step for the same reason buildAnimationSetBlock skips
+// VAR's dropdown.
+const buildAnimationSetByIdBlock = ({icon, colour}) => {
+  Blockly.Blocks['sprite_player_set_animation_id'] = {
+    init: function() {
+      this.appendValueInput('VALUE')
+          .setCheck('Number')
+          .appendField(`${icon} Player`)
+          .appendField(new Blockly.FieldDropdown(PLAYER_OPTIONS), 'PLAYER')
+          .appendField(`${ANIMATION_ICON} set animation to ID`);
+      this.appendDummyInput()
+          .appendField(new Blockly.FieldCheckbox('TRUE'), 'LOOP')
+          .appendField('loop');
+      this.setInputsInline(true);
+      this.setPreviousStatement(true);
+      this.setNextStatement(true);
+      this.setColour(colour);
+      Blockly.Extensions.apply('sprite_player_field_sync', this, false);
+      this.setTooltip('Sets the chosen player\'s active animation directly by its numeric list ' +
+        'position (0-based, top to bottom) - for a fixed animation picked by name instead, see ' +
+        '"set animation to" above. "loop" on (the default) replays it from the start every time ' +
+        'it ends; off plays it once and leaves it on its last frame (see "Player animation has ' +
+        'finished" to react to that moment).');
+    },
+  };
+};
+
+// One-step getter: reads the chosen player's CURRENTLY PLAYING animation as
+// its raw numeric list position - pairs with buildAnimationSetByIdBlock
+// above the same way sprite_player_animation_select (pick a name, get its
+// ID) pairs with buildAnimationSetBlock. The generic sprite_player_get
+// block (VAR = Animation) already reads this too, just needing "Animation"
+// picked from VAR first - this skips that extra step for the same reason
+// buildAnimationSetByIdBlock skips sprite_player_set's VAR dropdown.
+const buildAnimationIdGetBlock = ({icon, colour}) => {
+  Blockly.Blocks['sprite_player_animation_id_get'] = {
+    init: function() {
+      this.appendDummyInput()
+          .appendField(`${icon} Player`)
+          .appendField(new Blockly.FieldDropdown(PLAYER_OPTIONS), 'PLAYER')
+          .appendField(`${ANIMATION_ICON} current animation ID`);
+      this.setOutput(true, 'Number');
+      this.setColour(colour);
+      Blockly.Extensions.apply('sprite_player_field_sync', this, false);
+      this.setTooltip('Reads the chosen player\'s currently playing animation as its numeric ' +
+        'list position (0-based, top to bottom) - for a fixed animation\'s ID by name instead, ' +
+        'see "Player animation [name]", which does the reverse (name to ID).');
+    },
+  };
+};
+
+// Works exactly like sprite_player_fade_finished (see its comment below) -
+// same shared "check a flag bit, clear it, run DO" shape,
+// just watching a non-looping animation's "finished" bit (see
+// animationLoopBitsCode in generators/bbasic/sprites.js) instead of a color
+// fade's. Never fires for a LOOPING animation (the default - see the "loop"
+// checkbox on "Player set animation to"/"Player set animation to ID"/the
+// generic "Player set Animation to"), since a looping animation never
+// actually reaches a stopped "finished" state to begin with.
+const buildAnimationFinishedBlock = ({icon, colour}) => {
+  Blockly.Blocks['sprite_player_animation_finished'] = {
+    init: function() {
+      this.appendDummyInput()
+          .appendField(`${icon} When Player`)
+          .appendField(new Blockly.FieldDropdown(PLAYER_OPTIONS), 'PLAYER')
+          .appendField(`${ANIMATION_ICON} animation has finished`);
+      this.appendStatementInput('DO');
+      this.setPreviousStatement(true);
+      this.setNextStatement(true);
+      this.setColour(colour);
+      Blockly.Extensions.apply('sprite_player_field_sync', this, false);
+      this.setTooltip('Runs the connected blocks once, the moment a non-looping animation (see ' +
+        'the "loop" checkbox on the Set Animation blocks) reaches its last frame and stops. ' +
+        'Never fires for a looping animation (the default), which never actually stops.');
+    },
+  };
+};
+
 const buildPlayerOptions = (name) => [
   [HORIZONTAL_ICON + ' X', `${name}x`],
   [VERTICAL_ICON + ' Y', `${name}y`],
@@ -453,11 +574,35 @@ const buildCombinedPlayerVarBlocks = ({icon, colour}) => {
           'name': 'VALUE',
         },
       ],
+      // A second row for the "loop" checkbox - same "field(s) FIRST, then
+      // a trailing named input_dummy to close/wrap them" shape as
+      // sprite_inertia_accelerate's DIRECTIONS16_INPUT/FINE_INPUT rows
+      // (see that block's comment for why the dummy has to come AFTER the
+      // field it's wrapping, not before - a real reported crash
+      // ("FieldDropdown.getTextContent: text content is null") when this
+      // was first built with the dummy declared first). Only actually
+      // shown once VAR is "Animation" - see
+      // sprite_player_set_loop_visibility_sync's comment below.
+      'message1': '%1 loop %2',
+      'args1': [
+        {
+          'type': 'field_checkbox',
+          'name': 'LOOP',
+          'checked': true,
+        },
+        {
+          'type': 'input_dummy',
+          'name': 'LOOP_INPUT',
+        },
+      ],
       'previousStatement': null,
       'nextStatement': null,
       colour,
-      'extensions': ['sprite_player_field_sync'],
-      'tooltip': 'Updates information about whichever player is selected.',
+      'extensions': ['sprite_player_field_sync', 'sprite_player_set_loop_visibility_sync'],
+      'tooltip': 'Updates information about whichever player is selected. Setting Animation ' +
+        'shows a "loop" checkbox - on (the default) replays it from the start every time it ' +
+        'ends; off plays it once and leaves it on its last frame (see "Player animation has ' +
+        'finished" to react to that moment).',
     },
     // Block for adding to a variable in place.
     {
@@ -480,13 +625,85 @@ const buildCombinedPlayerVarBlocks = ({icon, colour}) => {
           'check': 'Number',
         },
       ],
+      // Same shape as sprite_player_set's message1/args1 just above.
+      'message1': '%1 loop %2',
+      'args1': [
+        {
+          'type': 'field_checkbox',
+          'name': 'LOOP',
+          'checked': true,
+        },
+        {
+          'type': 'input_dummy',
+          'name': 'LOOP_INPUT',
+        },
+      ],
       'previousStatement': null,
       'nextStatement': null,
       colour,
-      'extensions': ['sprite_player_field_sync', 'math_change_tooltip'],
+      'extensions': ['sprite_player_field_sync', 'sprite_player_set_loop_visibility_sync', 'math_change_tooltip'],
     },
   ]);
 };
+
+// Shows/hides sprite_player_set's/sprite_player_change's LOOP_INPUT (the
+// "loop" checkbox) based on whether VAR is currently set to "Animation" -
+// every other property (X/Y/Color/Visibility/Horizontal flip/...) has no
+// such concept, so the checkbox would just read as a dead control for
+// them. Same visibility-toggle shape/guards (insertion-marker/headless-
+// workspace bail-outs) as sprite_inertia_accelerate_action_sync's
+// comment above - VAR's value is a real variable name
+// (player0animation/player1animation), not a fixed literal shared across
+// every PLAYER choice, so this checks endsWith('animation') rather than a
+// fixed option list, matching buildPlayerOptions' `${name}animation`
+// value shape. A dedicated extension, not folded into
+// registerDropdownFieldSyncExtension above - that one's shared with the
+// combined Missile blocks too, which have no Animation option or
+// LOOP_INPUT to toggle at all.
+Blockly.Extensions.register('sprite_player_set_loop_visibility_sync', function() {
+  // eslint-disable-next-line no-invalid-this
+  const block = this;
+  const varField = block.getField('VAR');
+  if (!varField) return;
+  const applyVisibility = (value) => {
+    if (typeof block.isInsertionMarker === 'function' && block.isInsertionMarker()) return;
+    if (!block.workspace || !block.workspace.rendered) return;
+    const shouldBeVisible = typeof value === 'string' && value.endsWith('animation');
+    const input = block.getInput('LOOP_INPUT');
+    if (!input || input.isVisible() === shouldBeVisible) return;
+    input.setVisible(shouldBeVisible);
+    // Deferred, not called synchronously here - same "run after the
+    // current Blockly field-update cascade finishes" reasoning
+    // registerDropdownFieldSyncExtension's comment documents in detail.
+    // This runs from TWO places that can both fire before the block has
+    // ever gone through a first real render: once synchronously at
+    // extension-apply time (construction - VAR's default option here is
+    // X, not Animation, so this genuinely does need to hide LOOP_INPUT on
+    // every fresh instance, unlike sprite_inertia_accelerate_action_sync's
+    // initial call, which happens to be a no-op since that block's default
+    // ACTION already matches its fields' starting visibility), and again
+    // via the VALIDATOR the instant a saved project's XML
+    // <field name="VAR"> tag gets applied during load - BEFORE this
+    // block's first real render either time. Calling block.render()
+    // synchronously in both cases corrupts this block's row/field
+    // measurements for Blockly's subsequent real render pass right after -
+    // confirmed as a real reported crash
+    // ("FieldDropdown.getTextContent: text content is null") on every
+    // fresh sprite_player_set/change instance AND on loading any saved
+    // project with one. Deferring guarantees Blockly's first render
+    // (which already reads isVisible() fresh regardless) has happened by
+    // the time this actually runs.
+    setTimeout(() => {
+      if (typeof block.render === 'function') block.render();
+      if (block.workspace && block.workspace.resizeContents) block.workspace.resizeContents();
+    }, 0);
+  };
+  applyVisibility(varField.getValue());
+  varField.setValidator((newValue) => {
+    applyVisibility(newValue);
+    return newValue;
+  });
+});
 
 // Same reasoning as buildCombinedPlayerVarBlocks above, for Missile 0/1 -
 // Ball is NOT part of this (never had a twin), so buildSpriteBlocks below
@@ -1511,6 +1728,27 @@ buildAnimationSelectBlock({
   icon: PLAYER_ICON,
   colour: 'red',
   storageFactory: usePlayerAnimationsStorage,
+});
+
+buildAnimationSetBlock({
+  icon: PLAYER_ICON,
+  colour: 'red',
+  storageFactory: usePlayerAnimationsStorage,
+});
+
+buildAnimationSetByIdBlock({
+  icon: PLAYER_ICON,
+  colour: 'red',
+});
+
+buildAnimationIdGetBlock({
+  icon: PLAYER_ICON,
+  colour: 'red',
+});
+
+buildAnimationFinishedBlock({
+  icon: PLAYER_ICON,
+  colour: 'red',
 });
 
 // Missile 0/1 share these four combined block families now (see

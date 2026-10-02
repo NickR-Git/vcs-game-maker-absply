@@ -162,6 +162,7 @@
         <v-btn icon small title="Import from image" :disabled="!activeEditor" @click="() => activeEditor.handleImportImage()">
           <v-icon>mdi-import</v-icon>
         </v-btn>
+        <slot name="extra-tools" />
       </div>
       <template v-if="$slots['after-tools']">
         <v-divider class="get-after-tools-divider" vertical />
@@ -203,7 +204,10 @@ const TOOL_HOTKEYS = {
 // "after-tools" (its target card/animation differs per tab, so that
 // computation stays local to each one) - everything else (the actual
 // Eraser/Pencil/Undo/Redo/Export/Import icons, and the sticky-header
-// behavior around them) lives here once.
+// behavior around them) lives here once. A third slot, "extra-tools",
+// sits right after the Export/Import icons for one-off tools only a
+// single tab needs (currently just PlayerEditor.vue's "Import from
+// Aseprite" button) without every other tab growing an unused icon too.
 export default {
   props: {
     // The PixelEditor.vue instance the toolbar currently acts on - null

@@ -90,6 +90,32 @@ export const resolveUsedPlayerAnimations = (workspace) => {
       } else {
         unsafe[name] = true;
       }
+    } else if (block.type === 'sprite_player_set_animation') {
+      // Same reachability tracking as the sprite_player_set + nested
+      // sprite_player_animation_select combo above, just read straight off
+      // this block's PLAYER/VAR fields directly - no separate VALUE input
+      // to dig into, since both are baked into one block here.
+      const name = block.getFieldValue('PLAYER') === '1' ? 'player1' : 'player0';
+      const index = Number(block.getFieldValue('VAR'));
+      if (Number.isInteger(index)) {
+        used[name].add(index);
+      } else {
+        unsafe[name] = true;
+      }
+    } else if (block.type === 'sprite_player_set_animation_id') {
+      // Same VALUE-digging as sprite_player_set above (this block's VALUE
+      // is just as arbitrary an expression) - provably safe only
+      // when a sprite_player_animation_select block happens to be plugged
+      // into it, same as there.
+      const name = block.getFieldValue('PLAYER') === '1' ? 'player1' : 'player0';
+      const valueBlock = block.getInputTargetBlock('VALUE');
+      const index = valueBlock && valueBlock.type === 'sprite_player_animation_select' ?
+        Number(valueBlock.getFieldValue('VAR')) : NaN;
+      if (Number.isInteger(index)) {
+        used[name].add(index);
+      } else {
+        unsafe[name] = true;
+      }
     } else if (block.type === 'sprite_player_change') {
       const varField = animationVarName(block);
       if (varField === 'player0animation') unsafe.player0 = true;
@@ -100,6 +126,23 @@ export const resolveUsedPlayerAnimations = (workspace) => {
     player0: unsafe.player0 ? null : used.player0,
     player1: unsafe.player1 ? null : used.player1,
   };
+};
+
+// Every player a sprite_player_animation_finished watch block actually
+// exists for - read by bbasic.js's generateAnimations (processAnimation) to
+// skip setting the "finished" bit (playerNsize{5}) on a non-looping
+// animation's last frame when nothing in the project ever checks it, same
+// "don't pay for a flag nothing reads" reasoning
+// resolveBackgroundFadeFinishedWatches (blocks/background.js) already uses
+// for color fades. A plain Set, same shape as that one - only 2 possible
+// players, each either watched or not.
+export const resolvePlayerAnimationFinishedWatches = (workspace) => {
+  const watched = new Set();
+  workspace.getAllBlocks(false).forEach((block) => {
+    if (block.type !== 'sprite_player_animation_finished') return;
+    watched.add(block.getFieldValue('PLAYER') === '1' ? 'player1' : 'player0');
+  });
+  return watched;
 };
 
 // sprite_*_rom_noise (below) points a sprite's pointer/height straight at raw
@@ -1418,6 +1461,26 @@ export const generateInertiaChecks = (Blockly) => {
   return lines.join('\n') + '\n';
 };
 
+// Writes the two spare playerNsize bits sprite_player_set/sprite_player_
+// change's "loop" checkbox (see blocks/sprites.js's LOOP_INPUT comment) and
+// the new one-step sprite_player_set_animation/sprite_player_set_animation_id
+// blocks all share: bit 4 ("loop disabled" - 0, the power-on/boot default,
+// means looping IS on, matching the checkbox's default-checked state with
+// no extra init code needed anywhere) and bit 5 ("animation finished" -
+// always cleared here, since assigning a new animation index starts a fresh
+// playthrough regardless of whether the previous one had finished). Only
+// ever called where varName is known to end in "animation" (see each call
+// site) - playerNsize's bits 4/5 (unlike 0-3, 6 - see bbasic.js's
+// processAnimation comment on the full layout) are otherwise unused, so
+// writing them for every OTHER property would be harmless but pointless.
+const animationLoopBitsCode = (block, varName) => {
+  const loopField = block.getField('LOOP');
+  const loop = loopField ? block.getFieldValue('LOOP') === 'TRUE' : true;
+  const sizeVar = varName.replace('animation', 'size');
+  return `${sizeVar}{4} = ${loop ? 0 : 1}\n` +
+    `${sizeVar}{5} = 0\n`;
+};
+
 export default (Blockly) => {
   const createGeneratorForSprite = (name) => {
     Blockly.BBasic[`sprite_${name}_get`] = function(block) {
@@ -1496,6 +1559,8 @@ export default (Blockly) => {
       } else if (varName.endsWith('size_3_')) {
         const bitVarName = varName.replace('__', '').replace('_3_', '{3}');
         return `if ${argument0} then ${bitVarName} = 1 else ${bitVarName} = 0\n`;
+      } else if (varName.endsWith('animation')) {
+        return `${varName} = ${argument0}\n` + animationLoopBitsCode(block, varName);
       }
       return varName + ' = ' + argument0 + '\n';
     };
@@ -1508,7 +1573,8 @@ export default (Blockly) => {
           block.getFieldValue('VAR'), Blockly.VARIABLE_CATEGORY_NAME);
       const isNegativeConstant = /^\s*-\s*\d+\s*$/.test(argument0);
       const operator = isNegativeConstant ? '' : '+';
-      return `${varName} = ${varName} ${operator} ${argument0}\n`;
+      const assignment = `${varName} = ${varName} ${operator} ${argument0}\n`;
+      return varName.endsWith('animation') ? assignment + animationLoopBitsCode(block, varName) : assignment;
     };
   };
 
@@ -1529,6 +1595,38 @@ export default (Blockly) => {
     Blockly.BBasic['sprite_player_animation_select'] = function(block) {
       const index = block.getFieldValue('VAR') || '0';
       return [index, Blockly.BBasic.ORDER_ATOMIC];
+    };
+
+    // Same assignment sprite_player_set's generic setter emits for VAR =
+    // "Animation" (see createGeneratorForSprite's `animation`-suffix
+    // branch), just with the player and the animation both baked into this
+    // one block instead of a separate "Player set Animation to" block plugged
+    // with the sprite_player_animation_select value block above - including
+    // the same LOOP checkbox/animationLoopBitsCode handling that branch has.
+    Blockly.BBasic['sprite_player_set_animation'] = function(block) {
+      const varName = Blockly.BBasic.nameDB_.getName(
+          `${resolvePlayerName(block)}animation`, Blockly.VARIABLE_CATEGORY_NAME);
+      const index = block.getFieldValue('VAR') || '0';
+      return `${varName} = ${index}\n` + animationLoopBitsCode(block, varName);
+    };
+
+    // Same assignment, for buildAnimationSetByIdBlock's VALUE-input sibling -
+    // an arbitrary plugged expression instead of a fixed dropdown value.
+    Blockly.BBasic['sprite_player_set_animation_id'] = function(block) {
+      const varName = Blockly.BBasic.nameDB_.getName(
+          `${resolvePlayerName(block)}animation`, Blockly.VARIABLE_CATEGORY_NAME);
+      const argument0 = Blockly.BBasic.valueToCode(block, 'VALUE', Blockly.BBasic.ORDER_ASSIGNMENT) || '0';
+      return `${varName} = ${argument0}\n` + animationLoopBitsCode(block, varName);
+    };
+
+    // One-step getter pairing with sprite_player_set_animation_id above -
+    // same raw read sprite_player_get's generic getter emits for VAR =
+    // "Animation" (nameDB_.getName resolves straight to the real
+    // player0animation/player1animation variable, same as there).
+    Blockly.BBasic['sprite_player_animation_id_get'] = function(block) {
+      const code = Blockly.BBasic.nameDB_.getName(
+          `${resolvePlayerName(block)}animation`, Blockly.VARIABLE_CATEGORY_NAME);
+      return [code, Blockly.BBasic.ORDER_ATOMIC];
     };
 
     Blockly.BBasic['sprite_player_size'] = function(block) {
@@ -2210,6 +2308,31 @@ export default (Blockly) => {
   // emitFadeFinishedWatch in generators/bbasic/background.js).
   Blockly.BBasic['sprite_player_fade_finished'] = function(block) {
     return Blockly.BBasic.emitFadeFinishedWatch(block, block.getFieldValue('VAR'));
+  };
+
+  // Player 0/1's  "animation has finished" watch - same check-and-clear
+  // shape as emitFadeFinishedWatch (generators/bbasic/background.js), just
+  // reading playerNsize{5} (a literal, not resolved through nameDB_ - a
+  // real fixed kernel variable this app already writes directly in
+  // bbasic.js's processAnimation, same as the pause bit sprite_player_
+  // animation_playback's generator reads/writes) instead of
+  // fadeFlagsVarName's dev var. No watches.has(...) guard needed here
+  // (unlike emitFadeFinishedWatch) - this IS the one and only watch block
+  // for this bit, so if it exists in the workspace at all, it's watching.
+  Blockly.BBasic['sprite_player_animation_finished'] = function(block) {
+    const name = resolvePlayerName(block);
+    const code = Blockly.BBasic.statementToCode(block, 'DO').trim();
+    const flagBit = `${name}size{5}`;
+    const blockNumber = Blockly.BBasic.blockNumbers.next();
+    const labelEnd = `_animfin_${blockNumber}_end`;
+    return '\n' +
+      [
+        `if !${flagBit} then goto ${labelEnd}`,
+        `${flagBit} = 0`,
+        code,
+        `@ ${labelEnd}`,
+      ].join('\n') +
+      '\n';
   };
 
   // Plain boolean read of the active bit - same shape as background_fade_

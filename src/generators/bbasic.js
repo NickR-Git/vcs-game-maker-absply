@@ -50,6 +50,7 @@ import {processPlayerAnimationsStorageDefaults, generateRomNoiseChecks, generate
   generateMissileFireChecks, reserveMissileFireDevVars, reserveMissileBounceDevVars,
   generateSeekChecks, reserveSeekDevVars, reserveSeekArrivedDevVars,
   reserveCtrlpfShadowDevVar, generateCtrlpfShadowSetup, resolveUsedPlayerAnimations,
+  resolvePlayerAnimationFinishedWatches,
   generateInertiaChecks, reserveInertiaDevVars, reserveSpriteScrollDevVars} from './bbasic/sprites';
 import {resolveSeekArrivedWatches} from '../blocks/sprites';
 import {resolveProjectMusic, MUSIC_PLAY_RESET_NAME, MUSIC_PLAY_BY_ID_NAME,
@@ -1014,6 +1015,13 @@ Blockly.BBasic.init = function(workspace) {
   // generateAnimations below to skip compiling an animation nothing in the
   // project ever selects.
   this.usedPlayerAnimations = resolveUsedPlayerAnimations(workspace);
+
+  // Every player a sprite_player_animation_finished watch block actually
+  // exists for, read by processAnimation (this file's generateAnimations
+  // below) to decide whether a non-looping animation's "finished" bit is
+  // worth setting at all - see resolvePlayerAnimationFinishedWatches'
+  // comment in generators/bbasic/sprites.js.
+  this.playerAnimationFinishedWatches = resolvePlayerAnimationFinishedWatches(workspace);
 
   // Resolves every song the project references and builds their combined
   // per-channel data ahead of time (see generators/bbasic/music.js) - needed
@@ -4225,11 +4233,36 @@ Blockly.BBasic.generateAnimations = function() {
       `  ${name}size = ${name}size | ${sizeCode}\n`;
 
     const pauseSkipLabel = `${animationLabel}pauseSkip`;
+    // Bit 4 of {name}size ("loop disabled" - see blocks/sprites.js's LOOP
+    // checkbox/animationLoopBitsCode in generators/bbasic/sprites.js, both
+    // of which write it) decides what happens once the frame counter
+    // reaches the end: 0 (the power-on default, matching the checkbox's
+    // default-checked state) wraps back to 0 exactly like before this
+    // feature existed; 1 freezes on the last frame instead and sets bit 5
+    // ("finished"), which sprite_player_animation_finished's generator
+    // (generators/bbasic/sprites.js) checks-and-clears. Bit 5 is only ever
+    // written when something actually watches it
+    // (resolvePlayerAnimationFinishedWatches, read here via
+    // Blockly.BBasic.playerAnimationFinishedWatches, same "don't pay for a
+    // flag nothing reads" reasoning generateBackgroundFadeChecks' isWatched
+    // already uses) - a no-loop animation with no matching watch block
+    // anywhere just freezes, same as one with the watch.
+    const noLoopLabel = `${animationLabel}noLoop`;
+    const wrapDoneLabel = `${animationLabel}wrapDone`;
+    const finishedWatches = Blockly.BBasic.playerAnimationFinishedWatches;
+    const isFinishedWatched = !!(finishedWatches && finishedWatches.has(name));
     return `  rem Animation ${animationIndex} ${animation.name} for ${name}:\n\n` +
       sizeLines +
       `  if ${name}size{6} then goto ${pauseSkipLabel}\n` +
       `  ${name}frame = ${name}frame + 1\n` +
-      `  if ${name}frame >= ${totalDuration} then ${name}frame = 0\n` +
+      `  if ${name}frame < ${totalDuration} then goto ${wrapDoneLabel}\n` +
+      `  if ${name}size{4} then goto ${noLoopLabel}\n` +
+      `  ${name}frame = 0\n` +
+      `  goto ${wrapDoneLabel}\n` +
+      `${noLoopLabel}\n` +
+      `  ${name}frame = ${totalDuration} - 1\n` +
+      (isFinishedWatched ? `  ${name}size{5} = 1\n` : '') +
+      `${wrapDoneLabel}\n` +
       `${pauseSkipLabel}\n\n` +
       stateMachine.join('\n\n') +
       `\n\n${animationLabel}animationEnd`;

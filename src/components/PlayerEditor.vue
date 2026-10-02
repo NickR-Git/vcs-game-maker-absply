@@ -103,6 +103,42 @@
               </v-dialog>
             </div>
           </template>
+          <template v-slot:extra-tools>
+            <v-menu
+              top
+              :close-on-content-click="false"
+              v-model="asepriteImportMenuOpen"
+            >
+              <template v-slot:activator="{ on, attrs }">
+                <v-btn
+                  icon
+                  small
+                  title="Import from Aseprite (sprite strip + .json)"
+                  v-bind="attrs"
+                  v-on="on"
+                >
+                  <v-icon>mdi-file-import-outline</v-icon>
+                </v-btn>
+              </template>
+
+              <v-card>
+                <v-card-text class="import-animation-menu import-aseprite-menu">
+                  <v-btn
+                    color="primary"
+                    block
+                    @click="() => { asepriteImportMenuOpen = false; handleImportAsepriteSheet(); }"
+                  >
+                    Choose .json + image&hellip;
+                  </v-btn>
+                  <v-switch
+                    v-model="asepriteReplaceAnimations"
+                    label="Replace animations"
+                    hide-details
+                  />
+                </v-card-text>
+              </v-card>
+            </v-menu>
+          </template>
           <template v-if="spriteColorsEnabled" v-slot:below-tools>
             <quick-color-palette v-model="selectedQuickColor" :active-editor="effectiveFrameEditor" />
           </template>
@@ -197,11 +233,6 @@
 
                       <v-card>
                         <v-card-text class="import-animation-menu">
-                          <v-switch
-                            v-model="replaceFramesOnImport"
-                            label="Replace existing frames"
-                            hide-details
-                          />
                           <v-btn
                             color="primary"
                             block
@@ -209,6 +240,11 @@
                           >
                             Choose images&hellip;
                           </v-btn>
+                          <v-switch
+                            v-model="replaceFramesOnImport"
+                            label="Replace frames"
+                            hide-details
+                          />
                         </v-card-text>
                       </v-card>
                     </v-menu>
@@ -378,12 +414,14 @@ import {useCollapsedIds} from '../hooks/collapse';
 import {useDragReorder} from '../hooks/drag-reorder';
 import {DEFAULT_ROW_COLOR, clearRowColors} from '../blocks/background';
 import {DEFAULT_SPRITES, processPlayerAnimationsStorageDefaults} from '../generators/bbasic/sprites';
-import {useColorPaletteStorage, useConfigurationStorage, usePixelGridOverlayStorage} from '../hooks/project';
+import {useColorPaletteStorage, useConfigurationStorage, useErrorStorage, usePixelGridOverlayStorage} from '../hooks/project';
 import {useEditorZoom} from '../hooks/zoom';
 import {colorByteToCss} from '../utils/palette';
 import {playfieldToMatrix, resizePixelMatrixHeight} from '../utils/pixels';
 import {loadImageFromFile, openFileDialogMultiple, sortImportedAnimationFrameFiles} from '../utils/file';
-import {createResizedCanvas} from '../utils/image';
+import {createCroppedResizedCanvas, createResizedCanvas} from '../utils/image';
+import {parseAsepriteSheet} from '../utils/aseprite';
+import {escapeHtml} from '../utils/build-error';
 
 // Width of one frame editor at 100% zoom. The container is normally sized by
 // its  contents, so this pins it before the zoom factor is applied.
@@ -752,9 +790,11 @@ export default defineComponent({
     // on/off threshold included, so a batch import looks the same as
     // importing each frame one at a time through that existing button
     // would have).
-    const imageToFramePixels = (img) => {
-      const targetHeight = Math.min(64, Math.max(1, Math.round(img.height)));
-      const canvas = createResizedCanvas(img, 8, targetHeight);
+    // The actual canvas-pixels-to-frame-matrix conversion, factored out of
+    // imageToFramePixels below so handleImportAsepriteSheet's per-frame
+    // cropped canvases (see createCroppedResizedCanvas) can reuse the exact
+    // same on/off threshold instead of duplicating it.
+    const canvasToFramePixels = (canvas) => {
       const imageData = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
       const imgPixels = imageData.data;
       const pixelValues = [];
@@ -765,6 +805,12 @@ export default defineComponent({
         pixelValues.push((r + g + b) / 3);
       }
       return chunk(pixelValues.map((v) => v > 32 ? 1 : 0), 8);
+    };
+
+    const imageToFramePixels = (img) => {
+      const targetHeight = Math.min(64, Math.max(1, Math.round(img.height)));
+      const canvas = createResizedCanvas(img, 8, targetHeight);
+      return canvasToFramePixels(canvas);
     };
 
     // Imports several image files at once as new animation frames, in one
@@ -787,6 +833,93 @@ export default defineComponent({
               handleChildChange();
               instance.proxy.$forceUpdate();
             });
+      });
+    };
+
+    // Whether "Import from Aseprite" overwrites an existing animation that
+    // shares a new frameTag's name, instead of adding it as a separate
+    // animation alongside - one shared toggle, same "there's only ever one
+    // import happening at a time" reasoning as replaceFramesOnImport above.
+    const asepriteReplaceAnimations = ref(false);
+    const asepriteImportMenuOpen = ref(false);
+
+    const errorStorage = useErrorStorage();
+
+    const readFileAsText = (file) => new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsText(file);
+    });
+
+    // Imports an Aseprite "Export Sprite Sheet" (File > Export Sprite
+    // Sheet in Aseprite) .json plus its sprite strip image as one or more
+    // whole new animations - one per frameTag in the .json, in that tag's
+    // frame order/direction, each frame cropped straight out of the
+    // strip image at the .json's recorded rectangle and its duration
+    // converted from Aseprite's milliseconds to this app's NTSC-frame count
+    // (see utils/aseprite.js). Only offered on this tab (see
+    // GraphicEditorToolbar.vue's "extra-tools" slot) - Background/Title/
+    // Score/Text have no concept of a multi-pose animation a frameTag could
+    // map onto.
+    const handleImportAsepriteSheet = () => {
+      openFileDialogMultiple('.json,image/*').then((files) => {
+        if (!files.length) return;
+        const jsonFile = files.find((file) => file.name.toLowerCase().endsWith('.json'));
+        if (!jsonFile) {
+          errorStorage.value = 'Import from Aseprite: select both the sprite sheet\'s .json file and its image.';
+          return;
+        }
+        const imageFiles = files.filter((file) => file !== jsonFile);
+
+        readFileAsText(jsonFile).then((text) => {
+          let sheet;
+          try {
+            sheet = parseAsepriteSheet(JSON.parse(text));
+          } catch (err) {
+            errorStorage.value = `Import from Aseprite: ${escapeHtml(err.message)}.`;
+            return;
+          }
+          if (!sheet.tags.length) {
+            errorStorage.value = 'Import from Aseprite: the .json has no frame tags (animations) to import.';
+            return;
+          }
+          // Matches by the filename the .json itself references
+          // (meta.image) when it's among the selected files; falls back to
+          // whichever single non-.json file was picked otherwise, so
+          // selecting just the two files Aseprite actually produced always
+          // works even if the image got renamed since export.
+          const imageFile = imageFiles.find((file) => file.name === sheet.imageName) || imageFiles[0];
+          if (!imageFile) {
+            errorStorage.value = 'Import from Aseprite: couldn\'t find the sprite strip image among the selected files.';
+            return;
+          }
+
+          loadImageFromFile(imageFile).then((img) => {
+            const existingByName = new Map(state.value.animations.map((animation) => [animation.name, animation]));
+            sheet.tags.forEach((tag) => {
+              let nextFrameId = 1;
+              const frames = tag.frameIndexes.map((frameIndex) => {
+                const sourceFrame = sheet.frames[frameIndex];
+                const targetHeight = Math.min(64, Math.max(1, Math.round(sourceFrame.h)));
+                const canvas = createCroppedResizedCanvas(
+                    img, sourceFrame.x, sourceFrame.y, sourceFrame.w, sourceFrame.h, 8, targetHeight);
+                return {id: nextFrameId++, duration: sourceFrame.durationFrames, pixels: canvasToFramePixels(canvas)};
+              });
+
+              const existing = asepriteReplaceAnimations.value ? existingByName.get(tag.name) : null;
+              if (existing) {
+                existing.frames = frames;
+              } else {
+                const newAnimation = {id: getMaxId(state.value.animations) + 1, name: tag.name, frames};
+                state.value.animations.push(newAnimation);
+                existingByName.set(tag.name, newAnimation);
+              }
+            });
+            handleChildChange();
+            instance.proxy.$forceUpdate();
+          });
+        });
       });
     };
 
@@ -943,6 +1076,7 @@ export default defineComponent({
       state, handleChildChange,
       handleAddFrame, handleDeleteFrame,
       handleImportAnimationFrames, replaceFramesOnImport, importMenuOpenAnimationId,
+      handleImportAsepriteSheet, asepriteReplaceAnimations, asepriteImportMenuOpen,
       handleAddAnimation, handleDeleteAnimation, handleSetPreviewScale,
       handleRowColorsInput, handleClearRowColors, editorRowColors, spriteColorsEnabled,
       copiedFrameRowColors, handleCopyRowColors, handlePasteRowColors,
@@ -1189,17 +1323,44 @@ export default defineComponent({
   gap: 4px;
 }
 
-/* The "Replace existing frames" switch and "Choose images..." button inside
-   the Import animation frames popover - a fixed width so the popover reads
-   as a small, deliberate control rather than stretching to fit whatever
-   width v-menu's default sizing would give it, and enough vertical gap
-   that the switch's label doesn't crowd the button right below it. */
+/* The "Choose images..."/"Choose .json + image..." button and "Replace..."
+   switch inside the Import animation frames/Import from Aseprite popovers -
+   a fixed width so the popover reads as a small, deliberate control rather
+   than stretching to fit whatever width v-menu's default sizing would give
+   it. A flex column (not just a fixed width) is what actually guarantees
+   the button lines up flush with this element's left/right padding -
+   v-btn--block's width (min-width: 100% against the block-level box's
+   auto width) was coming out WIDER than that padded content box, bleeding
+   past it on one side (clipped by the popover card's overflow: hidden -
+   see App.vue's ".v-menu__content > .v-card" rule), rather than landing
+   flush - confirmed as a real reported "not enough margin on the left"
+   bug. Flex-column + stretch sizes every child (the button included)
+   to this exact content width instead, with no such mismatch possible.
+   gap (not a margin-top on the button) is what spaces the two elements
+   apart now, so it stays correct however they're ordered. */
 .import-animation-menu {
   width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.import-animation-menu .v-btn {
-  margin-top: 8px;
+/* Vuetify's v-switch carries a default margin-top: 16px (see
+   .v-input--selection-controls in vuetify.css), which stacked on top of
+   the flex gap above, making the space between the button and the switch
+   noticeably bigger than the space between the switch and the card's
+   bottom padding - confirmed as a real reported "space above/below the
+   toggle doesn't match" bug. Zeroed here so the flex gap alone controls
+   that spacing, same as it already does everywhere else in this card. */
+.import-animation-menu >>> .v-input--selection-controls {
+  margin-top: 0;
+}
+
+/* Wider than .import-animation-menu's shared 220px - "Choose .json +
+   image..." is longer than that menu's "Choose images..." and was
+   getting clipped/wrapped at that width. */
+.import-aseprite-menu {
+  width: 280px;
 }
 
 /* Holds every frame-level corner button (copy/paste frame, copy/paste

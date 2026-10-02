@@ -111,6 +111,43 @@
               </v-dialog>
             </div>
           </template>
+          <template v-slot:extra-tools>
+            <v-menu
+              top
+              :close-on-content-click="false"
+              v-model="asepriteImportMenuOpen"
+            >
+              <template v-slot:activator="{ on, attrs }">
+                <v-btn
+                  icon
+                  small
+                  title="Import from Aseprite (sprite strip + .json) into the selected card"
+                  :disabled="!selectedGraphicCard"
+                  v-bind="attrs"
+                  v-on="on"
+                >
+                  <v-icon>mdi-file-import-outline</v-icon>
+                </v-btn>
+              </template>
+
+              <v-card>
+                <v-card-text class="import-frames-menu import-aseprite-menu">
+                  <v-btn
+                    color="primary"
+                    block
+                    @click="() => { asepriteImportMenuOpen = false; handleImportAsepriteCardFrames(); }"
+                  >
+                    Choose .json + image&hellip;
+                  </v-btn>
+                  <v-switch
+                    v-model="replaceFramesOnImport"
+                    label="Replace existing frames"
+                    hide-details
+                  />
+                </v-card-text>
+              </v-card>
+            </v-menu>
+          </template>
           <template v-slot:below-tools>
             <quick-color-palette v-model="selectedQuickColor" :active-editor="effectiveFrameEditor" />
           </template>
@@ -254,11 +291,6 @@
 
                                 <v-card>
                                   <v-card-text class="import-frames-menu">
-                                    <v-switch
-                                      v-model="replaceFramesOnImport"
-                                      label="Replace existing frames"
-                                      hide-details
-                                    />
                                     <v-btn
                                       color="primary"
                                       block
@@ -266,6 +298,11 @@
                                     >
                                       Choose images&hellip;
                                     </v-btn>
+                                    <v-switch
+                                      v-model="replaceFramesOnImport"
+                                      label="Replace existing frames"
+                                      hide-details
+                                    />
                                   </v-card-text>
                                 </v-card>
                               </v-menu>
@@ -557,7 +594,9 @@ import {chunk, max} from 'lodash';
 import {colorByteToCss} from '../utils/palette';
 import {resizePixelMatrixHeight} from '../utils/pixels';
 import {loadImageFromFile, openFileDialogMultiple, sortImportedAnimationFrameFiles} from '../utils/file';
-import {createResizedCanvas} from '../utils/image';
+import {createCroppedResizedCanvas, createResizedCanvas} from '../utils/image';
+import {parseAsepriteSheet} from '../utils/aseprite';
+import {escapeHtml} from '../utils/build-error';
 
 import ColorSwatchPicker from '../components/ColorSwatchPicker.vue';
 import ConfirmDeleteMenu from '../components/ConfirmDeleteMenu.vue';
@@ -570,7 +609,7 @@ import QuickColorPalette from '../components/QuickColorPalette.vue';
 import {useCollapsedIds} from '../hooks/collapse';
 import {recordCardDeletion} from '../hooks/card-delete-undo';
 import {useDragReorder} from '../hooks/drag-reorder';
-import {useTitleScreenStorage, usePixelGridOverlayStorage,
+import {useTitleScreenStorage, useErrorStorage, usePixelGridOverlayStorage,
   usePlayerAnimationsStorage, useColorPaletteStorage} from '../hooks/project';
 import {useEditorZoom, ZOOM_LEVELS} from '../hooks/zoom';
 
@@ -921,14 +960,11 @@ export default defineComponent({
     // stale) behind that native dialog.
     const importMenuOpenCardRef = ref(null);
 
-    // Converts one loaded image into a bitmap card's frame pixel format -
-    // width fixed to this card's kernel width (48 or 96, see cardWidth),
-    // height auto-sized to the image's resolution (clamped 1-64, same
-    // range/rounding PixelEditor.vue's single-image import and
-    // PlayerEditor.vue's batch import both already use).
-    const imageToCardFramePixels = (img, width) => {
-      const targetHeight = Math.min(64, Math.max(1, Math.round(img.height)));
-      const canvas = createResizedCanvas(img, width, targetHeight);
+    // The actual canvas-pixels-to-card-frame-matrix conversion, factored out
+    // of imageToCardFramePixels below so handleImportAsepriteCardFrames's
+    // per-frame cropped canvases (see createCroppedResizedCanvas) can reuse
+    // the exact same on/off threshold instead of duplicating it.
+    const canvasToCardFramePixels = (canvas, width) => {
       const imageData = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
       const imgPixels = imageData.data;
       const pixelValues = [];
@@ -939,6 +975,17 @@ export default defineComponent({
         pixelValues.push((r + g + b) / 3);
       }
       return chunk(pixelValues.map((v) => v > 32 ? 1 : 0), width);
+    };
+
+    // Converts one loaded image into a bitmap card's frame pixel format -
+    // width fixed to this card's kernel width (48 or 96, see cardWidth),
+    // height auto-sized to the image's resolution (clamped 1-64, same
+    // range/rounding PixelEditor.vue's single-image import and
+    // PlayerEditor.vue's batch import both already use).
+    const imageToCardFramePixels = (img, width) => {
+      const targetHeight = Math.min(64, Math.max(1, Math.round(img.height)));
+      const canvas = createResizedCanvas(img, width, targetHeight);
+      return canvasToCardFramePixels(canvas, width);
     };
 
     // Imports several image files at once as new card frames, in one shot -
@@ -969,6 +1016,89 @@ export default defineComponent({
               handleChildChange();
               instance.proxy.$forceUpdate();
             });
+      });
+    };
+
+    // Whether "Import from Aseprite" popover is currently open - tab-level
+    // (not per-card like importMenuOpenCardRef above), since this button
+    // lives in the shared toolbar (see GraphicEditorToolbar.vue's
+    // "extra-tools" slot) and always acts on selectedGraphicCard, the same
+    // card the toolbar's "Set height" button already targets.
+    const asepriteImportMenuOpen = ref(false);
+
+    const errorStorage = useErrorStorage();
+
+    const readFileAsText = (file) => new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsText(file);
+    });
+
+    // Imports an Aseprite "Export Sprite Sheet" .json plus its sprite strip
+    // image into the currently selected card's frames - unlike
+    // PlayerEditor.vue's Aseprite import (one new ANIMATION per
+    // frameTag), a title screen card has no name a frameTag could match
+    // against, so this only supports a single animation: the .json's one
+    // frameTag (or, with no tags at all, every frame in the sheet, in
+    // order). More than one frameTag is rejected with an error instead of
+    // silently guessing which one the user meant.
+    const handleImportAsepriteCardFrames = () => {
+      const card = selectedGraphicCard.value;
+      if (!card) return;
+      openFileDialogMultiple('.json,image/*').then((files) => {
+        if (!files.length) return;
+        const jsonFile = files.find((file) => file.name.toLowerCase().endsWith('.json'));
+        if (!jsonFile) {
+          errorStorage.value = 'Import from Aseprite: select both the sprite sheet\'s .json file and its image.';
+          return;
+        }
+        const imageFiles = files.filter((file) => file !== jsonFile);
+
+        readFileAsText(jsonFile).then((text) => {
+          let sheet;
+          try {
+            sheet = parseAsepriteSheet(JSON.parse(text));
+          } catch (err) {
+            errorStorage.value = `Import from Aseprite: ${escapeHtml(err.message)}.`;
+            return;
+          }
+          if (sheet.tags.length > 1) {
+            errorStorage.value = 'Import from Aseprite: the .json has more than one frame tag - ' +
+              'title screen cards only support a single animation. Pick a .json with just one tag.';
+            return;
+          }
+          const frameIndexes = sheet.tags.length ?
+            sheet.tags[0].frameIndexes : sheet.frames.map((frame, index) => index);
+
+          const imageFile = imageFiles.find((file) => file.name === sheet.imageName) || imageFiles[0];
+          if (!imageFile) {
+            errorStorage.value = 'Import from Aseprite: couldn\'t find the sprite strip image among the selected files.';
+            return;
+          }
+
+          loadImageFromFile(imageFile).then((img) => {
+            const width = cardWidth(card);
+            const keptFrames = replaceFramesOnImport.value ? [] : card.frames;
+            let nextId = getMaxId(keptFrames) + 1;
+            const newFrames = frameIndexes.map((frameIndex) => {
+              const sourceFrame = sheet.frames[frameIndex];
+              const targetHeight = Math.min(64, Math.max(1, Math.round(sourceFrame.h)));
+              const canvas = createCroppedResizedCanvas(
+                  img, sourceFrame.x, sourceFrame.y, sourceFrame.w, sourceFrame.h, width, targetHeight);
+              const pixels = canvasToCardFramePixels(canvas, width);
+              return {
+                id: nextId++,
+                duration: sourceFrame.durationFrames,
+                pixels,
+                ...(cardHasRowColors(card) ? {rowColors: pixels.map(() => DEFAULT_ROW_COLOR)} : {}),
+              };
+            });
+            card.frames = [...keptFrames, ...newFrames];
+            handleChildChange();
+            instance.proxy.$forceUpdate();
+          });
+        });
       });
     };
 
@@ -1206,6 +1336,7 @@ export default defineComponent({
       handleFramePixelsInput, handleRowColorsInput, cardFrameHeight,
       handleAddFrame, handleDeleteFrame,
       handleImportCardFrames, replaceFramesOnImport, importMenuOpenCardRef,
+      handleImportAsepriteCardFrames, asepriteImportMenuOpen,
       handleCopyFrame, handlePasteFrame, copiedFrameData,
       isCollapsed, toggleCollapsed, cardCollapseKey,
       cardDragAttrs, cardDragCardClass, cardDragHandleListeners, cardDragTargetListeners,
@@ -1541,16 +1672,29 @@ export default defineComponent({
   font-size: 21px !important;
 }
 
-/* Same fixed-width popover as PlayerEditor.vue's .import-animation-menu -
-   the "Replace existing frames" switch and "Choose images..." button read as
-   a small, deliberate control instead of stretching to v-menu's default
-   sizing. */
+/* Same fixed-width, flex-column popover as PlayerEditor.vue's
+   .import-animation-menu (see its comment there for the full reasoning) -
+   the "Choose images..."/"Choose .json + image..." button and "Replace..."
+   switch read as a small, deliberate control instead of stretching to
+   v-menu's default sizing, and flex-column + gap (not a block button's
+   width/margin alone) is what guarantees the button lines up flush with
+   this element's left/right padding. */
 .import-frames-menu {
   width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.import-frames-menu .v-btn {
-  margin-top: 8px;
+.import-frames-menu >>> .v-input--selection-controls {
+  margin-top: 0;
+}
+
+/* Wider than .import-frames-menu's shared 220px - "Choose .json +
+   image..." is longer than "Choose images..." and was getting clipped/
+   wrapped at that width. */
+.import-aseprite-menu {
+  width: 280px;
 }
 
 /* Comes right after .titlescreen-screen-title-row, which already clears

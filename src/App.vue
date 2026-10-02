@@ -1545,13 +1545,10 @@ export default {
 
 /* Re-included (a THIRD invert, nested two deep inside the already-excluded
    .blocklyDiv, nets back to inverted - see .blocklyDiv's comment above for
-   the parity math) - these three pieces DO still need to follow Dark Mode
+   the parity math) - these pieces DO still need to follow Dark Mode
    despite living inside the otherwise-excluded Blockly component: the
    toolbox sidebar's background (a real reported requirement - blocks/
-   flyout stay excluded, but .blocklyToolboxDiv itself isn't a block), the
-   flyout's non-block label text (.blocklyFlyoutLabelText - e.g. the
-   Variables category's "Create variable..." button - distinct from
-   .blocklyFlyoutLabel's block-colored siblings, which stay excluded), and
+   flyout stay excluded, but .blocklyToolboxDiv itself isn't a block), and
    the zoom/grid-snap/multiselect control icons (.blocklyZoom/
    .blocklyMultiselect/.grid-snap-icon-group - plain <image>/hand-drawn
    <rect> icons, not block-colored SVG paths, so inverting them is exactly
@@ -1562,12 +1559,26 @@ export default {
    there suggesting otherwise - see that class's comment for the live DOM
    check that found this). */
 .dark-mode .blocklyToolboxDiv,
-.dark-mode .blocklyFlyoutLabelText,
 .dark-mode .blocklyZoom,
 .dark-mode .blocklyMultiselect,
 .dark-mode .grid-snap-icon-group,
 .dark-mode .blockly-ws-search {
   filter: invert(1) hue-rotate(180deg);
+}
+
+/* @blockly/toolbox-search's result label - the "Type to search for
+   blocks"/"No matching blocks found" text it shows in the flyout (see
+   node_modules/@blockly/toolbox-search/dist/index.js's matchBlocks(),
+   which pushes a plain {kind: "label", text: ...} flyout item) - stayed
+   plain black even with the filter re-include every OTHER flyout label
+   relied on (.blocklyFlyoutLabelText, e.g. the Variables category's
+   "Create variable..." button, which DOES invert correctly), confirmed as
+   a real reported gap specific to this plugin's label. Direct,
+   filter-independent fill instead, same reasoning as the native-<input>
+   overrides just below (that plugin's search box's typed/placeholder
+   text). */
+.dark-mode .blocklyFlyoutLabelText {
+  fill: #fff !important;
 }
 
 /* .blockly-ws-search is @blockly/plugin-workspace-search's search-bar
@@ -1581,24 +1592,25 @@ export default {
    worth preserving - it's ordinary UI chrome the same as every other
    panel Dark Mode already recolors. */
 
-/* Direct color overrides, not relying on .blocklyToolboxDiv's filter above
-   to reach it - a real reported case ("type to search for blocks" text
-   needs to be inverted) where it didn't: this is @blockly/toolbox-search's
-   native <input> (confirmed live its text/placeholder stayed plain black
-   despite sitting inside .blocklyToolboxDiv, which does correctly show
-   filter: invert(1) hue-rotate(180deg) in the computed style of every one
-   of its ancestors in between - a browser rendering quirk where native
-   form control text/placeholder doesn't always composite through an
-   ancestor's CSS filter the way regular rendered content does, the same
-   category of issue already hit once for the emulator's WASM canvas).
-   Direct, filter-independent color properties instead, the same pattern
-   already used everywhere else that turned out to need it. */
+/* @blockly/toolbox-search's native <input type="search"> (see
+   node_modules/@blockly/toolbox-search/dist/index.js's createDom_) sits
+   inside .blocklyToolboxDiv, which already carries dark mode's
+   filter: invert(1) hue-rotate(180deg) (see that rule above) - so both
+   its typed text and its placeholder get composited through THAT filter
+   same as everything else in the toolbox, same "counter-invert" math
+   .blocklyDiv's comment documents for every other re-included piece of
+   this component. Authoring light colors here (the first real attempt at
+   this fix) gets inverted a SECOND time by that ancestor filter, landing
+   back on dark text - the exact "still dark" bug reported, twice. The fix
+   is authoring the PRE-invert color instead: dark gray/white-as-black
+   here becomes light once the ancestor's filter inverts it. */
 .dark-mode .blocklyTreeRowContentContainer input {
-  color: #fff !important;
+  color: #000 !important;
+  -webkit-text-fill-color: #000 !important;
 }
 
 .dark-mode .blocklyTreeRowContentContainer input::placeholder {
-  color: rgba(255, 255, 255, 0.6) !important;
+  color: rgba(0, 0, 0, 0.6) !important;
 }
 
 /* Same native-<input>-doesn't-composite-through-filter quirk, same direct
@@ -2041,7 +2053,20 @@ export default {
    own comment just below for the same "duplicated, then shared" history. */
 .alpha-notice {
   width: fit-content;
-  margin: 0 16px 8px;
+  margin: 0 16px 0;
+}
+
+/* Tightens the gap specifically when a .tab-intro-section (and its
+   description paragraph) follows an .alpha-notice warning (Music, Title) -
+   confirmed as a real reported case of "too much space" between the two:
+   .tab-intro-section's default v-card-text padding-top (16px, left
+   un-overridden - see that rule's comment below) stacked on top of this
+   alert's former 8px margin-bottom, 24px total. Scoped to this
+   adjacent-sibling case only, not a blanket .tab-intro-section change,
+   since every other tab's intro paragraph sits directly under its
+   v-card-title with no alert in between and still wants the full 16px. */
+.alpha-notice + .tab-intro-section {
+  padding-top: 8px;
 }
 
 /* The v-card-text wrapping every tab's intro paragraph (Background/Sprites/
