@@ -156,10 +156,10 @@
           <v-icon>mdi-flip-vertical</v-icon>
         </v-btn>
         <v-divider class="get-inner-divider" vertical />
-        <v-btn icon small title="Export to image" :disabled="!activeEditor" @click="() => activeEditor.handleExportImage()">
+        <v-btn icon small title="Export to image (Shift+E)" :disabled="!activeEditor" @click="() => activeEditor.handleExportImage()">
           <v-icon>mdi-export</v-icon>
         </v-btn>
-        <v-btn icon small title="Import from image" :disabled="!activeEditor" @click="() => activeEditor.handleImportImage()">
+        <v-btn icon small title="Import from image (Shift+I)" :disabled="!activeEditor" @click="() => activeEditor.handleImportImage()">
           <v-icon>mdi-import</v-icon>
         </v-btn>
         <slot name="extra-tools" />
@@ -347,6 +347,21 @@ export default {
       if (key.toLowerCase() === 'v' && event.shiftKey) {
         event.preventDefault();
         this.activeEditor.flipVertical();
+        return;
+      }
+
+      // Shift+E/Shift+I for Export/Import - shift-gated (not plain E/I)
+      // since E alone is already the Eraser tool (see TOOL_HOTKEYS below);
+      // I is free either way, but kept shift-gated to match Export's
+      // binding rather than reading as a separate, inconsistent choice.
+      if (key.toLowerCase() === 'e' && event.shiftKey) {
+        event.preventDefault();
+        this.activeEditor.handleExportImage();
+        return;
+      }
+      if (key.toLowerCase() === 'i' && event.shiftKey) {
+        event.preventDefault();
+        this.activeEditor.handleImportImage();
         return;
       }
 

@@ -2872,6 +2872,16 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
   height: auto;
 }
 
+/* Dims the logo a bit under Dark Mode - at full brightness it read as too
+   stark/glaring against the rest of the now-dark UI (a real reported
+   case). This logo isn't excluded from the blanket invert filter (see
+   .dark-mode.v-application's rule) - it already inverts along with
+   everything else; this just layers a plain opacity reduction on top of
+   that inverted result. */
+.dark-mode .app-logo-img {
+  opacity: 0.8;
+}
+
 .app-logo-version {
   margin-top: 4px;
   font-size: 11px;

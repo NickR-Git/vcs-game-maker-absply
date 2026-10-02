@@ -87,7 +87,7 @@
           <v-btn
             icon
             small
-            title="Stop playback"
+            title="Stop playback (Space)"
             class="music-flat-icon-btn music-icon-btn-size"
             @click="handleStop"
           >
@@ -96,7 +96,7 @@
           <v-btn
             icon
             small
-            :title="playingSongId === activeSong().id ? 'Playing...' : 'Play the full pattern sequence'"
+            :title="playingSongId === activeSong().id ? 'Playing...' : 'Play the full pattern sequence (Space)'"
             :class="['music-flat-icon-btn', 'music-icon-btn-size',
               {'music-icon-btn-active': playingSongId === activeSong().id}]"
             @click="() => handlePlaySong(activeSong())"
@@ -574,7 +574,7 @@
                             <v-btn
                               icon
                               small
-                              title="Export pattern to .JSON file"
+                              title="Export pattern to .JSON file (Shift+E)"
                               class="music-flat-icon-btn music-icon-btn-size"
                               @click="() => handleExportPattern(activePattern(song))"
                             >
@@ -583,7 +583,7 @@
                             <v-btn
                               icon
                               small
-                              title="Import pattern from .JSON file"
+                              title="Import pattern from .JSON file (Shift+I)"
                               class="music-flat-icon-btn music-icon-btn-size"
                               @click="() => handleImportPattern(song, activePattern(song))"
                             >
@@ -604,7 +604,7 @@
                             <v-btn
                               icon
                               small
-                              title="Stop playback"
+                              title="Stop playback (Shift+Space)"
                               class="music-flat-icon-btn music-icon-btn-size"
                               @click="handleStop"
                             >
@@ -613,7 +613,7 @@
                             <v-btn
                               icon
                               small
-                              :title="playingPatternId === activePattern(song).id ? 'Playing...' : 'Play this pattern'"
+                              :title="playingPatternId === activePattern(song).id ? 'Playing...' : 'Play this pattern (Shift+Space)'"
                               :class="['music-flat-icon-btn', 'music-icon-btn-size',
                                 {'music-icon-btn-active': playingPatternId === activePattern(song).id}]"
                               @click="() => handlePlayPattern(song, activePattern(song))"
@@ -3757,13 +3757,59 @@ export default defineComponent({
     // tabs doesn't have to learn a second set just for the piano roll's own
     // Move/Draw/Erase/Rectangle select.
     const PIANO_ROLL_TOOL_HOTKEYS = {v: 'move', b: 'draw', e: 'erase', m: 'select'};
+    // Space/Shift+Space play/stop the song/pattern-preview (song and
+    // pattern-preview playback are mutually exclusive - see handleStop's
+    // comment - so either key's "stop" half can just call the one shared
+    // handleStop regardless of which is currently playing). Shift+E/
+    // Shift+I export/import the active PATTERN (not the whole song - no
+    // unshifted letter is free for a second export/import target, and the
+    // pattern is what you're actively looking at/editing, matching
+    // Shift+Space's pattern-preview target) - checked ahead of the
+    // plain 'e' tool-hotkey lookup below, same as GraphicEditorToolbar.vue's
+    // Shift+E/Shift+I checks run ahead of its Eraser lookup.
     const handlePianoRollToolHotkey = (event) => {
+      // event.repeat - skips the synthetic keydowns the OS fires while a
+      // key is held, same reasoning as SoundFXEditor.vue's
+      // handleSoundFxPlaybackHotkey: without this, holding Space/
+      // Shift+Space kept re-triggering Play dozens of times a second
+      // instead of once per actual press.
+      if (event.repeat) return;
       // Same "skip Ctrl/Cmd/Alt combos and real text fields" guards as
       // GraphicEditorToolbar.vue's own handleToolHotkey.
       if (event.ctrlKey || event.metaKey || event.altKey) return;
       const target = event.target;
       const tag = target && target.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || (target && target.isContentEditable)) return;
+
+      const song = activeSong();
+      if (event.key === ' ') {
+        event.preventDefault();
+        if (!song) return;
+        if (event.shiftKey) {
+          const pattern = activePattern(song);
+          if (!pattern) return;
+          if (playingPatternId.value === pattern.id) handleStop();
+          else handlePlayPattern(song, pattern);
+        } else if (playingSongId.value === song.id) {
+          handleStop();
+        } else {
+          handlePlaySong(song);
+        }
+        return;
+      }
+      if (event.key.toLowerCase() === 'e' && event.shiftKey) {
+        event.preventDefault();
+        const pattern = song && activePattern(song);
+        if (pattern) handleExportPattern(pattern);
+        return;
+      }
+      if (event.key.toLowerCase() === 'i' && event.shiftKey) {
+        event.preventDefault();
+        const pattern = song && activePattern(song);
+        if (song && pattern) handleImportPattern(song, pattern);
+        return;
+      }
+
       const tool = PIANO_ROLL_TOOL_HOTKEYS[event.key.toLowerCase()];
       if (!tool) return;
       event.preventDefault();

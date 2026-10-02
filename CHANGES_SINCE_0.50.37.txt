@@ -214,3 +214,15 @@ Add Aseprite sprite-sheet import, Player animation loop/finished blocks, and a B
   main Music toolbar as both scroll
 - Tighten the gap between the alpha warning banner and the intro text
   on the Music/Title tabs
+
+=== 0.51.9 ===
+Add playback/export/import hotkeys; fix a key-repeat bug and dim the logo under Dark Mode
+
+- Add Shift+E/Shift+I (Export/Import) to the Graphic Editor Toolbar, Sound
+  tab (selected sound effect), and Music tab (active pattern)
+- Add Space (Sound tab: preview the selected sound; Music tab: play/stop
+  the song) and Shift+Space (Music tab: play/stop the open pattern)
+- Fix holding Space re-triggering playback dozens of times a second
+  instead of once per press (missing an event.repeat guard)
+- Dim the app logo under Dark Mode - full brightness read as too
+  glaring against the rest of the now-dark UI

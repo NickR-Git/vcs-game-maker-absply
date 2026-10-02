@@ -127,7 +127,7 @@
             <v-btn
               icon
               small
-              title="Export sound effect to .JSON file"
+              title="Export sound effect to .JSON file (Shift+E)"
               class="soundfx-bank-btn soundfx-icon-btn-size"
               :disabled="!selectedSoundEffect"
               @click="() => handleExportSoundEffect(selectedSoundEffect)"
@@ -137,7 +137,7 @@
             <v-btn
               icon
               small
-              title="Import sound effect from .JSON file"
+              title="Import sound effect from .JSON file (Shift+I)"
               class="soundfx-bank-btn soundfx-icon-btn-size"
               :disabled="!selectedSoundEffect"
               @click="() => handleImportSoundEffect(selectedSoundEffect)"
@@ -157,7 +157,7 @@
             <v-btn
               icon
               small
-              title="Play this sound effect"
+              title="Play this sound effect (Space)"
               class="soundfx-bank-btn soundfx-icon-btn-size"
               :disabled="!selectedSoundEffect"
               @click="() => handlePlaySoundEffect(selectedSoundEffect)"
@@ -777,16 +777,52 @@ export default defineComponent({
     const handleSoundFxToolbarScroll = (event) => {
       isSoundFxToolbarScrolled.value = event.target.scrollTop > 0;
     };
+    // Space previews the selected sound effect (retriggering it from the
+    // start if it's already playing - a one-shot preview has no real
+    // "pause" state worth toggling, unlike Music tab's sustained song/
+    // pattern playback, so this is just "play" rather than a true
+    // play/stop toggle). Shift+E/Shift+I export/import that same selected
+    // sound effect - same guard shape (Ctrl/Cmd/Alt excluded, Shift not;
+    // never hijack a real text field) as GraphicEditorToolbar.vue's
+    // handleToolHotkey.
+    const handleSoundFxPlaybackHotkey = (event) => {
+      // event.repeat - true for every synthetic keydown the OS fires while
+      // a key is held down (not just the first real press) - without this,
+      // holding Space re-triggered the preview from scratch dozens of
+      // times a second for as long as it was held, instead of once per
+      // actual press (confirmed as a real reported bug).
+      if (event.repeat) return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      const target = event.target;
+      const tag = target && target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (target && target.isContentEditable)) return;
+      if (!selectedSoundEffect.value) return;
+
+      const key = event.key;
+      if (key === ' ') {
+        event.preventDefault();
+        handlePlaySoundEffect(selectedSoundEffect.value);
+      } else if (key.toLowerCase() === 'e' && event.shiftKey) {
+        event.preventDefault();
+        handleExportSoundEffect(selectedSoundEffect.value);
+      } else if (key.toLowerCase() === 'i' && event.shiftKey) {
+        event.preventDefault();
+        handleImportSoundEffect(selectedSoundEffect.value);
+      }
+    };
+
     onMounted(() => {
       soundFxToolbarScrollContainer = instance.proxy.$el.querySelector('.editor-container');
       if (soundFxToolbarScrollContainer) {
         soundFxToolbarScrollContainer.addEventListener('scroll', handleSoundFxToolbarScroll);
       }
+      window.addEventListener('keydown', handleSoundFxPlaybackHotkey);
     });
     onBeforeUnmount(() => {
       if (soundFxToolbarScrollContainer) {
         soundFxToolbarScrollContainer.removeEventListener('scroll', handleSoundFxToolbarScroll);
       }
+      window.removeEventListener('keydown', handleSoundFxPlaybackHotkey);
     });
 
     const handleAddSoundEffect = () => {

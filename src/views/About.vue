@@ -152,6 +152,12 @@ export default {
   margin-bottom: 0;
 }
 
+/* Same Dark Mode dimming as App.vue's .app-logo-img rule, for this
+   page's second copy of the same logo. */
+.dark-mode .about-logo {
+  opacity: 0.8;
+}
+
 .about-version {
   color: rgba(0, 0, 0, 0.6);
 }
