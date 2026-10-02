@@ -1,5 +1,8 @@
 'use strict';
 
+import {useConfigurationStorage} from '../hooks/project';
+import {tvAudioClockScale} from './tv-standard';
+
 import {DEFAULT_TEMPO} from '../blocks/music';
 import {DEFAULT_ARPEGGIO_DIVISION} from '../blocks/soundfx';
 import {buildEnvelopeCurve} from './envelope';
@@ -40,8 +43,10 @@ const getAudioContext = () => {
 // is a 31440Hz shift rate but a 15720Hz tone). AUDC 12/13 ("much lower" pure
 // tone) run off CPUclock/114 (10480Hz, exactly a third of 31440) instead.
 const NTSC_SHIFT_CLOCK = 31440;
+// Scaled for the project's TV standard (PAL60's audio clock is slightly lower).
+const shiftClock = () => NTSC_SHIFT_CLOCK * tvAudioClockScale(useConfigurationStorage().value);
 export const shiftClockFor = (audf, {slowClock = false} = {}) =>
-  (slowClock ? NTSC_SHIFT_CLOCK / 3 : NTSC_SHIFT_CLOCK) / (Number(audf) + 1);
+  (slowClock ? shiftClock() / 3 : shiftClock()) / (Number(audf) + 1);
 
 // Every buffer below is built at this rate instead of the AudioContext's own
 // (typically 44100/48000Hz) - Web Audio resamples an AudioBuffer to the
@@ -55,7 +60,7 @@ export const shiftClockFor = (audf, {slowClock = false} = {}) =>
 // register genuinely only ever changes state this often, never in between -
 // matching that exactly, rather than a host-rate approximation of it, is
 // what actually gets closer to how it sounds on real hardware.
-const TIA_SAMPLE_RATE = NTSC_SHIFT_CLOCK;
+const tiaSampleRate = () => Math.round(shiftClock());
 
 // Advances a Galois LFSR by one step, returning both the new state and the
 // bit that was shifted out (needed by AUDC 3's gated poly5->poly4 below).
@@ -82,7 +87,7 @@ const stepLfsr = (lfsr, bits) => stepLfsrWithBit(lfsr, bits).next;
 // 4-bit poly that only advances on a div31 transition, so it sounds like the
 // same buzz as AUDC 1 but roughly 31x slower rather than a different pattern.
 export const buildBuzzBuffer = (context, chipClockHz, seconds, bits, {stepDivider = 1} = {}) => {
-  const sampleRate = TIA_SAMPLE_RATE;
+  const sampleRate = tiaSampleRate();
   const length = Math.max(1, Math.ceil(sampleRate * seconds));
   const buffer = context.createBuffer(1, length, sampleRate);
   const data = buffer.getChannelData(0);
@@ -115,7 +120,7 @@ export const buildBuzzBuffer = (context, chipClockHz, seconds, bits, {stepDivide
 const DIV31_HIGH_STEPS = 18;
 const DIV31_TOTAL_STEPS = 31;
 export const buildDiv31Buffer = (context, chipClockHz, seconds) => {
-  const sampleRate = TIA_SAMPLE_RATE;
+  const sampleRate = tiaSampleRate();
   const length = Math.max(1, Math.ceil(sampleRate * seconds));
   const buffer = context.createBuffer(1, length, sampleRate);
   const data = buffer.getChannelData(0);
@@ -147,7 +152,7 @@ export const buildDiv31Buffer = (context, chipClockHz, seconds) => {
 // toggling once per chip, so a full high-low cycle is 2 chips, same
 // resulting pitch as before.
 export const buildSquareBuffer = (context, chipClockHz, seconds) => {
-  const sampleRate = TIA_SAMPLE_RATE;
+  const sampleRate = tiaSampleRate();
   const length = Math.max(1, Math.ceil(sampleRate * seconds));
   const buffer = context.createBuffer(1, length, sampleRate);
   const data = buffer.getChannelData(0);
@@ -172,7 +177,7 @@ export const buildSquareBuffer = (context, chipClockHz, seconds) => {
 // genuinely different mechanism from a single gated/divided LFSR, not just a
 // different bit-width, so it gets its  dual-register builder.
 export const buildGatedBuzzBuffer = (context, chipClockHz, seconds) => {
-  const sampleRate = TIA_SAMPLE_RATE;
+  const sampleRate = tiaSampleRate();
   const length = Math.max(1, Math.ceil(sampleRate * seconds));
   const buffer = context.createBuffer(1, length, sampleRate);
   const data = buffer.getChannelData(0);

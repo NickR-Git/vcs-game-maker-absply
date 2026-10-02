@@ -1,5 +1,8 @@
 'use strict';
 
+import {useConfigurationStorage} from '../hooks/project';
+import {tvAudioClockScale} from './tv-standard';
+
 // Maps TIA AUDC/AUDF combinations to musical notes, for the Music tab's
 // pattern editor. AUDC 4/5/12/13 ("pure tone") produce a clean,
 // single-frequency square wave, so their in-tune notes are computed directly
@@ -10,6 +13,7 @@
 // other AUDC value has no well-defined single pitch at all, so those only
 // ever get a plain on/off hit.
 const NTSC_SHIFT_CLOCK = 31440;
+const shiftClock = () => NTSC_SHIFT_CLOCK * tvAudioClockScale(useConfigurationStorage().value);
 const PURE_TONE_AUDCS = new Set(['4', '5', '12', '13']);
 const SLOW_CLOCK_AUDCS = new Set(['12', '13']);
 
@@ -108,7 +112,7 @@ EMPIRICAL_NOTE_CHARTS[15] = EMPIRICAL_NOTE_CHARTS[14];
 const EMPIRICAL_TONE_AUDCS = new Set(['1', '6', '7', '9', '10', '14', '15']);
 
 const shiftClockFor = (audf, slowClock) =>
-  (slowClock ? NTSC_SHIFT_CLOCK / 3 : NTSC_SHIFT_CLOCK) / (Number(audf) + 1);
+  (slowClock ? shiftClock() / 3 : shiftClock()) / (Number(audf) + 1);
 
 // A pure tone square wave takes two shift-register clocks per cycle (one
 // high, one low), so its actual pitch is half the shift rate - matches

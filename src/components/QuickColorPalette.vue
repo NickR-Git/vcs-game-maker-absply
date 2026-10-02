@@ -71,7 +71,7 @@ import {useCollapsedIds} from '../hooks/collapse';
 import {useDragReorder} from '../hooks/drag-reorder';
 import {recordQuickColorDeletion} from '../hooks/quick-color-undo';
 import {useColorPaletteStorage} from '../hooks/project';
-import {colorByteToBBasic, colorByteToCss, NTSC_COLORS} from '../utils/palette';
+import {colorByteToBBasic, colorByteToCss, activePalette} from '../utils/palette';
 
 // A single "entry" for useCollapsedIds'  per-list-item convention -
 // there's only ever one Quick colors section per tab, not a list of them.
@@ -188,7 +188,7 @@ export default defineComponent({
       dragAttrs, dragCardClass, dragHandleListeners, dragTargetListeners,
       collapsed, toggleCollapsed,
       isAltHeld, hoveredByte, handleClickSwatch,
-      ntscPalette: NTSC_COLORS, cssColor: colorByteToCss, bbasicLiteral: colorByteToBBasic,
+      ntscPalette: computed(() => activePalette()), cssColor: colorByteToCss, bbasicLiteral: colorByteToBBasic,
     };
   },
 });

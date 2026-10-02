@@ -22,7 +22,7 @@
           :items="tvStandardOptions"
           label="TV standard"
           class="mb-4"
-          hint="NTSC is the 60 Hz North American standard; PAL is the 50 Hz European one; PAL60 is a PAL color signal at 60 Hz. The emulator preview follows this setting too. Colors and timing-dependent values elsewhere in the app are still tuned for NTSC."
+          hint="NTSC is the North American color standard. PAL60 is a PAL console's color signal at the same 60 Hz timing: the ROM is built for it, the emulator preview follows it, and the color pickers and sound previews switch to the PAL palette and audio clock. Frame-based timing (durations, tempo) is identical to NTSC."
           persistent-hint
         />
         <v-select
