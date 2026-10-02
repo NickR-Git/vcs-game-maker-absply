@@ -291,3 +291,6 @@ Add a TV standard option (NTSC / PAL60)
   finished, so changing the standard mid-build could pair a ROM built for
   one standard with the other's spec. It is now read when the code is
   generated.
+- Creating a new project or importing one now clears the emulator: the
+  screen goes blank and the previous project's ROM is forgotten (it can no
+  longer be saved or tested in Stella until the new project is built).

@@ -177,6 +177,7 @@ import {migrateLegacyJoystickBlocksInWorkspaceXml} from '../hooks/migrate-joysti
 import {migrateLegacyKeypadBlocksInWorkspaceXml} from '../hooks/migrate-keypad-blocks';
 import {getDateInfix} from '../utils/date';
 import {resetMusicEditorActiveState} from '../hooks/music-editor-state';
+import {clearEmulatorRom} from '../hooks/emulator';
 import {matrixToPlayfield, playfieldToMatrix} from '../utils/pixels';
 import {persistActiveFileHandle, loadPersistedFileHandle, ensureWritePermission, persistActiveFilePath, loadPersistedFilePath} from '../utils/file-handle-storage';
 import pkg from '../../package.json';
@@ -929,6 +930,7 @@ export default defineComponent({
       // handleNewProject's  identical change: the user may still want
       // to check/adjust the imported project's  Title/Developer/
       // Version/Description right here first.
+      clearEmulatorRom();
       appendCompileLog(`Imported project ${sourceName}`, 'stage');
     },
 
@@ -960,6 +962,7 @@ export default defineComponent({
       // song/pattern/track IDs start counting from 1 again too, colliding
       // with whatever the previous project used.
       resetMusicEditorActiveState();
+      clearEmulatorRom();
 
       this.data.newProjectDialog = false;
       // Unlike loadProjectFromFile, deliberately stays on this tab rather than

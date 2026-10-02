@@ -433,6 +433,10 @@ func (c *console) powerOff() {
 	c.vcs = nil
 	c.romAttached = false
 	c.jsBufSize = 0
+	c.fillBlack()
+}
+
+func (c *console) fillBlack() {
 	if !c.ctx.IsUndefined() {
 		// Fill black, not clearRect (which leaves the canvas transparent,
 		// showing whatever's behind it rather than a dark "no signal"
@@ -442,6 +446,18 @@ func (c *console) powerOff() {
 		c.ctx.Set("fillStyle", "#000")
 		c.ctx.Call("fillRect", 0, 0, w, h)
 	}
+}
+
+// clearRom removes the loaded ROM and blanks the screen, leaving the console
+// powered on with no cartridge running - the next loadRom starts it again.
+func (c *console) clearRom() {
+	c.lastRom = nil
+	c.romAttached = false
+	c.jamReported = false
+	if c.mixer != nil {
+		c.mixer.Reset()
+	}
+	c.fillBlack()
 }
 
 func (c *console) attachRom(romData []byte) error {
@@ -698,6 +714,11 @@ func main() {
 		if err := c.powerOn(); err != nil {
 			js.Global().Get("console").Call("error", "gopher2600-wasm: powerOn failed: "+err.Error())
 		}
+		return nil
+	}))
+
+	api.Set("clearRom", safeFunc("clearRom", func(this js.Value, args []js.Value) any {
+		c.clearRom()
 		return nil
 	}))
 

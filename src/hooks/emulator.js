@@ -1,6 +1,6 @@
 'use strict';
 
-import {useLastLoadedRomBytes, useLastLoadedTvSpec} from './rom-status';
+import {useLastLoadedRomBytes, useLastLoadedTvSpec, clearLoadedRom} from './rom-status';
 
 // public/index.html's own loadGopher2600Wasm() fires this every time a
 // window.gopher2600 instance becomes ready - the real first page load
@@ -51,6 +51,16 @@ export const withGopher2600 = (callback, retriesLeft = 40) => {
   }
   if (retriesLeft <= 0) return;
   window.setTimeout(() => withGopher2600(callback, retriesLeft - 1), 250);
+};
+
+// Empties the emulator and forgets the ROM behind it, for a new or imported
+// project (the ROM belonged to the project it replaces). A no-op on the
+// emulator side if it isn't loaded yet or is an older build without clearRom.
+export const clearEmulatorRom = () => {
+  clearLoadedRom();
+  safeWithGopher2600((gopher2600) => {
+    if (gopher2600.clearRom) gopher2600.clearRom();
+  });
 };
 
 // For callers (front-panel switch UI) where a dead emulator instance should

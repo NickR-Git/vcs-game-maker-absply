@@ -40,6 +40,24 @@ export const setCompiledRomBytes = (result) => {
   compiledRomBytes.value = result;
 };
 
+// Forgets every compiled/loaded ROM - for a new or imported project, whose
+// ROM (kept for recovery, "Save ROM" and "Test in Stella") belongs to the
+// project it replaces. Doesn't touch the emulator itself; see
+// clearEmulatorRom in hooks/emulator.js.
+export const clearLoadedRom = () => {
+  lastLoadedRomBytes.value = null;
+  lastLoadedTvSpec.value = 'NTSC';
+  compiledRomBytes.value = null;
+  hasCompiledRom.value = false;
+  romOutdated.value = true;
+  try {
+    sessionStorage.removeItem(LAST_LOADED_ROM_KEY);
+    sessionStorage.removeItem(LAST_LOADED_TV_SPEC_KEY);
+  } catch (e) {
+    // Nothing stored to remove.
+  }
+};
+
 export const markRomUpToDate = () => {
   romOutdated.value = false;
   hasCompiledRom.value = true;
