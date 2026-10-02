@@ -1116,8 +1116,13 @@ const buildRomInner = async () => {
     appendCompileLog(attempt === 0 ? 'Generating bBasic code...' :
       `Attempt ${attempt + 1}: generating bBasic code...`, 'stage');
     let code;
+    // The TV standard this code was generated for, read now - the compile
+    // below is async, and the standard can be changed meanwhile, which would
+    // pair a ROM built for one standard with the emulator spec of the other.
+    let buildTvSpec;
     try {
       code = regenerateCode();
+      buildTvSpec = emulatorTvSpec(useConfigurationStorage().value || {});
       useGeneratedBasic().value = code;
     } catch (e) {
       appendCompileLog('Failed to generate bBasic code.', 'error');
@@ -1253,11 +1258,11 @@ const buildRomInner = async () => {
       // nothing about the project or the compiler is actually broken.
       try {
         withGopher2600((gopher2600) => {
-          gopher2600.loadRom(compiledResult.output, emulatorTvSpec(useConfigurationStorage().value || {}));
+          gopher2600.loadRom(compiledResult.output, buildTvSpec);
           gopher2600.setKeypadMode('left', !!BlocklyBB.keypad0Used);
           gopher2600.setKeypadMode('right', !!BlocklyBB.keypad1Used);
         });
-        recordLoadedRomForRecovery(compiledResult.output, emulatorTvSpec(useConfigurationStorage().value || {}));
+        recordLoadedRomForRecovery(compiledResult.output, buildTvSpec);
       } catch (previewError) {
         console.error('gopher2600-wasm: failed to load the compiled ROM into the preview emulator ' +
           '(the ROM itself compiled successfully) - try "Refresh emulator":', previewError);
@@ -1695,8 +1700,13 @@ export const buildTitleScreenPreviewRom = async (screenId) => {
     setRelocationBank('subroutineBanks', TITLE_SCREEN_SUBROUTINE_NAME, 2);
     setRelocationBank('eventBanks', 'gameover_start', 3);
     let code;
+    // The TV standard this code was generated for, read now - the compile
+    // below is async, and the standard can be changed meanwhile, which would
+    // pair a ROM built for one standard with the emulator spec of the other.
+    let buildTvSpec;
     try {
       code = regenerateCode(buildTitleScreenPreviewXml(screenId));
+      buildTvSpec = emulatorTvSpec(useConfigurationStorage().value || {});
       // Left as the project's configured ROM size (Configuration.vue)
       // whenever it already has room for banks 1/2/3 above (bankswitched,
       // 16k or bigger) - confirmed directly as a real bug to override it
@@ -1759,11 +1769,11 @@ export const buildTitleScreenPreviewRom = async (screenId) => {
       const compiledResult = await assembleBatariBasic(compiled.mainAsm, compiled.workDir, log);
       try {
         withGopher2600((gopher2600) => {
-          gopher2600.loadRom(compiledResult.output, emulatorTvSpec(useConfigurationStorage().value || {}));
+          gopher2600.loadRom(compiledResult.output, buildTvSpec);
           gopher2600.setKeypadMode('left', false);
           gopher2600.setKeypadMode('right', false);
         });
-        recordLoadedRomForRecovery(compiledResult.output, emulatorTvSpec(useConfigurationStorage().value || {}));
+        recordLoadedRomForRecovery(compiledResult.output, buildTvSpec);
       } catch (previewError) {
         console.error('gopher2600-wasm: failed to load the title screen preview ROM into the emulator ' +
           '(the ROM itself compiled successfully) - try "Refresh emulator":', previewError);

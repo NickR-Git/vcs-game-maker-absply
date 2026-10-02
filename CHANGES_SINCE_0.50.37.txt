@@ -286,3 +286,8 @@ Add a TV standard option (NTSC / PAL60)
   abstractpolygon.com). They open in a new tab in the browser; the desktop
   build now opens any web link or window.open() in the system browser
   instead of a new app window.
+- Fixed the preview sometimes showing wrong colors after changing the TV
+  standard: the emulator's TV spec was read after the (async) compile
+  finished, so changing the standard mid-build could pair a ROM built for
+  one standard with the other's spec. It is now read when the code is
+  generated.
