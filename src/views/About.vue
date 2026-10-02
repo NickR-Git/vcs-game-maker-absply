@@ -22,11 +22,11 @@
         <br />
         <strong>Experimental:</strong>
         <a
-          href="https://abstractpolygon.com/vcs-game-maker/"
+          href="https://abstractpolygon.com/vcs-game-maker"
           target="_blank"
           rel="noopener"
         >
-          abstractpolygon.com/vcs-game-maker/
+          abstractpolygon.com/vcs-game-maker
         </a>
       </div>
 
