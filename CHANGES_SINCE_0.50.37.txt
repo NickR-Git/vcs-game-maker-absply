@@ -282,5 +282,7 @@ Add a TV standard option (NTSC / PAL60)
 - PAL60 audio: the Sound and Music previews use the PAL audio clock (about
   0.7% lower than NTSC, roughly 12 cents flat), and the note names shown for
   an AUDC/AUDF pair follow it.
-
-- About tab: new Official and Experimental links (itch.io and abstractpolygon.com). They open in a new tab in the browser; the desktop build now opens any web link or window.open() in the system browser instead of a new app window.
+- About tab: new Official and Experimental links (itch.io and
+  abstractpolygon.com). They open in a new tab in the browser; the desktop
+  build now opens any web link or window.open() in the system browser
+  instead of a new app window.
