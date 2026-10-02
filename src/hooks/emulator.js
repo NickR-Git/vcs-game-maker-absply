@@ -1,6 +1,6 @@
 'use strict';
 
-import {useLastLoadedRomBytes} from './rom-status';
+import {useLastLoadedRomBytes, useLastLoadedTvSpec} from './rom-status';
 
 // public/index.html's own loadGopher2600Wasm() fires this every time a
 // window.gopher2600 instance becomes ready - the real first page load
@@ -29,7 +29,8 @@ import {useLastLoadedRomBytes} from './rom-status';
 window.addEventListener('gopher2600-ready', () => {
   const lastLoadedRomBytes = useLastLoadedRomBytes();
   if (!lastLoadedRomBytes.value) return;
-  withGopher2600((gopher2600) => gopher2600.loadRom(lastLoadedRomBytes.value));
+  const lastLoadedTvSpec = useLastLoadedTvSpec();
+  withGopher2600((gopher2600) => gopher2600.loadRom(lastLoadedRomBytes.value, lastLoadedTvSpec.value));
 });
 
 // Waits for tools/gopher2600-wasm's window.gopher2600 API to exist - its WASM

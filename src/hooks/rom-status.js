@@ -51,6 +51,7 @@ export const markRomUpToDate = () => {
 // tab close (rather than it lingering indefinitely) is the right lifetime for
 // that.
 const LAST_LOADED_ROM_KEY = 'vcsgm-last-loaded-rom';
+const LAST_LOADED_TV_SPEC_KEY = 'vcsgm-last-loaded-tv-spec';
 
 // What the emulator canvas is CURRENTLY showing, independent of whether that
 // came from a real "Update ROM" build or a one-off Title Screen preview build
@@ -64,15 +65,24 @@ const lastLoadedRomBytes = ref(null);
 
 export const useLastLoadedRomBytes = () => lastLoadedRomBytes;
 
+// The gopher2600 television spec ("NTSC"/"PAL"/"PAL60") the loaded ROM was
+// built for - kept next to the bytes so a recovery reload hands the emulator
+// the same spec, not whatever the Options tab says by then.
+const lastLoadedTvSpec = ref('NTSC');
+
+export const useLastLoadedTvSpec = () => lastLoadedTvSpec;
+
 // Call right after ANY successful gopher2600.loadRom(...) - both call sites
 // in hooks/rom.js. Persists to sessionStorage so a real page reload (see
 // App.vue's handleRefreshEmulator - the only thing that actually clears
 // module state like this ref) still has something to hand the emulator once
 // gopher2600.wasm finishes reinitializing, instead of coming back up blank
 // until the user manually rebuilds.
-export const recordLoadedRomForRecovery = (output) => {
+export const recordLoadedRomForRecovery = (output, tvSpec = 'NTSC') => {
   lastLoadedRomBytes.value = output;
+  lastLoadedTvSpec.value = tvSpec;
   try {
+    sessionStorage.setItem(LAST_LOADED_TV_SPEC_KEY, tvSpec);
     let binary = '';
     for (let i = 0; i < output.length; i++) binary += String.fromCharCode(output[i]);
     sessionStorage.setItem(LAST_LOADED_ROM_KEY, btoa(binary));
@@ -90,6 +100,7 @@ export const recordLoadedRomForRecovery = (output) => {
     const output = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) output[i] = binary.charCodeAt(i);
     lastLoadedRomBytes.value = output;
+    lastLoadedTvSpec.value = sessionStorage.getItem(LAST_LOADED_TV_SPEC_KEY) || 'NTSC';
   } catch (e) {
     // Corrupt/unreadable entry - fall through with nothing to restore.
   }

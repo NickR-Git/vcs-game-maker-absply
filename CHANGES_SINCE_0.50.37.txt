@@ -4,7 +4,7 @@ Merge remote-tracking branch 'origin/main'
 Scrub "own" from the Title tab's Score card hint text
 
 === 0.50.38 ===
-Add sprite Inertia/Bounce, 16-way Fire directions, missile/ball blank-line filling, music/cycle optimizations; bump version
+Add sprite Inertia/Bounce, 16-way Fire directions, music/cycle optimizations; bump version
 
 - Inertia: new accelerate/decelerate blocks (velocity, per-axis max speed,
   8/16-way) for all 5 sprites, and a unified object_bounce block covering
@@ -14,17 +14,25 @@ Add sprite Inertia/Bounce, 16-way Fire directions, missile/ball blank-line filli
   tracks the 8/16-way toggle; fixed a throttle-countdown seeding bug that
   made the first post-fire/seek step happen a frame early instead of
   waiting the full interval.
-- New ball_blank_lines kernel option: lets the ball take over the
-  per-scanline fill slot no_blank_lines otherwise gives to missile0, so
-  missile0 stays usable as a normal sprite. Reuses stock no_blank_lines'
-  real gap-elimination path unchanged; only swaps one filler slot. Full
-  writeup in public/bb19/includes/UPSTREAM_CHANGES.md.
 - "Show blank lines" toggle inverted to "Fill blank lines ... with
-  missile0" for consistency with the new ball option (display-only; the
-  stored config value keeps its original polarity).
-- Music/soundfx/background/sprite generators: several redundant-read/asm
-  cycle-reduction passes (envelope checks, fade checks, note-timer checks,
-  missile fire/seek throttling).
+  missile0" (display-only; the stored config value keeps its original
+  polarity).
+- Music generator: fewer redundant loads - back-to-back instrument checks
+  on a shared channel no longer re-load the same value, the duration read
+  is reused by the arpeggio branch, and the arpeggio speed/range variable
+  is read once instead of three times.
+- Soundfx generator: each channel's unpacked envelope nibble is kept in X
+  instead of re-reading and re-masking envelopeConfig before the dispatch.
+  Also fixed a "Branch out of range" build failure once a project
+  registered enough envelope configs (5 in the reported case) by using a
+  BNE-over-JMP long branch to the channel's done label.
+- Background generator: the fade checks now build their active/finished
+  mask tests directly on the flags byte they just loaded instead of
+  reloading it (the two masks are disjoint bits), and share one color
+  variable resolution instead of duplicating it.
+- Sprite generator: missile fire/seek throttling computes its half-rate
+  step (speed/2, clamped to at least 1) once per frame instead of at every
+  use.
 - Combined Player 0/1 and Missile 0/1 blocks into single dropdown-driven
   block types (existing projects auto-migrate).
 
@@ -246,3 +254,18 @@ Rewrite tall-background vertical scrolling; fix grid snap, XY labels and canvas 
   clicking outside the canvas (not the toolbar) deselects marquee tools
 - Fix stray pixels left by line/rectangle/circle previews after a late
   update from the page redrew an older preview
+
+=== Unreleased ===
+Add a TV standard option (NTSC / PAL / PAL60)
+
+- New "TV standard" dropdown at the top of the Options tab's ROM Options,
+  above ROM size. It sets the compiled ROM's "set tv" line (ntsc, pal or
+  pal60; projects saved before this existed stay NTSC).
+- The preview emulator (gopher2600-wasm) is no longer fixed to NTSC: it is
+  created with the project's TV standard for each ROM it loads (still pinned
+  to that one spec, never auto-detected - auto-detection once mistook a
+  single slow frame for a different TV standard and blanked the screen).
+  The standard a loaded ROM was built for is remembered across a page
+  reload.
+- Colors and timing-dependent values elsewhere in the app (palettes, note
+  frequencies, the 192-line picture assumptions) are still tuned for NTSC.

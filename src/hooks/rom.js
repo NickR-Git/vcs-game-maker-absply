@@ -21,6 +21,7 @@ import {buildTextFontOverride, buildTextScrollCursorOverride, buildTextRow2Color
 import {textLinesMaxVarName, textLinesBaseVarName, textRow2ColorVarName,
   textScrollCursorColorVarName, textEndIconColorVarName} from '../generators/bbasic/text-minikernel';
 import {showError} from '../utils/build-error';
+import {emulatorTvSpec} from '../utils/tv-standard';
 import {computeRomCapacity} from '../utils/rom-capacity';
 import {useGeneratedBasic} from './generated';
 import {appendCompileLog, clearCompileLog, useBackgroundsStorage, useConfigurationStorage, useErrorStorage,
@@ -1252,11 +1253,11 @@ const buildRomInner = async () => {
       // nothing about the project or the compiler is actually broken.
       try {
         withGopher2600((gopher2600) => {
-          gopher2600.loadRom(compiledResult.output);
+          gopher2600.loadRom(compiledResult.output, emulatorTvSpec(useConfigurationStorage().value || {}));
           gopher2600.setKeypadMode('left', !!BlocklyBB.keypad0Used);
           gopher2600.setKeypadMode('right', !!BlocklyBB.keypad1Used);
         });
-        recordLoadedRomForRecovery(compiledResult.output);
+        recordLoadedRomForRecovery(compiledResult.output, emulatorTvSpec(useConfigurationStorage().value || {}));
       } catch (previewError) {
         console.error('gopher2600-wasm: failed to load the compiled ROM into the preview emulator ' +
           '(the ROM itself compiled successfully) - try "Refresh emulator":', previewError);
@@ -1758,11 +1759,11 @@ export const buildTitleScreenPreviewRom = async (screenId) => {
       const compiledResult = await assembleBatariBasic(compiled.mainAsm, compiled.workDir, log);
       try {
         withGopher2600((gopher2600) => {
-          gopher2600.loadRom(compiledResult.output);
+          gopher2600.loadRom(compiledResult.output, emulatorTvSpec(useConfigurationStorage().value || {}));
           gopher2600.setKeypadMode('left', false);
           gopher2600.setKeypadMode('right', false);
         });
-        recordLoadedRomForRecovery(compiledResult.output);
+        recordLoadedRomForRecovery(compiledResult.output, emulatorTvSpec(useConfigurationStorage().value || {}));
       } catch (previewError) {
         console.error('gopher2600-wasm: failed to load the title screen preview ROM into the emulator ' +
           '(the ROM itself compiled successfully) - try "Refresh emulator":', previewError);

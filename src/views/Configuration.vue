@@ -17,6 +17,15 @@
       </div>
       <div v-if="!isSectionCollapsed('rom')" class="option-section-content">
         <v-select
+          v-model="configurationState.tvStandard"
+          @change="handleChangeConfiguration"
+          :items="tvStandardOptions"
+          label="TV standard"
+          class="mb-4"
+          hint="NTSC is the 60 Hz North American standard; PAL is the 50 Hz European one; PAL60 is a PAL color signal at 60 Hz. The emulator preview follows this setting too. Colors and timing-dependent values elsewhere in the app are still tuned for NTSC."
+          persistent-hint
+        />
+        <v-select
           v-model="configurationState.romSize"
           @change="handleChangeConfiguration"
           :items="romSizeOptions"
@@ -264,6 +273,7 @@
 </template>
 <script>
 import {computed, defineComponent, ref, watch} from '@vue/composition-api';
+import {TV_STANDARD_OPTIONS} from '../utils/tv-standard';
 
 import {USER_VARIABLE_LETTERS_WITHOUT_SUPERCHIP} from '../generators/bbasic';
 import {useBackgroundsStorage, useConfigurationStorage,
@@ -334,6 +344,7 @@ const DEFAULT_CONFIGURATION = {
   pfres: 24,
   enablePfRowHeight: false,
   pfrowheight: 8,
+  tvStandard: 'ntsc',
   romSize: '4k',
   scoreFont: '',
   muteAllAudio: false,
@@ -596,6 +607,7 @@ export default defineComponent({
       handleToggleSuperchip,
       handleResetToDefaults,
       romSizeOptions,
+      tvStandardOptions: TV_STANDARD_OPTIONS,
       romSizeIsBankswitched,
       player0RainbowColorsActive,
       enableMissile0BlankLines,

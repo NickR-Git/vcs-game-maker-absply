@@ -36,6 +36,7 @@ import {CUSTOM_SCORE_FONT, SQUISH_SCORE_FONT, SQUISH_CUSTOM_SCORE_FONT,
   customScoreFontUsesExtraGlyphs} from '../utils/score-font';
 import {canonicalDistanceVarName, distancePointVarName} from '../utils/distance';
 import {superchipRwFreeCount, pfRowDivisorFor} from '../utils/playfield-coords';
+import {bbTvSetting} from '../utils/tv-standard';
 import {keypadKeyVarName} from '../utils/keypad';
 import {registerTitleScreenSubroutine} from './bbasic/titlescreen';
 import {resolveAnimatedTitleScreenCardRefs, titleCardFrameCounterVarName,
@@ -2664,6 +2665,7 @@ Blockly.BBasic.finish = function(code) {
   const generatedProjectInfo = Blockly.BBasic.generateProjectInfo();
   const generatedConfiguration = Blockly.BBasic.generateConfiguration();
   const generatedRomSize = Blockly.BBasic.generateRomSize();
+  const generatedTv = bbTvSetting(useConfigurationStorage().value || {});
   const generatedSystemDims = Blockly.BBasic.generateSystemDims();
   const generatedBackgrounds = Blockly.BBasic.generateBackgrounds();
   // Has to run after generateBackgrounds() (needs relocatableGraphicsUnits
@@ -2803,7 +2805,7 @@ Blockly.BBasic.finish = function(code) {
     generatedTextOffsetTables, generatedTextStaticOffsetTables, generatedTextRow2OffsetsTable, generatedJoyDir8Table,
     generatedSubroutines, generatedFunctions, generatedRelocatedEvents, generatedTextMinikernel,
     systemStartEvent, titleStartEvent, titleUpdateEvent, gamePlayStartEvent,
-    gameOverStartEvent, gameOverUpdateEvent, generatedProjectInfo, generatedConfiguration, generatedRomSize,
+    gameOverStartEvent, gameOverUpdateEvent, generatedProjectInfo, generatedConfiguration, generatedRomSize, generatedTv,
     generatedSystemDims,
     generatedTextMinikernelDefaults, generatedDivMul, generatedMuteAudio, generatedChannelDurationChecks,
     generatedEnvelopeChecks, hasSoundHandling, hasFadeRoutines,

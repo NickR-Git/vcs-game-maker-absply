@@ -169,6 +169,7 @@ type console struct {
 	mixer    *webAudioMixer
 
 	lastRom     []byte
+	tvSpec      string // "NTSC" | "PAL" | "PAL60" - see powerOn
 	poweredOn   bool
 	romAttached bool
 	jamReported bool
@@ -371,24 +372,29 @@ func (c *console) onAnimationFrame(this js.Value, args []js.Value) (result any) 
 // was previously loaded it's re-attached (mirrors "cartridge stays inserted
 // across a power cycle").
 func (c *console) powerOn() error {
-	// Pinned to NTSC, not "AUTO" - every ROM this tool ever produces is
-	// hardcoded to "set tv ntsc" (see generators/bbasic.bb.hbs), never
-	// configurable per-project, so there's nothing to actually detect.
-	// "AUTO" instead lets gopher2600 reclassify the TV spec on the fly from
-	// observed frame timing - confirmed directly as the cause of a real
-	// reported bug (screen goes solid black, audio keeps playing, looks
-	// like a lockup but isn't one): a single frame that runs long enough to
-	// overrun the compiled ROM's kernel timing budget (the actual
-	// trigger - a heavy collision check only running on the one frame a
-	// hardware collision fires) is enough for the auto-detector to
-	// reclassify the signal as a different, longer-scanline spec - directly
-	// observed via a DIAG probe, len(sig) jumping 59735->79799 and the same
-	// sampled pixel flipping VBlank=false->true between frames, meaning the
-	// crop window recalculated for the new (wrong) spec lands on blank
-	// scanlines from then on. Pinning to the one spec this tool ever
-	// produces removes the reclassification machinery entirely, rather than
-	// just reducing how often a slow frame manages to trigger it.
-	tv, err := television.NewTelevision("NTSC")
+	// Pinned to ONE specific spec (c.tvSpec - set per ROM by loadRom, from the
+	// project's TV standard option), never "AUTO". Every ROM this tool
+	// produces is generated with a fixed "set tv" line (see
+	// generators/bbasic.bb.hbs), so the app always knows exactly which spec
+	// it is - there is nothing to actually detect. "AUTO" instead lets
+	// gopher2600 reclassify the TV spec on the fly from observed frame
+	// timing - confirmed directly as the cause of a real reported bug
+	// (screen goes solid black, audio keeps playing, looks like a lockup but
+	// isn't one): a single frame that runs long enough to overrun the
+	// compiled ROM's kernel timing budget (the actual trigger - a heavy
+	// collision check only running on the one frame a hardware collision
+	// fires) is enough for the auto-detector to reclassify the signal as a
+	// different, longer-scanline spec - directly observed via a DIAG probe,
+	// len(sig) jumping 59735->79799 and the same sampled pixel flipping
+	// VBlank=false->true between frames, meaning the crop window
+	// recalculated for the new (wrong) spec lands on blank scanlines from
+	// then on. Pinning removes the reclassification machinery entirely,
+	// rather than just reducing how often a slow frame manages to trigger it.
+	spec := c.tvSpec
+	if spec == "" {
+		spec = "NTSC"
+	}
+	tv, err := television.NewTelevision(spec)
 	if err != nil {
 		return err
 	}
@@ -663,6 +669,25 @@ func main() {
 		jsBytes := args[0]
 		romData := make([]byte, jsBytes.Get("length").Int())
 		js.CopyBytesToGo(romData, jsBytes)
+		// Optional second argument: the television spec the ROM was built
+		// for ("NTSC", "PAL" or "PAL60" - the project's TV standard option).
+		// A different spec than the running console's needs a fresh
+		// television, so it takes a power-cycle (powerOn re-attaches
+		// lastRom, set here first).
+		spec := "NTSC"
+		if len(args) > 1 && args[1].Type() == js.TypeString {
+			spec = args[1].String()
+		}
+		if spec != c.tvSpec && !(c.tvSpec == "" && spec == "NTSC") {
+			c.tvSpec = spec
+			if c.poweredOn {
+				c.lastRom = romData
+				if err := c.powerOn(); err != nil {
+					js.Global().Get("console").Call("error", "gopher2600-wasm: loadRom failed: "+err.Error())
+				}
+				return nil
+			}
+		}
 		if err := c.attachRom(romData); err != nil {
 			js.Global().Get("console").Call("error", "gopher2600-wasm: loadRom failed: "+err.Error())
 		}
