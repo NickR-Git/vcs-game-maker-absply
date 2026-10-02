@@ -11,7 +11,7 @@
       </div>
 
       <div class="about-website">
-        <strong>Latest:</strong>
+        <strong>Official:</strong>
         <a
           href="https://haroldo-ok.itch.io/vcs-game-maker"
           target="_blank"
