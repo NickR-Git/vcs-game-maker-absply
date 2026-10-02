@@ -11,7 +11,7 @@
       </div>
 
       <div class="about-website">
-        Latest:
+        <strong>Latest:</strong>
         <a
           href="https://haroldo-ok.itch.io/vcs-game-maker"
           target="_blank"
@@ -20,7 +20,7 @@
           haroldo-ok.itch.io/vcs-game-maker
         </a>
         <br />
-        Experimental:
+        <strong>Experimental:</strong>
         <a
           href="https://abstractpolygon.com/vcs-game-maker/#/"
           target="_blank"
