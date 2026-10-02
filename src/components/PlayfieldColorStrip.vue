@@ -50,7 +50,7 @@
   </div>
 </template>
 <script>
-import {activePalette, PALETTE_COLUMNS, colorByteToCss, colorByteToBBasic} from '../utils/palette';
+import {NTSC_COLORS, PALETTE_COLUMNS, colorByteToCss, colorByteToBBasic} from '../utils/palette';
 
 export default {
   name: 'PlayfieldColorStrip',
@@ -72,6 +72,7 @@ export default {
   },
   data() {
     return {
+      palette: NTSC_COLORS,
       paletteColumns: PALETTE_COLUMNS,
       // Click-and-drag row painting: mousedown on a row remembers which
       // color to spread (the armed quick color if one's selected, else
@@ -95,11 +96,6 @@ export default {
   },
   beforeDestroy() {
     window.removeEventListener('mouseup', this.handleDragEnd);
-  },
-  computed: {
-    palette() {
-      return activePalette();
-    },
   },
   methods: {
     cssColor(byte) {

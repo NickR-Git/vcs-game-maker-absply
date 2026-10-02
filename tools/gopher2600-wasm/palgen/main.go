@@ -1,23 +1,40 @@
-// palgen prints the PAL palette gopher2600 displays (one "rrggbb" per color
-// index 0..127), for src/utils/palette.js's PAL_COLORS - run natively, not as
-// WASM: go run -mod=vendor ./palgen
+// palgen prints the palette gopher2600 draws for a solid color (one "rrggbb"
+// per color index 0..127), for src/utils/palette.js's PAL_COLORS and
+// EMULATOR_NTSC_COLORS - run natively, not as WASM:
+//
+//	go run -mod=vendor ./palgen PAL60
+//	go run -mod=vendor ./palgen NTSC
 package main
 
 import (
 	"fmt"
+	"os"
 
-	"github.com/jetsetilly/gopher2600/hardware/television/colourgen"
+	"github.com/jetsetilly/gopher2600/hardware/television"
 	"github.com/jetsetilly/gopher2600/hardware/television/signal"
+	"github.com/jetsetilly/gopher2600/hardware/television/specification"
 )
 
 func main() {
-	cg, err := colourgen.NewColourGen()
-	if err != nil {
+	id := "PAL60"
+	if len(os.Args) > 1 {
+		id = os.Args[1]
+	}
+	// Creating the television sets up the colour generator the way the app does.
+	if _, err := television.NewTelevision(id); err != nil {
 		panic(err)
 	}
-	cg.SetDefaults(false, "PAL")
+	spec := specification.SpecNTSC
+	if id == "PAL60" {
+		spec = specification.SpecPAL60
+	}
+	stride := specification.ClksScanline
+	sig := make([]signal.SignalAttributes, stride*4)
 	for i := 0; i < 128; i++ {
-		c := cg.GeneratePAL(signal.ColorSignal(i<<1), signal.ColorSignal(0), false)
+		for k := range sig {
+			sig[k].Color = signal.ColorSignal(i << 1)
+		}
+		c := spec.GetColorScreen(sig, stride*2+5, stride)
 		fmt.Printf("%02x%02x%02x\n", c.R, c.G, c.B)
 	}
 }

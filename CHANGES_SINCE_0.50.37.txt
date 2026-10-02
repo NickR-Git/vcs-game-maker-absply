@@ -259,21 +259,26 @@ Rewrite tall-background vertical scrolling; fix grid snap, XY labels and canvas 
 Add a TV standard option (NTSC / PAL60)
 
 - New "TV standard" dropdown at the top of the Options tab's ROM Options,
-  above ROM size. It sets the compiled ROM's "set tv" line (ntsc or pal60;
-  projects saved before this existed stay NTSC). PAL60 is a PAL console's
-  color signal at NTSC's 60 Hz timing, so frame-based values (durations,
-  tempo) are identical between the two.
+  above ROM size (ntsc or pal60; projects saved before this existed stay
+  NTSC). PAL60 is a PAL console's color signal at NTSC's 60 Hz timing, so
+  frame-based values (durations, tempo) are identical between the two, and
+  the ROM is built with NTSC's frame timing (batari Basic's "set tv
+  pal60" makes a 312-line frame that sits 15 lines lower on screen).
 - The preview emulator (gopher2600-wasm) is no longer fixed to NTSC: it is
   created with the project's TV standard for each ROM it loads (still pinned
   to that one spec, never auto-detected - auto-detection once mistook a
   single slow frame for a different TV standard and blanked the screen).
   The standard a loaded ROM was built for is remembered across a page
   reload.
-- PAL60 colors: every color picker, swatch grid, the Color block dropdown
-  and the row color strip show the PAL palette (generated from the
-  emulator's PAL color generator, see tools/gopher2600-wasm/palgen)
-  instead of the NTSC one, so a picked color looks the same in the editor
-  as in the ROM. The stored color byte is unchanged.
+- PAL60 colors: the same color byte is a different color on PAL, so a PAL60
+  build replaces every color fixed at build time (Color blocks, sprite and
+  playfield row colors, score/text colors, title screen colors) with the
+  PAL color that looks closest to the NTSC one the emulator draws
+  (nearest in CIE Lab between the emulator's two palettes - see
+  tools/gopher2600-wasm/palgen). The editors keep showing the NTSC palette
+  and the stored color bytes don't change. Colors the game computes while
+  running (fades, rainbow colors) step through the PAL palette's hues
+  and brightness.
 - PAL60 audio: the Sound and Music previews use the PAL audio clock (about
   0.7% lower than NTSC, roughly 12 cents flat), and the note names shown for
   an AUDC/AUDF pair follow it.

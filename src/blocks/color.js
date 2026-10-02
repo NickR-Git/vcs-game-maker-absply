@@ -2,7 +2,7 @@ import * as Blockly from 'blockly/core';
 import '@blockly/field-grid-dropdown';
 
 import {COLOR_ICON} from './icon';
-import {activePalette} from '../utils/palette';
+import {NTSC_COLORS} from '../utils/palette';
 
 // 28x28 (up from an original 16x16) - see App.vue's  global .blocklyMenuItem
 // padding override, which shrinks each grid cell's  frame to match: a
@@ -22,25 +22,18 @@ const colorToDataURL = (color) => {
   return canvas.toDataURL();
 };
 
-// The swatch-grid options for the project's current TV standard (see
-// activePalette in utils/palette.js) - the dropdown takes this as a function so
-// it is rebuilt each time the menu opens, not once at load. Each palette's
-// swatch images are only drawn once.
-const optionsByPalette = new Map();
-export const colorOptions = () => {
-  const palette = activePalette();
-  if (!optionsByPalette.has(palette)) {
-    optionsByPalette.set(palette, palette.map((color, idx) => ([
-      {
-        src: colorToDataURL(`#${color}`),
-        width: SWATCH_SIZE,
-        height: SWATCH_SIZE,
-      },
-      `${idx << 1}`,
-    ])));
-  }
-  return optionsByPalette.get(palette);
-};
+// Exported so other blocks that need the exact same visual swatch-grid
+// picker (see @blockly/field-grid-dropdown) - not just this one's own
+// color_get - can reuse it instead of duplicating the color-to-dataURL
+// rendering (see blocks/text-minikernel.js's background-color block).
+export const NTSC_COLOR_OPTIONS = NTSC_COLORS.map((color, idx) => ([
+  {
+    src: colorToDataURL(`#${color}`),
+    width: SWATCH_SIZE,
+    height: SWATCH_SIZE,
+  },
+  `${idx << 1}`,
+]));
 
 Blockly.defineBlocksWithJsonArray([
   {
@@ -51,7 +44,7 @@ Blockly.defineBlocksWithJsonArray([
         'type': 'field_grid_dropdown',
         'name': 'COLOR',
         'columns': 8,
-        'options': colorOptions,
+        'options': NTSC_COLOR_OPTIONS,
       },
     ],
     'output': 'Number',

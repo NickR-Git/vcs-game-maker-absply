@@ -2,7 +2,7 @@
 
 // The project's TV standard (Options tab) - what the compiled ROM's
 // "set tv" line says, what the preview emulator is created with, and which
-// color palette / audio clock the editors use.
+// color bytes / audio clock the editors and generator use.
 //
 // PAL60 is a PAL console's color signal at NTSC's 60 Hz / 262-line timing, so
 // every frame-based value (durations, tempo, frames per second) is identical
@@ -21,8 +21,11 @@ export const tvStandardFor = (config) => {
   return KNOWN.includes(value) ? value : 'ntsc';
 };
 
-// batari Basic's "set tv" argument (lowercase).
-export const bbTvSetting = (config) => tvStandardFor(config);
+// batari Basic's "set tv" argument (lowercase). PAL60 is built with NTSC's
+// timing, because that is what it is - 262 lines at 60 Hz, only the color
+// signal differs - whereas batari Basic's "pal60" setting is a different
+// PAL-length frame (312 lines, with the picture pushed 15 lines down).
+export const bbTvSetting = (config) => (tvStandardFor(config) === 'pal60' ? 'ntsc' : tvStandardFor(config));
 
 // gopher2600's television spec name (uppercase).
 export const emulatorTvSpec = (config) => tvStandardFor(config).toUpperCase();

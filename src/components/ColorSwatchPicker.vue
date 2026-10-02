@@ -30,7 +30,7 @@
 </template>
 <script>
 import {computed, defineComponent} from '@vue/composition-api';
-import {activePalette, colorByteToCss} from '../utils/palette';
+import {NTSC_COLORS, colorByteToCss} from '../utils/palette';
 
 // A single reusable swatch-button + palette-grid color picker (a TIA color
 // byte, matching utils/palette.js's index<<1 convention) - the same
@@ -55,7 +55,7 @@ export default defineComponent({
   },
   setup(props) {
     const swatchColor = computed(() => (props.value != null ? colorByteToCss(props.value) : props.fallbackColor));
-    return {palette: computed(() => activePalette()), swatchColor};
+    return {palette: NTSC_COLORS, swatchColor};
   },
 });
 </script>

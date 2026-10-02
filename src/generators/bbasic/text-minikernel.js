@@ -3,6 +3,7 @@
 import {chunk} from 'lodash';
 
 import {useConfigurationStorage} from '../../hooks/project';
+import {colorByteToBuildBBasic} from '../../utils/palette';
 import {TEXT_MESSAGE_LENGTH, CHAR_TO_GLYPH, listTextStrings,
   resolveTextMaxDisplayWidth} from '../../blocks/text-strings';
 import {functionCallDiscardVarName} from '../../blocks/function';
@@ -1098,7 +1099,7 @@ export default (Blockly) => {
   // the reference demo (which explicitly sets white) nor a readable default.
   Blockly.BBasic.generateTextMinikernelDefaults = function() {
     if (!this.isTextMinikernelActive()) return '';
-    const lines = [' TextColor = $0F'];
+    const lines = [` TextColor = ${colorByteToBuildBBasic(0x0F)}`];
     // Row 2's  color defaults to the "$01 sentinel" (see
     // buildTextRow2ColorOverride's  comment in utils/text-font.js), not a
     // real color - it means "follow TextColor" until a "Text: set color"
@@ -1118,10 +1119,10 @@ export default (Blockly) => {
       // own comment above.
       const cursorColor = Blockly.BBasic.nameDB_.getName(
           textScrollCursorColorVarName(), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
-      lines.push(` ${cursorColor} = $0E`);
+      lines.push(` ${cursorColor} = ${colorByteToBuildBBasic(0x0E)}`);
       const endIconColor = Blockly.BBasic.nameDB_.getName(
           textEndIconColorVarName(), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
-      lines.push(` ${endIconColor} = $0E`);
+      lines.push(` ${endIconColor} = ${colorByteToBuildBBasic(0x0E)}`);
     }
     return lines.join('\n');
   };

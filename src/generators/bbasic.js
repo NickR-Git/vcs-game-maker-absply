@@ -31,7 +31,7 @@ import {functionCallDiscardVarName, functionCallArgVarName, functionParamVarName
   MAX_FUNCTION_ARGS} from '../blocks/function';
 import {dataTableSymbolName, processDataTablesStorageDefaults} from '../blocks/data';
 import {matrixToPlayfield} from '../utils/pixels';
-import {colorByteToBBasic} from '../utils/palette';
+import {colorByteToBuildBBasic} from '../utils/palette';
 import {CUSTOM_SCORE_FONT, SQUISH_SCORE_FONT, SQUISH_CUSTOM_SCORE_FONT,
   customScoreFontUsesExtraGlyphs} from '../utils/score-font';
 import {canonicalDistanceVarName, distancePointVarName} from '../utils/distance';
@@ -2666,6 +2666,13 @@ Blockly.BBasic.finish = function(code) {
   const generatedConfiguration = Blockly.BBasic.generateConfiguration();
   const generatedRomSize = Blockly.BBasic.generateRomSize();
   const generatedTv = bbTvSetting(useConfigurationStorage().value || {});
+  // The starting colors (NTSC palette bytes), swapped for PAL60 like any other color.
+  const defaultPlayer1Color = colorByteToBuildBBasic(0x80);
+  const defaultPlayer0Color = colorByteToBuildBBasic(0x40);
+  const defaultInitialBackgroundColor = colorByteToBuildBBasic(0x0F);
+  const defaultScoreColor = colorByteToBuildBBasic(0x08);
+  const defaultPlayfieldColor = colorByteToBuildBBasic(0x0E);
+  const defaultBackgroundColor = colorByteToBuildBBasic(0xC4);
   const generatedSystemDims = Blockly.BBasic.generateSystemDims();
   const generatedBackgrounds = Blockly.BBasic.generateBackgrounds();
   // Has to run after generateBackgrounds() (needs relocatableGraphicsUnits
@@ -2805,7 +2812,8 @@ Blockly.BBasic.finish = function(code) {
     generatedTextOffsetTables, generatedTextStaticOffsetTables, generatedTextRow2OffsetsTable, generatedJoyDir8Table,
     generatedSubroutines, generatedFunctions, generatedRelocatedEvents, generatedTextMinikernel,
     systemStartEvent, titleStartEvent, titleUpdateEvent, gamePlayStartEvent,
-    gameOverStartEvent, gameOverUpdateEvent, generatedProjectInfo, generatedConfiguration, generatedRomSize, generatedTv,
+    gameOverStartEvent, gameOverUpdateEvent, generatedProjectInfo, generatedConfiguration, generatedRomSize, generatedTv, defaultPlayer1Color, defaultPlayer0Color,
+    defaultPlayfieldColor, defaultBackgroundColor, defaultInitialBackgroundColor, defaultScoreColor,
     generatedSystemDims,
     generatedTextMinikernelDefaults, generatedDivMul, generatedMuteAudio, generatedChannelDurationChecks,
     generatedEnvelopeChecks, hasSoundHandling, hasFadeRoutines,
@@ -3761,7 +3769,7 @@ Blockly.BBasic.generateConfiguration = function() {
   // inheriting whatever COLUBK the surrounding code happens to leave
   // behind.
   const textBkColorConfigurationCode = this.isTextMinikernelActive() ?
-    `const textbkcolor = ${colorByteToBBasic(config.textBkColor ?? 0)}` : '';
+    `const textbkcolor = ${colorByteToBuildBBasic(config.textBkColor ?? 0)}` : '';
   // text12b.asm's  second-line drawing path (see its "textkernel2ndrow"
   // ifconst block) - only assembled in at all once some Text tab entry
   // actually has "Wrap to line 2" on (see TextEditor.vue and
@@ -3936,9 +3944,9 @@ Blockly.BBasic.generateBackgrounds = function() {
     const outputBytes = blankLinesShown ?
       resolved.concat([resolved[resolved.length - 1]]) :
       [resolved[0]].concat(resolved);
-    const rows = outputBytes.map((byte) => '  ' + colorByteToBBasic(byte));
+    const rows = outputBytes.map((byte) => '  ' + colorByteToBuildBBasic(byte));
     return ' pfcolors:\n' + rows.join('\n') + '\nend\n' +
-      ` playfieldrealcolor = ${colorByteToBBasic(resolved[0])}\n`;
+      ` playfieldrealcolor = ${colorByteToBuildBBasic(resolved[0])}\n`;
   };
 
   // Registers the shared row-patch subroutine (see its comment) as a side
@@ -4478,7 +4486,7 @@ Blockly.BBasic.generateAnimations = function() {
       const colorSource = this.useSpriteColorsFor(name) ? (() => {
         const rowColors = frame.rowColors || [];
         const resolved = frame.pixels.map((_, i) => rowColors[i] ?? DEFAULT_ROW_COLOR);
-        const rows = resolved.slice().reverse().map((byte) => '  ' + colorByteToBBasic(byte));
+        const rows = resolved.slice().reverse().map((byte) => '  ' + colorByteToBuildBBasic(byte));
         return `  ${name}color:\n` + rows.join('\n') + '\nend\n';
       })() : '';
       return skipCondition +

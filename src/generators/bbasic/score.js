@@ -1,7 +1,7 @@
 'use strict';
 
 import {useConfigurationStorage} from '../../hooks/project';
-import {colorByteToBBasic} from '../../utils/palette';
+import {colorByteToBuildBBasic} from '../../utils/palette';
 import {pfRowDivisorFor} from '../../utils/playfield-coords';
 import {effectiveBackgroundRows} from '../../blocks/background';
 
@@ -307,7 +307,7 @@ export default (Blockly) => {
     const config = (configurationStorage && configurationStorage.value) || {};
     const colorLine = this.scoreBkColorIsBackground(config.scoreBkColor) ?
       '       lda backgroundrealcolor' :
-      `       lda #${colorByteToBBasic(this.resolveScoreBkColorByte(config.scoreBkColor))}`;
+      `       lda #${colorByteToBuildBBasic(this.resolveScoreBkColorByte(config.scoreBkColor))}`;
     // "end" has to sit at column 0, same quirk score_digit_set works around
     // with its own "@end" trick (see its  comment) - confirmed directly:
     // the leading space this used to have here reproduced the exact
@@ -388,7 +388,7 @@ export default (Blockly) => {
     const configurationStorage = useConfigurationStorage();
     const config = (configurationStorage && configurationStorage.value) || {};
     if (!this.usesScoreBkColorSetter && this.scoreBkColorIsBackground(config.scoreBkColor)) return '';
-    return ` scorebkcolor = ${colorByteToBBasic(this.resolveScoreBkColorByte(config.scoreBkColor))}\n`;
+    return ` scorebkcolor = ${colorByteToBuildBBasic(this.resolveScoreBkColorByte(config.scoreBkColor))}\n`;
   };
 
   Blockly.BBasic[`score_digit_get`] = function(block) {

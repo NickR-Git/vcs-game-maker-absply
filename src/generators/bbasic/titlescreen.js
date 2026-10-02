@@ -8,6 +8,7 @@ import {useTitleScreenStorage, usePlayerAnimationsStorage,
   useConfigurationStorage} from '../../hooks/project';
 import {processPlayerAnimationsStorageDefaults} from './sprites';
 import {resolveScoreDigitBytes} from '../../utils/score-font';
+import {tvColorByte} from '../../utils/palette';
 
 // Packs one pixel row (an array of 0/1 values, PixelEditor.vue's own
 // format) into one byte per 8-pixel-wide column block, left pixel = high
@@ -27,6 +28,8 @@ const packRowToBytes = (row, blockCount) => {
 
 const toBinaryByte = (n) => `%${(n & 0xff).toString(2).padStart(8, '0')}`;
 const toHexByte = (n) => `$${(n & 0xff).toString(16).padStart(2, '0')}`;
+// A color byte (the editors' NTSC palette) as it goes into the ROM - see tvColorByte.
+const toColorHexByte = (n) => toHexByte(tvColorByte(n & 0xff));
 
 // One card's  image data block, in the exact format the Titlescreen
 // Kernel's *_image.asm files use (see public/bb19/titlescreen/ - this
@@ -155,7 +158,7 @@ const buildCardDataAsm = (card, key, typeInfo, ref, Blockly) => {
         ' BYTE 0 ; leave this here!',
         '',
         `bmp_${key}_colors`,
-        ...[...rowColors].reverse().map((color) => `\tBYTE ${toHexByte(color)}`),
+        ...[...rowColors].reverse().map((color) => `\tBYTE ${toColorHexByte(color)}`),
     );
   }
 
@@ -165,7 +168,7 @@ const buildCardDataAsm = (card, key, typeInfo, ref, Blockly) => {
     // blocks/titlescreen.js for why), no per-row list.
     lines.push(
         `bmp_${key}_color`,
-        `\t.byte ${toHexByte(card.color || 0)}`,
+        `\t.byte ${toColorHexByte(card.color || 0)}`,
     );
   }
 
@@ -179,7 +182,7 @@ const buildCardDataAsm = (card, key, typeInfo, ref, Blockly) => {
         `bmp_${key}_PF2`,
         `\tBYTE ${toBinaryByte(card.pf2 || 0)}`,
         `bmp_${key}_background`,
-        `\tBYTE ${toHexByte(card.background || 0)}`,
+        `\tBYTE ${toColorHexByte(card.background || 0)}`,
     );
   }
 
@@ -275,7 +278,7 @@ const buildPlayerDataAsm = (card) => {
     lines.push('', `bmp_color_player${playerIndex}`);
     frames.forEach((rows) => {
       [...rows].reverse().forEach((row) =>
-        lines.push(`\tBYTE ${toHexByte(hasRowColors ? row.color : fallbackColor)}`));
+        lines.push(`\tBYTE ${toColorHexByte(hasRowColors ? row.color : fallbackColor)}`));
     });
     lines.push('');
   });
@@ -571,7 +574,7 @@ const buildDriverAsm = (selectedIdVarName, screenPlans, usedKernelKeys, hasPlaye
       );
     }
     lines.push(
-        `\tlda #${toHexByte(plan.backgroundColor)}`,
+        `\tlda #${toColorHexByte(plan.backgroundColor)}`,
         '\tsta titlescreencolor',
         '\tsta COLUBK',
         `\t${plan.layoutMacroName}`,
