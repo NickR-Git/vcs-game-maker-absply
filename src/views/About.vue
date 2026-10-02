@@ -10,14 +10,16 @@
         <div class="about-version">{{ version }}</div>
       </div>
 
-      <a
-        class="about-website"
-        href="https://haroldo-ok.itch.io/vcs-game-maker"
-        target="_blank"
-        rel="noopener"
-      >
-        haroldo-ok.itch.io/vcs-game-maker
-      </a>
+      <div class="about-website">
+        Latest:
+        <a
+          href="https://haroldo-ok.itch.io/vcs-game-maker"
+          target="_blank"
+          rel="noopener"
+        >
+          haroldo-ok.itch.io/vcs-game-maker
+        </a>
+      </div>
 
       <p class="about-description">
         VCS Game Maker is a no-code environment for building Atari 2600 games. Build your game's logic with
@@ -167,8 +169,10 @@ export default {
    an ordinary new TAB, not a separate popup window, so a plain anchor is
    both simpler and the correct native behavior here. */
 .about-website {
-  display: block;
   margin-bottom: 24px;
+}
+
+.about-website a {
   color: var(--v-primary-base, #1976d2);
   text-decoration: underline;
 }
