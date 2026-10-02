@@ -38,15 +38,15 @@
         </div>
       </div>
       <!-- A genuine flex footer of .editor-container now (see that class's
-           own comment), not "position: sticky" layered over the scrollable
+           comment), not "position: sticky" layered over the scrollable
            area anymore - an earlier version used sticky, which visually
            overlaid the bottom slice of .code-scroll-wrapper rather than
-           actually reserving its own space, so a match on one of the last
+           actually reserving its space, so a match on one of the last
            few lines could render right underneath it with no way to scroll
            it clear (confirmed as a real, reproducible bug - the container
-           has no room to scroll past its own max scrollHeight, so no amount
+           has no room to scroll past its max scrollHeight, so no amount
            of centering math could fix it). Being a real flex item instead
-           means .code-scroll-wrapper's own height is simply reduced to fit
+           means .code-scroll-wrapper's height is simply reduced to fit
            above it, so every line - including the last one - has real
            scrollable room to reach the middle of the actually-visible area. -->
       <div class="generated-code-search-dock">
@@ -130,7 +130,7 @@ export default defineComponent({
     // Every piece of the search feature below is kept entirely in setup(),
     // not mixed into a separate Options API data()/computed/watch/methods
     // block the way an earlier version of this had: confirmed as a real
-    // bug - this component's OWN existing pattern is setup() (returning
+    // bug - this component's existing pattern is setup() (returning
     // plain refs) plus a genuinely separate methods: block for the two
     // handlers above, and adding a NEW data()/computed/watch alongside that
     // broke Vue's  reactivity wiring (surfaced as "searchQuery is not
@@ -138,10 +138,10 @@ export default defineComponent({
     // scrolling to a match silently never actually ran).
     const searchQuery = ref('');
     const matchCount = ref(0);
-    // Bumped by every selectCurrentMatch() call, read back by its own
+    // Bumped by every selectCurrentMatch() call, read back by its
     // pending retries below - lets an OLDER search's retry chain notice a
     // NEWER one has since started and quietly stop, instead of finishing
-    // late and overwriting the newer (correct) highlight with its own
+    // late and overwriting the newer (correct) highlight with its
     // stale one. Confirmed as a real bug without this: typing several
     // characters quickly starts one independent retry chain per keystroke
     // (see selectCurrentMatch's  comment on why a single attempt isn't
@@ -178,7 +178,7 @@ export default defineComponent({
     // ref, always resolves to whatever's actually live right now.
     // Tracks a running newline count across nodes as it walks, so each
     // match also comes back with WHICH LINE it's on - used by selectMatch
-    // below to scroll by line position instead of by the rendered DOM's own
+    // below to scroll by line position instead of by the rendered DOM's
     // geometry (see its  comment for why the geometry approach isn't
     // reliable against this particular syntax highlighter).
     const findMatches = () => {
@@ -219,7 +219,7 @@ export default defineComponent({
     // any existing document Selection (a normal browser behavior, not a
     // mistake to work around), so every keystroke's  live-search call
     // either stole focus from the field the user was actively typing in
-    // (if left unfocused after selecting) or silently wiped its own
+    // (if left unfocused after selecting) or silently wiped its
     // highlight the instant it tried to restore focus (if it re-focused
     // the field right after) - there was no way to keep both with
     // Selection. A CSS custom highlight isn't tied to focus at all, so it
@@ -275,7 +275,7 @@ export default defineComponent({
     // Clears any highlight left over from a previous search - needed
     // whenever a search comes up with nothing (query cleared, or no longer
     // matches anything), since selectMatch only ever SETS the highlight,
-    // never removes it on its own.
+    // never removes it by itself.
     const clearHighlight = () => {
       if (window.CSS && CSS.highlights) CSS.highlights.delete(SEARCH_HIGHLIGHT_NAME);
     };
@@ -285,9 +285,9 @@ export default defineComponent({
     // matchCount/currentMatchIndex below, not folded into the same
     // findMatches() call. Confirmed as a real bug otherwise: writing to
     // matchCount/currentMatchIndex (both rendered in this same component's
-    // own template - the "X of Y" count and the prev/next buttons'
+    // template - the "X of Y" count and the prev/next buttons'
     // :disabled state) triggers a Vue re-render, and vue-code-highlight
-    // reprocesses its slot content on every one of ITS OWN parent's
+    // reprocesses its slot content on every one parent's
     // re-renders regardless of whether generatedBasic's actual VALUE
     // changed - which replaces the code pane's text nodes with fresh ones
     // a moment later. Selecting on the SAME tick, before that replacement
@@ -297,7 +297,7 @@ export default defineComponent({
     // itself always re-queries the live DOM fresh (see its  comment on
     // why - NOT a cached template ref, which was the actual root cause of
     // this staying broken even with nextTick() at first: vue-code-highlight
-    // turned out to replace the <pre> element itself outside Vue's own
+    // turned out to replace the <pre> element itself outside Vue's
     // patching, permanently orphaning any ref taken once at mount). A
     // small retry margin (a few attempts, a short beat apart) stays as a
     // safety net for the rare case a node is found an instant before it's
@@ -396,7 +396,7 @@ export default defineComponent({
   /* App.vue's  global ".editor-container { border-radius: 0 !important }"
      already squares this off, same as every other tab's main card - kept
      here too (redundant with that !important rule, but harmless) since the
-     search dock's own matching "border-radius: 0" below is written as if
+     search dock's matching "border-radius: 0" below is written as if
      this were 0, and the two are meant to be read together. */
   border-radius: 0;
 }
@@ -406,14 +406,14 @@ export default defineComponent({
    standard 16px left/right padding (confirmed as a real reported bug, text
    sat flush against the card edge) nor a contained position for the shared
    "v-messages__message" class's positioning to resolve against (Vuetify's
-   own base CSS expects that class inside a positioned ancestor - without
+   base CSS expects that class inside a positioned ancestor - without
    one, this rendered many times taller than its actual text, leaving a
    huge blank gap before the toolbar below - also confirmed as a real
    reported bug). Now wrapped in a v-card-text with the shared
    .tab-intro-section class (see App.vue) like every other tab. */
 
-/* Flush left, own row below the title, above the code itself. Same "gap"
-   spacing method as Project.vue's own .project-actions. */
+/* Flush left, separate row below the title, above the code itself. Same "gap"
+   spacing method as Project.vue's .project-actions. */
 .generated-code-toolbar {
   display: flex;
   align-items: center;
@@ -424,8 +424,8 @@ export default defineComponent({
 
 /* The actual scrolling element now (see .editor-container's  comment) -
    takes up whatever space is left once the title/toolbar above and the
-   search dock below (both flex: 0 0 auto, sized to their own content) claim
-   theirs. min-height: 0 overrides flexbox's own default min-height: auto on
+   search dock below (both flex: 0 0 auto, sized to their content) claim
+   theirs. min-height: 0 overrides flexbox's default min-height: auto on
    a flex item, which would otherwise let this refuse to shrink smaller than
    its content and break scrolling entirely within a flex column - a real,
    well-known flexbox gotcha, not a hypothetical one. */
@@ -437,16 +437,16 @@ export default defineComponent({
 
 /* A genuine flex footer of .editor-container (see its  template comment
    for why this replaced "position: sticky; bottom: 0" - that overlaid the
-   scrollable area instead of actually reserving its own space, which made
+   scrollable area instead of actually reserving its space, which made
    a match on one of the last few lines permanently unreachable no matter
-   how the highlight's own scroll target was computed). Left-aligned within
-   its own full-width row (justify-content, not float) so the search field
-   itself sits at the dock's own left edge, with the count/prev/next
-   controls trailing right after it - not pushed to the row's own right
+   how the highlight's scroll target was computed). Left-aligned within
+   its full-width row (justify-content, not float) so the search field
+   itself sits at the dock's left edge, with the count/prev/next
+   controls trailing right after it - not pushed to the row's right
    edge as a group. Plain white background (the standard v-card background
-   every other field in this app sits on, e.g. Configuration.vue's own
+   every other field in this app sits on, e.g. Configuration.vue's
    fields) rather than matching the dark code area behind it - a dark
-   background needed its own bespoke light-text overrides for the field to
+   background needed its bespoke light-text overrides for the field to
    stay readable, which fought the standard v-text-field styling instead of
    just using it. */
 .generated-code-search-dock {
@@ -459,7 +459,7 @@ export default defineComponent({
   background: #fff;
   border-top: 1px solid rgba(0, 0, 0, 0.12);
   /* Being the last child now (see .editor-container's  comment), this
-     sits flush against the v-card's own bottom edge - Vuetify's default
+     sits flush against the v-card's bottom edge - Vuetify's default
      card corner-rounding otherwise shows through as two rounded notches at
      this row's bottom corners, clipping its square white background into a
      rounded shape that doesn't match the rest of the row. */
@@ -468,7 +468,7 @@ export default defineComponent({
 
 /* No bespoke color/border/background overrides here - deliberately, to
    match how a compact toolbar-row field is already styled elsewhere in
-   this app (e.g. DataEditor.vue's own ".data-columns-field": dense,
+   this app (e.g. DataEditor.vue's ".data-columns-field": dense,
    hide-details, plain Vuetify default underline styling, sized only via a
    fixed flex-basis). Just the width is capped (flex: 0 0, not flex: 1) -
    a search box stretching the full remaining row width looked oversized
@@ -492,9 +492,9 @@ export default defineComponent({
 }
 
 /* Same flat-icon, fade-in-on-hover/blue-on-press treatment as the Music
-   tab's own play/stop buttons (MusicEditor.vue's .music-flat-icon-btn) -
+   tab's play/stop buttons (MusicEditor.vue's .music-flat-icon-btn) -
    transparent background (no Vuetify default hover circle), icon fades
-   from a faint grey to near-black on hover, and flashes the app's own blue
+   from a faint grey to near-black on hover, and flashes the app's blue
    on an actual click/press. */
 .generated-code-flat-icon-btn {
   background-color: transparent !important;
@@ -523,9 +523,9 @@ export default defineComponent({
   align-items: flex-start;
   /* NOT overflow: auto - .code-scroll-wrapper (the actual flex item sized
      to fill the pane down to the search dock) is the one, sole horizontal
-     scroll owner. This element only ever grows as tall as its own content
+     scroll owner. This element only ever grows as tall as its content
      (align-items: flex-start, no explicit height), so if IT were also a
-     scroll container, its own scrollbar would render right after the last
+     scroll container, its scrollbar would render right after the last
      line of code - wherever that happens to land - instead of pinned to
      the bottom of the visible pane just above the search dock, which is
      where a user actually expects to find it. Confirmed directly as a real
@@ -535,7 +535,7 @@ export default defineComponent({
 
 /* Matches duotone-sea.css's  pre[class*="language-"] font/spacing exactly
    (font family/size/line-height/margin), so each printed number lines up
-   with its own row in the code pane next to it. */
+   with its row in the code pane next to it. */
 .line-numbers-gutter {
   flex: none;
   position: sticky;
@@ -557,24 +557,24 @@ export default defineComponent({
 
 .code-container {
   flex: 1 1 auto;
-  /* min-width: 0 (flexbox's own "allow shrinking below content size"
+  /* min-width: 0 (flexbox's "allow shrinking below content size"
      override) was actively WRONG here, not just unhelpful: it's what a flex
-     item needs when its own overflowing content should be clipped/scrolled
-     INTERNALLY, but this pane's own scrolling happens on an ANCESTOR
-     instead (.code-scroll-wrapper, so .line-numbers-gutter's own
+     item needs when its overflowing content should be clipped/scrolled
+     INTERNALLY, but this pane's scrolling happens on an ANCESTOR
+     instead (.code-scroll-wrapper, so .line-numbers-gutter's
      "position: sticky; left: 0" - a sibling, not a descendant, of this pane -
      scrolls in lockstep with the code beside it). With min-width: 0, this
      flex item was letting itself (and the <pre> inside it) shrink down to
      fit the viewport no matter how long the widest generated line actually
-     was, so .code-scroll-wrapper's own overflow: auto never had any real
+     was, so .code-scroll-wrapper's overflow: auto never had any real
      overflow to scroll - confirmed directly as the reported bug (long lines
      just never triggered a horizontal scrollbar at all). min-width:
      max-content is the standard fix for exactly this flexbox gotcha: still
      grows to fill available width for the common case (an ordinary, narrow
-     line), but refuses to shrink below the widest line's own natural
+     line), but refuses to shrink below the widest line's natural
      (unwrapped, thanks to the theme's "white-space: pre") width once that
      exceeds the viewport, which is what actually makes .code-scroll-wrapper
-     overflow and show its own scrollbar. */
+     overflow and show its scrollbar. */
   min-width: max-content;
 }
 
@@ -595,14 +595,14 @@ export default defineComponent({
 
 </style>
 <!-- Styles the CSS Custom Highlight this component sets via
-     CSS.highlights.set() in selectMatch() (see its own comment for why
+     CSS.highlights.set() in selectMatch() (see its comment for why
      this replaced window.getSelection() - a focus/highlight conflict with
      the search field that Selection couldn't avoid). A plain, unscoped
      <style> block, not "scoped" like the one above - Vue's scoped CSS
      can't target ::highlight(), since it's a pseudo-element with no real
      DOM node to attach the scoping data-attribute to. Named specifically
      enough (matching SEARCH_HIGHLIGHT_NAME exactly) to be extremely
-     unlikely to collide with any other component's own highlight, if this
+     unlikely to collide with any other component's highlight, if this
      app ever adds another one. -->
 <style>
 ::highlight(generated-code-search-match) {

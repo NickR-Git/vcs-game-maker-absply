@@ -60,7 +60,7 @@ export const useEditorZoom = (name, defaultZoom = DEFAULT_ZOOM, levels = ZOOM_LE
  * @param {number} zoom Current zoom factor.
  * @param {number} direction 1 to zoom in, -1 to zoom out.
  * @param {number[]} [levels] Stops to step between - defaults to the shared
- *   ZOOM_LEVELS (see useEditorZoom's own param of the same name).
+ *   ZOOM_LEVELS (see useEditorZoom's param of the same name).
  * @return {number} The new zoom factor.
  */
 export const stepZoom = (zoom, direction, levels = ZOOM_LEVELS) => {

@@ -17,7 +17,7 @@ const fetchText = (path) => fetch(path).then((r) => r.text());
 // page file (see its  comment for why: a per-copy kernel file like
 // 48x1_1_kernel.asm reaches shared routines like position48 via a plain
 // same-bank "jsr", so every page has to compile into the SAME subroutine/
-// bank rather than each getting its own).
+// bank rather than each getting its).
 let staticFilesPromise = null;
 const STATIC_FILES = [
   'layoutmacros.asm', 'dpcfix.asm', 'position48.asm', 'player_kernel.asm', 'score_kernel.asm',
@@ -45,7 +45,7 @@ const getKernelFile = (name) => {
  * per-copy kernel files (48x1_N_kernel.asm/48x2_N_kernel.asm/
  * 96x2_N_kernel.asm) actually referenced, plus the shared 48x1_X_kernel.asm/
  * 48x2_X_kernel.asm core whenever any 48x1/48x2 copy is used at all (see
- * public/bb19/titlescreen/titlescreen_kernel.asm's own #ifconst gates,
+ * public/bb19/titlescreen/titlescreen_kernel.asm's #ifconst gates,
  * mirrored here so an unused copy's kernel file is never even fetched).
  * @param {Set<string>} usedKernelKeys e.g. new Set(['48x1_1', '96x2_3']).
  * @return {Promise<Object<string, string>>} filename -> file content.

@@ -15,9 +15,9 @@
         >{{ tick }}</span>
       </div>
       <!-- Exactly two kinds of vertical line: one at each user-editable
-           dot's own CURRENT position (attack/decay/release-start - the
+           dot's CURRENT position (attack/decay/release-start - the
            three draggable handles below), and one above each stage
-           LABEL's own position (see labelXPercents/labelStyle - same
+           LABEL's position (see labelXPercents/labelStyle - same
            midpoint each label itself centers on). -->
       <div class="envelope-graph-current-line" :style="{left: attackX + '%'}" />
       <div class="envelope-graph-current-line" :style="{left: decayX + '%'}" />
@@ -53,10 +53,10 @@
         title="Sustain - drag vertically to shift Decay End and Release Start together"
         @mousedown="startDrag('sustainShift', $event)"
       />
-      <!-- Every vertex gets a dot (matching the classic ADSR diagram's own
+      <!-- Every vertex gets a dot (matching the classic ADSR diagram's
            corners), but only the three whose position actually maps to a
            DRAGGABLE field are draggable - the start (always silence at time
-           0) is a fixed reference point only; Sustain's own end IS a real
+           0) is a fixed reference point only; Sustain's end IS a real
            editable value now (sustainLength), but only via the dropdown
            (see SoundFXEditor.vue), not by dragging, so it stays undraggable
            here too. -->
@@ -67,11 +67,11 @@
         title="Attack - drag to change how many frames it takes to reach full volume"
         @mousedown="startDrag('attack', $event)"
       />
-      <!-- decayX equals attackX whenever decay is 0 (see its own
+      <!-- decayX equals attackX whenever decay is 0 (see its
            computed) - without this guard, this dot sat exactly on top of
            the Attack dot above, reading as one oddly-thick point instead
            of a genuine vertex on the curve. Decay is still editable either
-           way (see SoundFXEditor.vue's own dropdown field for it) - this
+           way (see SoundFXEditor.vue's dropdown field for it) - this
            only hides the redundant on-graph handle for it. -->
       <div
         v-if="decay > 0"
@@ -81,10 +81,10 @@
         @mousedown="startDrag('decaySustain', $event)"
       />
       <!-- sustainEndX equals decayX whenever sustainLength is 0 (same
-           overlapping-vertex reasoning as the decaySustain dot's own
+           overlapping-vertex reasoning as the decaySustain dot's
            guard above, and the same condition the "Sus" label just below
            already uses) - Release is still editable either way (see
-           SoundFXEditor.vue's own dropdown field for it), this only hides
+           SoundFXEditor.vue's dropdown field for it), this only hides
            the redundant on-graph handle for it. -->
       <div
         v-if="sustainLength > 0"
@@ -100,7 +100,7 @@
            "the sound ends here", exactly like the static dot at (0, 0)
            marks "the sound starts here". Not draggable: an earlier version
            made this one draggable too, which did nothing but visually snap
-           straight back to the edge on every drag update, since its own
+           straight back to the edge on every drag update, since its
            position can't respond to the value dragging it would produce. -->
       <div class="envelope-graph-dot envelope-graph-dot-static" :style="dotStyle(releaseX, 0)" />
       <!-- Positioned under each segment's  midpoint (not evenly spaced
@@ -151,14 +151,14 @@ export default defineComponent({
   },
   computed: {
     // Sustain could always be assumed nonzero here before (a fixed visual
-    // width stood in for its own real, always-"however long is left"
+    // width stood in for its real, always-"however long is left"
     // length) - now that it's a real length that can genuinely be 0, all
     // four stages can be 0 at once (an instant, silent "click"). totalUnits
     // still floors at 1 for that case (so this doesn't divide by zero), but
-    // releaseX itself needs its own explicit 100% fallback below - dividing
+    // releaseX itself needs its explicit 100% fallback below - dividing
     // a zero sum by that floor would otherwise land it at 0%, breaking the
-    // static "sound ends here" dot's own invariant (other code assumes it
-    // always sits exactly at the right edge - see its own template comment).
+    // static "sound ends here" dot's invariant (other code assumes it
+    // always sits exactly at the right edge - see its template comment).
     totalUnits() {
       return Math.max(1, this.attack + this.decay + this.sustainLength + this.release);
     },
@@ -271,7 +271,7 @@ export default defineComponent({
         this.$emit('update:decayEndPercent', decayEndPercent);
       } else if (this.dragHandle === 'release') {
         // This handle sits at sustainEndX, which - unlike attack/decay's
-        // own handles - ISN'T measured from x=0: it's measured from the
+        // handles - ISN'T measured from x=0: it's measured from the
         // FIXED right edge (releaseX is always exactly 100%, see the
         // now-static dot there), moving LEFT as Release grows. Reusing the
         // same "distance from 0" shape the other two handles use would
@@ -331,9 +331,9 @@ export default defineComponent({
      the old 4px left it overlapping SoundFXEditor.vue's Reset/Undo/Redo
      toolbar row directly above. */
   margin-top: 16px;
-  /* Breathing room from whatever follows (e.g. SoundFXEditor.vue's own
+  /* Breathing room from whatever follows (e.g. SoundFXEditor.vue's
      Delete button row, which sits flush with zero top padding) - without
-     this the graph's own bottom edge and the next control below it touch
+     this the graph's bottom edge and the next control below it touch
      directly, reading as an overlap even though nothing actually overlaps
      in the DOM. */
   margin-bottom: 8px;
@@ -343,10 +343,10 @@ export default defineComponent({
    graph) are always a percentage of this preset's peak volume, matching how
    ENVELOPE_VOLUME_PERCENT_OPTIONS itself is defined (see blocks/
    soundfx.js). Sits INSIDE the graph now, just past the left border,
-   overlaid on the curve/grid rather than its own separate column outside
+   overlaid on the curve/grid rather than its separate column outside
    the frame - each tick is absolutely positioned (see
    envelope-graph-scale-tick below) rather than flex "space-between" - a
-   plain span's own ~22px line-height meant 5 of them (110px) didn't fit
+   plain span's ~22px line-height meant 5 of them (110px) didn't fit
    this 90px-tall column, so "space-between" silently grew the container
    and pushed every tick below "100" progressively lower than its real
    gridline. */
@@ -354,11 +354,11 @@ export default defineComponent({
   position: absolute;
   left: 6px;
   top: 0;
-  /* Explicit height (matching .envelope-graph's own) rather than the
+  /* Explicit height (matching .envelope-graph's) rather than the
      top:0/bottom:0 stretch trick other absolutely-positioned children here
-     use - this element's own text content gives it an intrinsic height
+     use - this element's text content gives it an intrinsic height
      that top:0/bottom:0 alone doesn't override, which was making its
-     ticks' own percentage "top" values resolve against the wrong (much
+     ticks' percentage "top" values resolve against the wrong (much
      taller) containing block. */
   height: 90px;
   width: 20px;
@@ -388,15 +388,15 @@ export default defineComponent({
   flex: 1 1 auto;
   height: 90px;
   margin-bottom: 16px;
-  /* Same repeating-linear-gradient grid technique MusicEditor.vue's own
-     piano roll uses for its own time-division lines (see sliceGridImage) -
+  /* Same repeating-linear-gradient grid technique MusicEditor.vue's
+     piano roll uses for its time-division lines (see sliceGridImage) -
      reused here so the two read as the same visual language. Horizontal
      only (vertical snap lines are real, reactive divs below - see
-     snapGridXPercents - since Attack/Decay/Release's own snap positions
+     snapGridXPercents - since Attack/Decay/Release's snap positions
      shift as the shape changes, unlike Sustain's fixed 0/25/50/75/100%). */
   background-image: repeating-linear-gradient(to bottom, rgba(0, 0, 0, 0.06) 0,
     rgba(0, 0, 0, 0.06) 1px, transparent 1px, transparent 25%);
-  /* Same frame as MusicEditor.vue's own .piano-roll-scroll (the piano
+  /* Same frame as MusicEditor.vue's .piano-roll-scroll (the piano
      roll's outer border) - matches App.vue's darkened card-border color
      rather than Vuetify's lighter default, so this reads as the same kind
      of "framed panel" the piano roll already establishes. */
@@ -414,7 +414,7 @@ export default defineComponent({
      absolutely-positioned sibling here - without this, a static element
      always paints BELOW any positioned sibling regardless of source order,
      which was putting the curve behind the y-axis text even after removing
-     that text's own z-index. */
+     that text's z-index. */
   position: relative;
 }
 
@@ -480,7 +480,7 @@ export default defineComponent({
      draggable release-start dot whenever Release is 0) - without this, the
      static dot (painted on top, since it's later in the DOM) swallows the
      mousedown meant for the handle underneath it, making that handle
-     undraggable at exactly that value. Static dots never have their own
+     undraggable at exactly that value. Static dots never have their
      listeners, so this is always safe. */
   pointer-events: none;
 }
@@ -507,7 +507,7 @@ export default defineComponent({
   font-size: 11px;
   /* Flat grey (was opacity: 0.6) - same visual result, but a real color
      the y-axis ticks can match exactly (see .envelope-graph-scale-tick's
-     own comment for why they use color instead of opacity). */
+     comment for why they use color instead of opacity). */
   color: #666;
   white-space: nowrap;
 }

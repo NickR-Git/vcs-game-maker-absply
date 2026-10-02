@@ -29,8 +29,8 @@ export default (Blockly) => {
   // goto/gosub does (see bankJumpSuffix) whenever the caller and the
   // subroutine's  bank differ - calling it from its  bank (the common
   // case, including every call before this feature existed, when everything
-  // was always bank 1) stays untagged. "return" never takes a bank suffix of
-  // its own - the compiler restores the caller's bank automatically
+  // was always bank 1) stays untagged. "return" never takes a bank suffix -
+  // the compiler restores the caller's bank automatically
   // (confirmed directly: tagging return with a bank breaks the entire build
   // with a flood of unrelated "unresolved symbol" errors, a sign of the
   // preprocessor losing its place entirely, not a small mistake) - so

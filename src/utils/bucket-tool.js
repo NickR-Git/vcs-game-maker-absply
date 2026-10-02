@@ -2,7 +2,7 @@
 
 /**
  * A paint bucket tool matching @curtishughes/pixel-editor's Tool interface
- * (handlePointerDown/handlePointerMove/handlePointerUp - see its own
+ * (handlePointerDown/handlePointerMove/handlePointerUp - see its
  * Pencil.js) - the library ships Pencil/Line/Rectangle but no flood fill, so
  * this fills the gap the same way a caller would build any other custom
  * tool for it: a plain class with that same shape, constructed with a fixed
@@ -23,8 +23,8 @@ export default class Bucket {
   // shares its exact starting color - the standard flood-fill span. Editor
   // cells are never actually "empty" here (PixelEditor.vue's setPixels
   // always writes a real color, fgColor/rowColor or bgColor, never leaves a
-  // cell unset - see its own comment), so comparing against the clicked
-  // cell's own color (rather than any special "background" sentinel) is
+  // cell unset - see its comment), so comparing against the clicked
+  // cell's color (rather than any special "background" sentinel) is
   // exactly right whether the click starts on drawn art or blank canvas.
   /**
    * @param {{x: number, y: number}} position

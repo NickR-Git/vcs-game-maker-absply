@@ -255,8 +255,8 @@ Rewrite tall-background vertical scrolling; fix grid snap, XY labels and canvas 
 - Fix stray pixels left by line/rectangle/circle previews after a late
   update from the page redrew an older preview
 
-=== Unreleased ===
-Add a TV standard option (NTSC / PAL60)
+=== 0.51.11 ===
+Add a TV standard option (NTSC / PAL60), scroll start/edge blocks and faster tall-background scrolling
 
 - New "TV standard" dropdown at the top of the Options tab's ROM Options,
   above ROM size (ntsc or pal60; projects saved before this existed stay
@@ -294,3 +294,19 @@ Add a TV standard option (NTSC / PAL60)
 - Creating a new project or importing one now clears the emulator: the
   screen goes blank and the previous project's ROM is forgotten (it can no
   longer be saved or tested in Stella until the new project is built).
+- Tall-background scrolling: the stop-at-edge check now tests playfieldpos
+  before fetching the row/maximum, so only the call that wraps a row pays for
+  it (previously every downward call ran a gosub for the maximum), a wrapping
+  downward call reuses the maximum instead of fetching it twice, and the row
+  copy routine tests its rarer modes first and no longer reloads temp5 or
+  re-dispatches (about 15 cycles less per row-step). Checked frame-for-frame
+  against the previous build for down/up, with and without stop-at-edge.
+- New Background blocks: "Set background scroll to row [n]" starts or jumps
+  the scroll of a tall background at any row (it works before or after a
+  "Set background" block in the same event; the row is clamped to the last
+  scrollable one), and "When background scroll reaches the [Top/Bottom]"
+  runs its blocks once each time Up/Down scrolling lands on that edge.
+  Each costs RAM only when used (one flags byte / one pending-row byte).
+- Fixed a build failure ("Unknown Mnemonic 'lda backgroundScrollRow'") for a
+  project with a tall background but no scroll block: the scroll routine was
+  emitted without the variables it reads.

@@ -107,7 +107,7 @@ export const useErrorBannerHighlight = () => computed({
 });
 
 // Live progress feed for the ROM build pipeline (see hooks/rom.js's
-// buildRom()) - a separate store from errorRef above so a build's own
+// buildRom()) - a separate store from errorRef above so a build's
 // step-by-step narration (which stage is running, which bank got relocated
 // and why) doesn't clobber - or get clobbered by - the single persistent
 // error banner errorRef holds for the build's  final failure (still shown
@@ -197,7 +197,7 @@ export const consumeSkipLoadLastProjectCheckOnce = () => {
 // UI to behave, not just the game itself. Stored as the raw string
 // "true"/"false" (useLocalStorage doesn't JSON-encode), defaulting to
 // defaultValue (false unless a caller says otherwise) when never having
-// been set - false matches every one of the original three settings' own
+// been set - false matches every one of the original three settings'
 // default in configurationState; usePixelGridLabelsStorage below is the one
 // exception, defaulting to true instead (see its  comment on why).
 const useBooleanAppSetting = (key, defaultValue = false) => {
@@ -220,7 +220,7 @@ export const useHideSidebarStorage = () =>
   useBooleanAppSetting('vcs-game-maker.hideSidebar');
 // Same "standing app preference" reasoning as the others here - applies a
 // CSS filter across every block (workspace canvas AND the toolbox/flyout,
-// see BlocklyComponent.vue's own .blocklyDiv binding) rather than touching
+// see BlocklyComponent.vue's .blocklyDiv binding) rather than touching
 // any block's  colour value, so it works uniformly regardless of which
 // theme/category colours are actually in play.
 export const useDesaturateBlocklyColorsStorage = () =>
@@ -237,7 +237,7 @@ export const useHideDescriptionTextStorage = () =>
 export const useMuteBlocklySoundsStorage = () =>
   useBooleanAppSetting('vcs-game-maker.muteBlocklySounds');
 // Same "standing app preference, not a project setting" reasoning as the
-// three above - the grid-snap toggle (see ActionEditor.vue's own
+// three above - the grid-snap toggle (see ActionEditor.vue's
 // setupGridSnapZoomButton/toggleGridSnap) used to be page-local-only data,
 // reset every time the Actions tab was left and revisited. A real reported
 // request ("remember the grid snap setting on the blockly screen when
@@ -247,7 +247,7 @@ export const useGridSnapStorage = () =>
 // Same "standing app preference, not a project setting" reasoning as the
 // others above - lets a player switch the Sound tab's  card list between
 // a multi-column grid (the default) and a single full-width column, same
-// choice SoundFXEditor.vue's own .soundfx-list layout has gone back and
+// choice SoundFXEditor.vue's .soundfx-list layout has gone back and
 // forth on for itself in the past.
 export const useSoundFxColumnsStorage = () =>
   useBooleanAppSetting('vcs-game-maker.soundFxColumns', true);
@@ -274,10 +274,10 @@ export const useProjectIncludeDateInFilenameStorage = () =>
   useBooleanAppSetting('vcs-game-maker.projectIncludeDateInFilename', true);
 
 // Same "standing app preference, not a project setting" reasoning as the
-// others above - the desktop (Electron) build's own "Test in Stella" button
+// others above - the desktop (Electron) build's "Test in Stella" button
 // (App.vue) needs to know where the user installed Stella locally, a plain
 // path string rather than a boolean, so this goes through useLocalStorage
-// directly (raw string, like useLoadLastProjectStorage's own "false"
+// directly (raw string, like useLoadLastProjectStorage's "false"
 // convention) rather than useBooleanAppSetting. Meaningless in the browser
 // build (no filesystem access to launch anything with it), but harmless to
 // keep around there too - Configuration.vue's  Stella field is only
@@ -343,13 +343,13 @@ export const usePixelGridLabelsStorage = () =>
 // once at setup() time) that survives navigating away and back, same
 // shape as every other localStorage-backed preference above. Plain
 // load-once functions (not a reactive useLocalStorage wrapper) since
-// MusicEditor.vue already wraps its OWN ref around these and re-persists on
+// MusicEditor.vue already wraps its ref around these and re-persists on
 // every toggle itself - and generators/bbasic/music.js (the OTHER
 // consumer, see isMusicTrackMuted below) only ever needs a one-shot read at
 // compile time, never reactivity. Exported (rather than kept local to
 // MusicEditor.vue, which is where this lived before) specifically so the
 // ROM generator can honor the exact same mute/solo state the Music tab's
-// own preview already does, instead of silently baking in every track
+// preview already does, instead of silently baking in every track
 // regardless of what's muted/soloed on screen.
 export const MUTED_MUSIC_TRACKS_KEY = 'vcs-game-maker.muted.music-tracks';
 export const loadMutedMusicTrackIds = () => {

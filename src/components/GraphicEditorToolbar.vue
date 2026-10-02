@@ -108,7 +108,7 @@
              inside it. Bound to the exact same :value/@click as the one
              above, so highlighting and selection still work identically
              across both - Vuetify doesn't care which literal component
-             instance a button lives in, only that its own "value" matches
+             instance a button lives in, only that its "value" matches
              this shared activeTool. -->
         <v-btn-toggle :value="activeTool" borderless>
           <v-btn
@@ -178,7 +178,7 @@ import {tryUndoCardDeletion, usePendingCardDeletion} from '../hooks/card-delete-
 import {usePixelGridOverlayStorage, usePixelGridLabelsStorage} from '../hooks/project';
 
 // The standard Photoshop/Aseprite-style single-letter tool shortcuts -
-// see handleToolHotkey's own comment for why these specific letters.
+// see handleToolHotkey's comment for why these specific letters.
 const TOOL_HOTKEYS = {
   b: 'pencil',
   e: 'eraser',
@@ -198,9 +198,9 @@ const TOOL_HOTKEYS = {
 // markup, same CSS, same activeEditor/toggledTool/handleSetTool plumbing,
 // same sticky/scroll-divider/bleed trick), which made every layout tweak a
 // five-file find-and-replace. Now a single component: each tab supplies
-// its own zoom control/grid toggles via the "before-tools" slot (these
+// its zoom control/grid toggles via the "before-tools" slot (these
 // differ per tab - e.g. only BackgroundEditor.vue has the "XY" pixel-
-// coordinate toggle) and its own "Set height" menu (if any) via
+// coordinate toggle) and its "Set height" menu (if any) via
 // "after-tools" (its target card/animation differs per tab, so that
 // computation stays local to each one) - everything else (the actual
 // Eraser/Pencil/Undo/Redo/Export/Import icons, and the sticky-header
@@ -213,19 +213,19 @@ export default {
     // The PixelEditor.vue instance the toolbar currently acts on - null
     // (every button disabled, no tool highlighted) until a caller resolves
     // one, however it chooses to (an explicit frame click, a $ref fallback
-    // to the selected card's first frame, etc. - see each tab's own
+    // to the selected card's first frame, etc. - see each tab's
     // "effectiveFrameEditor"-style computed for that logic, which stays
     // local to each tab since "which card is selected" means something
     // different in each one).
     activeEditor: {type: Object, default: null},
     // How many pixels of ancestor padding this toolbar needs to bleed
     // through (via a negative margin) to reach its real scrolling
-    // ancestor's true edge, so its own scrolled-state divider spans the
+    // ancestor's true edge, so its scrolled-state divider spans the
     // full pane width instead of stopping at the nearest padded ancestor.
     // 16 covers one padding level (this toolbar sitting directly in a
     // tab's v-card-text - PlayerEditor/BackgroundEditor/
     // TitleScreenEditor/ScoreFontEditor); TextFontEditor.vue passes 32,
-    // since its own toolbar sits inside a SECOND nested v-card-text (the
+    // since its toolbar sits inside a SECOND nested v-card-text (the
     // "Text Minikernel Font" sub-card) on top of that.
     bleed: {type: Number, default: 16},
   },
@@ -235,7 +235,7 @@ export default {
     };
   },
   computed: {
-    // Reads the active editor's OWN reactive toggledTool directly (see
+    // Reads the active editor's reactive toggledTool directly (see
     // PixelEditor.vue's comment on why that's a separate string, not
     // literally "editor.tool") - Vue tracks this cross-component property
     // access the same as any other reactive read, so this recomputes
@@ -308,7 +308,7 @@ export default {
       this.isScrolled = event.target.scrollTop > 0;
     },
     // Handles every graphic-editor hotkey in one place: the
-    // (B/E/G/L/R/O/V/M/C/P) tool shortcuts (see each tool button's own
+    // (B/E/G/L/R/O/V/M/C/P) tool shortcuts (see each tool button's
     // title), "'" for the pixel grid overlay, Shift+"'" for its X,Y
     // coordinate labels, "H" for Set height, Shift+H/Shift+V for Flip
     // Horizontal/Vertical, and Escape to clear the current selection - all
@@ -318,7 +318,7 @@ export default {
     handleToolHotkey(event) {
       // Skip Ctrl/Cmd/Alt combos entirely (e.g. leaves Ctrl+Z/Ctrl+Shift+Z
       // browser/OS shortcuts alone) - Shift alone is deliberately NOT
-      // excluded, since holding it is also how Line/Rectangle/Oval's own
+      // excluded, since holding it is also how Line/Rectangle/Oval's
       // 45-degree/square/circle snap works (see hooks/shift-key.js), and
       // it's also needed for the Shift+"'" XY-labels binding below.
       if (event.ctrlKey || event.metaKey || event.altKey) return;
@@ -345,7 +345,7 @@ export default {
       if (!this.activeEditor) return;
 
       // Clears any active selection (and discards an in-progress, not-yet-
-      // closed polygon - see PolygonSelect's own cancel()), matching every
+      // closed polygon - see PolygonSelect's cancel()), matching every
       // other image editor's "Escape backs out of the current selection"
       // convention.
       if (key === 'Escape') {
@@ -363,7 +363,7 @@ export default {
       }
 
       // Shift+H/Shift+V for Flip Horizontal/Vertical (matching Aseprite's
-      // own bindings) - checked ahead of the plain "H" height-hotkey below,
+      // bindings) - checked ahead of the plain "H" height-hotkey below,
       // since that one's deliberately NOT shift-gated.
       if (key.toLowerCase() === 'h' && event.shiftKey) {
         event.preventDefault();
@@ -497,7 +497,7 @@ export default {
 
 /* Same gap-based spacing for the Eraser/Pencil/Fill/Line group - v-btn-
    toggle already renders its buttons as a flex row, so this reaches them
-   the same way .get-tools's own gap reaches its direct children. */
+   the same way .get-tools's gap reaches its direct children. */
 .get-tools >>> .v-btn-toggle {
   gap: 4px;
 }
@@ -507,7 +507,7 @@ export default {
 }
 
 /* The one divider OUTSIDE .get-tools (before the "after-tools" slot, e.g.
-   TitleScreenEditor.vue's "Set height" button) - kept as its own class
+   TitleScreenEditor.vue's "Set height" button) - kept as its class
    (rather than reusing .get-inner-divider) specifically so its margin can
    stay independent of the gap-based spacing above, since that slot's
    content isn't a direct flex child of .get-tools the gap could reach. */
@@ -527,8 +527,8 @@ export default {
 
 /* Disabled buttons (no activeEditor - e.g. Import/Export/Undo/Redo/Flip
    with no card/frame selected) otherwise rendered at the exact same
-   rgba(0,0,0,0.38) as an ENABLED button's own resting color above (that
-   rule's !important wins over Vuetify's own default disabled dimming),
+   rgba(0,0,0,0.38) as an ENABLED button's resting color above (that
+   rule's !important wins over Vuetify's default disabled dimming),
    reading as clickable when they're not - confirmed as a real reported
    bug on Import/Export specifically. Dimmed further so a disabled icon is
    visually distinct from a merely-unhovered enabled one. */
@@ -543,14 +543,14 @@ export default {
    every outline reads as the exact same thickness, rather than
    approximating it by eye per icon the way font-based icons would need.
    Sized to the same 19px as Pencil (the one icon here still a real MDI
-   glyph - .get-tools >>> .v-btn .v-icon's own font-size, just expressed as
+   glyph - .get-tools >>> .v-btn .v-icon's font-size, just expressed as
    width/height since an SVG has no font-size to size itself by) so they
    match at a glance rather than looking like a different icon set.
    fill: none + stroke: currentColor is what lets the existing hover/active/
    rest color rules below (all targeting ".v-icon", a class added directly
    to these plain SVGs for exactly this reason) reach them the same way
    they reach a real MDI glyph's font color. */
-/* mdi-format-color-fill's glyph sits smaller within its own icon box than
+/* mdi-format-color-fill's glyph sits smaller within its icon box than
    mdi-pencil's does at the same font-size, rendering visibly smaller
    alongside it - bumped up to actually match instead of just matching the
    (misleading) shared font-size. */
@@ -573,7 +573,7 @@ export default {
    three selection tools read as a distinct kind of tool from the solid-
    stroke Rectangle/Oval DRAW tools right next to them, even though two of
    the three reuse the exact same underlying shapes. */
-/* A near-zero dash length, combined with .get-shape-icon's own
+/* A near-zero dash length, combined with .get-shape-icon's
    stroke-linecap: round (inherited, not overridden here), draws each
    "dash" as a round dot instead of a short line segment - the classic
    dotted marquee look, not a dashed one. Dot SIZE is stroke-width (a round
@@ -585,10 +585,10 @@ export default {
   stroke-dasharray: 0.1 4.5;
 }
 
-/* The polygon path's own points don't reach the 24x24 viewBox's edges as
+/* The polygon path's points don't reach the 24x24 viewBox's edges as
    fully as the rectangle/circle marquee icons' shapes do, reading smaller
    alongside them at the same 19px box - bumped up to actually match. */
-/* stroke-width/dasharray are in the shared 24x24 viewBox's own units, not
+/* stroke-width/dasharray are in the shared 24x24 viewBox's units, not
    screen px - since this icon's rendered box (23px) is larger than the
    circle/rectangle marquee icons' (19px), the SAME stroke-width value
    renders visibly thicker dots here purely from that extra scale-up.

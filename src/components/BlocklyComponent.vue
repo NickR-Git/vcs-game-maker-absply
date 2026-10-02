@@ -112,7 +112,7 @@ const MULTISELECT_ICON_ACTIVE = 'data:image/svg+xml,' + encodeURIComponent(
     'C 21.105 22 22 21.105 22 20 L 22 7 C 22 6.448 21.552 6 21 6 z"/></svg>');
 
 // Blockly's  default for a block style's colourTertiary (the outline/
-// border stroke colour - see renderers/common/path_object.js's own
+// border stroke colour - see renderers/common/path_object.js's
 // "stroke: this.style.colourTertiary") - whenever a theme doesn't set one
 // explicitly, which the Classic theme this app uses never does (only
 // colourPrimary, a bare hue number, per category - see node_modules/
@@ -133,7 +133,7 @@ Blockly.blockRendering.ConstantProvider.prototype.generateTertiaryColour_ = func
   return Blockly.utils.colour.blend('#000', colour, 0.3) || colour;
 };
 
-// Options tab's own "Desaturate Blockly block colors" toggle (see
+// Options tab's "Desaturate Blockly block colors" toggle (see
 // useDesaturateBlocklyColorsStorage in hooks/project.js) - -50% saturation,
 // applied in real HSL space (matching Photoshop's  Hue/Saturation
 // adjustment, which scales S the same way) - NOT a CSS filter:
@@ -152,7 +152,7 @@ const rgbToHex = (r, g, b) => '#' + [r, g, b]
     .map((v) => Math.round(clamp01(v) * 255).toString(16).padStart(2, '0'))
     .join('');
 
-// Standard RGB<->HSL conversion (e.g. matching the CSS Color 4 spec's own
+// Standard RGB<->HSL conversion (e.g. matching the CSS Color 4 spec's
 // algorithm) - h in [0,1) (not degrees), s/l in [0,1].
 const rgbToHsl = (r, g, b) => {
   const max = Math.max(r, g, b);
@@ -304,14 +304,14 @@ if (!Blockly.ToolboxCategory.prototype.parseColour_.isDesaturationPatch) {
 // WorkspaceSvg.prototype.setScale (the function EVERY zoom path - the +/-
 // buttons, Ctrl+wheel, zoom-to-fit, zoom-reset - ultimately calls)
 // unconditionally calls Blockly.hideChaff(false) itself, and that false
-// (not true - see hideChaff's own "onlyClosePopups" parameter) is
+// (not true - see hideChaff's "onlyClosePopups" parameter) is
 // specifically what tells the flyout to close itself, not just dismiss
 // unrelated popups like tooltips/context menus. A real reported
 // annoyance: picking a category, then zooming to get a better look before
 // dragging a block in, closed the very drawer you were about to drag from.
 //
 // Temporarily swaps out Blockly.hideChaff for the duration of setScale's
-// own (synchronous) call, forcing it to behave as if onlyClosePopups were
+// (synchronous) call, forcing it to behave as if onlyClosePopups were
 // always true - deliberately NOT a permanent override of hideChaff
 // itself, which would also leave the flyout open on every OTHER
 // hideChaff(false) call site too (e.g. clicking empty canvas), well
@@ -484,13 +484,13 @@ if (!Blockly.Variables.flyoutCategory.isExtraBlocksPatch) {
 // when canWheelZoom && e.ctrlKey, otherwise scrolls). The only reason plain
 // wheel used to always zoom regardless of Ctrl was that this app never set
 // a "move" option at all, leaving wheel-scrolling off entirely (see
-// ActionEditor.vue's own "move: {wheel: true}" option, which is the actual
+// ActionEditor.vue's "move: {wheel: true}" option, which is the actual
 // fix) - once that's on, stock Blockly's  logic already does exactly
 // what's wanted with no override needed.
 
 // Module-scope (not component data) - same reasoning as every other
 // "survive remount" ref elsewhere in this app (e.g. BackgroundEditor.vue's
-// own copiedBackgroundData): Vue Router destroys and recreates this
+// copiedBackgroundData): Vue Router destroys and recreates this
 // component every time its tab is left and revisited, so a plain instance
 // property would reset right back to nothing on every visit. Only ever
 // read/written imperatively (see mounted()/beforeDestroy() below), never
@@ -674,7 +674,7 @@ export default {
     // depends on the container's  size the way the scrollbar's THUMB
     // position does - see resizeWorkspace's  comment just below for the
     // actual thing that settle pass exists for), which was confirmed as a
-    // real, reported bug: the workspace visibly rendered at Blockly's own
+    // real, reported bug: the workspace visibly rendered at Blockly's
     // default scroll position for a moment, then visibly JUMPED to the
     // saved one about 100ms later. Restoring it here instead means this
     // mount's very first paint already shows the right place - no jump to
@@ -695,7 +695,7 @@ export default {
     // Blockly.svgResize()/workspace.resize() then caches the scrollbar's
     // position from that in-between size instead of the final one - the SVG
     // itself keeps tracking the container correctly (CSS does that on its
-    // own), so only the scrollbar (positioned from Blockly's  cached
+    // ), so only the scrollbar (positioned from Blockly's  cached
     // metrics, not live CSS) ends up visibly drawn in the wrong place versus
     // where it actually receives clicks.
     const resizeWorkspace = () => {
@@ -710,7 +710,7 @@ export default {
     this.resizeObserver.observe(this.$refs['blocklyDiv']);
   },
   beforeDestroy() {
-    // Flushes any pending debounced save (see mounted()'s own comment on
+    // Flushes any pending debounced save (see mounted()'s comment on
     // debouncedHandleChange) before the workspace below is disposed and
     // this component's "value" prop's last-known state becomes the
     // project's permanent record of this tab's blocks.
@@ -849,7 +849,7 @@ export default {
     // promise resolves. Confirmed as a real reported bug otherwise: a block
     // currently being dragged lives on Blockly's  separate "drag surface"
     // layer (see BlockSvg.prototype.moveToDragSurface in node_modules/
-    // blockly/core/block_svg.js), tracked there via that surface's own
+    // blockly/core/block_svg.js), tracked there via that surface's
     // transform rather than the block's normal workspace-relative position -
     // rendering it mid-gesture (which reads/writes that normal position)
     // produced a large, arbitrary jump, not the small (half a grid-spacing)
@@ -869,7 +869,7 @@ export default {
       // used to be. That loop walks blocks in forward (parent-before-child)
       // order; Blockly's  version deliberately renders in REVERSE
       // (children/leaves first), since a parent with inline inputs sizes its
-      // own row layout from its children's already-rendered dimensions -
+      // row layout from its children's already-rendered dimensions -
       // render the parent first (while a child has just been measured with
       // the new font but not yet re-rendered itself) and its inline fields
       // get positioned against a child width that's about to change out from
@@ -878,7 +878,7 @@ export default {
       // than plain wrong sizing) that only this ordering, not the font race
       // itself, explains.
       this.workspace.render();
-      // The toolbox flyout is a genuinely separate sub-workspace (its own
+      // The toolbox flyout is a genuinely separate sub-workspace (its
       // blocks, its  earlier text measurement race) - workspace.render()
       // above only walks the MAIN workspace, so a category open at the
       // moment the font finishes loading still stayed the wrong size until
@@ -910,13 +910,13 @@ export default {
     },
     // Blockly.Events.disable()/enable() around domToWorkspace - without
     // this, every one of these calls fired real BLOCK_CREATE (etc.) events
-    // for the whole re-synced XML, which Blockly's own workspace listens to
-    // ITSELF (separately from this component's own addChangeListener) to
+    // for the whole re-synced XML, which Blockly's workspace listens to
+    // ITSELF (separately from this component's addChangeListener) to
     // build its native undo/redo stack. This call is a programmatic resync
     // (the v-model round trip, or loading a different project), never a
     // real user edit - letting it reach the undo stack anyway meant a
     // user's later Ctrl+Z could end up reversing "recreate this entire
-    // workspace" instead of their own last real action, wiping every block
+    // workspace" instead last real action, wiping every block
     // at once - confirmed as a real reported bug ("sometimes when undoing a
     // block move or edit, all blockly blocks vanish from the canvas").
     // try/finally guarantees events are re-enabled even if domToWorkspace
@@ -964,15 +964,15 @@ export default {
       }
       if (newVal !== this.lastSavedWorkspace) {
         this.loadWorkspace(newVal);
-        // Previously an incidental side effect of loadWorkspace's own
+        // Previously an incidental side effect of loadWorkspace's
         // domToWorkspace call firing real change events (which handleChange
         // then captured into lastSavedWorkspace itself) - now that
-        // loadWorkspace deliberately disables events (see its own comment),
+        // loadWorkspace deliberately disables events (see its comment),
         // that side effect no longer happens, so this has to be set
         // explicitly instead. Without it, this same (already fully synced)
         // value would still look "new" on the NEXT comparison too, calling
         // domToWorkspace again on data the workspace already has - which
-        // (per this method's own comment above) duplicates every block,
+        // (per this method's comment above) duplicates every block,
         // since domToWorkspace never clears the workspace first.
         this.lastSavedWorkspace = newVal;
       }
@@ -987,7 +987,7 @@ export default {
     },
   },
   watch: {
-    // Guarded against mid-drag reloads (see loadExternalWorkspace's own
+    // Guarded against mid-drag reloads (see loadExternalWorkspace's
     // comment) - Blockly fires an abstract 'move' event partway through a
     // drag gesture, not only at drop, so handleChange's v-model round trip
     // (serialize -> emit -> parent's reactive storage -> this same 'value'
@@ -1029,24 +1029,24 @@ export default {
   stroke: none;
 }
 
-/* Options tab's own "Desaturate Blockly block colors" toggle, the text/
-   emoji half - see Blockly.utils.parseBlockColour's own patch above for
+/* Options tab's "Desaturate Blockly block colors" toggle, the text/
+   emoji half - see Blockly.utils.parseBlockColour's patch above for
    the block FILL colour half. Emoji icon characters embedded in a block's
-   own message string (see blocks/icon.js - MISSILE_ICON, COLOR_ICON, etc)
-   render as native colour-emoji glyphs via the OS/browser's own emoji
+   message string (see blocks/icon.js - MISSILE_ICON, COLOR_ICON, etc)
+   render as native colour-emoji glyphs via the OS/browser's emoji
    font, entirely outside Blockly's SVG fill/theme system - there's no
-   "colour" value to desaturate in HSL the way a block's own fill has, so
+   "colour" value to desaturate in HSL the way a block's fill has, so
    this is a plain CSS filter instead, scoped to just the text elements
-   (same .blocklyText/.blocklyFlyoutLabelText classes App.vue's own font-
+   (same .blocklyText/.blocklyFlyoutLabelText classes App.vue's font-
    family override already targets, for the same "block canvas AND
    toolbox/flyout both" reach) rather than the whole canvas - a filter
    across the ENTIRE .blocklyDiv was tried first and reverted (see this
-   component's own git history): saturate() uses a different algorithm
-   than Photoshop's HSL-based slider (see parseBlockColour's own comment),
+   component's git history): saturate() uses a different algorithm
+   than Photoshop's HSL-based slider (see parseBlockColour's comment),
    and applying it to block fills a SECOND time on top of the already-
    desaturated HSL fills double-muted them. >>> pierces this component's
-   own scoped CSS boundary - Blockly injects its SVG text nodes into
-   .blocklyDiv at runtime, so they never carry this component's own scope
+   scoped CSS boundary - Blockly injects its SVG text nodes into
+   .blocklyDiv at runtime, so they never carry this component's scope
    attribute the way template-authored elements do. */
 .blocklyDiv-desaturated >>> .blocklyText,
 .blocklyDiv-desaturated >>> .blocklyFlyoutLabelText {

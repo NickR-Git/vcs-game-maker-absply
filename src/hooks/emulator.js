@@ -2,12 +2,12 @@
 
 import {useLastLoadedRomBytes, useLastLoadedTvSpec, clearLoadedRom} from './rom-status';
 
-// public/index.html's own loadGopher2600Wasm() fires this every time a
+// public/index.html's loadGopher2600Wasm() fires this every time a
 // window.gopher2600 instance becomes ready - the real first page load
 // (nothing to restore yet, unless a previous page load in this same tab
 // session left something behind - see rom-status.js's sessionStorage
 // restore, which runs before this listener can ever fire), every automatic
-// reinstantiation after a fatal WASM trap (see that function's own comment
+// reinstantiation after a fatal WASM trap (see that function's comment
 // on why a crash can't be recovered from inside the dead instance itself),
 // and a real full page reload (App.vue's handleRefreshEmulator). A fresh
 // instance boots with no ROM attached, so without this, "Reset"/every other
@@ -19,7 +19,7 @@ import {useLastLoadedRomBytes, useLastLoadedTvSpec, clearLoadedRom} from './rom-
 // Screen preview build, not just the real build's compiledRomBytes -
 // otherwise a page reload while a preview was showing came back up blank
 // instead of showing what was actually on screen a moment ago.
-// BlocklyBB.keypad0Used/keypad1Used (see hooks/rom.js's own loadRom call)
+// BlocklyBB.keypad0Used/keypad1Used (see hooks/rom.js's loadRom call)
 // aren't re-applied here - they're a property of the CURRENT workspace's
 // compiled code, not of the ROM bytes themselves, and re-deriving them here
 // would need the whole compile pipeline re-run; the keypad mode a fresh

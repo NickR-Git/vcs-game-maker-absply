@@ -2,11 +2,11 @@
 
 import {useShiftKey} from '../hooks/shift-key';
 
-// Bresenham line plot, matching @curtishughes/pixel-editor's own internal
+// Bresenham line plot, matching @curtishughes/pixel-editor's internal
 // getLine/getLineWithColor (see its tools/Line.js) byte-for-byte - not
 // imported from there since that helper isn't part of the package's
 // declared public API (only PixelEditor/History/PixelCollection/the tool
-// classes/types are - see its own index.js), so reaching into dist/utils
+// classes/types are - see its index.js), so reaching into dist/utils
 // directly would be relying on an internal path a dependency update could
 // move or remove without warning.
 const plotLine = (x0, y0, x1, y1, color) => {
@@ -59,12 +59,12 @@ const snapEndpoint = (x0, y0, x1, y1) => {
 
 /**
  * A straight-line tool matching @curtishughes/pixel-editor's Tool interface
- * (handlePointerDown/handlePointerMove/handlePointerUp - see its own
- * Pencil.js) - built as a standalone replacement for the library's own
+ * (handlePointerDown/handlePointerMove/handlePointerUp - see its
+ * Pencil.js) - built as a standalone replacement for the library's
  * Line tool (rather than using that one directly) specifically to add the
  * Shift-to-snap-to-45-degrees behavior, which needs live keyboard state
  * (see hooks/shift-key.js) the library's tool interface has no way to pass
- * through on its own.
+ * through by itself.
  */
 export default class Line {
   /** @param {string} color */
@@ -91,7 +91,7 @@ export default class Line {
   }
 
   // Same "undo the previous preview, redraw the full line to the new
-  // endpoint" approach as the library's own Line tool - each move replaces
+  // endpoint" approach as the library's Line tool - each move replaces
   // the last preview rather than accumulating one, so dragging shows a
   // single live line instead of a trail of every intermediate position.
   /**

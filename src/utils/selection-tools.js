@@ -4,13 +4,13 @@ import {useShiftKey} from '../hooks/shift-key';
 
 // Marquee selection tools matching @curtishughes/pixel-editor's Tool
 // interface (handlePointerDown/handlePointerMove/handlePointerUp - see its
-// own Pencil.js), but none of these ever call editor.set() - a selection
+// Pencil.js), but none of these ever call editor.set() - a selection
 // isn't pixel data, just a set of cell coordinates the Move tool (see
 // move-tool.js) later acts on. Each one is constructed with a single
 // onChange(cellsSet) callback (a Set of "x,y" string keys, matching
-// PixelEditor.vue's own selection storage), which it calls with the
+// PixelEditor.vue's selection storage), which it calls with the
 // selection so far every time that selection changes - PixelEditor.vue
-// supplies a callback that assigns a NEW Set to its own reactive
+// supplies a callback that assigns a NEW Set to its reactive
 // "selection" data property each time (Vue 2 can't observe Set mutations
 // in place, only whole-value reassignment). Also takes a getSelection
 // callback - reading the CURRENT selection live at the start of a new drag
@@ -26,7 +26,7 @@ export class RectangleSelect {
    * @param {Function} onChange
    * @param {Function=} getSelection () => Set<string>|null - the CURRENT
    *     selection, read fresh at the start of every drag (see this file's
-   *     own top comment).
+   *     top comment).
    */
   constructor(onChange, getSelection) {
     this.onChange = onChange;
@@ -59,7 +59,7 @@ export class RectangleSelect {
     this.startPosition = position;
     this.baseSelection = useShiftKey().value && this.getSelection ? this.getSelection() : null;
     // Selection deliberately doesn't start until an actual drag happens
-    // (see handlePointerMove) - see this class's own handlePointerUp.
+    // (see handlePointerMove) - see this class's handlePointerUp.
   }
 
   /**
@@ -99,7 +99,7 @@ export class RectangleSelect {
 export class CircleSelect {
   /**
    * @param {Function} onChange
-   * @param {Function=} getSelection - see RectangleSelect's own constructor.
+   * @param {Function=} getSelection - see RectangleSelect's constructor.
    */
   constructor(onChange, getSelection) {
     this.onChange = onChange;
@@ -111,7 +111,7 @@ export class CircleSelect {
   }
 
   // Same "a plain click selects nothing (but leaves an existing Shift-held
-  // selection alone)" reasoning as RectangleSelect's own handlePointerUp.
+  // selection alone)" reasoning as RectangleSelect's handlePointerUp.
   /** @return {void} */
   handlePointerUp() {
     this.dragging = false;
@@ -128,7 +128,7 @@ export class CircleSelect {
     this.startPosition = position;
     this.baseSelection = useShiftKey().value && this.getSelection ? this.getSelection() : null;
     // Selection deliberately doesn't start until an actual drag happens
-    // (see handlePointerMove) - see this class's own handlePointerUp.
+    // (see handlePointerMove) - see this class's handlePointerUp.
   }
 
   /**
@@ -163,7 +163,7 @@ export class CircleSelect {
         const nx = rx ? (x - cx) / rx : 0;
         const ny = ry ? (y - cy) / ry : 0;
         // A tiny epsilon past 1.0 so a cell whose center sits exactly on
-        // the ellipse's own edge (common at small radii, where rx/ry are
+        // the ellipse's edge (common at small radii, where rx/ry are
         // only 1-2 cells) doesn't get excluded by floating-point rounding.
         if (nx * nx + ny * ny <= 1.0001) cells.add(`${x},${y}`);
       }
@@ -181,7 +181,7 @@ export class CircleSelect {
  * the first point, which made every click double as a potential (silent)
  * close - removed so a click always just adds another vertex, with
  * double-click as the one, unambiguous close gesture. No live preview of
- * the points placed so far either (this class's own onPreview callback
+ * the points placed so far either (this class's onPreview callback
  * below), every click looked like it did nothing at all until a polygon
  * happened to close.
  */
@@ -196,7 +196,7 @@ export class PolygonSelect {
    * @param {Function=} getSelection () => Set<string>|null - the CURRENT
    *     selection, read once at the FIRST point of a new polygon (whether
    *     Shift was held at that moment decides whether this polygon adds to
-   *     it or replaces it - see this file's own top comment).
+   *     it or replaces it - see this file's top comment).
    */
   constructor(onChange, onPreview, getSelection) {
     this.onChange = onChange;
@@ -251,7 +251,7 @@ export class PolygonSelect {
   /**
    * Discards any in-progress polygon (points placed so far) without
    * selecting anything - used when the Escape key cancels the whole
-   * selection, see PixelEditor.vue's own escape handler.
+   * selection, see PixelEditor.vue's escape handler.
    * @return {void}
    */
   cancel() {
@@ -262,7 +262,7 @@ export class PolygonSelect {
   }
 }
 
-// Ray-casting point-in-polygon test, sampled at each cell's own center
+// Ray-casting point-in-polygon test, sampled at each cell's center
 // (x+0.5, y+0.5) rather than its corner, so a polygon edge running exactly
 // along a cell boundary doesn't leave that row/column's inclusion
 // ambiguous.

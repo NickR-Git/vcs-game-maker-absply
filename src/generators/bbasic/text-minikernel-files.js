@@ -25,7 +25,7 @@ export const getExtendedScoreGraphics = () => {
 // The pristine, unmodified text12b.asm - fetched once and cached, same
 // reasoning as getExtendedScoreGraphics above. Exposed separately (not just
 // folded into getTextMinikernelSiblingFiles below) so utils/text-font.js can
-// fetch this same content on its own: once to parse the built-in glyph
+// fetch this same content by itself: once to parse the built-in glyph
 // shapes for a fresh Text Font Editor (getDefaultTextFont), and again to
 // build a byte-for-byte override splicing the user's  edited glyphs in
 // (buildTextFontOverride) - both need the real pristine bytes as their

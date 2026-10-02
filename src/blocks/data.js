@@ -16,7 +16,7 @@ export const MAX_DATA_TABLE_VALUES = 256;
 // How many value fields DataEditor.vue displays per row before wrapping to a
 // new one - purely a display preference (see table.columns there), stored
 // per table so it survives a reload. Also the fallback for any table saved
-// before this feature existed, which won't have its own "columns" yet.
+// before this feature existed, which won't have its "columns" yet.
 export const DEFAULT_DATA_TABLE_COLUMNS = 4;
 
 export const DEFAULT_DATA_TABLES = {
@@ -40,10 +40,10 @@ export const processDataTablesStorageDefaults = (dataTablesStorage) => {
 
 // A table can only be read correctly from the same bank it's declared in
 // (see the bank-targeting feasibility notes), so a table read from more than
-// one bank needs a separate physical copy per bank - each copy needs its own
+// one bank needs a separate physical copy per bank - each copy needs its
 // symbol name, hence the bank number baked in here. Bank 1 keeps the
 // original (suffix-less) name some existing generated projects may already
-// reference. Shared beyond just dataTableSymbolName below (see its own
+// reference. Shared beyond just dataTableSymbolName below (see its
 // callers) - the Text Minikernel's  fixed-name tables (text_offsets/
 // text_scroll_max/text_static_offsets/text_has_row2/text_lines_max in
 // generators/bbasic/text-scroll.js and text-minikernel.js) need this exact
@@ -130,18 +130,18 @@ Blockly.Blocks['data_get_element_by_id'] = {
     this.setInputsInline(true);
     this.setOutput(true, 'Number');
     this.setColour(DATA_COLOR);
-    this.setTooltip('Reads a value out of a read-only data table, chosen by its own ID number ' +
+    this.setTooltip('Reads a value out of a read-only data table, chosen by its ID number ' +
       '(see the ID badge on its card on the Data tab, plugged in as a plain number here) instead ' +
       'of picking it from a dropdown. The table can only be read, not written to.');
   },
 };
 
 // A plain VALUE block, pluggable directly into a standard "if" (or any
-// other Number/Boolean socket) - unlike batari Basic's own "{n}" bit-index
+// other Number/Boolean socket) - unlike batari Basic's "{n}" bit-index
 // syntax (see generators/bbasic/bit.js), which only works on a plain
 // variable and can't be chained onto an array read like "table[index]{n}"
 // (confirmed by a real compile: the assembler choked on a mangled
-// "LDX #0]{0" line). Its own generator instead computes the bit with pure
+// "LDX #0]{0" line). Its generator instead computes the bit with pure
 // arithmetic (see its  comment there) - no "{n}" syntax, no temp
 // variable, so it never runs into that limitation at all.
 Blockly.Blocks['data_get_bit'] = {
@@ -181,7 +181,7 @@ Blockly.Blocks['data_get_bit_by_id'] = {
     this.setOutput(true, 'Boolean');
     this.setColour(DATA_COLOR);
     this.setTooltip('Checks a single bit (0-7) of a value read out of a read-only data table, ' +
-      'chosen by its own ID number (see the ID badge on its card on the Data tab, plugged in as ' +
+      'chosen by its ID number (see the ID badge on its card on the Data tab, plugged in as ' +
       'a plain number here) instead of picking it from a dropdown.');
   },
 };

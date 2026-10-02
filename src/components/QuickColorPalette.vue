@@ -83,7 +83,7 @@ import {colorByteToBBasic, colorByteToCss, NTSC_COLORS} from '../utils/palette';
 const COLLAPSE_ENTRY = {id: 'quick-colors'};
 
 // Reusable "Quick colors" bar - a curated shortlist of color bytes for fast
-// reuse while picking row colors, shown under a divider with its own
+// reuse while picking row colors, shown under a divider with its
 // collapsible header (matching MusicEditor's  Sequence section). Backed
 // by shared project storage (useColorPaletteStorage), so a color added on
 // one tab (e.g. Player 0) is immediately available on every other tab this
@@ -266,7 +266,7 @@ export default defineComponent({
 /* The currently-armed color - a visibly bolder/thicker outline than the
    plain hover outline above, so "this one's armed for painting" reads as a
    distinctly stronger state than "the mouse just happens to be over it".
-   White-then-black double ring (matching PlayfieldColorStrip's own
+   White-then-black double ring (matching PlayfieldColorStrip's
    .palette-swatch.selected) instead of a solid color outline, so it stays
    visible against a quick color that's itself close to white or black. */
 .quick-color-swatch-selected {
@@ -300,7 +300,7 @@ export default defineComponent({
   height: 20px !important;
 }
 
-/* Same popup grid style as PlayfieldColorStrip's own .palette-card/
+/* Same popup grid style as PlayfieldColorStrip's .palette-card/
    .palette-grid/.palette-swatch - duplicated rather than imported since
    this one lives in a plain v-menu here, not that component. */
 .palette-card {

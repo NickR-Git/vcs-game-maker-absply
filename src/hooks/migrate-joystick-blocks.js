@@ -2,15 +2,15 @@
 
 // One-time migration from the old, separate input_joy0_*/input_joy1_*
 // block types into the single combined input_joystick_* type each pair now
-// shares (see JOYSTICK_OPTIONS' own comment in blocks/input.js for why:
+// shares (see JOYSTICK_OPTIONS' comment in blocks/input.js for why:
 // Joystick 0/1 are otherwise-identical input hardware, so there's a single
 // block type with a JOYSTICK dropdown field instead of two full sets of
 // blocks - same reasoning, same shape, as the earlier Player 0/1 and
-// Missile 0/1 combination). The getter's own VAR field (already the
+// Missile 0/1 combination). The getter's VAR field (already the
 // literal bB variable name "joy0up"/"joy1fire", not a generic index) is
-// left untouched - only the block's own "type" attribute and a brand new
+// left untouched - only the block's "type" attribute and a brand new
 // JOYSTICK field need to change, same as PLAYER/MISSILE did.
-// Same overall shape as hooks/migrate-player-blocks.js's own
+// Same overall shape as hooks/migrate-player-blocks.js's
 // migrateLegacyPlayerBlocksInWorkspaceXml (raw workspace XML STRING in,
 // string out, via DOMParser/XMLSerializer) - called from the same two
 // places that function is: main.js's startup pass (an existing

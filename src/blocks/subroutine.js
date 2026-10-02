@@ -76,7 +76,7 @@ function buildSubroutineOptions() {
 function setSubroutineDropdownValue(field, newValue) {
   field.getOptions();
   field.setValue(newValue);
-  // Field.prototype.setValue's own "new value equals the old value" fast
+  // Field.prototype.setValue's "new value equals the old value" fast
   // path (see node_modules/blockly/core/field.js) calls doValueUpdate_ -
   // which is what actually recomputes FieldDropdown's selectedOption_ (the
   // CLOSED dropdown's displayed text) - but returns immediately afterward,
@@ -84,11 +84,11 @@ function setSubroutineDropdownValue(field, newValue) {
   // changed" path gets. Exactly the case here: by the time this settle pass
   // runs, the value itself is often already correct (see
   // acceptAnyDropdownValue's  comment - just the earlier deserialization
-  // moment's stale-cache display lookup wasn't), so setValue's own "nothing
+  // moment's stale-cache display lookup wasn't), so setValue's "nothing
   // changed" shortcut would otherwise leave the stale text on screen forever
   // despite selectedOption_ now being right underneath it - a real, reported
   // symptom (closed dropdown still showing "No subroutines defined" even
-  // once the underlying value, visible via the open dropdown's own
+  // once the underlying value, visible via the open dropdown's
   // checkmark, was already correct). Forcing this unconditionally costs
   // nothing when a redraw wasn't actually needed.
   field.forceRerender();
@@ -99,7 +99,7 @@ function setSubroutineDropdownValue(field, newValue) {
  * FieldDropdown is constructed - and gets its initial value AND its first
  * (then permanently cached, see setSubroutineDropdownValue) options fetch -
  * while it's still on the flyout's  separate workspace, which never has
- * any "subroutine_define" blocks of its own. That leaves the NAME field
+ * any "subroutine_define" blocks. That leaves the NAME field
  * stuck on "" (an empty gosub target - see subroutine_call in
  * generators/bbasic/subroutine.js) even once the block lands on the real
  * workspace next to an existing subroutine, until something re-picks a
@@ -125,8 +125,8 @@ function fixSubroutineCallNames(workspace) {
     // while that separate display-text lookup still missed it, because it
     // ran against the SAME incomplete cache at that same moment - a real,
     // reported symptom (closed dropdown showing "No subroutines defined"
-    // even though the value underneath, visible via the open dropdown's own
-    // checkmark, was already right). setSubroutineDropdownValue's own
+    // even though the value underneath, visible via the open dropdown's
+    // checkmark, was already right). setSubroutineDropdownValue's
     // getOptions()-then-setValue() pattern busts the cache and recomputes
     // selectedOption_ against the now-complete list either way.
     setSubroutineDropdownValue(field, names.includes(current) ? current : names[0]);
@@ -180,7 +180,7 @@ function ensureSubroutineCallListener(workspace) {
 
 // FieldDropdown.doClassValidation_ (see node_modules/blockly/core/
 // field_dropdown.js) rejects any value not present in getOptions(true) - its
-// OWN cached option list, captured whenever this field's generator
+// cached option list, captured whenever this field's generator
 // (buildSubroutineOptions) last ran. During XML deserialization, Blockly
 // applies each block's saved field values as it parses them IN DOCUMENT
 // ORDER - so a "Call subroutine" block whose saved NAME points at a
@@ -204,7 +204,7 @@ function ensureSubroutineCallListener(workspace) {
 // subroutine.js) - there's no reason this field's  separate, load-order-
 // dependent cache should ALSO get a veto. Overriding doClassValidation_ to
 // always accept removes that veto entirely; a real click in the dropdown's
-// own UI can still only ever offer currently-valid names to click in the
+// UI can still only ever offer currently-valid names to click in the
 // first place (built fresh via getOptions() when the menu opens), so this
 // doesn't let anything genuinely invalid slip in through normal use.
 /**

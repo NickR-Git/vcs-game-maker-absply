@@ -19,8 +19,8 @@ import {SOUND_ICON} from './icon';
 13 Same as 12.
 14 Electronic tones, mostly lows, extends to rumble.
 15 Electronic tones, mostly highs, extends to rumble - NOT a duplicate of 14
-   despite sharing the same note chart (see utils/music-notes.js's own
-   EMPIRICAL_NOTE_CHARTS[15] alias) - Saunders' own source lists 14 and 15
+   despite sharing the same note chart (see utils/music-notes.js's
+   EMPIRICAL_NOTE_CHARTS[15] alias) - Saunders' source lists 14 and 15
    as two separate distortions with different descriptions ("mostly lows"
    vs "mostly highs"), unlike 4/5, 6/10, 7/9, 0/11, and 12/13 below, which
    the source explicitly groups as one row/description each (exactly the

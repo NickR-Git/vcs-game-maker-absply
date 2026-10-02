@@ -12,7 +12,7 @@ import {effectiveBackgroundRows} from '../blocks/background';
 // of pfres/Superchip - exact, no project config needed.
 export const PF_COLUMN_WIDTH_PX = 5;
 
-// Row height in scanlines - matches std_kernel.asm/startup.asm's own
+// Row height in scanlines - matches std_kernel.asm/startup.asm's
 // default row height calculation ("lda #(96/pfres)"), confirmed against
 // that same 96-scanline-tall half-screen constant. Divides by the TRUE
 // pfres the kernel itself uses, NOT effectiveBackgroundRows() directly -
@@ -28,9 +28,9 @@ export const PF_COLUMN_WIDTH_PX = 5;
 // sprite<->playfield Y conversion blocks (generators/bbasic/background.js).
 export const pfRowDivisorFor = (config) => {
   const cfg = config || {};
-  // A manual "pfrowheight" override (see Configuration.vue's own "Override
+  // A manual "pfrowheight" override (see Configuration.vue's "Override
   // playfield row height" switch + field for it) takes priority over the
-  // automatic round(96/pfres) calculation below - matches the kernel's own
+  // automatic round(96/pfres) calculation below - matches the kernel's
   // precedence exactly (std_kernel.asm/std_kernel_vertical_reflect.asm both
   // check "ifconst pfrowheight" before ever falling back to computing it
   // from pfres - see generateConfiguration's  comment on

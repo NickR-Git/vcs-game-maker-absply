@@ -170,10 +170,10 @@ export const notesForAudc = (audc) => {
     // AUDF 0 is a documented real-hardware exception for AUDC 4/5
     // specifically (Saunders' chart marks it "SILENT", unlike every other
     // AUDF/AUDC combination here, which always produces some tone) - the
-    // shift-clock formula below has no way to know that on its own, so it'd
+    // shift-clock formula below has no way to know that by itself, so it'd
     // otherwise surface this as a normal (if very high-pitched) selectable
     // note. AUDC 12/13 (the slow-clock pair) don't share this quirk - their
-    // own AUDF 0 row is a real, in-tune note in the same chart.
+    // AUDF 0 row is a real, in-tune note in the same chart.
     if (audf === 0 && (key === '4' || key === '5')) continue;
     const frequencyHz = frequencyForAudf(audf, slowClock);
     const {name, midi, cents} = nearestNote(frequencyHz);

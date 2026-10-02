@@ -6,7 +6,7 @@
         <p class="v-messages theme--light v-messages__message player-intro-paragraph">
           Draw sprite animations here, shared by all Player sprites - assign one to a Player
           with a "Player animation" block, then control playback with "Player animation
-          Play/Pause" (Actions tab). Each animation has its own 1x/2x/4x width (matching real
+          Play/Pause" (Actions tab). Each animation has its 1x/2x/4x width (matching real
           player size) setting, which will be set automatically when that sprite is activated.
         </p>
 
@@ -461,7 +461,7 @@ export default defineComponent({
     // aspectRatio calculation below scales by, instead of just increasing
     // aspectRatio alone against a fixed-width container - confirmed as a
     // real bug that way: the proportion-wrapper's height is a PERCENTAGE OF
-    // ITS OWN WIDTH (padding-bottom: 100/aspectRatio%, see PixelEditor.vue),
+    // ITS WIDTH (padding-bottom: 100/aspectRatio%, see PixelEditor.vue),
     // so widening the aspect ratio while the container's  width stayed
     // fixed just made the box shorter, not wider. Scaling width and
     // aspectRatio by the same factor keeps the derived height exactly
@@ -500,7 +500,7 @@ export default defineComponent({
 
     // Which quick color (see components/QuickColorPalette.vue) is currently
     // "armed" for painting row colors directly - v-model'd to that
-    // component above, and passed into PlayfieldColorStrip's own
+    // component above, and passed into PlayfieldColorStrip's
     // activeQuickColor prop below. Not module-scope (unlike the palette
     // data itself, which QuickColorPalette owns via shared project
     // storage) - which color is armed is closer to a live "tool selection"
@@ -510,7 +510,7 @@ export default defineComponent({
     const selectedQuickColor = ref(null);
 
     // Same reasoning/mechanism as BackgroundEditor's  ensureRowColors -
-    // fills in a missing/mismatched-length row color list (a frame's own
+    // fills in a missing/mismatched-length row color list (a frame's
     // height can change via "Set height", unlike a background's fixed
     // pfres-driven row count) whenever per-row sprite colors is on, without
     // clobbering colors the user already picked. Left alone while the
@@ -526,11 +526,11 @@ export default defineComponent({
 
     // Purely a visual "which card am I looking at" marker - same
     // selectCard/selectedCardId/deselectCard pattern as MusicEditor.vue's
-    // own song cards and the other tabs'  entry cards (see
+    // song cards and the other tabs'  entry cards (see
     // MusicEditor.vue's  comment for the full reasoning): plain local
     // component state, not persisted, not wired into anything else. Also
     // drives the shared "Set height" tool below (see selectedAnimation's
-    // own comment).
+    // comment).
     const selectedCardId = ref(null);
     const selectCard = (id) => {
       selectedCardId.value = id;
@@ -578,9 +578,9 @@ export default defineComponent({
       return selectedAnimation.value && selectedAnimation.value.id === animation.id ? 'blue' : 'grey';
     };
 
-    // Unique per animation+frame (frame ids are only unique WITHIN their own
+    // Unique per animation+frame (frame ids are only unique WITHIN their
     // animation - see handleAddFrame's getMaxId) - used as this frame's
-    // own PixelEditor.vue $ref name (see the template) so effectiveFrameEditor
+    // PixelEditor.vue $ref name (see the template) so effectiveFrameEditor
     // (declared further below, once selectedAnimation itself exists) can
     // resolve straight to its component instance.
     const pixelEditorRefKey = (animation, frame) => `pixelEditor_${animation.id}_${frame.id}`;
@@ -598,9 +598,9 @@ export default defineComponent({
       heightMenuValue.value = selectedAnimation.value.frames[0].pixels.length;
       heightMenuScaleContents.value = false;
     };
-    // The "H" hotkey (see GraphicEditorToolbar.vue's own handleToolHotkey) -
+    // The "H" hotkey (see GraphicEditorToolbar.vue's handleToolHotkey) -
     // openHeightMenu alone only prefills the dialog's fields, since normally
-    // it's v-dialog's own activator wiring (v-bind="attrs" v-on="on" on the
+    // it's v-dialog's activator wiring (v-bind="attrs" v-on="on" on the
     // "Set height" button) that actually flips heightMenuVisible on; a
     // hotkey has no activator click to piggyback on, so this does both.
     const handleSetHeightHotkey = () => {
@@ -784,9 +784,9 @@ export default defineComponent({
     // Converts one loaded image into this animation's  frame pixel
     // format - width is always forced to 8 (the fixed player-sprite width;
     // see the pixel-editor's :width="8" above, not something a frame
-    // can individually override), height auto-sized to the image's own
+    // can individually override), height auto-sized to the image's
     // resolution (clamped 1-64, same range/rounding as PixelEditor.vue's
-    // own handleImportImage, which this otherwise mirrors exactly -
+    // handleImportImage, which this otherwise mirrors exactly -
     // on/off threshold included, so a batch import looks the same as
     // importing each frame one at a time through that existing button
     // would have).
@@ -930,7 +930,7 @@ export default defineComponent({
       instance.proxy.$forceUpdate();
     };
 
-    // A single blank frame, not a copy of the previous animation's own
+    // A single blank frame, not a copy of the previous animation's
     // frames - confirmed as the wanted behavior directly: a brand new
     // animation starting pre-filled with an unrelated animation's entire
     // frame set (every frame, every pose) meant deleting all of them by
@@ -965,12 +965,12 @@ export default defineComponent({
       };
       state.value.animations.push(newAnimation);
       // Every card on this tab defaults to collapsed (see useCollapsedIds'
-      // own "true" default above), but a card the user just this moment
+      // "true" default above), but a card the user just this moment
       // created should still open right away, so they can see/start
       // drawing its first frame immediately instead of having to expand it
       // themselves first. ensureExpanded (used elsewhere purely to stop a
       // brand new entry from inheriting a REUSED id's  stale override)
-      // isn't enough here on its own - it only clears an existing override,
+      // isn't enough here by itself - it only clears an existing override,
       // it doesn't fight the "true" default this tab now has, so a
       // never-before-seen id would still read as collapsed. toggleCollapsed
       // instead flips (and explicitly stores) this exact id's  state
@@ -1022,10 +1022,10 @@ export default defineComponent({
     // Copies/pastes a frame's ENTIRE row-color list at once (not one row at
     // a time) - same "copy this whole thing, paste it onto another" pattern
     // as MusicEditor's  handleCopyTrack/handlePasteTrack for an
-    // instrument's notes. Pasting doesn't resize the target frame's own
+    // instrument's notes. Pasting doesn't resize the target frame's
     // list to match the source's length - handleRowColorsInput->
     // ensureRowColors (run on the next state.value read, same as every
-    // other frame mutation here) reconciles it to the target frame's own
+    // other frame mutation here) reconciles it to the target frame's
     // pixel height right afterward, padding with DEFAULT_ROW_COLOR or
     // truncating as needed, the exact same way a fresh/resized frame's row
     // colors already get filled in.
@@ -1041,7 +1041,7 @@ export default defineComponent({
     // too whenever per-row sprite colors is on. While that toggle is off,
     // this copies/pastes pixels ONLY (rowColors is never read or written
     // here) - the colors-only pair (handleCopyRowColors/handlePasteRowColors
-    // above) is the one place row colors ever move on their own; this pair
+    // above) is the one place row colors ever move by themselves; this pair
     // treats them as just another part of "the frame" when the feature is
     // actually in use, and ignores them entirely when it isn't.
     const handleCopyFrame = (frame) => {
@@ -1114,7 +1114,7 @@ export default defineComponent({
   padding-right: 0;
 }
 
-/* Same fix, and matching 8px/12px values, as BackgroundEditor.vue's own
+/* Same fix, and matching 8px/12px values, as BackgroundEditor.vue's
    .background-list/.entry-list-item rules - v-list-item__content's default
    12px top/bottom padding was adding extra space BETWEEN cards beyond
    anything explicitly set (there was no explicit gap at all before), so
@@ -1127,17 +1127,17 @@ export default defineComponent({
   display: flex;
   flex-direction: column;
   gap: 8px;
-  /* Tighter than the 12px this used to match (BackgroundEditor.vue's own
+  /* Tighter than the 12px this used to match (BackgroundEditor.vue's
      .background-list) - the toolbar row directly above (unique to this
-     tab, added later) already has its own top/bottom padding, so the old
+     tab, added later) already has its top/bottom padding, so the old
      12px on top of that read as too much combined space before the first
      card. */
   margin-top: 4px;
 }
 
 /* A real <v-list> (unlike Title screen's equivalent .titlescreen-frame-list,
-   a plain div), so it carries Vuetify's own default 8px top/bottom padding
-   unless stripped - stacking on top of .animation-card's own 12px bottom
+   a plain div), so it carries Vuetify's default 8px top/bottom padding
+   unless stripped - stacking on top of .animation-card's 12px bottom
    padding below, leaving noticeably more space under the last frame than
    the same card's edges elsewhere (confirmed as a real reported bug). */
 .animation-frame-list {
@@ -1145,18 +1145,18 @@ export default defineComponent({
 }
 
 /* overflow: visible added alongside the padding reset (see MusicEditor.vue's
-   own identical fix) - stops this element's default "overflow: hidden" from
+   identical fix) - stops this element's default "overflow: hidden" from
    clipping a selected card's 2px outline - min-width: 0 has to come
    with it (same comment there for the full explanation): overflow: visible
    silently undoes a flex item's default 0 min-width, letting it refuse
-   to shrink below its own widest content instead of the tab's width. */
+   to shrink below its widest content instead of the tab's width. */
 .entry-list-item >>> .v-list-item__content {
   padding: 0;
   overflow: visible;
   min-width: 0;
 }
 
-/* Same rounded, thin-bordered look as the Sound/Data/Text/Music tabs' own
+/* Same rounded, thin-bordered look as the Sound/Data/Text/Music tabs'
    per-item cards (e.g. SoundFXEditor's .soundfx-card) - wraps directly
    around the existing title/frames-list content rather than switching to a
    v-card-text section like those tabs use, so the change is just the
@@ -1164,7 +1164,7 @@ export default defineComponent({
    otherwise have provided. */
 /* width: 100% - same fix as BackgroundEditor.vue's identical
    .background-card rule: without it, this card (nested inside
-   v-list-item-content, not the list item itself) shrinks to its own
+   v-list-item-content, not the list item itself) shrinks to its
    content's natural width instead of filling its row, so a collapsed
    animation (just the title row) rendered narrower than an expanded one
    (whose frames force wider content). */
@@ -1174,7 +1174,7 @@ export default defineComponent({
   padding: 12px;
 }
 
-/* Only this top strip is draggable (see hooks/drag-reorder.js's own
+/* Only this top strip is draggable (see hooks/drag-reorder.js's
    comment on why) - covers the same header band the collapse/ID/delete
    controls already occupy. Sits behind them (they're later in DOM order,
    so they paint on top and stay clickable) but in front of everything
@@ -1231,7 +1231,7 @@ export default defineComponent({
 /* Nudges the row-color sidebar and sprite canvas down a few pixels, so
    neither sits flush against the copy/paste/delete icon row directly above
    (those buttons are absolutely positioned over this same top corner, so
-   they don't otherwise push this content down on their own). */
+   they don't otherwise push this content down by themselves). */
 .pixel-editor-parent-container >>> .editor-with-sidebar {
   margin-top: 6px;
 }
@@ -1284,10 +1284,10 @@ export default defineComponent({
    (.pixel-editor-parent-container's "padding-left: 0") rather than the
    field's default Vuetify indent. A NEGATIVE top margin, not just a small
    positive one - the name field isn't hide-details, so Vuetify already
-   reserves its own ~18px hint/error-message strip below the input whether
+   reserves its ~18px hint/error-message strip below the input whether
    or not anything is actually showing there, which read as extra dead
    space stacking on top of any positive margin this toggle added of its
-   own; pulling up into that reserved strip (rather than adding to it)
+   ; pulling up into that reserved strip (rather than adding to it)
    closes the gap down to what's actually visible. */
 .animation-preview-scale-toggle {
   margin: -14px 40px 0 0;
@@ -1365,8 +1365,8 @@ export default defineComponent({
 
 /* Holds every frame-level corner button (copy/paste frame, copy/paste
    colors, delete) in one absolutely-positioned flex row instead of each
-   button computing its own "right" offset by hand - the color buttons are
-   only shown while per-row sprite colors is on (see their own v-if), so a
+   button computing its "right" offset by hand - the color buttons are
+   only shown while per-row sprite colors is on (see their v-if), so a
    fixed per-button offset would leave a gap where they'd normally sit
    whenever that's off. A flex row packs whichever buttons are actually
    present flush together regardless. */
@@ -1406,7 +1406,7 @@ export default defineComponent({
 /* At 100% zoom and above, the card is wide enough for every frame toolbar
    icon (eraser/pencil, undo/redo, export/import, Set height, Delete) to fit
    on one row - PixelEditor.vue's toolbar row wraps by design for
-   narrower cards (see its own comment), which was dropping Delete onto a
+   narrower cards (see its comment), which was dropping Delete onto a
    lone second row by itself even at 100%. Forcing nowrap unconditionally
    broke the 50%/75% zoom levels instead, where the row genuinely is too
    narrow and needs to wrap - gating this on zoom keeps that case intact. */
@@ -1415,12 +1415,12 @@ export default defineComponent({
 }
 
 /* Marks which frame the shared toolbar above (Eraser/Pencil/Undo/Redo/
-   Export/Import/Set height) currently acts on (see isFrameActive's own
+   Export/Import/Set height) currently acts on (see isFrameActive's
    comment) - same border-color + outline treatment as every other tab's
-   own "-selected" card highlight (App.vue's shared .animation-card-
+   "-selected" card highlight (App.vue's shared .animation-card-
    selected/.background-card-selected/etc. rule), reaching into THIS
    frame's PixelEditor.vue instance, which (unlike Background/Title's
-   own nested pixel editors) keeps its real outlined v-card border, since
+   nested pixel editors) keeps its real outlined v-card border, since
    nothing here strips it the way .pixel-editor-container >>> .v-card is
    stripped on those other tabs. */
 .pixel-editor-container-active >>> .v-card {
@@ -1439,19 +1439,19 @@ export default defineComponent({
   outline: 2px solid rgba(0, 0, 0, 0.24) !important;
 }
 
-/* .player-icon-btn-size's own size/disabled-opacity/icon-font-size rules -
+/* .player-icon-btn-size's size/disabled-opacity/icon-font-size rules -
    see App.vue's shared, unscoped copy (moved there once confirmed
-   byte-identical to BackgroundEditor.vue's own duplicate of this exact
+   byte-identical to BackgroundEditor.vue's duplicate of this exact
    class name - scoped CSS can't share a rule across components even under
    the same class name, so each tab using it still has to apply it here). */
 
 /* editor-zoom and pixel-grid-toggle are separate components, each with
-   their own inline layout - a flex row keeps them on one visual line and
-   vertically centered against each other regardless of either one's own
+   their inline layout - a flex row keeps them on one visual line and
+   vertically centered against each other regardless of either one's
    internal baseline/height quirks. */
-/* The "Set height" button passed into GraphicEditorToolbar.vue's own
+/* The "Set height" button passed into GraphicEditorToolbar.vue's
    "after-tools" slot - that component only owns the sticky bar itself and
-   the standard Eraser/Pencil/Undo/Redo/Export/Import icons (see its own
+   the standard Eraser/Pencil/Undo/Redo/Export/Import icons (see its
    comment), not this tab-specific control, so its styling stays here.
    Rendered as part of THIS component's template (slot content keeps
    its origin component's scoped attribute even once teleported into a
@@ -1477,7 +1477,7 @@ export default defineComponent({
 }
 
 /* Same rest/hover/press treatment as every icon in GraphicEditorToolbar.vue
-   itself (its own .get-tools >>> .v-btn rules) - this button previously
+   itself (its .get-tools >>> .v-btn rules) - this button previously
    fell back to Vuetify's default "text" button hover (a grey background
    overlay, not the flat color-only fade the rest of the toolbar uses),
    reading as a different, out-of-place control sitting right next to them. */
@@ -1507,7 +1507,7 @@ export default defineComponent({
   padding-left: 16px;
 }
 
-/* .delete-icon-btn.player-icon-btn-size's own mdi-delete size bump - see
+/* .delete-icon-btn.player-icon-btn-size's mdi-delete size bump - see
    App.vue's shared, unscoped copy. */
 
 /* Rest/hover/no-filled-circle treatment lives in App.vue's global
@@ -1521,8 +1521,8 @@ export default defineComponent({
 
 /* Sits inline after the last frame, vertically centered against the frame
    cards' height via vertical-align (rather than the list item's default
-   flex centering, which only centers within its own row). margin-top only
-   matters once this wraps onto its own line below the frame cards (there's
+   flex centering, which only centers within its row). margin-top only
+   matters once this wraps onto its line below the frame cards (there's
    nothing to space it from while it's still sharing a row with them) - a
    real gap there, not flush against the row of cards above it, confirmed
    as needed once a frame count/zoom combination actually causes that wrap. */
@@ -1535,7 +1535,7 @@ export default defineComponent({
      this ~32px from the last frame's graphic - pulled in to match the
      Title tab's equivalent gap (TitleScreenEditor.vue's
      .titlescreen-add-frame-list-item, a plain 12px margin-left there since
-     that one's just a bare div, not a v-list-item with its own padding to
+     that one's just a bare div, not a v-list-item with its padding to
      fight). */
   margin-left: -20px;
 }

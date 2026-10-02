@@ -11,7 +11,7 @@ import {ref} from '@vue/composition-api';
 // current array (in display order), setItems(newArray) is called with the
 // reordered array once a drop lands - deliberately unopinionated about
 // where/how that array is stored, so each tab can wire it straight into
-// whatever storage setter it already uses (see TextEditor.vue's own
+// whatever storage setter it already uses (see TextEditor.vue's
 // handleChildChange-based example).
 //
 // dragAttrs(index)/dragHandleListeners(index) are meant for a template's
@@ -78,11 +78,11 @@ export const useDragReorder = (getItems, setItems) => {
       event.preventDefault();
       event.dataTransfer.dropEffect = 'move';
       dragOverIndex.value = index;
-      // Stops this dragover from also reaching an ANCESTOR's own
+      // Stops this dragover from also reaching an ANCESTOR's
       // dragTargetListeners (e.g. TitleScreenEditor.vue's per-screen card
-      // list nested inside that screen's own draggable-card list) -
+      // list nested inside that screen's draggable-card list) -
       // without this, dragover bubbling up the DOM marked the outer
-      // screen/card as "dragged over" too, showing its own drag-above
+      // screen/card as "dragged over" too, showing its drag-above
       // highlight for a drag that can only ever reorder within this
       // nested list, never actually move onto that outer target
       // (confirmed as a real reported bug).

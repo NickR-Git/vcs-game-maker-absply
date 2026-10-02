@@ -33,7 +33,7 @@
   </v-menu>
 </template>
 <script>
-// Shared by every tab's own "Delete this X?" confirm popup (Backgrounds,
+// Shared by every tab's "Delete this X?" confirm popup (Backgrounds,
 // Sprites, Title screens, Sound, Music, Data, Text) - previously each tab
 // duplicated a near-identical inline v-menu block. A real v-menu
 // (not a v-dialog, tried first) - a real reported requirement ("the popup

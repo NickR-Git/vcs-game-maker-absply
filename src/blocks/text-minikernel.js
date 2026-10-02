@@ -3,7 +3,7 @@ import * as Blockly from 'blockly/core';
 import {COLOR_ICON, TEXT_ICON} from './icon';
 import {buildTextStringOptions} from './text-strings';
 
-// Was '#795548' - identical (down to the exact RGB triplet) to Data's own
+// Was '#795548' - identical (down to the exact RGB triplet) to Data's
 // 'rgb(121, 85, 72)', making Text and Data blocks indistinguishable by
 // colour alone. Indigo isn't used anywhere else in the app's palette (see
 // blocks/*.js: purple, red, blue, background's orange, score's orange-red,
@@ -11,7 +11,7 @@ import {buildTextStringOptions} from './text-strings';
 // blue-grey).
 const TEXT_COLOR = '#3F51B5';
 
-// A message longer than the Text tab's own "Max characters to display at
+// A message longer than the Text tab's "Max characters to display at
 // once" setting (see resolveTextMaxDisplayWidth in blocks/text-strings.js)
 // always auto-scrolls, regardless of which "Show text" block shows it (see
 // generators/bbasic/text-minikernel.js's  encodeMessageRow) - the three
@@ -134,9 +134,9 @@ Blockly.defineBlocksWithJsonArray([
   // than a whole message - the OTHER row always comes out blank (see
   // generators/bbasic/text-minikernel.js's  registerFreeTypedRowMessage):
   // this always compiles in a real 2-row entry with the chosen row set to
-  // TEXT and the other row set to spaces, since the Text Minikernel's own
+  // TEXT and the other row set to spaces, since the Text Minikernel's
   // row 2 is always read from a fixed offset right after row 1 (text12b.asm's
-  // own "textkernel2ndrow") - there's no way to update just one row while
+  // "textkernel2ndrow") - there's no way to update just one row while
   // leaving whatever the OTHER row currently shows untouched.
   {
     'type': 'text_minikernel_show_row',
@@ -279,9 +279,9 @@ Blockly.defineBlocksWithJsonArray([
     'tooltip': 'Sets the color of the "end of message" icon that appears once there\'s nothing ' +
       'left to scroll down to.',
   },
-  // Runtime on/off switch for the scroll cursor (Text tab's own "Show a
+  // Runtime on/off switch for the scroll cursor (Text tab's "Show a
   // scroll cursor" switch) - a single block with a dropdown, matching
-  // text_minikernel_scroll_control's own "one flag write, several named
+  // text_minikernel_scroll_control's "one flag write, several named
   // choices" shape below, rather than two separate "show"/"hide" blocks.
   // Hidden means neither the up/down arrows nor the "end of message" icon
   // ever draw, regardless of whether the currently shown message actually
@@ -306,13 +306,13 @@ Blockly.defineBlocksWithJsonArray([
       'is on - visible by default.',
   },
   // Fades TextColor toward a target - same shared mechanism as Background's
-  // own "Fade color to" (see blocks/background.js's  fade var-name
+  // "Fade color to" (see blocks/background.js's  fade var-name
   // helpers and generateBackgroundFadeChecks in generators/bbasic/
   // background.js, both now generalized past just COLUBK/COLUPF), just
   // always targeting TextColor rather than offering a register choice.
   // Fire-and-forget, same as Background's  version: triggering this once
-  // keeps the color stepping toward the target every frame afterward on its
-  // own, only while the Text Minikernel is in use elsewhere in the project.
+  // keeps the color stepping toward the target every frame afterward by itself,
+  // only while the Text Minikernel is in use elsewhere in the project.
   {
     'type': 'text_minikernel_fade_to',
     'message0': `${TEXT_ICON} Fade Text ${COLOR_ICON} color to %1 over %2 frames`,
@@ -358,7 +358,7 @@ Blockly.defineBlocksWithJsonArray([
   // Stop freezes the message at its  start (offset 0) and pauses it
   // there - Restart resets to offset 0 too, but leaves it running (and
   // waits the "pause at limits" duration before its first step, the same
-  // as a genuinely new message - see buildTextScrollSetupLines' own
+  // as a genuinely new message - see buildTextScrollSetupLines'
   // comment in text-scroll.js).
   {
     'type': 'text_minikernel_scroll_control',
@@ -462,7 +462,7 @@ Blockly.defineBlocksWithJsonArray([
 ]);
 
 // Free-typed version of text_minikernel_show_named_scroll above - see
-// text_minikernel_show's  comment for why free-typed text gets its own
+// text_minikernel_show's  comment for why free-typed text gets its
 // block instead of a Text tab entry.
 Blockly.Blocks['text_minikernel_show_scroll'] = {
   init: function() {
@@ -506,7 +506,7 @@ Blockly.Blocks['text_minikernel_show_by_id_scroll'] = {
 };
 
 // Works exactly like background_fade_finished (see blocks/background.js's
-// own comment - same shared bit/flag machinery, same "fires once, regardless
+// comment - same shared bit/flag machinery, same "fires once, regardless
 // of fade direction, never late" behavior), just always targeting TextColor
 // rather than offering a register choice - same reasoning as
 // text_minikernel_fade_to above: there's only one possible text color

@@ -65,8 +65,8 @@ export const processPlayerAnimationsStorageDefaults = (playerAnimationsStorage) 
 // way, the actual index reached at runtime isn't known until the game
 // itself runs, so nothing can safely be excluded.
 //
-// Index 0 is always included for both players - it's processAnimations' own
-// dispatch-chain fallthrough default (see its own "if (!animationIndex)
+// Index 0 is always included for both players - it's processAnimations'
+// dispatch-chain fallthrough default (see its "if (!animationIndex)
 // return ''" - no explicit check is ever emitted for it, so it's reachable
 // the instant player0animation/player1animation holds anything unmatched,
 // not just a literal 0), not something a project's  blocks need to
@@ -185,7 +185,7 @@ export const resolvePlayerAnimationFinishedWatches = (workspace) => {
 //    player0pointer for a single instant - but generateAnimations() ALWAYS
 //    unconditionally reassigns every player's pointer/height once per frame,
 //    from inside commongamelogic, for ANY player with animation frames (even
-//    a blank default one - see its own "if player0frame <> 255 ... else
+//    a blank default one - see its "if player0frame <> 255 ... else
 //    player0: %00000000" fallback), and commongamelogic runs before every
 //    single drawscreen. So the animation logic silently clobbered this
 //    block's  assignment before the next frame ever got drawn, no matter
@@ -198,8 +198,8 @@ export const resolvePlayerAnimationFinishedWatches = (workspace) => {
 //    right AFTER generateAnimations'  output, so it runs (and wins) after
 //    the animation logic but still before that frame's drawscreen.
 // Bank 1's  fixed base address per ROM size - confirmed against public/
-// bb19/includes/2600basicheader.asm's own "RORG" directive: $F000 with no
-// bankswitching, $D000/$9000/$1000 for 8k/16k/32k+ (64k shares 32k's own
+// bb19/includes/2600basicheader.asm's "RORG" directive: $F000 with no
+// bankswitching, $D000/$9000/$1000 for 8k/16k/32k+ (64k shares 32k's
 // $1000 - both hit the "if bankswitch == 32"/"if bankswitch == 64" branches,
 // which RORG to the identical address). Every one of these is already
 // page-aligned (low byte $00) - deliberately not arbitrary: that's what
@@ -287,14 +287,14 @@ export const seekSpeedVarName = (name) => `${name}SeekSpeed`;
 // bit per sprite name (same bits as seekActiveBit above, reused directly
 // rather than a duplicate map, since there's no reason the two features'
 // bit layouts need to differ). This is the ONLY dedicated state the
-// feature needs - the actual per-frame Y nudge (background_scroll's own
+// feature needs - the actual per-frame Y nudge (background_scroll's
 // generator, generators/bbasic/background.js) reuses backgroundScrollRow
 // directly rather than keeping a second, per-sprite scroll offset of its
-// own; see backgroundScrollRowVarName's comment in blocks/background.js.
+// ; see backgroundScrollRowVarName's comment in blocks/background.js.
 export const spriteScrollFlagsVarName = () => 'spriteScrollFlags';
 export const spriteScrollActiveBit = (name) => seekActiveBit(name);
 
-// object_seek_arrived's own "finished" bits - deliberately a SEPARATE byte
+// object_seek_arrived's "finished" bits - deliberately a SEPARATE byte
 // from seekFlagsVarName's  active bits above (not packed into the same
 // byte the way background.js's  fadeFlagsVarName does for its 4
 // registers): seek has 5 possible names, so 5 active + 5 finished bits would
@@ -368,7 +368,7 @@ export const inertiaMaxSpeedVarName = (name) => `${name}MaxSpeed`;
 // while the accel-active bit stays set (same reason missileFireDirVarName
 // persists across frames rather than being re-read from the trigger block
 // every check) - same 0-7 clockwise-from-Up scale generateMissileFireChecks'
-// own 8-way dispatch already uses, reused directly rather than inventing a
+// 8-way dispatch already uses, reused directly rather than inventing a
 // second angle convention.
 export const inertiaAccelDirVarName = (name) => `${name}AccelDir`;
 // Only reserved for a sprite using 16-way Accelerate (inertiaAccel16UsedFor) -
@@ -402,7 +402,7 @@ export const inertiaPosFracYVarName = (name) => `${name}PosFracY`;
 // Combat disassembly's  missile-bounce routine at $F4A6-$F4CD in
 // atariage.com's "Definitive Combat Disassembly") - stageVar tracks how many
 // consecutive stuck frames have been seen so far (0 = not currently stuck,
-// 1-3 = that many consecutive stuck frames, capped at 3 - Combat's own
+// 1-3 = that many consecutive stuck frames, capped at 3 - Combat's
 // MxPFcount keeps counting past 3 forever, but every value >= 3 behaves
 // identically here, so this caps instead of growing unbounded), origDirVar
 // freezes the heading the FIRST stuck frame started from (stage 3's "corner,
@@ -439,7 +439,7 @@ export const missileBounceOrigVelocityFracYVarName = (name) => `${name}BounceOri
 // one also has to follow value-input connections since it's checking a
 // block that sits in an "if" condition socket, this one only ever needs
 // statement nesting, since a trigger block is always a plain statement)
-// looking for an event_frame_every_n ancestor. Its own MASK field's VALUE
+// looking for an event_frame_every_n ancestor. Its MASK field's VALUE
 // is interval-1 (see FRAME_OPTIONS in blocks/event.js) - "+ 1" recovers the
 // real interval.
 const resolveEnclosingFrameInterval = (block) => {
@@ -454,7 +454,7 @@ const resolveEnclosingFrameInterval = (block) => {
 };
 
 // "Rainbow colors" (its  block, sprite_*_rainbow_colors) is a REAL,
-// existing batari Basic kernel feature (see std_kernel.asm's own "ifnconst
+// existing batari Basic kernel feature (see std_kernel.asm's "ifnconst
 // playercolors"/"ifnconst player1colors" checks - it reads (player0color),y
 // / (player1color),y every scanline, the SAME Y the graphic pointer itself
 // uses, into COLUP0/COLUP1), not something built from scratch here - just
@@ -463,14 +463,14 @@ const resolveEnclosingFrameInterval = (block) => {
 // WITHOUT the same lo/hi-split alias names that let the graphic pointer be
 // set safely (see generateRomNoiseChecks'  comment on why "pointer = X +
 // offset" can't be used) - EXCEPT they happen to double up on other named
-// registers at the exact same physical addresses, which the header's own
+// registers at the exact same physical addresses, which the header's
 // comments confirm is deliberate, not coincidental ("currentpaddle = $90 ;
 // replaces missile 0 (and can't be used with playercolor)"): player0color's
 // low byte IS player0color itself, and its high byte is "paddle";
 // player1color's low byte is player1color itself, and its high byte is
 // "missile1y". Reusing those exact names lets the color pointer be set the
 // same safe, plain-8-bit-assignment way as the graphic pointer, with no new
-// mechanism needed. Deliberately independent of sprite_*_rom_noise (its own
+// mechanism needed. Deliberately independent of sprite_*_rom_noise (its
 // offset/dev var, its  active bit) - this reads real ROM bytes into the
 // COLOR channel regardless of whatever the player's  GRAPHIC pointer is
 // currently showing, a normal animation frame or ROM noise.
@@ -487,7 +487,7 @@ export const ROM_NOISE_COLOR_REGISTERS = {
 // (DASM: "Unknown Mnemonic 'sta _player0RomNoiseOffset'" - an undeclared
 // symbol) from an earlier version of this that only ever called
 // nameDB_.getName from inside the trigger/check generators, the same way
-// reserveTextScrollDevVars already has to for the Text Minikernel's own
+// reserveTextScrollDevVars already has to for the Text Minikernel's
 // scroll state (see its  call site in bbasic.js's init(), which this
 // mirrors) - called with a pre-scanned Set of which player names actually
 // use rom_noise anywhere in the project (bbasic.js's init() has to know this
@@ -503,10 +503,10 @@ export const reserveRomNoiseDevVars = (reserveDevVar, usedFor) => {
 };
 
 // Same reasoning as reserveRomNoiseDevVars above, for sprite_*_rainbow_
-// colors'  offset dev var - deliberately separate from ROM noise's own,
+// colors'  offset dev var - deliberately separate from ROM noise's,
 // since either block can be used without the other. Shares the SAME flags
-// byte (romNoiseFlagsVarName) rather than a byte of its own - see that
-// function's own "one shared flags byte" comment.
+// byte (romNoiseFlagsVarName) rather than a byte - see that
+// function's "one shared flags byte" comment.
 export const reserveRainbowColorDevVars = (reserveDevVar, usedFor) => {
   if (!usedFor || !usedFor.size) return;
   reserveDevVar(romNoiseFlagsVarName(), undefined, 'shared active-bit byte (ROM noise + rainbow colors)');
@@ -518,11 +518,11 @@ export const reserveRainbowColorDevVars = (reserveDevVar, usedFor) => {
 // with a pre-scanned Set of which missile names actually have a Fire block
 // used anywhere in the project (bbasic.js's  init() has to know this
 // before user variable letters are handed out, well before this feature's
-// own generator would otherwise run).
+// generator would otherwise run).
 // throttleVar/throttleResetVar route through reserveDevVarRW (the
 // Superchip r/w pool - see its  big comment in generators/bbasic.js)
 // instead of the ordinary lettered pool - a plain decrement-then-if-
-// comparison countdown is exactly the "safe" usage shape that pool's own
+// comparison countdown is exactly the "safe" usage shape that pool's
 // restrictions allow (never a loop counter, goto/gosub target, or fixed-
 // point/16-bit math - confirmed by reading every call site below by hand
 // before making this change). Falls back to the ordinary lettered pool
@@ -622,11 +622,11 @@ export const reserveSeekDevVars = (reserveDevVar, reserveDevVarRW, usedFor) => {
 
 // One shared byte, reserved only when at least one sprite_scroll_with_
 // playfield_set/_get block is used anywhere in the project (spriteScrollUsedFor,
-// bbasic.js's own pre-scan - same shape as seekUsedFor). Also forces
+// bbasic.js's pre-scan - same shape as seekUsedFor). Also forces
 // backgroundScrollRow/backgroundScrollRowMax to be reserved even without any
 // "Background scroll" block present, since a "set/is scrolling with
-// playfield" block on its own still needs somewhere to read/nudge - see
-// bbasic.js's own init().
+// playfield" block by itself still needs somewhere to read/nudge - see
+// bbasic.js's init().
 export const reserveSpriteScrollDevVars = (reserveDevVar, usedFor) => {
   if (!usedFor || !usedFor.size) return;
   reserveDevVar(spriteScrollFlagsVarName(), undefined,
@@ -649,7 +649,7 @@ export const reserveSeekArrivedDevVars = (reserveDevVar, watches) => {
 // inertiaAccelRateVarName's  comment), decelRate only for names in
 // decelUsedFor. The two flag bytes are reserved whenever their  Set is
 // non-empty, regardless of usedFor (mirrors reserveSeekArrivedDevVars'
-// own "only when actually watched" gate).
+// "only when actually watched" gate).
 export const reserveInertiaDevVars = (reserveDevVar, usedFor, accelUsedFor, decelUsedFor, accel16UsedFor, fineUsedFor) => {
   const fineSet = fineUsedFor || new Set();
   if (usedFor && usedFor.size) {
@@ -702,7 +702,7 @@ export const reserveInertiaDevVars = (reserveDevVar, usedFor, accelUsedFor, dece
 // a "preserve the other bits" write can set or clear ANY bit, including bit
 // 1 (score mode) - confirmed as the actual root cause of a real reported bug
 // ("ball width flips half the playfield to player1's color"), after ruling
-// out compiler operator-precedence (splitting the multiply into its own
+// out compiler operator-precedence (splitting the multiply into its
 // statement first didn't fix it either, since the read-back itself was
 // always the problem, however the expression was shaped).
 // This dev var is CTRLPF's  RAM shadow: ball width/priority read-modify-
@@ -718,7 +718,7 @@ export const reserveCtrlpfShadowDevVar = (reserveDevVar, used) => {
 };
 
 // Setup-section one-off (see bbasic.bb.hbs's  generatedCtrlpfShadowSetup
-// splice, right alongside generatedKeypadSetup) - matches startup.asm's own
+// splice, right alongside generatedKeypadSetup) - matches startup.asm's
 // real CTRLPF initial value (reflect bit only) so the shadow and the
 // hardware register agree from the very first ball width/priority write,
 // rather than the shadow starting at 0 (bB's normal all-vars-start-at-zero
@@ -757,7 +757,7 @@ export const generateRomNoiseChecks = (Blockly) => {
         // syntax) isn't valid here - confirmed by a real compile failure
         // ("Unknown keyword: 0"); the bit-index syntax only works as a
         // direct boolean condition, negated with "!" (see backgroundFadeTo's
-        // own "if !${activeBit} then goto ..." in generators/bbasic/
+        // "if !${activeBit} then goto ..." in generators/bbasic/
         // background.js, the proven working precedent this mirrors).
         ` if !${flagsVar}{${romNoiseActiveBit(name)}} then goto ${doneLabel}`,
         // Sets player0pointer's  hi/lo bytes DIRECTLY (2600basic.h
@@ -774,7 +774,7 @@ export const generateRomNoiseChecks = (Blockly) => {
         // directly with NO overflow risk, because every ROM_NOISE_BASE_
         // HIGH_BYTE_BY_ROMSIZE entry is page-aligned (low byte $00) - so
         // "low = 0 + offset" can never carry into the high byte, meaning
-        // this reads real code starting from the very base of bank 1's own
+        // this reads real code starting from the very base of bank 1's
         // mapped ROM, offset by 0-255 bytes into it - genuine Yars'
         // Revenge-style "read whatever code is there", zero ROM cost.
         ` ${name}pointerlo = ${offsetVar}`,
@@ -789,7 +789,7 @@ export const generateRomNoiseChecks = (Blockly) => {
 // Whether kernel_options needs "playercolors" - see the real, confirmed
 // language rule (from an actual working example program, not guesswork):
 // "playercolors cannot be set by itself; player1colors must also be set."
-// "player1colors" alone (player1-only multicolor) is fine on its own - only
+// "player1colors" alone (player1-only multicolor) is fine by itself - only
 // "playercolors" (needed whenever player0 wants it) has this extra
 // requirement. So both real kernel_options AND both player0color:/
 // player1color: graphic-literal declarations below are needed together
@@ -913,7 +913,7 @@ export const generateMissileFireChecks = (Blockly) => {
     // "(speedVar/2)" - bB's integer division rounds 1/2 down to 0, which at
     // speed 1 would make every halfway direction's slower axis vanish,
     // making 16-way look identical to 8-way (see missileFireHalfSpeedVarName's
-    // own comment).
+    // comment).
     const dispatch = is16 ?
       DIRECTION16_STEPS.flatMap(([xStep, yStep], dir) => [
         ...(xStep ? [` if ${dirVar} = ${dir} then ${name}x = ${name}x ${xStep > 0 ? '+' : '-'} ` +
@@ -953,7 +953,7 @@ export const generateMissileFireChecks = (Blockly) => {
         // lda/sec/sbc/sta bB itself already compiles to, with the reload
         // removed. doneLabel is a bB-generated label defined OUTSIDE this
         // asm block, so the jump to it needs the same dot-prefixed local
-        // name DASM itself expects (see generators/bbasic/music.js's own
+        // name DASM itself expects (see generators/bbasic/music.js's
         // extensive comment on this) - throttleContinueLabel is purely
         // local to this block, so it doesn't need one.
         ' asm',
@@ -973,11 +973,11 @@ export const generateMissileFireChecks = (Blockly) => {
         ...dispatch,
         // Off-screen (standard NTSC playfield bounds) stops the movement -
         // clears the active bit so this missile's  dispatch above is
-        // skipped every frame from here on - WITHOUT touching its own
+        // skipped every frame from here on - WITHOUT touching its
         // Height (confirmed with the user: it should stop, not change
-        // size/visibility on its own - that stays entirely up to whatever
+        // size/visibility by itself - that stays entirely up to whatever
         // "Missile: set Height" blocks the user has elsewhere). x/y are
-        // unsigned bytes (see math.js's own "Player coordinates ... are
+        // unsigned bytes (see math.js's "Player coordinates ... are
         // unsigned bytes" comment) - stepping past 0 wraps around to a large
         // positive value rather than going negative, so there's no separate
         // "< 0" case to check: an out-of-range value from EITHER direction
@@ -1065,14 +1065,14 @@ export const generateSeekChecks = (Blockly) => {
 };
 
 // Clamps velocityVar (a two's-complement signed byte) to +/-maxSpeedVar
-// (an ordinary unsigned magnitude, realistically well under 128) - bB's own
-// "if" comparisons are unsigned-only (see inertiaVelocityXVarName's own
+// (an ordinary unsigned magnitude, realistically well under 128) - bB's
+// "if" comparisons are unsigned-only (see inertiaVelocityXVarName's
 // comment), so this branches on the sign bit first (BPL/BMI, a single cheap
 // check) and does a plain UNSIGNED compare within whichever half of the
 // byte range applies from there - valid specifically because both operands
 // stay within 0-127 (positive branch) or 128-255 (negative branch) after
 // that split, where unsigned and signed comparison agree. negMaxVar is
-// computed fresh each call (0 - maxSpeedVar) rather than kept as its own
+// computed fresh each call (0 - maxSpeedVar) rather than kept as its
 // dev var - two extra instructions, cheaper than a whole extra byte of
 // state kept in sync with every "set max speed" write.
 const buildSignedClampAsm = (velocityVar, maxSpeedVar, uid) => {
@@ -1306,7 +1306,7 @@ export const generateInertiaChecks = (Blockly) => {
       const halfRateVar = is16 ? resolveVar(inertiaAccelHalfRateVarName(name)) : null;
       // Same 8-way/16-way dispatch generateMissileFireChecks'  Fire
       // dispatch uses (see its  comments, including DIRECTION16_STEPS'
-      // own "no trig, dominant axis full rate / other axis half rate"
+      // "no trig, dominant axis full rate / other axis half rate"
       // approximation, and missileFireHalfSpeedVarName's  comment on why
       // the half-rate step needs a clamped-to-minimum-1 var instead of
       // inlining "(rateVar/2)") - just adding into velocityX/Y here instead
@@ -1501,14 +1501,14 @@ export default (Blockly) => {
         // CTRLPF's CURRENT value (207 = 0b11001111, clearing only bits 4-5)
         // rather than overwriting the whole byte, which used to also
         // hardcode bit 0 (playfield reflect) permanently on and reset bit 2
-        // (playfield priority - see sprite_priority_set's own `CTRLPF{2} =`
+        // (playfield priority - see sprite_priority_set's `CTRLPF{2} =`
         // bit-safe write just below) back to 0 every time ball width was
         // set - a real bug (reported as "changing sprite priority flips the
         // right half of the playfield," since whichever of the two blocks
         // ran later silently undid the other's  bit).
         //
         // Reads/writes the CTRLPF RAM shadow (see reserveCtrlpfShadowDevVar's
-        // own comment for why the real hardware register can't be safely
+        // comment for why the real hardware register can't be safely
         // read back), flushing it to the real CTRLPF right after. temp1
         // holds the multiply as its  statement rather than inline (not
         // the actual root cause of the playfield-flip bug, but still cheap
@@ -1579,7 +1579,7 @@ export default (Blockly) => {
   };
 
   // Player 0/1 now share these six combined block types (sprite_player_size,
-  // etc. - see PLAYER_OPTIONS' own comment in blocks/sprites.js), so this is
+  // etc. - see PLAYER_OPTIONS' comment in blocks/sprites.js), so this is
   // called once, not once per name (unlike createGeneratorForSprite/
   // createGeneratorForFireBall below, still per-name for Missile 0/1/Ball) -
   // each generator resolves which player THIS block instance is set to via
@@ -1651,7 +1651,7 @@ export default (Blockly) => {
     // public/bb19/includes/2600basic.h and std_kernel.asm) - plain,
     // already-defined zero-page RAM the standard kernel reads every
     // scanline as "lda (player0pointer),y" (y counting down from
-    // player0height), the exact same mechanism the compiler's own
+    // player0height), the exact same mechanism the compiler's
     // "player0: ... end" graphic-literal syntax sets up automatically
     // behind the scenes for every normal animation frame (see
     // generateAnimations in generators/bbasic.js). Every OTHER player
@@ -1708,11 +1708,11 @@ export default (Blockly) => {
       return `${flagsVar}{${romNoiseActiveBit(name)}} = 0\n`;
     };
 
-    // Trigger for sprite_player_rainbow_colors - see this file's own
+    // Trigger for sprite_player_rainbow_colors - see this file's
     // ROM_NOISE_COLOR_REGISTERS comment for the real kernel mechanism this
     // uses, and generateRainbowColorChecks for the per-frame write this
     // only primes (same trigger+check split as sprite_player_rom_noise's
-    // own trigger, and for the same reason: this line alone would only ever
+    // trigger, and for the same reason: this line alone would only ever
     // take effect for a single instant, not stick).
     Blockly.BBasic['sprite_player_rainbow_colors'] = function(block) {
       const name = resolvePlayerName(block);
@@ -1741,10 +1741,10 @@ export default (Blockly) => {
   };
 
   // Missile 0/1 now share this one combined block type (sprite_missile_size
-  // - see MISSILE_OPTIONS' own comment in blocks/sprites.js, same "one
+  // - see MISSILE_OPTIONS' comment in blocks/sprites.js, same "one
   // combined type with a dropdown field" treatment Player 0/1 already got),
   // so this is called once, not once per name - Ball has no equivalent
-  // block at all (its  width is set through sprite_ball_set's own
+  // block at all (its  width is set through sprite_ball_set's
   // "Width" option instead, see buildMissileOptions/writeOnlyOptions), so
   // there's no third name to worry about here the way createGeneratorFor
   // FireBall below has to.
@@ -1763,9 +1763,9 @@ export default (Blockly) => {
   // bB vars exactly like missile0x/missile0y, and missileFireActiveBit/
   // missileFireDirVarName/missileFireSpeedVarName already cover 'ball' too).
   // registrationName is the block-type suffix to register under
-  // (sprite_${registrationName}_fire/_bounce) - 'ball' for Ball's own
+  // (sprite_${registrationName}_fire/_bounce) - 'ball' for Ball's
   // still-separate-from-Missile-0/1 blocks, 'missile' for the combined
-  // Missile 0/1 type (see MISSILE_OPTIONS' own comment in blocks/
+  // Missile 0/1 type (see MISSILE_OPTIONS' comment in blocks/
   // sprites.js). resolveName(block) resolves the REAL object name
   // ('missile0'/'missile1'/'ball') this particular block instance means,
   // read fresh every time a generator runs rather than closed over once -
@@ -1779,8 +1779,8 @@ export default (Blockly) => {
     // actual per-frame movement, reading these dev vars back every frame
     // until the missile goes off-screen. <angleExpr> is evaluated into
     // ${name}dir EXACTLY ONCE (not re-inlined below) since it can itself be
-    // a real expression (e.g. the joystick 8-way direction getter's own
-    // table lookup), not just a bare variable - see this block's own
+    // a real expression (e.g. the joystick 8-way direction getter's
+    // table lookup), not just a bare variable - see this block's
     // tooltip. Always re-launches, even if a previous shot from this same
     // missile is still in flight (no "already active" guard) - confirmed
     // with the user: this block is meant to be placed behind its  rate
@@ -1791,7 +1791,7 @@ export default (Blockly) => {
     // to current" this way with no special-casing needed). If the evaluated
     // angle is 255 ("no clear direction" - the joystick 8-way direction
     // getter's  value when the joystick is centered), falls back to the
-    // block's own "default" dropdown (any of the 8 directions, user-picked -
+    // block's "default" dropdown (any of the 8 directions, user-picked -
     // see MISSILE_FIRE_DEFAULT_ANGLE_OPTIONS in blocks/sprites.js) rather
     // than skipping the launch - an idle joystick should still fire the
     // missile, not silently do nothing, and the direction that happens in
@@ -1844,7 +1844,7 @@ export default (Blockly) => {
 
   // 'player'/'missile' register the combined sprite_player_get/set/change
   // and sprite_missile_get/set/change types (see PLAYER_OPTIONS'/
-  // MISSILE_OPTIONS' own comments in blocks/sprites.js) -
+  // MISSILE_OPTIONS' comments in blocks/sprites.js) -
   // createGeneratorForSprite's  get/set/change bodies only ever read
   // VAR's already-real-variable-name value, never `name` itself, so this
   // needs no changes beyond two extra names to register under.
@@ -1869,7 +1869,7 @@ export default (Blockly) => {
   // is read from that field instead of being fixed per block type, but
   // otherwise every dev var this reads/writes still comes from the exact
   // same per-name functions (seekXVarName/seekYVarName/seekSpeedVarName/
-  // seekActiveBit) generateSeekChecks itself uses. seekUsedFor's own
+  // seekActiveBit) generateSeekChecks itself uses. seekUsedFor's
   // pre-scan in bbasic.js's init() reads this same OBJECT field to know
   // which names are "in use" (same reasoning as missileFireUsedFor), so
   // every dev var referenced here is always guaranteed to already exist.
@@ -1893,7 +1893,7 @@ export default (Blockly) => {
     const throttleResetPair = Blockly.BBasic.superchipRwPairs[seekThrottleResetVarName(name)];
     const interval = block.getFieldValue('THROTTLE') === 'TRUE' ?
       (resolveEnclosingFrameInterval(block) || 1) : 1;
-    // Clears this object's own "arrived" bit (object_seek_arrived, if
+    // Clears this object's "arrived" bit (object_seek_arrived, if
     // watched) every time a new target is set - without this, the bit would
     // stay stuck true from a previous arrival even after re-triggering
     // toward a brand-new target that hasn't been reached yet.
@@ -1916,7 +1916,7 @@ export default (Blockly) => {
   };
 
   // object_seek_arrived's  generator - a plain, always-current boolean
-  // read of the arrived bit (same shape as background_fade_active's own
+  // read of the arrived bit (same shape as background_fade_active's
   // generator), NOT a watch-and-clear: this plugs into an "if" condition
   // socket as a value (per explicit request - "if (object) arrives at its
   // seek target do..."), so it can be read any number of times (or not at
@@ -1934,13 +1934,13 @@ export default (Blockly) => {
 
   // A literal can be assigned straight to the bit; anything else has to be
   // branched on, since a batari Basic condition is not a value - same
-  // reasoning/shape as bit_set's own BIT_LITERALS in generators/bbasic/bit.js
+  // reasoning/shape as bit_set's BIT_LITERALS in generators/bbasic/bit.js
   // (duplicated locally rather than imported, since it's a 4-entry map not
   // worth coupling the two files over).
   const SPRITE_SCROLL_VALUE_LITERALS = {'true': '1', '1': '1', 'false': '0', '0': '0'};
 
   // sprite_scroll_with_playfield_set's generator - just flips this object's
-  // own bit in the shared flags byte; background_scroll's own generator
+  // bit in the shared flags byte; background_scroll's generator
   // (generators/bbasic/background.js) is what actually reads it to decide
   // whether to nudge this object's Y alongside the playfield each scroll.
   Blockly.BBasic['sprite_scroll_with_playfield_set'] = function(block) {
@@ -2071,7 +2071,7 @@ export default (Blockly) => {
   //   up guessing and reverse the ORIGINAL pre-collision heading outright
   //   (dirVar = origDirVar + N/2), assuming a corner - and keep reapplying
   //   that same reversed heading every frame for as long as the collision
-  //   keeps being reported, exactly like Combat's own "or higher" case.
+  //   keeps being reported, exactly like Combat's "or higher" case.
   //
   // velocityX/Y need no angle math at all - two's-complement negation is
   // just "0 - x" (6502 SBC produces the identical bit pattern whether the
@@ -2200,7 +2200,7 @@ export default (Blockly) => {
         // asm content - and everything bB-generated after it, for the rest
         // of the file, keeps being emitted as literal, untranslated text
         // instead of real bBasic, cascading into exactly this shape of
-        // failure. "@end" survives normalizeIndents' OWN special-case
+        // failure. "@end" survives normalizeIndents' special-case
         // handling (stripped straight to column 0, same as "@label"
         // definitions), matching the same fix already used for this exact
         // reason in generateRunOnceEdgeReset. Confirmed directly as the
@@ -2290,7 +2290,7 @@ export default (Blockly) => {
   };
 
   // Player 0/1's color fade trigger - same shared mechanism as Background's
-  // own "Fade color to" (see emitColorFadeTrigger in generators/bbasic/
+  // "Fade color to" (see emitColorFadeTrigger in generators/bbasic/
   // background.js), just targeting player0realcolor/player1realcolor
   // (whichever the VAR dropdown picked) instead of COLUBK/COLUPF. This is
   // set up by background.js's  init(), which always runs before this file's
@@ -2304,7 +2304,7 @@ export default (Blockly) => {
   };
 
   // Player 0/1's  fade-finished watch - same shared mechanism as
-  // Background's own "When ... color has finished fading" (see
+  // Background's "When ... color has finished fading" (see
   // emitFadeFinishedWatch in generators/bbasic/background.js).
   Blockly.BBasic['sprite_player_fade_finished'] = function(block) {
     return Blockly.BBasic.emitFadeFinishedWatch(block, block.getFieldValue('VAR'));

@@ -24,7 +24,7 @@ export default (Blockly) => {
   // generator uses for this block) rather than only ever reading IF0/DO0 -
   // a previous version of this only handled a single if/else, which SILENTLY
   // dropped every "else if" branch from the compiled output (the block's
-  // own gear-icon mutator still let a project add as many as it wanted; they
+  // gear-icon mutator still let a project add as many as it wanted; they
   // just never made it into the ROM, with no build error to notice by).
   //
   // Each branch gets its  condition-check label and body label, chained
@@ -56,7 +56,7 @@ export default (Blockly) => {
       // resolves this branch's  BODY, whose first statement (if it also
       // needed a preamble-emitting value, as makeScene's  body reliably
       // does) would drain the queue itself first - stealing the CONDITION's
-      // own preamble along with its own, and positioning both AFTER the "if"
+      // preamble along with its, and positioning both AFTER the "if"
       // line instead of before it. That left the "if" comparing a stale
       // leftover value from whatever dispatch call happened to run before
       // this one, while the real dispatch for THIS condition ended up

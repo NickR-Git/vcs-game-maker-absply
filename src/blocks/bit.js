@@ -9,7 +9,7 @@ export const BIT_OPTIONS = [...Array(8).keys()].map((n) => [`${n}`, `${n}`]);
 // between the per-bit blocks below (BUILT_IN_VARIABLES) and
 // system_variable_get further down (SYSTEM_VARIABLE_OPTIONS, same list,
 // already in dropdown-option [label, value] shape) - reading the WHOLE
-// byte only makes sense for the built-in names, not the user's own
+// byte only makes sense for the built-in names, not the user's
 // variables (those already have a plain Blockly "variables_get" block for
 // that), so this doesn't reuse variableOptions()'s combined list below.
 export const SYSTEM_VARIABLE_OPTIONS = [
@@ -34,7 +34,7 @@ export const SYSTEM_VARIABLE_OPTIONS = [
 const BUILT_IN_VARIABLES = SYSTEM_VARIABLE_OPTIONS;
 
 // A block in the toolbox flyout belongs to the flyout's  workspace, which
-// has no variables of its own.
+// has no variables.
 const workspaceOf = (field) => {
   const block = field.getSourceBlock();
   if (!block || !block.workspace) return null;
@@ -71,7 +71,7 @@ const selectedVariable = (block) => {
 // The VAR field stores the variable's ID (see variableOptions), so a rename
 // elsewhere doesn't break the reference - but FieldDropdown only re-runs its
 // options generator (and so only re-reads the variable's current name) when
-// its cache is invalidated, which a plain rename never does on its own: the
+// its cache is invalidated, which a plain rename never does by itself: the
 // field keeps showing whatever label was cached from the last time its
 // dropdown opened, stale until the user happens to click it again.
 // getOptions() (no cache arg) has to run BEFORE setValue(), same gotcha

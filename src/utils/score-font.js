@@ -164,7 +164,7 @@ export const processScoreFontDefaults = (storage, fallbackFont = DEFAULT_SCORE_F
 // (see processScoreFontDefaults), so digitsToFont always returns the full
 // 128-byte shape regardless of whether glyphs 10-15 are actually wanted -
 // this is a plain, explicit, user-facing toggle (see ScoreFontEditor.vue's
-// own "Use extra glyphs (10-15)" checkbox) rather than an implicit "scan
+// "Use extra glyphs (10-15)" checkbox) rather than an implicit "scan
 // the pixels for anything non-blank" guess: the earlier pixel-scanning
 // version silently kept including a project's already-drawn extra glyphs
 // forever with no way to opt back OUT of paying for them short of erasing
@@ -231,7 +231,7 @@ const customSquishFontBytes = () => {
 // unlike buildScoreFontOverride (which returns null for the Default preset,
 // since the bundled compiler already ships with it and needs no override at
 // all), this always returns a real, usable array, since callers here (the
-// Title tab's own "score" minikernel - see generators/bbasic/titlescreen.js)
+// Title tab's "score" minikernel - see generators/bbasic/titlescreen.js)
 // need SOME bytes regardless of which font is picked, not "no override
 // needed." Squish/Squish Custom get padded back out to 8 rows per digit
 // (padSquishDigitBytes) the same way buildScoreFontOverride's  Squish
@@ -254,7 +254,7 @@ export const resolveScoreDigitBytes = (font) => {
       return SCORE_FONTS[font].slice(0, decimalByteCount);
     }
   } catch (e) {
-    console.error('Error resolving the score font for the Title tab\'s own score minikernel', e);
+    console.error('Error resolving the score font for the Title tab\'s score minikernel', e);
   }
   return DEFAULT_SCORE_FONT.slice(0, decimalByteCount);
 };
@@ -281,13 +281,13 @@ const getPristineScoreGraphics = () => {
   return pristineScoreGraphicsPromise;
 };
 
-// Squish Custom splices into the extended score_graphics.asm's own "if
+// Squish Custom splices into the extended score_graphics.asm's "if
 // fontstyle == SQUISH" digit table instead of the stock file's plain
 // "scoretable" - it needs the extended file's fontstyle/SQUISH constants
-// (defined there, not in the stock file) for text12a.asm's own
+// (defined there, not in the stock file) for text12a.asm's
 // "ifconst fontstyle: ifconst SQUISH: if fontstyle == SQUISH: scorecount=4"
 // check to still shrink the row height. The decimal digit bytes run from
-// right after that block's own "LENDEC = 80" line to its "ifconst
+// right after that block's "LENDEC = 80" line to its "ifconst
 // fontcharsHEX" gate - and, now that DIGIT_COUNT includes the 6 extra
 // slots (10-15, see DECIMAL_DIGIT_COUNT's  comment), THOSE get spliced
 // into that same gated block's  byte region too (right after its
@@ -324,8 +324,8 @@ const buildSquishScoreFontOverride = async (digits) => {
 
   // Only 80 bytes (the normal case - see customScoreFontUsesExtraGlyphs):
   // splice the decimal digits and leave the rest of the file, including its
-  // own "ifconst fontcharsHEX" block, completely untouched - that block
-  // only ever activates via generators/bbasic.js's own "const fontcharsHEX"
+  // "ifconst fontcharsHEX" block, completely untouched - that block
+  // only ever activates via generators/bbasic.js's "const fontcharsHEX"
   // emission, which is gated on this exact same "extra glyphs actually in
   // use" check, so leaving its stock hex glyphs in place here is harmless:
   // nothing will ever read them.
@@ -376,12 +376,12 @@ export const buildScoreFontOverride = async (font) => {
   // the full DIGIT_BYTES (128, all 16 slots). Accepting either length here
   // (rather than requiring DIGIT_BYTES now that it covers 16 slots) matters:
   // rejecting the 80-byte preset case would silently stop overriding every
-  // preset font at once, falling back to the stock score_graphics.asm's own
+  // preset font at once, falling back to the stock score_graphics.asm's
   // "ifconst font" dispatch - which this toolchain's  bundled compiler
   // doesn't actually support (see this function's  doc comment on why
   // "const font" alone is inert here), so that fallback isn't a safe no-op,
   // it's a real regression. The plain (non-Squish) drawing routine needs no
-  // extra activation for a 128-byte table either way (unlike Squish's own
+  // extra activation for a 128-byte table either way (unlike Squish's
   // "ifconst fontcharsHEX" gate) - it just reads however many bytes are
   // actually here by raw nibble index, so an 80-byte preset naturally still
   // only ever shows its  original 10 digits, nothing missing.
@@ -403,7 +403,7 @@ export const buildScoreFontOverride = async (font) => {
   // size - a plain "ORG $F7AC-8"/"ORG $FF9C" for a non-bankswitched ROM, or
   // an "ORG X-bscode_length" PAIRED WITH an independently-tracked
   // "RORG Y-bscode_length" (the runtime/relocated address DASM uses for
-  // every branch/jump target from here on, distinct from ORG's own
+  // every branch/jump target from here on, distinct from ORG's
   // physical file-offset tracking) for each bankswitched size. Extending
   // Custom past the normal 80-byte budget needs this whole start point
   // shifted EARLIER by exactly the extra byte count, so the table's END
@@ -420,13 +420,13 @@ export const buildScoreFontOverride = async (font) => {
   // if the relative shift's interaction with RORG specifically is what's
   // wrong (not a genuine capacity shortfall - the failing case still had
   // thousands of bytes free elsewhere). Both "shift ORG only" (the stock
-  // file's  approach) and "shift ORG and RORG both, via their own
-  // relative '.'" were tried and also confirmed NOT to fix it - RORG's own
+  // file's  approach) and "shift ORG and RORG both, via their
+  // relative '.'" were tried and also confirmed NOT to fix it - RORG's
   // relationship to "." evidently doesn't compose with a later relative
   // "ORG . - N"/"RORG . - N" the way it would for a plain, non-relocated
   // ORG.
   //
-  // This instead rewrites the header's OWN address expressions directly -
+  // This instead rewrites the header's address expressions directly -
   // appending "-N" onto each literal "ORG expr"/"RORG expr" line here, so
   // every branch (bankswitched or not) computes its already-correct
   // ABSOLUTE target with the extra bytes baked directly in, rather than

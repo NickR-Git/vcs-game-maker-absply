@@ -101,16 +101,16 @@ export const ENVELOPE_VOLUME_PERCENT_OPTIONS = [0, 25, 50, 75, 100];
 export const DEFAULT_ENVELOPE_VOLUME_PERCENT = 100;
 // How many frames the Sustain ramp itself lasts - same small-fixed-dropdown
 // reasoning as every other stage above, same range as Attack/Release (see
-// ENVELOPE_ATTACK_RELEASE_FRAME_OPTIONS' own comment). Release now always
+// ENVELOPE_ATTACK_RELEASE_FRAME_OPTIONS' comment). Release now always
 // starts immediately after Sustain ends (see clampEnvelopeStages/
 // buildEnvelopeCurve in utils/envelope.js) rather than always ending exactly
-// on the sound/note's own last frame the way it used to when Sustain had no
-// length of its own - a real reported request ("I should be able to shorten
+// on the sound/note's last frame the way it used to when Sustain had no
+// length - a real reported request ("I should be able to shorten
 // the sustain to 0"), which wasn't actually possible before this existed:
 // Sustain used to just be "however long is left," with no way to make that
 // zero regardless of how short Attack/Decay/Release were set. Defaults to
 // the max option (32) so an existing preset saved before this field existed
-// (see its own migration clamp below) keeps sounding close to its old
+// (see its migration clamp below) keeps sounding close to its old
 // "holds until Release" behavior rather than suddenly cutting off early.
 export const ENVELOPE_SUSTAIN_FRAME_OPTIONS = [0, 2, 4, 8, 16, 32];
 export const DEFAULT_ENVELOPE_SUSTAIN_FRAMES = 32;
@@ -152,15 +152,15 @@ export const DEFAULT_SOUND_EFFECTS = {
       arpeggioDivision: DEFAULT_ARPEGGIO_DIVISION,
       arpeggioInterval: DEFAULT_ARPEGGIO_INTERVAL,
       arpeggioRange: DEFAULT_ARPEGGIO_RANGE,
-      // See NOISE_PRIORITY_OPTIONS' own comment.
+      // See NOISE_PRIORITY_OPTIONS' comment.
       priority: DEFAULT_NOISE_PRIORITY,
       // A TIA color byte (utils/palette.js's index<<1 convention), or null
       // for "auto-assigned" - see utils/instrument-colors.js. Used by the
       // Music tab to color this sound's notes in the piano roll.
       color: null,
-      // A display tag for the Sound tab's own "show all/instruments/sounds"
+      // A display tag for the Sound tab's "show all/instruments/sounds"
       // filter (see SoundFXEditor.vue), but also the actual gate on the
-      // Music tab's own Instrument dropdown (see MusicEditor.vue's
+      // Music tab's Instrument dropdown (see MusicEditor.vue's
       // soundEffectOptions, which only lists isInstrument sounds there) -
       // true here (not the usual "off by default" a brand new flag would
       // get) so a fresh project's one default sound card is actually

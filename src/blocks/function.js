@@ -11,13 +11,13 @@ const MAX_FUNCTION_ARGS = 6;
 
 // Scratch storage for function_call_statement's  discarded return value
 // (see generators/bbasic/function.js) - calling a function purely for its
-// side effects still has to assign its result SOMEWHERE, batari Basic's own
+// side effects still has to assign its result SOMEWHERE, batari Basic's
 // function-call syntax has no way to just drop it. temp1 looks like the
 // obvious spot (used exactly that way throughout this codebase, and
 // genuinely fine for a call made OUTSIDE any function), but is NOT
 // obviously safe for a call made FROM INSIDE another function's  body:
 // temp1 is ALSO argument 1's  storage there (see function_param_get's
-// own comment), so "temp1 = someFunction(...)" risked colliding with
+// comment), so "temp1 = someFunction(...)" risked colliding with
 // whichever argument happens to occupy that exact same register -
 // consistent with a real reported bug (argument 1 reading back a stuck
 // wrong value after calling a function as a bare statement inside another
@@ -30,7 +30,7 @@ export const functionCallDiscardVarName = () => 'functionCallResult';
 // Scratch storage for function_call_statement's  arguments, handed off to
 // a small per-function wrapper subroutine (see registerFunctionCallWrapper in
 // generators/bbasic/function.js) instead of calling the function inline. A
-// bB function call ("name(args)") has no bank-tag syntax of its own - unlike
+// bB function call ("name(args)") has no bank-tag syntax - unlike
 // gosub/goto, it can only ever be called from the exact bank the function
 // itself lives in (always bank 1, see this.functions'  comment in
 // generators/bbasic.js's init()) - so an event/subroutine calling one
@@ -40,7 +40,7 @@ export const functionCallDiscardVarName = () => 'functionCallResult';
 // by sharing a statement stack with it. Routing through "gosub" instead needs
 // somewhere to stash the arguments first (gosub itself carries none) - these
 // vars are that somewhere, reserved only for a project that actually calls a
-// function as a bare statement at all (see functionCallStatementUsed's own
+// function as a bare statement at all (see functionCallStatementUsed's
 // pre-scan in generators/bbasic.js).
 export const functionCallArgVarName = (index) => `fnCallArg${index}`;
 
@@ -49,7 +49,7 @@ export const functionCallArgVarName = (index) => `fnCallArg${index}`;
 // arguments arrive in temp1..temp6 (batari Basic's  fixed calling
 // convention, same registers function_param_get itself used to read
 // directly), but those same registers are ALSO used as scratch/argument
-// storage by any OTHER function call made from within this function's own
+// storage by any OTHER function call made from within this function's
 // body (confirmed as a real reported bug: a data table read keyed off
 // "Function argument 1" came back correct for the first couple of reads,
 // then silently wrong for every one after, once the function's  body
@@ -99,8 +99,8 @@ Blockly.Blocks['function_param_get'] = {
         ), 'INDEX');
     this.setOutput(true, 'Number');
     this.setColour(FUNCTION_COLOR);
-    this.setTooltip('Reads one of this function\'s own arguments - only meaningful inside ' +
-      'a "Function" block\'s own body, in a position a "Call function" block actually ' +
+    this.setTooltip('Reads one of this function\'s arguments - only meaningful inside ' +
+      'a "Function" block\'s body, in a position a "Call function" block actually ' +
       'plugged something into.');
   },
 };
@@ -118,7 +118,7 @@ Blockly.Blocks['function_return'] = {
     this.setColour(FUNCTION_COLOR);
     this.setTooltip('Ends the enclosing function immediately, with this value as its ' +
       'result. A function can have several of these on different branches (e.g. inside ' +
-      'an if/else), same as batari Basic\'s own "function" command.');
+      'an if/else), same as batari Basic\'s "function" command.');
   },
 };
 
@@ -138,7 +138,7 @@ function definedFunctionNames(workspace) {
 
 /**
  * Lists every function currently defined on the same workspace as the
- * dropdown's  block - same reasoning as subroutine.js's own
+ * dropdown's  block - same reasoning as subroutine.js's
  * buildSubroutineOptions.
  * @return {!Array<!Array<string>>} Pairs of label and value.
  */
@@ -163,7 +163,7 @@ function setFunctionDropdownValue(field, newValue) {
 }
 
 /**
- * Same flyout-drag staleness problem (and same fix) as subroutine.js's own
+ * Same flyout-drag staleness problem (and same fix) as subroutine.js's
  * fixSubroutineCallNames - see its comment for the full explanation.
  * @param {?Blockly.Workspace} workspace
  */
@@ -187,7 +187,7 @@ function fixFunctionCallNames(workspace) {
 }
 
 /**
- * Same rename-cascade need (and same fix) as subroutine.js's own
+ * Same rename-cascade need (and same fix) as subroutine.js's
  * cascadeSubroutineRename - see its comment for the full explanation.
  * @param {?Blockly.Workspace} workspace
  * @param {!Blockly.Events.Abstract} event
@@ -217,7 +217,7 @@ function ensureFunctionCallListener(workspace) {
     cascadeFunctionRename(workspace, event);
     fixFunctionCallNames(workspace);
   });
-  // Same saved-project load-order gap (and same fix) as subroutine.js's own
+  // Same saved-project load-order gap (and same fix) as subroutine.js's
   // ensureSubroutineCallListener - see its comment for the full explanation.
   setTimeout(() => fixFunctionCallNames(workspace), 0);
 }
@@ -314,7 +314,7 @@ const appendFunctionCallFields = (block) => {
   // Applies in the toolbox flyout too, not just the main workspace - a
   // flyout's  workspace is a real, rendered WorkspaceSvg (isFlyout is
   // just a flag on it, not a different, unrendered kind of workspace), so
-  // updateFunctionCallArgVisibility's own `workspace.rendered` guard already
+  // updateFunctionCallArgVisibility's `workspace.rendered` guard already
   // allows this safely. Without running it there, the toolbox always showed
   // the "Call function" block with all 6 argument slots, cluttered and
   // identical regardless of which function it'll actually call - a real
@@ -329,7 +329,7 @@ const appendFunctionCallFields = (block) => {
 // straight to "name(arg1, arg2, ...)", batari Basic's  real function-call
 // syntax, usable anywhere a number can go). Up to MAX_FUNCTION_ARGS value
 // inputs, each optional - only the ones actually connected are passed (see
-// the generator), matching the real language's own "extra/missing arguments
+// the generator), matching the real language's "extra/missing arguments
 // aren't checked" behavior rather than silently inventing zeros for unfilled
 // slots. See function_call_statement below for a version that drops straight
 // into an event's  statement stack instead, for a function whose return
@@ -340,7 +340,7 @@ Blockly.Blocks['function_call'] = {
     this.setOutput(true, 'Number');
     this.setTooltip('Calls a function defined with a "Function" block and returns its ' +
       'result - plug in as many of the argument slots as that function actually reads ' +
-      '(up to 6), matching them left to right against its own "Function argument" blocks.');
+      '(up to 6), matching them left to right against its "Function argument" blocks.');
   },
 };
 
@@ -351,7 +351,7 @@ Blockly.Blocks['function_call'] = {
 // doesn't care what it returns. The real returned value is simply discarded
 // (see generators/bbasic/function.js) rather than left unread in some
 // awkward way batari Basic itself doesn't actually support - the language's
-// own function calls are still real value expressions under the hood, this
+// function calls are still real value expressions under the hood, this
 // block just doesn't ask for anywhere to put the result.
 Blockly.Blocks['function_call_statement'] = {
   init: function() {

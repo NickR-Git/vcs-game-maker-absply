@@ -8,6 +8,7 @@ import {effectiveBackgroundRows, backgroundFadeTimerVarName, backgroundFadePaceV
   collisionPixelColumnVarName, collisionPixelRowVarName,
   collisionPixelNudgedColumnVarName, collisionPixelNudgedRowVarName,
   backgroundScrollRowVarName, backgroundScrollRowMaxVarName, backgroundScrollSubRowVarName,
+  backgroundScrollEdgeFlagsVarName, BACKGROUND_SCROLL_EDGE_BITS, backgroundScrollStartVarName,
   BACKGROUND_SCROLL_PATCH_SUBROUTINE_NAME} from '../../blocks/background';
 import {pfRowDivisorFor} from '../../utils/playfield-coords';
 import {ctrlpfShadowVarName, spriteScrollFlagsVarName, spriteScrollActiveBit} from './sprites';
@@ -23,12 +24,12 @@ const FADE_INCREMENT = 2;
 // Walks up from a block through plain parent connections (not just statement
 // nesting - background_get_pixel can sit inside an "if" condition socket, a
 // value input) looking for an enclosing function_define. Module-scope (not
-// inside the default export closure below) so generators/bbasic.js's own
+// inside the default export closure below) so generators/bbasic.js's
 // early pre-scan can use it too, ahead of reserveDevVar handing out letters.
-// Shared with generators/bbasic/collision.js's own grid-snap revert (see
+// Shared with generators/bbasic/collision.js's grid-snap revert (see
 // its comment) - module-scope and exported so both files agree on the
 // exact same sprite<->playfield-pixel X offset rather than each guessing
-// their own.
+// their.
 export const spriteXOffset = (width) => (width === 'SINGLE' ? 17 : 16);
 
 const isInsideFunctionDefine = (block) => {
@@ -42,12 +43,12 @@ const isInsideFunctionDefine = (block) => {
 
 // Whether a background_get_pixel block's  X or Y argument is a bare,
 // always-space-free value once generated - an unplugged socket falls back
-// to the literal '0', and a bare math_number/variables_get block's own
+// to the literal '0', and a bare math_number/variables_get block's
 // generated code is always a single token - everything else (arithmetic,
 // another getter block, etc.) is conservatively treated as possibly
-// producing a whitespace-containing expression, matching this block's own
+// producing a whitespace-containing expression, matching this block's
 // generator's real isSimple check (background_get_pixel below) without
-// running actual codegen this early (see reserveDevVar's own "known before
+// running actual codegen this early (see reserveDevVar's "known before
 // any generator runs" pre-scan timing constraint) - erring toward "still
 // reserve it" for anything this can't positively classify as simple, never
 // the other way around.
@@ -78,7 +79,7 @@ const FADE_LABEL_TAG_BY_VAR = {
 
 // Shared by every "Background [Set/Clear/Flip] line from X/Y to X/Y" block
 // (background_draw_line) - a runtime implementation of Bresenham's line
-// algorithm, needed because (unlike background_change_hv_line's own
+// algorithm, needed because (unlike background_change_hv_line's
 // straight horizontal/vertical runs, which are always axis-aligned and so
 // can compile straight to a single pfhline/pfvline macro call) an arbitrary
 // line's  endpoints can be variables, not fixed numbers known at compile
@@ -97,14 +98,14 @@ const FADE_LABEL_TAG_BY_VAR = {
 //
 // The "err" term is tracked with a fixed +128 bias throughout (comparing
 // against 128 instead of 0) rather than as a true signed value - this
-// codebase's own "dim"'d variables are plain unsigned bytes, and while
+// codebase's "dim"'d variables are plain unsigned bytes, and while
 // ADD/SUBTRACT wrap correctly for negative values via ordinary two's-
 // complement arithmetic, an UNSIGNED ">"/"<" comparison on a wrapped
 // negative value reads it as a huge positive number instead, which would
 // send the algorithm the wrong way at exactly the values where a plain sign
 // check matters most. Biasing keeps every comparison safely within 0-255
 // with no wraparound, as long as neither operand's  true magnitude ever
-// approaches ~127 - true for every coordinate range this app's own
+// approaches ~127 - true for every coordinate range this app's
 // playfield editor (32 pixels wide, well under 127 tall even with Superchip
 // RAM's  largest pfres) can ever produce.
 //
@@ -124,9 +125,9 @@ const FADE_LABEL_TAG_BY_VAR = {
 // x1/y1/x2/y2/dx/dy in the shared temp1-temp6 scratch registers instead
 // (the same ones background_change_pixel/background_change_hv_line use) -
 // that was wrong, and a real reported bug (a couple of pixels drawn, then
-// nothing, instead of a continuous line): pfpixel's OWN implementation
+// nothing, instead of a continuous line): pfpixel's implementation
 // (public/bb19/includes/pf_drawing.asm's  setuppointers) uses temp1 AND
-// temp2 as ITS OWN internal scratch while computing the byte/row address -
+// temp2 as ITS internal scratch while computing the byte/row address -
 // "stx temp2" / "sta temp1" - clobbering whatever this routine had stored
 // there the instant the FIRST pfpixel call happened. background_change_pixel
 // gets away with temp1/temp2 only because it uses them for one single,
@@ -149,7 +150,7 @@ export const registerBackgroundLineSubroutine = (Blockly, names, operations) => 
   // subroutine body, and on the whole program's  top-level code too -
   // see finish()'s  call) blindly indents every line, which breaks a
   // plain label's  required column-0 placement; "@ " is stripped back
-  // out afterward, restoring it. Same convention controls_if's own "@
+  // out afterward, restoring it. Same convention controls_if's "@
   // ${bodyLabel}" already uses for its  goto targets (see logic.js) -
   // this isn't specific to raw "asm...end" blocks the way it might look
   // from titlescreen.js's  comments, it's universal to every label
@@ -208,13 +209,13 @@ export const registerBackgroundLineSubroutine = (Blockly, names, operations) => 
 // screen_shake's  countdown (see generateShakeScreenChecks below for the
 // per-frame use of it) - only reserved when a screen_shake block is
 // actually on the canvas (screenShakeUsed, same early-pre-scan pattern as
-// every other feature's own "*Used"/"*UsedFor" dev var reservation).
+// every other feature's "*Used"/"*UsedFor" dev var reservation).
 export const shakeScreenFramesVarName = () => 'shakeScreenFrames';
 
 // Unlike every other feature in this file, this ALSO has to reserve the
 // literal bareword "shakescreen" itself, not just a private canonical dev
 // var - std_kernel.asm reads/gates on that exact symbol directly ("ifconst
-// shakescreen"/"bit shakescreen" - see generateShakeScreenChecks' own
+// shakescreen"/"bit shakescreen" - see generateShakeScreenChecks'
 // comment), and nothing in 2600basic.h ever pre-declares it the way
 // player0frame/newbackground/etc. are (confirmed by grepping the bundled
 // bB compiler's  includes - this feature is genuinely undocumented,
@@ -239,7 +240,7 @@ export const reserveShakeScreenDevVar = (reserveDevVar, used) => {
 // uniquing is needed here.
 //
 // Drives the standard kernel's  undocumented "shakescreen" hook (see
-// std_kernel.asm's own "ifconst shakescreen"/"doshakescreen" - confirmed by
+// std_kernel.asm's "ifconst shakescreen"/"doshakescreen" - confirmed by
 // reading that file directly, since this feature was never actually
 // documented anywhere in the bB community): every frame, the kernel checks
 // bit 7 of the runtime "shakescreen" variable - clear (0-127) inserts one
@@ -282,7 +283,7 @@ export const generateShakeScreenChecks = (Blockly) => {
 export default (Blockly) => {
   // A compile-time constant, not runtime state - the playfield's vertical
   // resolution is a single fixed ROM-wide setting (see effectiveBackgroundRows'
-  // own comment in blocks/background.js: pfres itself when Superchip RAM is
+  // comment in blocks/background.js: pfres itself when Superchip RAM is
   // on, else the standard kernel's fixed 11-row default), so this can just
   // splice in the literal number directly rather than needing a hidden
   // per-frame variable the way the Distance blocks do.
@@ -303,23 +304,23 @@ export default (Blockly) => {
   //   clocks wide - so X always scales by a flat 4, regardless of
   //   pfres/Superchip (confirmed by the reference documentation directly;
   //   the example program doesn't touch X at all).
-  // - X also has a fixed offset to the first usable playfield pixel's own
+  // - X also has a fixed offset to the first usable playfield pixel's
   //   leftmost color clock: 17 for a single-wide sprite, 16 for a
   //   double/quad-wide one (their  left edges start 1 color clock
   //   earlier at 2x/4x pixel width) - see the WIDTH dropdown.
   // - Y scales by pfRowDivisorFor(config) - 8 for the standard (non-
   //   Superchip) kernel's  implicit pfres=12 (96/12, matching the docs'
-  //   own "8 scanlines tall" and player0y's documented 1-88 range: 11
+  //   "8 scanlines tall" and player0y's documented 1-88 range: 11
   //   VISIBLE rows * 8 = 88), and round(96/pfres) once Superchip's  pfres
   //   is active - round(96/32) = 3 for the pfres=32 Superchip example above,
   //   an exact match for that program's  divisor. See pfRowDivisorFor's
-  //   own comment in utils/playfield-coords.js for why this can't just
+  //   comment in utils/playfield-coords.js for why this can't just
   //   divide by effectiveBackgroundRows(config) directly (that's the
-  //   VISIBLE row count, 11 by default - one less than the kernel's own
+  //   VISIBLE row count, 11 by default - one less than the kernel's
   //   true pfres=12 - only Superchip's  pfres has no such gap). The +1
   //   offset (player Y is measured from a sprite's  BOTTOM row, whose
   //   first usable value is 1, not 0) is independent of pfres and applies
-  //   either way - the example's own "14" isn't that offset, just its own
+  //   either way - the example's "14" isn't that offset, just its
   //   unrelated arbitrary starting position for that demo.
   // Y's divisor is a real per-project value, not always a power of 2, so
   // (unlike X's fixed /4, always a shift) it needs usesDivMul/div_mul.asm -
@@ -362,10 +363,10 @@ export default (Blockly) => {
   // sprites.js's  sprite_player_size generator, which reads it as a
   // source operand) covering both that player's  stretch (bits 0/2, mask
   // $05) and that missile's  width (bits 4-5, mask $30 - see sprites.js's
-  // own sprite_..._set generator, which writes missile width into THIS same
+  // sprite_..._set generator, which writes missile width into THIS same
   // var, never a separate one). Ball width lives in the SAME bit positions
   // ($30) of sprites.js's  CTRLPF RAM shadow instead of the real
-  // (unsafe-to-read-back) CTRLPF register - see ctrlpfShadowVarName's own
+  // (unsafe-to-read-back) CTRLPF register - see ctrlpfShadowVarName's
   // comment there. Not a static map - ball's  entry needs nameDB_ to
   // resolve the shadow var's real letter, so this has to be a function.
   const spriteCollisionCoords = (sprite) => {
@@ -402,10 +403,10 @@ export default (Blockly) => {
   // calls, no loops) escalating check: exact cell, then nudged column alone,
   // then nudged row alone, then - only if neither single-axis nudge found a
   // lit pixel - the diagonal (both nudged) combination, trusted without a
-  // further re-check (matching ChipOff's own "trust the final nudge, don't
+  // further re-check (matching ChipOff's "trust the final nudge, don't
   // re-verify" behavior for its  last fallback step). "Moving right"/
   // "moving down" pick which way each axis nudges - see blocks/background.js's
-  // own comment on why direction is a plain user-supplied input here, not
+  // comment on why direction is a plain user-supplied input here, not
   // auto-tracked previous-frame position.
   Blockly.BBasic['background_collision_pixel'] = function(block) {
     const sprite = block.getFieldValue('SPRITE');
@@ -508,7 +509,7 @@ export default (Blockly) => {
     const rawVar = block.getFieldValue('VAR');
     // COLUPF and COLUBK are both overwritten every frame by the score/text
     // drawing routines (the standard kernel's score digits, the playfield
-    // score bars if enabled, and the Text Minikernel's own "sta COLUBK"),
+    // score bars if enabled, and the Text Minikernel's "sta COLUBK"),
     // so both are tracked and restored each frame from a shadow variable,
     // just like COLUP0/COLUP1 are.
     const targetVar = rawVar === 'COLUPF' ? 'playfieldrealcolor' :
@@ -536,10 +537,10 @@ export default (Blockly) => {
     Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
 
   // The real color variable a fade register's rawVar actually writes to -
-  // shared by emitColorFadeTrigger and generateBackgroundFadeChecks' own
+  // shared by emitColorFadeTrigger and generateBackgroundFadeChecks'
   // checksForVar below, which used to duplicate this same resolution.
   // COLUBK/COLUPF need a separate shadow variable (see background_set_color's
-  // own comment above) since the score/text drawing routines overwrite the
+  // comment above) since the score/text drawing routines overwrite the
   // real register every frame - scorecolor/TextColor have no such override,
   // so the real variable doubles as its  shadow. player0realcolor/
   // player1realcolor have no separate shadow alias either (nothing renames
@@ -555,7 +556,7 @@ export default (Blockly) => {
     const targetShadowVar = rawVar === 'COLUPF' ? 'playfieldrealcolor' :
       rawVar === 'COLUBK' ? 'backgroundrealcolor' : rawVar;
     // scorecolor/TextColor are real batari Basic identifiers already
-    // (score.js's  score_color_get/set and text-minikernel.js's own
+    // (score.js's  score_color_get/set and text-minikernel.js's
     // TextColor blocks both reference them as plain literals, never through
     // nameDB_) - only COLUBK/COLUPF's shadow vars and player0realcolor/
     // player1realcolor are app-internal dev vars that actually need letter
@@ -564,13 +565,13 @@ export default (Blockly) => {
       Blockly.BBasic.nameDB_.getName(targetShadowVar, Blockly.VARIABLE_CATEGORY_NAME) : targetShadowVar;
   };
 
-  // Fires a fade trigger once - stores the target color and this fade's own
+  // Fires a fade trigger once - stores the target color and this fade's
   // pace (this fade's total requested duration, divided across FADE_STEPS
   // installments - "over roughly this many frames" is the OVERALL fade
   // time, not a per-step delay), then sets the "active" bit
   // (generateBackgroundFadeChecks below reads that bit every frame from
   // then on and does the actual stepping; see backgroundFadeTimerVarName's
-  // own comment in blocks/background.js for why this is a one-shot trigger
+  // comment in blocks/background.js for why this is a one-shot trigger
   // rather than a "call every frame yourself" block).
   //
   // The actual RESET (timer/pace/active all snapping back to a fresh fade)
@@ -586,13 +587,13 @@ export default (Blockly) => {
   // actually count down to 0 - a real reported bug ("fade finished never
   // seems to trigger"; the fade itself never finishes, since it's
   // perpetually reset before it can), same class of bug (and same fix) as
-  // buildTextScrollSetupLines' own "same message, don't re-reset" guard in
+  // buildTextScrollSetupLines' "same message, don't re-reset" guard in
   // text-scroll.js.
   //
   // Checking only targetVar (not the real color too, as this now does) was
   // confirmed as a real, separate reported bug: a "Fade to color" placed in
   // a one-shot event (Title screen start) that re-runs every time that
-  // screen is re-entered, preceded by its own "Set color" block resetting
+  // screen is re-entered, preceded by its "Set color" block resetting
   // the real color back to its starting value each time - targetVar still
   // held the PREVIOUS visit's already-reached target, so the guard kept
   // treating the fresh request as a no-op repeat and never restarted the
@@ -608,7 +609,7 @@ export default (Blockly) => {
   // can be an arbitrary expression (not necessarily side-effect-free, e.g.
   // a Random block), and evaluating it more than once could disagree with
   // itself between the guard checks and the actual reset (same reasoning
-  // random_between_set's own "rand" capture uses in generators/bbasic/
+  // random_between_set's "rand" capture uses in generators/bbasic/
   // random.js).
   //
   // Shared by background_fade_to below and score.js's  score_fade_to /
@@ -683,7 +684,7 @@ export default (Blockly) => {
   // temp1/temp2 are the compiler's  shared scratch registers, safe to
   // hold a value in across several statements here for the same reason as
   // score.js's  buildDigitPokeLines comment: only ever clobbered by
-  // drawscreen, which can't run in the middle of this function's own
+  // drawscreen, which can't run in the middle of this function's
   // generated lines.
   //
   // Hue stays on whatever it already was for the ENTIRE ramp, only
@@ -752,7 +753,7 @@ export default (Blockly) => {
     // 6502 relative branches (BEQ/BNE/BCC/BCS/...) only reach +/-127 bytes -
     // this whole state machine is bigger than that, so a plain "beq skip"/
     // "beq already" etc. can land "Branch out of range" once assembled,
-    // confirmed directly as a real build failure (both bg and pf's own
+    // confirmed directly as a real build failure (both bg and pf's
     // "beq skip" - the one spanning the ENTIRE block - measured 147 bytes,
     // 20 over the limit). JMP has no such range limit, so any branch whose
     // target ISN'T a handful of instructions away goes through here instead:
@@ -790,7 +791,7 @@ export default (Blockly) => {
       '       and #' + (255 - activeMask),
       '       sta ' + flagsVar,
       // "sta" never touches A - still holds the masked value from the line
-      // just above, so isWatched's own "ora finishedMask" can build on it
+      // just above, so isWatched's "ora finishedMask" can build on it
       // directly instead of a redundant "lda flagsVar" reload.
       ...(isWatched ? [
         '       ora #' + finishedMask,
@@ -835,7 +836,7 @@ export default (Blockly) => {
       ...farBcc(up),
       // DOWN - A already holds temp2 (current brightness) here, straight
       // from the "cmp temp3" just above (CMP never touches A) - see this
-      // function's own "Register discipline" comment.
+      // function's "Register discipline" comment.
       '       cmp #' + FADE_INCREMENT,
       '       bcs ' + downSub,
       '       lda #0',
@@ -868,7 +869,7 @@ export default (Blockly) => {
       ...landedLines,
       reprime,
       // Keeps the CURRENT hue (colorVar's  high nibble), only the
-      // brightness nibble changes this step - see the bB version's own
+      // brightness nibble changes this step - see the bB version's
       // comment on why this differs from the "landed" case above.
       '       lda ' + colorVar,
       '       and #$F0',
@@ -910,7 +911,7 @@ export default (Blockly) => {
 
       // Every register (background/playfield, score/text, AND player) routes
       // through a hand-written asm version instead (see buildFadeCheckAsm's
-      // own comment) - real cycle savings over the bB if/goto chain this
+      // comment) - real cycle savings over the bB if/goto chain this
       // used to be. buildFadeCheckAsm itself doesn't care whether
       // colorVarName came from a resolved dev var (COLUBK/COLUPF/player0/
       // player1's  shadow vars) or a bare literal identifier (scorecolor/
@@ -932,10 +933,10 @@ export default (Blockly) => {
     return [...fadeVarsUsed].map(checksForVar).flat().join('\n');
   };
 
-  // One-time Setup-section initialization (see bbasic.bb.hbs's own
+  // One-time Setup-section initialization (see bbasic.bb.hbs's
   // generatedBackgroundFadeSetup splice, right alongside
-  // generatedCtrlpfShadowSetup/generatedKeypadSetup) - every fade's own
-  // targetVar (see emitColorFadeTrigger's own "if targetVar = requested
+  // generatedCtrlpfShadowSetup/generatedKeypadSetup) - every fade's
+  // targetVar (see emitColorFadeTrigger's "if targetVar = requested
   // color then skip the reset" guard) needs to start at a value NO real
   // requested color can ever equal, or that guard's very first real trigger
   // could spuriously match on whatever targetVar happens to already hold.
@@ -947,7 +948,7 @@ export default (Blockly) => {
   // reset entirely, never actually starting the fade. 255 is guaranteed
   // safe: every real color byte a "Color" picker can ever produce is even
   // (the 2600 ignores a color register's  low bit - see
-  // utils/palette.js's own "byte is (index << 1)" comment), so an odd
+  // utils/palette.js's "byte is (index << 1)" comment), so an odd
   // sentinel can never collide with a genuine request.
   Blockly.BBasic.generateBackgroundFadeSetup = function() {
     const fadeVarsUsed = this.backgroundFadeVarsUsed || new Set();
@@ -957,20 +958,20 @@ export default (Blockly) => {
         .join('\n');
   };
 
-  // Shared by background_fade_finished below and score.js's own
-  // score_fade_finished / text-minikernel.js's own
+  // Shared by background_fade_finished below and score.js's
+  // score_fade_finished / text-minikernel.js's
   // text_minikernel_fade_finished - the check-and-clear body is identical
   // regardless of which register it targets, only rawVar (and so which dev
-  // vars/bit it resolves to) differs. Mirrors emitColorFadeTrigger's own
+  // vars/bit it resolves to) differs. Mirrors emitColorFadeTrigger's
   // "shared trigger body, per-register rawVar" split above.
   Blockly.BBasic.emitFadeFinishedWatch = function(block, rawVar) {
     const code = Blockly.BBasic.statementToCode(block, 'DO').trim();
     const watches = Blockly.BBasic.backgroundFadeFinishedWatches || new Set();
-    // No matching fade block was ever found to have set this watch's own
+    // No matching fade block was ever found to have set this watch's
     // flag in the first place (see resolveBackgroundFadeFinishedWatches -
     // this can only happen if the watch itself vanished between the
     // pre-scan and here, which shouldn't occur in practice, but matches
-    // this codebase's own "silently no-op on a dangling reference" -
+    // this codebase's "silently no-op on a dangling reference" -
     // resolveMusicEventFlags is the shipped instance of the exact same
     // handling).
     if (!watches.has(backgroundFadeWatchKey(rawVar))) return '';
@@ -1032,14 +1033,14 @@ export default (Blockly) => {
     // kernel and reused this way throughout this codebase) are the
     // ordinary, zero-cost choice here - EXCEPT when this block sits inside
     // a function_define's  body, where temp1-temp6 are ALSO bB's fixed
-    // argument-passing convention (see generators/bbasic/function.js's own
+    // argument-passing convention (see generators/bbasic/function.js's
     // comment): overwriting temp1/temp2 there could silently clobber that
     // function's  live parameter(s) out from under it. Confirmed
     // directly as a real bug (a project's  custom function calling this
     // went from "won't compile" to "resets the console the moment it
     // runs" from exactly that). Only THAT case falls back to
-    // backgroundGetPixelXVarName/backgroundGetPixelYVarName's own
-    // dedicated dev vars instead - reserved (see reserveMusicDevVars's own
+    // backgroundGetPixelXVarName/backgroundGetPixelYVarName's
+    // dedicated dev vars instead - reserved (see reserveMusicDevVars's
     // sibling in bbasic.js) only for a project that actually has this
     // block nested inside a function at all, so the common case (used
     // directly in a plain "if", not inside a function) costs nothing extra.
@@ -1087,7 +1088,7 @@ export default (Blockly) => {
 
     // "pfpixel X Y OPERATION" is a whitespace-separated positional macro,
     // not a real function call - a multi-token argument (e.g. a Random
-    // block's own "(rand / 8) + 1", which has spaces in it) gets split into
+    // block's "(rand / 8) + 1", which has spaces in it) gets split into
     // several garbage tokens instead of read as one expression, confirmed
     // directly as a real build failure ("Syntax Error ''" from a
     // malformed "LDA #(" with nothing after it). Assigning to temp1/temp2
@@ -1124,7 +1125,7 @@ export default (Blockly) => {
     // Block for drawing an arbitrary (diagonal) line between two points -
     // see registerBackgroundLineSubroutine's  comment for the runtime
     // Bresenham's-line-algorithm this gosubs into, and for why X1/Y1/X2/Y2
-    // need their  dedicated vars rather than temp1-temp4 (pfpixel's own
+    // need their  dedicated vars rather than temp1-temp4 (pfpixel's
     // implementation clobbers temp1/temp2 internally). OPERATION picks
     // which of the (up to 3) pre-built subroutines to gosub directly - a
     // compile-time choice fixed per block instance, not a runtime value.
@@ -1150,14 +1151,14 @@ export default (Blockly) => {
   };
 
   // Up/Down/Up (2x)/Down (2x) update backgroundScrollRow (see
-  // backgroundScrollRowVarName's own comment in blocks/background.js)
+  // backgroundScrollRowVarName's comment in blocks/background.js)
   // whenever ANY background_scroll/background_scroll_position block OR any
   // sprite_scroll_with_playfield_set/_get block is used anywhere in the
-  // project (backgroundScrollUsed, set by bbasic.js's own pre-scan) - not
-  // just when THIS block's own STOPATEDGE is checked - so a getter, or a
+  // project (backgroundScrollUsed, set by bbasic.js's pre-scan) - not
+  // just when THIS block's STOPATEDGE is checked - so a getter, or a
   // DIFFERENT scroll block that does check STOPATEDGE, always sees an
   // accurate position regardless of which specific block last moved it.
-  // Left/Right never touch it (no edge concept - see this block's own
+  // Left/Right never touch it (no edge concept - see this block's
   // tooltip) - so a sprite flagged to follow scroll only ever moves along
   // with Up/Down/Up (2x)/Down (2x), never Left/Right.
   const BACKGROUND_SCROLL_ROW_DELTA = {up: -1, down: 1, upup: -2, downdown: 2};
@@ -1196,6 +1197,16 @@ export default (Blockly) => {
       });
     };
 
+    // Sets the "reached top/bottom" flag when a row-step lands on that edge
+    // - only for an edge some "When background scroll reaches" block watches.
+    // condition is the bB test (an "if" body, without the "if"/"then").
+    const edgeWatches = Blockly.BBasic.backgroundScrollEdgeWatches || new Set();
+    const edgeFlag = (edge) =>
+      `${resolveVar(backgroundScrollEdgeFlagsVarName())}{${BACKGROUND_SCROLL_EDGE_BITS[edge]}}`;
+    const setEdgeFlag = (edge, condition) => {
+      if (edgeWatches.has(edge)) lines.push(` if ${condition} then ${edgeFlag(edge)} = 1`);
+    };
+
     if (!overflowUsed) {
       // No background in the project is taller than the visible window -
       // stock pfscroll's rotate-in-place is already correct and simplest.
@@ -1223,6 +1234,8 @@ export default (Blockly) => {
       lines.push(` if ${subRowVar} < ${rowHeight} then goto ${doneLabel}`);
       lines.push(` ${subRowVar} = ${subRowVar} - ${rowHeight}`);
       lines.push(` ${rowVar} = ${rowVar} ${delta < 0 ? '-' : '+'} 1`);
+      if (delta > 0) setEdgeFlag('bottom', `${rowVar} >= ${maxVar}`);
+      else setEdgeFlag('top', `${rowVar} = 0`);
       // Nudges every sprite currently flagged (a RUNTIME bit, checked here
       // every call, not a compile-time decision - see sprite_scroll_with_
       // playfield_set's generator in generators/bbasic/sprites.js) to
@@ -1269,15 +1282,24 @@ export default (Blockly) => {
       // playfieldpos is <= step, backward once it is > rowHeight - step), so
       // fine scrolling still runs right up to the last position and the
       // picture settles cleanly on the edge instead of stopping mid-row.
+      // The cheap playfieldpos test goes first, so every call that can't
+      // wrap skips the row/maximum work (forward: a whole gosub for the
+      // maximum) and only the wrapping call pays for it. Going forward that
+      // call leaves the maximum in temp6 for the bottom-row math below
+      // (nothing in between touches temp6, pfscroll included).
+      const edgeCheckedLabel = `_bgscroll_${uid}_edgeok`;
       if (stopAtEdge) {
         if (forward) {
+          lines.push(` if playfieldpos > ${step} then goto ${edgeCheckedLabel}`);
           loadMax();
           lines.push(` temp4 = ${rowVar} & ${rowMask}`);
-          lines.push(` if temp4 >= temp6 && playfieldpos <= ${step} then goto ${doneLabel}`);
+          lines.push(` if temp4 >= temp6 then goto ${doneLabel}`);
         } else {
+          lines.push(` if playfieldpos <= ${rowHeight - step} then goto ${edgeCheckedLabel}`);
           lines.push(` temp4 = ${rowVar} & ${rowMask}`);
-          lines.push(` if temp4 <= 0 && playfieldpos > ${rowHeight - step} then goto ${doneLabel}`);
+          lines.push(` if temp4 <= 0 then goto ${doneLabel}`);
         }
+        lines.push(`@ ${edgeCheckedLabel}`);
       }
       lines.push(` pfscroll ${mechDirection}`);
       // A row-step completed exactly when pfscroll wrapped playfieldpos:
@@ -1297,6 +1319,7 @@ export default (Blockly) => {
         if (stopAtEdge) {
           lines.push(` ${rowVar} = ${rowVar} + 1`);
         } else {
+          // Leaves temp6 = the row count (max + visible rows), reused below.
           loadMax();
           lines.push(` temp4 = ${rowVar} & ${rowMask}`);
           lines.push(' temp4 = temp4 + 1');
@@ -1311,14 +1334,25 @@ export default (Blockly) => {
         lines.push(` temp6 = temp6 + ${visibleRows - 1}`);
         lines.push(` if temp4 > 0 then ${rowVar} = ${rowVar} - 1 else ${rowVar} = ${rowVar} | temp6`);
       }
+      // Edge flags, from the row just stored. temp6 still holds what the row
+      // update left: the maximum (stop-at-edge) or the row count (without it).
+      if (forward && edgeWatches.has('bottom')) {
+        lines.push(` temp4 = ${rowVar} & ${rowMask}`);
+        if (!stopAtEdge) lines.push(` temp4 = temp4 + ${visibleRows}`);
+        setEdgeFlag('bottom', 'temp4 = temp6');
+      } else if (!forward && edgeWatches.has('top')) {
+        lines.push(` temp4 = ${rowVar} & ${rowMask}`);
+        setEdgeFlag('top', 'temp4 = 0');
+      }
       nudgeSprites();
       if (forward) {
         // The newly-visible BOTTOM row: top row + visibleRows - 1, wrapped
         // around the background's row count.
-        loadMax();
+        // temp6 already holds what the row update above left: the row count
+        // (no stop-at-edge) or the maximum (stop-at-edge), so no second gosub.
         lines.push(` temp3 = ${rowVar} & ${rowMask}`);
         lines.push(` temp3 = temp3 + ${visibleRows - 1}`);
-        lines.push(` temp6 = temp6 + ${visibleRows}`);
+        if (stopAtEdge) lines.push(` temp6 = temp6 + ${visibleRows}`);
         lines.push(' if temp3 >= temp6 then temp3 = temp3 - temp6');
         lines.push(` temp5 = ${visibleRows - 1}`);
       } else {
@@ -1329,12 +1363,59 @@ export default (Blockly) => {
       lines.push(gosubPatch);
     }
     // "@ label" (not a bare label), same reasoning as collision_check_
-    // position/object_bounce's own labels elsewhere in this codebase - this
+    // position/object_bounce's labels elsewhere in this codebase - this
     // whole block can end up nested inside an "if...then" body (e.g. an
     // "every X frames" wrapper), where a bare label comes out indented and
     // bB only recognizes a label at column 0 unless it's "@"-prefixed.
     lines.push(`@ ${doneLabel}`);
     return lines.join('\n') + '\n';
+  };
+
+  // Runs its blocks once when background_scroll lands on the chosen edge (see
+  // setEdgeFlag in background_scroll above) - the same flag-then-clear shape
+  // as emitFadeFinishedWatch.
+  Blockly.BBasic[`background_scroll_edge_reached`] = function(block) {
+    const edge = block.getFieldValue('EDGE');
+    const code = Blockly.BBasic.statementToCode(block, 'DO').trim();
+    const resolveVar = (canonicalName) =>
+      Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+    const watches = Blockly.BBasic.backgroundScrollEdgeWatches || new Set();
+    if (!watches.has(edge)) return '';
+    const flag = `${resolveVar(backgroundScrollEdgeFlagsVarName())}{${BACKGROUND_SCROLL_EDGE_BITS[edge]}}`;
+    const labelEnd = `_bgscrolledge_${Blockly.BBasic.blockNumbers.next()}_end`;
+    return '\n' + [
+      `if !${flag} then goto ${labelEnd}`,
+      `${flag} = 0`,
+      code,
+      `@ ${labelEnd}`,
+    ].join('\n') + '\n';
+  };
+
+  // Jumps the scroll to a chosen row. The row (+1, 0 = none) is parked in the
+  // pending-start variable, which the full-load mode of bgscrollpatch consumes
+  // - so a background switch still pending this frame (the load happens at
+  // the start of the next frame, from "newbackground") picks it up instead of
+  // resetting to the top. With no switch pending the load runs right here.
+  // Does nothing without a background taller than the window, where there is
+  // no position to set.
+  Blockly.BBasic[`background_scroll_set_row`] = function(block) {
+    if (!Blockly.BBasic.backgroundScrollStartUsed) return '';
+    const resolveVar = (canonicalName) =>
+      Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+    const row = Blockly.BBasic.valueToCode(block, 'ROW', Blockly.BBasic.ORDER_ADDITION) || '0';
+    const configurationStorage = useConfigurationStorage();
+    const config = (configurationStorage && configurationStorage.value) || {};
+    const doneLabel = `_bgscroll_${Blockly.BBasic.blockNumbers.next('bgscroll')}_setrow_done`;
+    const gosubPatch = ` gosub ${BACKGROUND_SCROLL_PATCH_SUBROUTINE_NAME}${Blockly.BBasic.bankJumpSuffix(
+        Blockly.BBasic.getCurrentBank(), Blockly.BBasic.getSubroutineBank(BACKGROUND_SCROLL_PATCH_SUBROUTINE_NAME))}`;
+    return [
+      ` ${resolveVar(backgroundScrollStartVarName())} = ${row} + 1`,
+      ' if newbackground <> 0 then goto ' + doneLabel,
+      ` playfieldpos = ${pfRowDivisorFor(config)}`,
+      ' temp5 = 255',
+      gosubPatch,
+      `@ ${doneLabel}`,
+    ].join('\n') + '\n';
   };
 
   Blockly.BBasic[`background_scroll_position`] = function(block) {

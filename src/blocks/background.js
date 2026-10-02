@@ -15,7 +15,7 @@ const BACKGROUND_COLOR = '#ffa500';
 // exactly like sound effect fades (generateEnvelopeChecks in generators/
 // bbasic/soundfx.js) and music event watches (generateMusicChecks) already
 // do. This matters because a fade triggered from inside an "if" block (e.g.
-// "if joystick fire") only has its OWN trigger code re-run while that
+// "if joystick fire") only has its trigger code re-run while that
 // condition holds - a single brief tap wouldn't re-enter it on later
 // frames, so an earlier "advance one step per call" design silently stalled
 // after one step once nested that way (confirmed as a real bug: the fade
@@ -49,8 +49,8 @@ const BACKGROUND_COLOR = '#ffa500';
 // an earlier version of this had: a separate brightness tracker defaulting
 // to 0 made a "fade down"-only block snap straight to black on its very
 // first call, regardless of whatever color was actually on screen.
-// Generalized past just COLUBK/COLUPF - scorecolor (score.js's own
-// score_fade_to) and TextColor (text-minikernel.js's own
+// Generalized past just COLUBK/COLUPF - scorecolor (score.js's
+// score_fade_to) and TextColor (text-minikernel.js's
 // text_minikernel_fade_to) share this exact same stepping mechanism, since
 // they're ordinary Atari color bytes with the identical hue/brightness
 // nibble layout. Unlike COLUBK/COLUPF, neither needs a separate "shadow"
@@ -78,7 +78,7 @@ export const backgroundFadeTargetVarName = (rawVar) => `${fadeTag(rawVar)}FadeTa
 // Fixed at 4 (not a user-choosable STEPS dropdown, as an earlier version of
 // this had) specifically because 4 is a power of 2: "frames / 4" always
 // compiles to a cheap bit-shift, never the real "jsr div8" subroutine call
-// a non-power-of-2 divisor (3, 5, 6, 7) needs (see generateDivMul's own
+// a non-power-of-2 divisor (3, 5, 6, 7) needs (see generateDivMul's
 // comment in generators/bbasic.js). That call is only safe from wherever
 // div_mul.asm itself got inlined (always bank 1) - fine from
 // generateBackgroundFadeChecks (always in commongamelogic, never
@@ -109,7 +109,7 @@ export const FADE_STEPS = 4;
 // dropdown splitting this by direction, but that meant a project reacting
 // to "this fade is done" regardless of which way it happened to go needed
 // two near-identical watch blocks wired to the same DO stack; removed in
-// favor of one flag per register that fires on either direction's own
+// favor of one flag per register that fires on either direction's
 // completion. The "active" bits are what the per-frame check
 // (generateBackgroundFadeChecks) reads to know whether a register has an
 // in-progress fade to keep stepping at all - set once by the matching
@@ -135,7 +135,7 @@ export const FADE_FLAGS_REGISTER_GROUPS = [
 // an operator, so an expression has to be computed somewhere before it's
 // passed in. temp1/temp2 look like the obvious scratch spot (used exactly
 // that way everywhere else in this codebase), but are NOT safe here: bB's
-// own "function" feature passes its arguments through temp1-temp6 directly
+// "function" feature passes its arguments through temp1-temp6 directly
 // (see generators/bbasic/function.js's  comment) with no other stack or
 // register file, so a background_get_pixel block used inside a function
 // body could be silently overwriting that function's  live parameter(s)
@@ -162,12 +162,12 @@ export const collisionPixelRowVarName = () => 'collisionPixelRow';
 export const collisionPixelNudgedColumnVarName = () => 'collisionPixelColumn2';
 export const collisionPixelNudgedRowVarName = () => 'collisionPixelRow2';
 // Bits 0-3: one "finished" bit per fadeable register (fires on either fade
-// direction's  completion - see fadeFlagsVarName's own
+// direction's  completion - see fadeFlagsVarName's
 // comment). Bits 4-7: the matching "active" bit for that same register
-// (FADE_ACTIVE_BIT_BY_VAR below) - always exactly 4 apart from its own
+// (FADE_ACTIVE_BIT_BY_VAR below) - always exactly 4 apart from its
 // "finished" bit, which is what backgroundFadeFinishedBit derives from
 // rather than keeping a second, parallel map in sync by hand. Player0/
-// player1 reuse the exact same 0-3/4-7 layout, just within their OWN byte
+// player1 reuse the exact same 0-3/4-7 layout, just within their byte
 // (fadeFlagsVarName('player0realcolor') !== fadeFlagsVarName('COLUBK')) -
 // bit numbers can safely repeat across the two bytes.
 const FADE_ACTIVE_BIT_BY_VAR = {
@@ -189,8 +189,8 @@ export const backgroundFadeFinishedBit = (rawVar) => FADE_ACTIVE_BIT_BY_VAR[rawV
 // the watch block itself (to know which bit to check-and-clear) - see
 // resolveVar's  callers in generators/bbasic/background.js.
 export const backgroundFadeWatchKey = (rawVar) => rawVar;
-// score_fade_finished/text_minikernel_fade_finished have no VAR dropdown of
-// their own (same reasoning as score_fade_to/text_minikernel_fade_to - see
+// score_fade_finished/text_minikernel_fade_finished have no VAR dropdown
+// (same reasoning as score_fade_to/text_minikernel_fade_to - see
 // their  comments: there's only one possible score/text color register,
 // so offering a choice would be pointless) - only background_fade_finished/
 // sprite_player_fade_finished (Player 0/Player 1) actually read one.
@@ -216,7 +216,7 @@ export const resolveBackgroundFadeFinishedWatches = (workspace) => {
 // generators/bbasic/background.js and generators/bbasic/sprites.js), so
 // whichever byte a given register lives in needs to be reserved even in the
 // (unusual, but valid) case of a project checking "is this fade active" on
-// a register that has no matching fade_to block of its own - the check just
+// a register that has no matching fade_to block - the check just
 // always reads false then, same as a fade that was never triggered. Returns
 // a Set of raw var names (not a plain boolean) so bbasic.js's  init() can
 // tell which of fadeFlagsVarName's  two possible bytes each one needs.
@@ -239,7 +239,7 @@ export const hasBackgroundFadeActiveChecks = (workspace) => {
 export const DEFAULT_ROW_COLOR = 0x0E;
 
 // Resets an existing rowColors array back to DEFAULT_ROW_COLOR, one entry
-// per row - shared by every tab's own "clear colors" handler (Background,
+// per row - shared by every tab's "clear colors" handler (Background,
 // Sprites, Title screen) so they don't each redeclare the same map().
 export const clearRowColors = (rowColors) => (rowColors || []).map(() => DEFAULT_ROW_COLOR);
 
@@ -264,7 +264,7 @@ export const effectiveBackgroundRows = (config) => {
 // (pfres) changes, since that setting reshapes every non-custom-height
 // background's playfield RAM layout at once. A background the user has
 // explicitly resized (via the pixel editor's "Set height" tool on the
-// Background tab - see BackgroundEditor.vue's own resize handler, which
+// Background tab - see BackgroundEditor.vue's resize handler, which
 // sets customHeight) is skipped entirely: it's meant to be taller than one
 // screen's worth of rows on purpose (e.g. to hold extra rows a vertical
 // scroll block will pan through later), so a pfres change must never
@@ -372,6 +372,18 @@ export const backgroundScrollPacking = (backgrounds) => {
   };
 };
 
+// One byte of edge flags for background_scroll_edge_reached watches: bit 0 =
+// the top was just reached, bit 1 = the bottom was. background_scroll sets a
+// bit when a row-step lands on that edge; the watch block clears it as it runs.
+export const backgroundScrollEdgeFlagsVarName = () => 'backgroundScrollEdgeFlags';
+export const BACKGROUND_SCROLL_EDGE_BITS = {top: 0, bottom: 1};
+
+// A requested starting row (+1, so 0 means "none") from background_scroll_set_row,
+// waiting for the next background load to apply it - see that block's
+// generator and the full-load mode of the bgscrollpatch routine. Only reserved
+// for a project with a background taller than the visible window.
+export const backgroundScrollStartVarName = () => 'backgroundScrollStart';
+
 // Holds the active background's index only for a project too big to pack it
 // into backgroundScrollRowVarName's high bits - see backgroundScrollPacking.
 export const backgroundScrollActiveVarName = () => 'backgroundScrollActive';
@@ -436,12 +448,12 @@ const BACKGROUND_LINE_DIRECTION_OPTIONS = [
   [`Vertically`, 'pfvline'],
 ];
 
-// Up first (not Left) - a plain field_dropdown's own default selected value
+// Up first (not Left) - a plain field_dropdown's default selected value
 // is always whichever option is FIRST in this list (FieldDropdown has no
-// separate "default value" of its own to set independently - see node_modules/
+// separate "default value" to set independently - see node_modules/
 // blockly/core/field_dropdown.js's constructor), and Up works unconditionally
 // (Left/Right don't, once Superchip RAM is on - see background_scroll_
-// direction_sync's own comment below), so it's the only choice that's always
+// direction_sync's comment below), so it's the only choice that's always
 // a valid default regardless of that setting.
 const BACKGROUND_PFSCROLL_OPTIONS = [
   [`${BACKGROUND_PFSCROLL_UP_ICON} Up`, 'up'],
@@ -453,7 +465,7 @@ const BACKGROUND_PFSCROLL_OPTIONS = [
 ];
 
 // Real batari Basic doesn't support horizontal (Left/Right) playfield
-// scrolling once Superchip RAM is on (see Configuration.vue's own
+// scrolling once Superchip RAM is on (see Configuration.vue's
 // "Enable Superchip RAM" hint text) - a function menuGenerator (rather
 // than the plain static array every other JSON-defined dropdown in this
 // file uses) so the option list is recomputed live every time the
@@ -463,12 +475,12 @@ const BACKGROUND_PFSCROLL_OPTIONS = [
 // toolbox-rebuild/watcher plumbing like ActionEditor.vue's Player 0/1
 // sprite-colors toggle uses.
 //
-// Also corrects the field's OWN current value at init time if it's
+// Also corrects the field's current value at init time if it's
 // already Left/Right while Superchip is on - covers a block freshly
 // dragged out of the flyout (which otherwise defaulted to Left, the
 // filtered menuGenerator's first entry no longer including it, but the
-// field's own already-set value never re-validated against that on its
-// own - confirmed as a real reported bug, "scroll left is still showing
+// field's already-set value never re-validated against that by itself
+// - confirmed as a real reported bug, "scroll left is still showing
 // as the default"), AND a project loaded with an existing Left/Right
 // choice from before Superchip was turned on - unlike the toolbox-only
 // sprite-colors gate this pattern is modeled on, Left/Right genuinely
@@ -624,19 +636,19 @@ Blockly.defineBlocksWithJsonArray([
   },
   // Block for fading a background/playfield color TOWARD a target color -
   // a one-shot TRIGGER (see backgroundFadeTimerVarName's  comment
-  // above): call it once and the color keeps stepping toward the target on
-  // its own, every frame from then on, via a check spliced into
+  // above): call it once and the color keeps stepping toward the target by itself,
+  // every frame from then on, via a check spliced into
   // commongamelogic - no need to keep re-calling this block yourself.
   // Brightness steps one level closer to the target each time the check
   // fires, AUTOMATICALLY going up or down depending on whether the color's
-  // own current brightness is currently below or above the target's - no
+  // current brightness is currently below or above the target's - no
   // separate "fade up"/"fade down" choice needed (an earlier version of
   // this had two separate blocks for that; folded into one since which
   // direction is "correct" is really just a fact about the current color,
   // not something worth asking the user to get right).
   // No STEPS field at all (an earlier version of this had a user-facing
   // dropdown for it) - always FADE_STEPS (4), fixed, for the real bug its
-  // own comment describes: any other choice risked a crash once this
+  // comment describes: any other choice risked a crash once this
   // block's  trigger code ended up in a relocated bank.
   {
     'type': `background_fade_to`,
@@ -813,7 +825,7 @@ Blockly.defineBlocksWithJsonArray([
   // 0-31, rows 0-10/pfres-1 - the same space background_get_pixel/
   // background_change_pixel already read/write) and sprite coordinates (the
   // raw X/Y a Player/Missile/Ball's  X/Y setter blocks use) - see the
-  // real batari Basic formulas in generators/bbasic/background.js's own
+  // real batari Basic formulas in generators/bbasic/background.js's
   // comment. One value-returning block per DIRECTION (two total, not one
   // per axis), with an AXIS dropdown - same shape as background_get_
   // resolution above for the no-variable-required part, and the same "one
@@ -931,7 +943,7 @@ Blockly.defineBlocksWithJsonArray([
     'colour': BACKGROUND_COLOR,
     'tooltip': `Works out which exact playfield column/row the chosen sprite is touching right now ` +
       `- place this right after a "Collided <sprite> and Playfield" check. "Moving right"/"moving ` +
-      `down" should reflect the sprite's own CURRENT direction of travel (wire in whatever variable ` +
+      `down" should reflect the sprite's CURRENT direction of travel (wire in whatever variable ` +
       `already tracks that) - used to pick the right neighboring pixel if the sprite's exact position ` +
       `doesn't land precisely on a playfield pixel. Read the result with "Playfield collision column" ` +
       `/ "Playfield collision row" right after this runs.`,
@@ -965,7 +977,7 @@ Blockly.defineBlocksWithJsonArray([
     'tooltip': `Turns off every playfield pixel, the same as batari Basic's "pfclear".`,
   },
   // Block for scrolling the background. STOPATEDGE only has any effect for
-  // Up/Down/Up (2x)/Down (2x) - see backgroundScrollRowVarName's own
+  // Up/Down/Up (2x)/Down (2x) - see backgroundScrollRowVarName's
   // comment for why Left/Right have no edge to stop at on the standard
   // kernel (a fixed 32-column playfield width, nothing to scroll past).
   {
@@ -995,7 +1007,7 @@ Blockly.defineBlocksWithJsonArray([
       `RAM is enabled (Options tab) - real batari Basic doesn't support horizontal playfield scrolling ` +
       `on that kernel. "stop at top/bottom edge", when checked, ` +
       `tracks how far Up/Down/Up (2x)/Down (2x) scrolling has moved within the CURRENT background's ` +
-      `own real row count (not just the fixed 12-row window batari Basic's own pfscroll rotates through) ` +
+      `real row count (not just the fixed 12-row window batari Basic's pfscroll rotates through) ` +
       `and skips the scroll instead of continuing past the top (row 0) or the bottom (this background's ` +
       `last row). Has no effect on Left/Right, which have no edge to stop at - the standard kernel's ` +
       `playfield is always exactly 32 columns wide, so there's nothing beyond it to scroll into. Position ` +
@@ -1004,20 +1016,43 @@ Blockly.defineBlocksWithJsonArray([
       `the edges itself.`,
   },
   // Read-only - how far Up/Down scrolling has moved the CURRENTLY shown
-  // background from its own top row (0 = top, at most that background's
-  // own row count minus the visible row count - see backgroundScrollRowVarName's
-  // own comment). Reset to 0 every time newbackground changes. Only ever
-  // updated by background_scroll's own Up/Down/Up (2x)/Down (2x) calls
-  // (Left/Right never touch it, see that block's own tooltip).
+  // background from its top row (0 = top, at most that background's
+  // row count minus the visible row count - see backgroundScrollRowVarName's
+  // comment). Reset to 0 every time newbackground changes. Only ever
+  // updated by background_scroll's Up/Down/Up (2x)/Down (2x) calls
+  // (Left/Right never touch it, see that block's tooltip).
   {
     'type': `background_scroll_position`,
     'message0': `${BACKGROUND_ICON} Background scroll position`,
     'args0': [],
     'output': 'Number',
     'colour': BACKGROUND_COLOR,
-    'tooltip': `How many rows Up/Down scrolling has moved the currently shown background from its own top ` +
+    'tooltip': `How many rows Up/Down scrolling has moved the currently shown background from its top ` +
       `row (0 = top). Only updated by "Background scroll" blocks using Up/Down/Up (2x)/Down (2x) - Left/` +
       `Right don't affect it. Resets to 0 whenever a different background is switched to.`,
+  },
+  // Jumps the scroll position to a chosen row instead of always starting at
+  // the top - see this block's generator in generators/bbasic/background.js.
+  {
+    'type': `background_scroll_set_row`,
+    'message0': `${BACKGROUND_ICON} Set background scroll to row %1`,
+    'args0': [
+      {
+        'type': 'input_value',
+        'name': 'ROW',
+        'check': 'Number',
+      },
+    ],
+    'inputsInline': true,
+    'previousStatement': null,
+    'nextStatement': null,
+    'colour': BACKGROUND_COLOR,
+    'tooltip': `Moves the scroll to start at this row of the background (0 = the top, the default). For ` +
+      `example, with a 64-row background and a 12-row screen, 32 shows rows 32 to 43. A row past the ` +
+      `last scrollable one is clamped to it. Only does anything for a background taller than the ` +
+      `screen. Works whether it comes before or after a "Set background" block in the same event, and ` +
+      `sprites that follow the scroll aren't moved. Use it right after switching backgrounds, or ` +
+      `later to jump the view.`,
   },
   // Block for drawing the screen
   {
@@ -1036,7 +1071,7 @@ Blockly.defineBlocksWithJsonArray([
   // reasoning draw_screen above already lives in this file despite not
   // being "background_"-prefixed. Self-contained, unlike every other
   // trigger block in this codebase (Fire/Bounce/Seek/Fade all leave their
-  // own timing up to the user) - confirmed with the user: a raw on/off
+  // timing up to the user) - confirmed with the user: a raw on/off
   // toggle only sets a constant one-scanline offset, not an actual
   // vibration, so a useful "shake" needs the frame-by-frame alternation
   // built in, not left for the user to wire up themselves.
@@ -1070,7 +1105,7 @@ Blockly.defineBlocksWithJsonArray([
 // bits, and generators/bbasic/background.js for where that bit actually
 // gets set (inside the per-frame check's  step branch, only the exact
 // frame a step causes it to reach the target, either direction) and
-// checked-and-cleared (this block's  generator). Used to have its own
+// checked-and-cleared (this block's  generator). Used to have its
 // DIRECTION dropdown (fading in/brightening vs fading out/dimming), removed
 // since a project reacting to "this fade is done" regardless of direction
 // needed two near-identical copies of this block wired to the same DO stack
@@ -1101,6 +1136,28 @@ Blockly.Blocks['background_fade_finished'] = {
     this.setTooltip('Runs the connected blocks once, the moment a matching "Fade" block (same Background/' +
       'Playfield choice) reaches its target color. Does nothing if no matching fade ever runs anywhere ' +
       'in the project.');
+  },
+};
+
+// Runs its blocks once, the moment background_scroll lands a row-step on the
+// top or bottom row - see backgroundScrollEdgeFlagsVarName. Works like
+// background_fade_finished above (the flag is set by the scroll block and
+// cleared here as the blocks run).
+Blockly.Blocks['background_scroll_edge_reached'] = {
+  init: function() {
+    this.appendDummyInput()
+        .appendField(`${BACKGROUND_ICON} When background scroll reaches the`)
+        .appendField(new Blockly.FieldDropdown([
+          ['Top', 'top'],
+          ['Bottom', 'bottom'],
+        ]), 'EDGE');
+    this.appendStatementInput('DO');
+    this.setPreviousStatement(true);
+    this.setNextStatement(true);
+    this.setColour(BACKGROUND_COLOR);
+    this.setTooltip('Runs the connected blocks once, each time a "Background scroll" (Up/Down) moves the ' +
+      'view onto the top row or the bottom row of the current background. Reaching the edge by "Set ' +
+      'background scroll to row" or by switching backgrounds does not count.');
   },
 };
 

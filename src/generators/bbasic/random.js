@@ -29,7 +29,7 @@ export default (Blockly) => {
   // makes it an explicit, guaranteed part of THIS block's  output
   // instead of an implicit assumption about assignment behavior elsewhere.
   //
-  // rand16 gets that same clamped byte XORed against 255 (bB's own "^"
+  // rand16 gets that same clamped byte XORed against 255 (bB's "^"
   // bitwise XOR operator - confirmed against the real command reference,
   // randomterrain.com's batari Basic commands page) rather than the
   // identical value "rand" just got: seeding both registers with the exact

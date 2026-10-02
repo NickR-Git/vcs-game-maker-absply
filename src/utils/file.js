@@ -14,7 +14,7 @@ export const openFileDialog = (accept) => new Promise((resolve, reject) => {
 // once (e.g. PlayerEditor.vue's "Import animation frames") - resolves
 // with a plain array (not the native FileList this.files itself is), so
 // every caller can use ordinary Array methods (map/sort/etc.) on it directly
-// without an Array.from() of their own.
+// without an Array.from().
 export const openFileDialogMultiple = (accept) => new Promise((resolve, reject) => {
   const input = document.createElement('input');
   input.type = 'file';

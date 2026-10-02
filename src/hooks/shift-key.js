@@ -10,7 +10,7 @@ import {ref} from '@vue/composition-api';
 // never the real MouseEvent a shiftKey check would normally read off of.
 // Tracked via plain keydown/keyup, independent of any specific canvas or
 // drag gesture, so it's already correct the moment a drag starts rather
-// than needing its own mouse-event plumbing threaded through the tool
+// than needing its mouse-event plumbing threaded through the tool
 // interface. The window "blur" listener guards against a genuinely stuck
 // "held" state if focus leaves the page (e.g. alt-tabbing away) while Shift
 // is still physically down - there's no keyup to ever un-stick it otherwise.

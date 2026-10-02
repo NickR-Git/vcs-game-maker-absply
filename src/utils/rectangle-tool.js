@@ -6,7 +6,7 @@ import {useShiftKey} from '../hooks/shift-key';
 // (equal width/height) on whichever axis moved further, keeping the same
 // direction (up/down, left/right) the drag was already going - same
 // "constrain to the larger axis, preserve direction" approach line-tool.js
-// uses for its own 45-degree snap.
+// uses for its 45-degree snap.
 const squareEndpoint = (x0, y0, x1, y1) => {
   const dx = x1 - x0;
   const dy = y1 - y0;
@@ -19,10 +19,10 @@ const squareEndpoint = (x0, y0, x1, y1) => {
 /**
  * A rectangle-outline tool matching @curtishughes/pixel-editor's Tool
  * interface (handlePointerDown/handlePointerMove/handlePointerUp - see its
- * own Pencil.js). The library ships its own Rectangle tool (tools/
+ * Pencil.js). The library ships its Rectangle tool (tools/
  * Rectangle.js), but it has no way to see keyboard state for a Shift-to-
  * square constraint (same reasoning as line-tool.js not reusing the
- * library's own Line), so this is a standalone equivalent with that added.
+ * library's Line), so this is a standalone equivalent with that added.
  */
 export default class Rectangle {
   /** @param {string} color */

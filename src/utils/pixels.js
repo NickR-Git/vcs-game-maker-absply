@@ -20,14 +20,14 @@ export const scalePixelMatrixHeight = (pixels, newHeight, width) => {
 };
 
 // Shared by every "resize this pixel matrix to a new height" call site
-// (PixelEditor.vue's  single-frame resize, and PlayerEditor.vue's own
+// (PixelEditor.vue's  single-frame resize, and PlayerEditor.vue's
 // "apply to every frame in this animation" option) so the two never drift
 // apart on what "resize" actually means. scaleContents picks between the
 // two available strategies: nearest-neighbor resampling the existing
 // content to fit (scalePixelMatrixHeight above), or the plain default -
 // crop extra rows off the bottom, or pad new blank rows on - which every
 // frame resize used before scaling was ever an option, and stays the
-// default (see PixelEditor.vue's own "off by default" reasoning) so an
+// default (see PixelEditor.vue's "off by default" reasoning) so an
 // occasional resize doesn't silently start distorting artwork the user
 // only meant to crop or extend.
 export const resizePixelMatrixHeight = (pixels, newHeight, width, scaleContents) => {

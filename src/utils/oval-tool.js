@@ -44,9 +44,9 @@ const ellipseOutline = (xStart, yStart, xEnd, yEnd, color) => {
 /**
  * An oval/circle-outline tool matching @curtishughes/pixel-editor's Tool
  * interface (handlePointerDown/handlePointerMove/handlePointerUp - see its
- * own Pencil.js). The library has no ellipse tool at all, so this is built
- * from scratch, following the same drag-a-bounding-box shape as its own
- * Rectangle tool (and this app's own rectangle-tool.js) - the corner
+ * Pencil.js). The library has no ellipse tool at all, so this is built
+ * from scratch, following the same drag-a-bounding-box shape as its
+ * Rectangle tool (and this app's rectangle-tool.js) - the corner
  * dragged from is one corner of the ellipse's bounding box, the corner
  * dragged to is the opposite one.
  */

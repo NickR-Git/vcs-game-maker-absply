@@ -128,7 +128,7 @@ const runWasi = async (wasmPath, args, stdinText, preopens, log) => {
   return {exitCode, stdout, stderr, dirs, rawFiles, elapsedMs};
 };
 
-// Matches the real toolchain's own "(N) message" diagnostic format (used by
+// Matches the real toolchain's "(N) message" diagnostic format (used by
 // preprocess.wasm and 2600basic.wasm), same as the old npm compiler wrapper.
 const parseParenErrors = (text) => {
   const re = /[(](\d+)[)]:?\s*(.+)/;
@@ -140,7 +140,7 @@ const parseParenErrors = (text) => {
   return errors;
 };
 
-// Matches DASM's own "file (N): kind: message" diagnostic format.
+// Matches DASM's "file (N): kind: message" diagnostic format.
 const parseDasmErrors = (text) => {
   const re = /[/]*([^( ]+)\s*[(](\d+)[)]\s*:\s*(.+?):\s*(.*)/;
   const errors = [];
@@ -151,7 +151,7 @@ const parseDasmErrors = (text) => {
   return errors;
 };
 
-// joinedOverride lets a caller that's already built its own (better-
+// joinedOverride lets a caller that's already built its (better-
 // annotated) multi-line summary - see assemble()'s main.asm context lines -
 // use that verbatim instead of the plain "Line N: msg" default.
 const prepareException = (mainMessage, errors, joinedOverride) => {
@@ -270,7 +270,7 @@ const assemble = async (mainAsmContent, workDir, log) => {
   const partialOutput = output;
   const partialSymbolmap = symText ? parseSymbolmap(symText) : undefined;
   if (errors.length) {
-    // DASM's own "Line N" refers to main.asm - the fully macro-expanded
+    // DASM's "Line N" refers to main.asm - the fully macro-expanded
     // assembly DASM actually saw, NOT the bBasic source shown elsewhere in
     // the app (hooks/rom.js's showError annotates against that SOURCE
     // instead, so its line numbers never line up here - confirmed directly:
@@ -279,8 +279,8 @@ const assemble = async (mainAsmContent, workDir, log) => {
     // main.asm and the lookup just fell off the end of it). Annotated here,
     // against main.asm itself (which this function already has in hand),
     // so the real offending line - and a few lines of context around it,
-    // since a single line rarely explains a bank/segment-tracking error on
-    // its own - travels with the error instead of being silently lost.
+    // since a single line rarely explains a bank/segment-tracking error by
+    // itself - so it travels with the error instead of being silently lost.
     const asmLines = mainAsmContent.split('\n');
     // A generous window before the error (not just a few lines) - an
     // "Origin Reverse-indexed" failure is frequently reported several
@@ -308,7 +308,7 @@ const assemble = async (mainAsmContent, workDir, log) => {
     // Matches the old npm wrapper's  fallback message, which
     // hooks/rom.js's isOverflowError() specifically looks for to trigger its
     // automatic event/graphics relocation retry. Only reached now when DASM
-    // failed to produce output AND left no parseable error of its own -
+    // failed to produce output AND left no parseable error -
     // genuinely the "ran out of room, no specific line to blame" case.
     const err = prepareException('Errors while assembling.',
         [{line: 0, msg: 'No symbol table generated, maybe segment overflow?'}]);

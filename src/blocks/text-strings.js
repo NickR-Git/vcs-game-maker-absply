@@ -119,7 +119,7 @@ export const processTextStringsStorageDefaults = (textStringsStorage) => {
     // ref) from an EXISTING saved project's JSON, which never had this key
     // at all - Vue 2's reactivity can't detect a brand new property added to
     // an already-observed object via plain assignment (the classic "Vue
-    // cannot detect property addition" caveat), so TextEditor.vue's own
+    // cannot detect property addition" caveat), so TextEditor.vue's
     // ":counter" binding (which reads entry.wrapToLine2) silently never
     // updated on toggle - confirmed as a real reported bug ("it should
     // update the character count without selecting another text card").

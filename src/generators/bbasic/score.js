@@ -11,7 +11,7 @@ import {effectiveBackgroundRows} from '../../blocks/background';
 // (not 'background') - see the scoreBkColorNeedsOwnVar pre-scan in
 // generators/bbasic.js's init(). The standard "dim <name> = <letter>"
 // mechanism (definitions_['variables'], built from that same pool) then
-// declares it automatically, with no aliasing/chaining of our own needed -
+// declares it automatically, with no aliasing/chaining needed -
 // see generateScoreBkColorRuntimeDims below for why that matters.
 export const scoreBkColorVarName = () => 'scorebkcolor';
 
@@ -146,7 +146,7 @@ export default (Blockly) => {
     // to decimal" path built for RUNTIME expressions below, which silently
     // wrapped anything over 255 (confirmed as a real reported bug: typing
     // 111110 displayed "000006", since 111110 mod 256 is 6) - a literal
-    // never needed that conversion at all, it can just be split into its own
+    // never needed that conversion at all, it can just be split into its
     // six decimal digits directly.
     const literalMatch = /^-?\d+$/.test(argument0.trim());
     if (literalMatch) {
@@ -219,7 +219,7 @@ export default (Blockly) => {
 
   Blockly.BBasic[`score_fade_to`] = function(block) {
     // Score's color fade trigger - same shared mechanism as Background's
-    // own "Fade color to" (see emitColorFadeTrigger in
+    // "Fade color to" (see emitColorFadeTrigger in
     // generators/bbasic/background.js), always targeting scorecolor.
     const color = Blockly.BBasic.valueToCode(block, 'VALUE', Blockly.BBasic.ORDER_NONE) || '0';
     const frames = Blockly.BBasic.valueToCode(block, 'FRAMES', Blockly.BBasic.ORDER_NONE) || '1';
@@ -228,7 +228,7 @@ export default (Blockly) => {
 
   Blockly.BBasic[`score_fade_finished`] = function(block) {
     // Score's  fade-finished watch - same shared mechanism as
-    // Background's own "When ... color has finished fading" (see
+    // Background's "When ... color has finished fading" (see
     // emitFadeFinishedWatch in generators/bbasic/background.js), always
     // targeting scorecolor.
     return Blockly.BBasic.emitFadeFinishedWatch(block, 'scorecolor');
@@ -242,7 +242,7 @@ export default (Blockly) => {
     // has no runtime-settable background color at all, so referencing the
     // variable without that would be a compile error against an undeclared
     // name. Silently no-op otherwise, same convention as
-    // generateScoreBkColorAsm/Defaults' own "nothing to do" cases just above.
+    // generateScoreBkColorAsm/Defaults' "nothing to do" cases just above.
     if (!Blockly.BBasic.isTextMinikernelActive()) return '';
     const argument0 = Blockly.BBasic.valueToCode(block, 'VALUE',
         Blockly.BBasic.ORDER_ASSIGNMENT) || '0';
@@ -267,7 +267,7 @@ export default (Blockly) => {
   // via the kernel's  internal call, never by falling through from the
   // line above, which naturally lands it in whatever bank ends up last
   // once every other, earlier piece of code has been assigned to a bank
-  // (matching the reference docs' own "add this to last bank"
+  // (matching the reference docs' "add this to last bank"
   // instruction).
   //
   // Only emitted when the Text Minikernel ISN'T active (that case is
@@ -288,7 +288,7 @@ export default (Blockly) => {
   // "Use background color" (config.scoreBkColor === 'background') takes
   // advantage of that: backgroundrealcolor is the same live bB variable
   // commongamelogic already copies into COLUBK every frame (see
-  // bbasic.bb.hbs and generators/bbasic/background.js's own "Background:
+  // bbasic.bb.hbs and generators/bbasic/background.js's "Background:
   // set color" generator, which can write there too), so reading it here
   // tracks the ACTUAL current background color, live, including any later
   // runtime change - not just this project's starting color the way any
@@ -309,7 +309,7 @@ export default (Blockly) => {
       '       lda backgroundrealcolor' :
       `       lda #${colorByteToBuildBBasic(this.resolveScoreBkColorByte(config.scoreBkColor))}`;
     // "end" has to sit at column 0, same quirk score_digit_set works around
-    // with its own "@end" trick (see its  comment) - confirmed directly:
+    // with its "@end" trick (see its  comment) - confirmed directly:
     // the leading space this used to have here reproduced the exact
     // "Missing end keyword at end of inline asm" failure, for every project
     // with the Text Minikernel inactive (the only condition this function
@@ -344,7 +344,7 @@ export default (Blockly) => {
   // alias onto "score"/"score+N" (bB's  built-in multi-byte variable,
   // not another ordinary dim). So both cases below resolve to a raw
   // target instead: "Use background color" reads backgroundRealColorRawTarget()
-  // (the exact same raw letter/varN backgroundrealcolor's own
+  // (the exact same raw letter/varN backgroundrealcolor's
   // SYSTEM_VARIABLES entry already resolves to - see generators/bbasic.js),
   // so it stays live/tracking automatically, the same reasoning as
   // generateScoreBkColorAsm above; anything else reserves scorebkcolor
@@ -363,7 +363,7 @@ export default (Blockly) => {
     // not backgroundrealcolor's  raw target.
     if (this.usesScoreBkColorSetter || !this.scoreBkColorIsBackground(config.scoreBkColor)) return '';
     const comment = (config.showVariableComments ?? true) ?
-      '  ; score row\'s own background color, aliased onto the live background color' : '';
+      '  ; score row\'s background color, aliased onto the live background color' : '';
     return `\n dim scorebkcolor = ${this.backgroundRealColorRawTarget()}${comment}`;
   };
 
@@ -372,12 +372,12 @@ export default (Blockly) => {
   // spot TextColor's  default gets written (see
   // generateTextMinikernelDefaults in generators/bbasic/text-minikernel.js,
   // spliced right alongside this in generators/bbasic.js). Needed for the
-  // literal/default case, and also (see usesScoreBkColorSetter's own
+  // literal/default case, and also (see usesScoreBkColorSetter's
   // comment in generators/bbasic.js) whenever a "Score set background
-  // color" block is in use, even with the picker left at its own "Use
+  // color" block is in use, even with the picker left at its "Use
   // background color" default - that block writes to a real, independent
   // byte now, not an alias, so it needs a real starting value the same way
-  // any other independent color var does (resolveScoreBkColorByte's own
+  // any other independent color var does (resolveScoreBkColorByte's
   // "unset falls back to black" default, same as every other case that
   // reaches it). "Use background color" with NO setter block in use is the
   // only remaining case that still aliases directly onto backgroundrealcolor
@@ -422,7 +422,7 @@ export default (Blockly) => {
     // builds) and feeds "current +/- delta" into the same poke helper,
     // instead of a plain literal/expression. Whatever that computes is
     // masked down to 4 bits when it's poked back in (see
-    // buildDigitPokeLines's own "and #$0F") - not a decimal wrap or carry
+    // buildDigitPokeLines's "and #$0F") - not a decimal wrap or carry
     // into the neighboring digit, just a hex nibble truncation, which is
     // why the block's  tooltip tells the user to keep the result inside
     // 0-9 themselves rather than claiming any automatic correction.
@@ -470,7 +470,7 @@ export default (Blockly) => {
   // A score bar's byte is a raw bit pattern read directly by the kernel, not
   // a plain "N units" value - so building "N units filled, growing outward
   // from the score" means constructing that pattern one step at a time, the
-  // same way the batari Basic docs' own "add a life"/"add to health" examples
+  // same way the batari Basic docs' "add a life"/"add to health" examples
   // do (pfscoreN = pfscoreN*2|1 for a solid bar, pfscoreN = pfscoreN*4|2 for
   // evenly spaced dots) - just run from a value of 0, N times, instead of
   // once. Confirmed directly against the compiler and emulator: N=5 health
@@ -510,7 +510,7 @@ export default (Blockly) => {
 
   // Grows or shrinks a score bar by repeating its one-step doubling/halving
   // move (see buildBarFillLoop above) a number of times, instead of just
-  // once like the docs' own "add a life"/"add to health" examples do.
+  // once like the docs' "add a life"/"add to health" examples do.
   //
   // The existing raw score_bar_get already returns the bar's plain byte
   // value (not BCD, a normal 0-255 number) - callers wanting a relative

@@ -144,7 +144,7 @@ export default {
       this.stopCapture();
       this.capturing = {kind, portIndex, control};
       // Capturing phase + preventDefault so the key that's being bound
-      // (e.g. Space, an arrow key) doesn't also trigger its own default
+      // (e.g. Space, an arrow key) doesn't also trigger its default
       // browser behavior (scrolling, etc.) on the very keypress that binds
       // it.
       this.keydownListener = (event) => {
@@ -194,7 +194,7 @@ export default {
 .key-mapping-controls {
   /* One control per row (not flex-wrap) so this always renders as exactly
      5 rows (Up/Down/Left/Right/Fire), regardless of how wide any one
-     port's own bound-key labels happen to render - Player 1 and Player 2
+     port's bound-key labels happen to render - Player 1 and Player 2
      often bind different-length key names (e.g. "ArrowUp" vs "KeyW"), and
      flex-wrap let that push a control onto a 6th row on one side but not
      the other, leaving the Keypad heading/grid below it at a different
@@ -208,7 +208,7 @@ export default {
 .key-mapping-keypad {
   /* A real Keypad Controller is 3 columns x 4 rows (1,2,3 / 4,5,6 / 7,8,9 /
      star,0,pound) - grid, not flex-wrap, so this always keeps exactly 3 per
-     row regardless of how wide any individual button's own bound-key label
+     row regardless of how wide any individual button's bound-key label
      happens to render (flex-wrap let a 4th narrow button ride up onto a
      row when the first 3 were narrow enough to leave room). */
   display: grid;
@@ -216,21 +216,21 @@ export default {
 }
 
 /* Same flat-icon, fade-in-on-hover/blue-on-press treatment as every other
-   icon button in the app (e.g. Project.vue's own .project-flat-icon-btn,
-   GeneratedCode.vue's own .generated-code-flat-icon-btn) - transparent
+   icon button in the app (e.g. Project.vue's .project-flat-icon-btn,
+   GeneratedCode.vue's .generated-code-flat-icon-btn) - transparent
    background (no Vuetify default hover circle), icon fades from a faint
-   grey to near-black on hover, and flashes the app's own blue on an actual
+   grey to near-black on hover, and flashes the app's blue on an actual
    click/press. */
 .emulator-flat-icon-btn {
   background-color: transparent !important;
   box-shadow: none !important;
   /* Pushes this button to the far right of .emulator-toolbar-row, flush
-     with the emulator window's own right edge (#gopher2600-target-container
-     shares that same row's width - see App.vue's own template). Auto
-     margins still absorb a flex row's free space even when the item's own
-     flex-grow is 0 - which it is here, forced by App.vue's own
+     with the emulator window's right edge (#gopher2600-target-container
+     shares that same row's width - see App.vue's template). Auto
+     margins still absorb a flex row's free space even when the item's
+     flex-grow is 0 - which it is here, forced by App.vue's
      ".emulator-drawer-inner .v-btn { flex: 0 0 auto !important }" (for an
-     unrelated reason - see that rule's own comment - that rules out
+     unrelated reason - see that rule's comment - that rules out
      growing "Refresh emulator" itself to push this button over instead). */
   margin-left: auto !important;
   margin-right: 4px !important;

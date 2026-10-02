@@ -9,7 +9,7 @@
         <p class="v-messages theme--light v-messages__message music-intro-paragraph">
           Compose songs here, then play one at runtime with a "Play song" block (Actions tab).
           A song is a sequence of patterns (drag to reorder, or repeat one in a row); each
-          pattern holds one or more instrument tracks, note by note, with its own tempo if it
+          pattern holds one or more instrument tracks, note by note, with its tempo if it
           needs one.
         </p>
       </v-card-text>
@@ -694,9 +694,9 @@
                         </div>
                       </div>
 
-                      <!-- Live preview of the Select tool's own in-progress
+                      <!-- Live preview of the Select tool's in-progress
                            drag (see marqueeSelecting/handleMarqueeSelectMove) -
-                           position: fixed (see its own CSS) sized directly off
+                           position: fixed (see its CSS) sized directly off
                            the drag's raw clientX/clientY corners, so it needs
                            no container-relative math at all; the actual
                            selection itself is only computed once on mouseup
@@ -813,7 +813,7 @@ const clampPianoRollZoom = (value) => (Number.isFinite(value) ? Math.min(16, Mat
 // The volume row's  height (see .piano-roll-volume-cell) - draggable via
 // its  resize handle (handleVolumeRowResizeMove below), same idea as the
 // piano roll's  horizontal zoom just above, just for this row's vertical
-// size instead. Stored separately (own key, own shared-across-every-song
+// size instead. Stored separately (shared-across-every-song
 // scope) rather than folded into pianoRollZoom - zooming the pitch grid and
 // resizing this row are independent adjustments, a project with a lot of
 // fine per-note volume automation wants this tall regardless of whatever
@@ -828,9 +828,9 @@ const clampVolumeRowHeight = (value) =>
   (Number.isFinite(value) ? Math.min(VOLUME_ROW_HEIGHT_MAX, Math.max(VOLUME_ROW_HEIGHT_MIN, value)) :
     VOLUME_ROW_HEIGHT_MIN);
 
-// Same idea as VOLUME_ROW_HEIGHT_KEY just above, for the pitch grid's own
+// Same idea as VOLUME_ROW_HEIGHT_KEY just above, for the pitch grid's
 // height instead - previously a flat, un-resizable 340px (.piano-roll-
-// scroll's own old max-height). 340 is kept as the default so existing
+// scroll's old max-height). 340 is kept as the default so existing
 // projects/sessions open at the exact same height as before until the user
 // actually drags the new handle between it and the volume row.
 const PIANO_ROLL_HEIGHT_KEY = 'vcs-game-maker.music-piano-roll.pitch-grid-height';
@@ -846,7 +846,7 @@ const clampPianoRollHeight = (value) =>
 // should survive navigating away to another tab and back, not just reset
 // silently. Loading/keys/the effective-mute formula (isTrackMuted below)
 // now live in hooks/project.js, shared with generators/bbasic/music.js so
-// the compiled ROM honors the exact same mute/solo state as this tab's own
+// the compiled ROM honors the exact same mute/solo state as this tab's
 // preview - see isMusicTrackMuted's  comment there.
 
 // The only "row" an untunable instrument (see utils/music-notes.js) ever
@@ -854,15 +854,15 @@ const clampPianoRollHeight = (value) =>
 // on/off hit per note event.
 const HIT_ROW = [{midi: 'hit', label: 'Hit'}];
 
-// Same array the template's own "sharedNoteRows" binding builds (see the
-// return statement below) - hoisted to module scope so the Move tool's own
+// Same array the template's "sharedNoteRows" binding builds (see the
+// return statement below) - hoisted to module scope so the Move tool's
 // drag logic can look up a row by index/offset too, not just render them.
 const SHARED_NOTE_ROWS = [...CANONICAL_NOTE_ROWS, ...HIT_ROW];
-// .piano-roll-cell's own fixed CSS height (see its rule further down) -
+// .piano-roll-cell's fixed CSS height (see its rule further down) -
 // duplicated here as a named constant (not read from the DOM) since the
 // Move tool's vertical drag needs to convert a pixel Y-delta into a row
 // count entirely in JS, and this value never actually changes (unlike the
-// pattern's own per-step width, which DOES scale with pianoRollZoom and so
+// pattern's per-step width, which DOES scale with pianoRollZoom and so
 // has to come from cellWidthPx() instead).
 const PIANO_ROLL_ROW_HEIGHT_PX = 20;
 
@@ -872,14 +872,14 @@ const PIANO_ROLL_ROW_HEIGHT_PX = 20;
 const PIANO_ROLL_CELL_WIDTH_BASE = 28;
 // Matches .piano-roll-label-spacer/.piano-roll-label's  flex-basis -
 // the row-label column's width doesn't scale with zoom, so it has to be
-// subtracted before dividing the remaining space among this pattern's own
+// subtracted before dividing the remaining space among this pattern's
 // steps (see handleFitZoom). Wide enough for a black-key row's  combined
 // "C#4/Db4"-style label (see noteLabel in utils/music-notes.js) - a natural
 // note's  shorter single-name label ("C4") fits with room to spare.
 // Sized generously past the widest real label (measured ~50px) rather than
 // exactly to it - flex-shrink:0 on both rules means actual content wider
 // than this basis would grow the column anyway (each .piano-roll-row is its
-// own independent flex container, so a mix of over- and under-width rows
+// independent flex container, so a mix of over- and under-width rows
 // breaks the grid's  column alignment down the page - a real, visible
 // bug this fixes).
 const PIANO_ROLL_LABEL_WIDTH = 58;
@@ -901,7 +901,7 @@ export default defineComponent({
     const songsStorage = useSongsStorage();
     const soundEffectsStorage = useSoundEffectsStorage();
     // Same shared app-wide storage keys as SoundFXEditor.vue's  identical
-    // dimSoundFx/dimSoundFxPercent pair (see useDimSoundFxStorage's own
+    // dimSoundFx/dimSoundFxPercent pair (see useDimSoundFxStorage's
     // comment in hooks/project.js - a standing app preference, not part of
     // this project's  saved configuration) - deliberately not scoped to
     // this tab, so toggling/adjusting either one here or on the Sound tab
@@ -957,7 +957,7 @@ export default defineComponent({
     // .piano-roll-volume-resize-handle in the template) - same
     // mousedown/mousemove/mouseup-on-window shape as startResize/
     // handleResizeMove below (a note's  length handle), just tracking
-    // one ref instead of mutating a note, and with no "own overlapping note"
+    // one ref instead of mutating a note, and with no "overlapping note"
     // concerns to speak of.
     const volumeRowResizing = ref(null);
     const handleVolumeRowResizeMove = (event) => {
@@ -987,7 +987,7 @@ export default defineComponent({
       },
     });
 
-    // Drag-to-resize for the pitch grid's own handle, sitting on the same
+    // Drag-to-resize for the pitch grid's handle, sitting on the same
     // boundary line as the volume row's handle just above (the top edge of
     // the volume row IS the bottom edge of the pitch grid) - same shape as
     // startVolumeRowResize/handleVolumeRowResizeMove, just growing the
@@ -1029,7 +1029,7 @@ export default defineComponent({
     };
     // The step width 100% zoom itself means - always recalibrated (see
     // recalculateFitBaseWidth) to whatever width makes the CURRENT pattern's
-    // own steps exactly fill the visible area, so 100% always reads as "fit
+    // steps exactly fill the visible area, so 100% always reads as "fit
     // to this pattern's Length" rather than some arbitrary fixed pixel size
     // - the slider still zooms in/out relative to that baseline exactly like
     // it would against a fixed one. Starts at the plain default
@@ -1058,12 +1058,12 @@ export default defineComponent({
     // Keeps the volume row's  horizontal position matching the main
     // grid's - they're two separate scrollable elements now (see the
     // template's .piano-roll-scroll/.piano-roll-volume-scroll split),
-    // not one shared scroll container, specifically so the grid's own
-    // native scrollbar renders at ITS OWN bottom edge (right above the
+    // not one shared scroll container, specifically so the grid's
+    // native scrollbar renders at ITS bottom edge (right above the
     // volume row) instead of below everything, including the volume row
     // itself. Same data-song-id lookup technique as
     // recalculateFitBaseWidth above, for the same reason (a v-for'd
-    // template ref isn't reliable here). The volume strip's own
+    // template ref isn't reliable here). The volume strip's
     // overflow is hidden (see its  CSS), not auto/scroll - it never
     // shows its  scrollbar or accepts direct dragging, purely mirrors
     // whatever this one-way sync sets.
@@ -1093,7 +1093,7 @@ export default defineComponent({
 
     // Plain functions, not computed()s - matches activePattern etc. below:
     // soundEffectsStorage is a plain mutable object shared with (and edited
-    // on) the separate Sound tab, whose own edits go through the exact same
+    // on) the separate Sound tab, whose edits go through the exact same
     // "mutate in place, then reassign the same object reference" pattern as
     // this file's  handleChildChange - a computed() here would go stale
     // the moment the Sound tab changed anything, since Vue's ref reactivity
@@ -1108,8 +1108,8 @@ export default defineComponent({
       }
     };
 
-    // Only sounds tagged as an instrument (see SoundFXEditor.vue's own
-    // isInstrument toggle) are meant to be picked as a track's own
+    // Only sounds tagged as an instrument (see SoundFXEditor.vue's
+    // isInstrument toggle) are meant to be picked as a track's
     // instrument here - a plain, untagged sound effect could still be
     // ALREADY assigned to a track from before it was untagged (see
     // trackSoundEffect, unaffected by this filter, still resolves it by id
@@ -1123,7 +1123,7 @@ export default defineComponent({
 
     // Undo/redo for the pattern editor - one stack pair per pattern id
     // (patternUndoStacks/patternRedoStacks, reactive so the toolbar buttons'
-    // own disabled state updates), storing plain-JSON snapshots of just the
+    // disabled state updates), storing plain-JSON snapshots of just the
     // fields a pattern edit can actually touch (name/tempo/useOwnTempo/
     // stepCount/loop/tracks - the same shape handleExportPattern already
     // treats as "this pattern's  content"), never its id. patternLastSnapshot
@@ -1155,7 +1155,7 @@ export default defineComponent({
     // dragging a note's resize handle or typing a pattern name fires this
     // watcher many times a second, and coalescing those into one undo step
     // per PAUSE in editing (not one per underlying mutation) matches how a
-    // typical undo history actually reads to a user - see stopResize's own
+    // typical undo history actually reads to a user - see stopResize's
     // single "release" point for the equivalent idea applied to just resize.
     let patternHistoryDebounce = null;
     watch(() => state.value.songs, () => {
@@ -1214,9 +1214,9 @@ export default defineComponent({
 
     // The Tempo (BPM) field's  min/max HTML attributes alone don't
     // actually stop a value typed outside that range from being applied
-    // (they only affect the spin-button arrows and the input's own
+    // (they only affect the spin-button arrows and the input's
     // :invalid styling, not v-model) - this is what actually enforces it,
-    // called from both the song- and pattern-level Tempo fields' own
+    // called from both the song- and pattern-level Tempo fields'
     // @change. Re-uses the exact same clampTempo also applied on load (see
     // processSongsStorageDefaults in blocks/music.js), so a value can't
     // reach storage out of range either way (typed directly, or loaded
@@ -1245,13 +1245,13 @@ export default defineComponent({
     // handleAddPattern/handleDuplicatePattern), not globally, unlike
     // song.id/soundEffect.id elsewhere - useCollapsedIds keys purely off
     // entry.id, so a plain pattern object would collide between two
-    // different songs' own "Pattern 1". A synthetic {id: "songId:patternId"}
+    // different songs' "Pattern 1". A synthetic {id: "songId:patternId"}
     // entry (see patternCollapseEntry) disambiguates that without needing
     // to change useCollapsedIds itself. Two independent collapse states
     // share this same keying: the whole pattern sub-card (collapsing hides
     // everything below the Pattern name/Length/Tempo row - instruments,
     // piano roll, zoom/playback controls, all of it), and, nested one level
-    // in, just the Instruments list on its own (collapsing that alone still
+    // in, just the Instruments list by itself (collapsing that alone still
     // leaves the piano roll and zoom/playback controls visible).
     const patternCollapseEntry = (song, pattern) => ({id: `${song.id}:${pattern.id}`});
     const {isCollapsed: isPatternCollapsedRaw, toggleCollapsed: togglePatternCollapsedRaw,
@@ -1302,10 +1302,10 @@ export default defineComponent({
     const forceUpdate = () => instance.proxy.$forceUpdate();
 
     // Same "growing padding + a bottom border once actually scrolled"
-    // treatment as GraphicEditorToolbar.vue's own .graphic-editor-toolbar/
-    // isScrolled - that component finds its own .editor-container ancestor
+    // treatment as GraphicEditorToolbar.vue's .graphic-editor-toolbar/
+    // isScrolled - that component finds its .editor-container ancestor
     // in an Options API mounted() hook; this is the Composition API
-    // equivalent, using instance.proxy.$el (this component's own root is
+    // equivalent, using instance.proxy.$el (this component's root is
     // itself .editor-container's PARENT div, not that element, so this has
     // to search for it rather than just reading $el directly).
     const isMusicToolbarScrolled = ref(false);
@@ -1408,9 +1408,9 @@ export default defineComponent({
       if (tool !== 'move') pianoRollSelection.value = new Set();
       pianoRollTool.value = tool;
     };
-    // The active track's own notes currently marquee-selected (Select
+    // The active track's notes currently marquee-selected (Select
     // tool - see handleSelectMouseDown/stopMarqueeSelect below), as a Set of
-    // direct note-object references (stable for a note's own lifetime - a
+    // direct note-object references (stable for a note's lifetime - a
     // note is never replaced in place, only pushed/spliced - so reference
     // equality is all this needs, no separate id scheme). Checked by the
     // Move tool (handleCellMouseDown) to move every selected note together
@@ -1441,7 +1441,7 @@ export default defineComponent({
       // OUTGOING pattern currently has active. Track ids are only unique
       // WITHIN a pattern (see hiddenTrackKey's  comment), so the
       // per-pattern activeTrackIdsRef entry below can't carry "the same
-      // instrument" across patterns on its own - matching by soundEffectId
+      // instrument" across patterns by itself - matching by soundEffectId
       // instead keeps whichever instrument the user was just looking at
       // selected on the new pattern too, whenever that same instrument is
       // also used there, rather than falling back to track 1 every time.
@@ -1469,10 +1469,10 @@ export default defineComponent({
       const pattern = song.patterns.find(({id}) => id === patternId);
       // Full handleFitZoom (recalculate AND reset zoom to 1), not just
       // recalculateFitBaseWidth alone - pianoRollZoom is a single value
-      // shared across every song/pattern (see its own comment), so without
+      // shared across every song/pattern (see its comment), so without
       // this, switching to a pattern of a different length than whatever
       // was last viewed showed it at that stale zoom percentage instead of
-      // fit to ITS OWN length - confirmed as a real reported bug ("isn't
+      // fit to ITS length - confirmed as a real reported bug ("isn't
       // auto-resizing the zoom to the pattern length by default").
       if (pattern) handleFitZoom(song, pattern);
       if (pattern && previousSoundEffectId != null) {
@@ -1481,12 +1481,12 @@ export default defineComponent({
         if (matchingTrack) setActiveTrack(pattern, matchingTrack);
       }
       if (pattern && shouldFollowPlayback) handlePlayPattern(song, pattern);
-      // Switching patterns can swap in a whole new set of tracks whose own
+      // Switching patterns can swap in a whole new set of tracks whose
       // v-selects (Channel, Instrument) Vue's  v-for keying (by
       // track.id) may reuse the SAME DOM node for, if the new pattern
       // happens to have a track sharing that id with the old one's (e.g.
       // both patterns' first track is id 1) - a plain reactive update
-      // alone left a reused select showing the PREVIOUS pattern's own
+      // alone left a reused select showing the PREVIOUS pattern's
       // value rather than the new track's, same class of stale-Vuetify-
       // select bug as the Sound tab's  Frequency field and this same
       // Channel field's  default-value display, both already fixed the
@@ -1500,7 +1500,7 @@ export default defineComponent({
     // Which song the single editor below is showing - a view preference,
     // not project data (same reasoning as activePatternId above), persisted
     // so it survives leaving and returning to this tab. Unlike
-    // activePatternId (keyed per-song, since every song has its own
+    // activePatternId (keyed per-song, since every song has its
     // separately-remembered active pattern), there's only ever one song
     // being edited at a time, so this is a single scalar id, not a map.
     const activeSongId = () =>
@@ -1520,7 +1520,7 @@ export default defineComponent({
       setActiveSongId(songId);
       // Same free fit-to-length as setActivePattern gives a pattern switch -
       // switching songs also swaps in a whole different piano roll (this
-      // song's own active pattern), which needs fitting to ITS length too,
+      // song's active pattern), which needs fitting to ITS length too,
       // not whatever zoom was last left over from the previous song.
       const song = state.value.songs.find(({id}) => id === songId);
       const pattern = song && activePattern(song);
@@ -1536,7 +1536,7 @@ export default defineComponent({
         (song) => ({text: song.name || `Song ${song.id}`, value: song.id}))
         .sort((a, b) => a.text.localeCompare(b.text, undefined, {sensitivity: 'base'}));
 
-    // Combined "Editing song"/"Song name" field (see the template's own
+    // Combined "Editing song"/"Song name" field (see the template's
     // v-combobox) - same exact behavior as handlePatternFieldChange below,
     // just for the song picker instead of the pattern one: picking an
     // EXISTING song switches which one is active, typing a name that
@@ -1560,7 +1560,7 @@ export default defineComponent({
     };
 
     // Combined "Editing pattern"/"Pattern name" field (see the template's
-    // own v-combobox) - picking an EXISTING pattern from its dropdown
+    // v-combobox) - picking an EXISTING pattern from its dropdown
     // switches which one is active, exactly like the old separate
     // "Editing pattern" select did; typing something that doesn't match
     // any OTHER existing pattern's  name instead renames whichever
@@ -1639,11 +1639,11 @@ export default defineComponent({
       // pianoRollBaseWidth/pianoRollZoom are shared across every song (not
       // per-song state), so a freshly added song otherwise just inherits
       // whatever was left over from the last song/pattern edited, rather
-      // than a real 100% fit to its OWN piano-roll-scroll width - the same
+      // than a real 100% fit to its piano-roll-scroll width - the same
       // gap handleFitZoom's  button fixes for an EXISTING pattern.
       // setActiveSong above already calls handleFitZoom, but this new
       // song's .piano-roll-scroll element doesn't exist in the DOM yet at
-      // that point - recalculateFitBaseWidth's own querySelector would find
+      // that point - recalculateFitBaseWidth's querySelector would find
       // nothing and silently fall back to the unmeasured default width, so
       // this nextTick fixup re-measures once it actually exists.
       nextTick(() => handleFitZoom(newSong, newSong.patterns[0]));
@@ -1674,7 +1674,7 @@ export default defineComponent({
       setPatternCollapsed(newSong, newSong.patterns[0], isPatternCollapsed(song, song.patterns[0]));
       setActiveSong(newSong.id);
       handleChildChange();
-      // Same DOM-not-ready-yet reasoning as handleAddSong's own nextTick.
+      // Same DOM-not-ready-yet reasoning as handleAddSong's nextTick.
       nextTick(() => handleFitZoom(newSong, activePattern(newSong)));
     };
 
@@ -1694,7 +1694,7 @@ export default defineComponent({
     // ids are only meaningful within a single project's  storage. Also
     // bundles every Sound tab instrument any of this song's tracks
     // actually points at (see soundEffectIdsUsedBySong/handleImportSong's
-    // own importSoundEffects) - without this, a song exported and opened
+    // importSoundEffects) - without this, a song exported and opened
     // in a different project would still LOOK complete (every note has a
     // soundEffectId), but every one of those ids would be pointing at
     // either nothing or, worse, some unrelated instrument that just
@@ -1879,14 +1879,14 @@ export default defineComponent({
       song.patterns.push(newPattern);
       // Without this, a brand new pattern's synthetic collapse-state id
       // (song.id:pattern.id) has never been in the stored map, so
-      // isPatternCollapsed falls back to useCollapsedIds' own
+      // isPatternCollapsed falls back to useCollapsedIds'
       // defaultCollapsed (true here) and the pattern section this new
       // pattern becomes active in renders collapsed - confirmed as a real
       // reported bug ("don't collapse pattern section when creating a new
       // pattern").
       ensurePatternExpanded(patternCollapseEntry(song, newPattern));
       // setActivePattern itself now already fits the zoom to whichever
-      // pattern becomes active (see its own comment), so a brand new
+      // pattern becomes active (see its comment), so a brand new
       // pattern gets that for free here - no separate handleFitZoom call
       // needed.
       setActivePattern(song, newPattern.id);
@@ -1903,7 +1903,7 @@ export default defineComponent({
         name: `${pattern.name || 'Pattern'} copy`,
       };
       song.patterns.push(newPattern);
-      // Same reasoning as handleAddPattern's own call just above.
+      // Same reasoning as handleAddPattern's call just above.
       ensurePatternExpanded(patternCollapseEntry(song, newPattern));
       // Same free fit-to-length as handleAddPattern above, via
       // setActivePattern.
@@ -1951,7 +1951,7 @@ export default defineComponent({
     const setActiveTrack = (pattern, track) => {
       setActiveTrackId(pattern.id, track.id);
       // The marquee selection (see pianoRollSelection) only ever holds the
-      // PREVIOUSLY active track's own notes - switching tracks would
+      // PREVIOUSLY active track's notes - switching tracks would
       // otherwise leave a Move drag grabbing a different track's notes than
       // whichever one the user can currently see/intend to edit.
       pianoRollSelection.value = new Set();
@@ -1962,7 +1962,7 @@ export default defineComponent({
     // doesn't change monophonic/channel blocking or anything else about it,
     // just whether its  note bars are drawn. Keyed by pattern id (not
     // just track id) since track ids are only unique WITHIN a pattern, not
-    // globally - two different patterns can each have their own "track 1".
+    // globally - two different patterns can each have their "track 1".
     const hiddenTrackIds = ref({});
     const hiddenTrackKey = (pattern, track) => `${pattern.id}:${track.id}`;
     const isTrackHidden = (pattern, track) => !!hiddenTrackIds.value[hiddenTrackKey(pattern, track)];
@@ -1973,7 +1973,7 @@ export default defineComponent({
 
     // Which instrument rows are explicitly silenced during pattern/song
     // preview playback - same "view preference, not project data" shape as
-    // hiddenTrackIds above, just for audio instead of the piano roll's own
+    // hiddenTrackIds above, just for audio instead of the piano roll's
     // display (doesn't touch the compiled ROM at all - that has no concept
     // of muting, only the Music tab's  browser preview does). This is
     // only HALF of a track's  effective muted state now - see
@@ -1993,7 +1993,7 @@ export default defineComponent({
     const mutedTrackKey = (song, track) => `${song.id}:${track.id}`;
     const explicitlyMutedTrack = (song, track) => !!mutedTrackIds.value[mutedTrackKey(song, track)];
 
-    // Which instrument rows are soloed - see isMusicTrackMuted's own
+    // Which instrument rows are soloed - see isMusicTrackMuted's
     // comment (hooks/project.js) for why this is a separate set from
     // mutedTrackIds rather than folded into it. Song-scoped for the same
     // reason as mutedTrackIds above.
@@ -2002,7 +2002,7 @@ export default defineComponent({
     const isTrackSoloed = (song, track) => !!soloedTrackIds.value[soloedTrackKey(song, track)];
 
     // A track's REAL, effective muted state, used everywhere actual
-    // playback/note-color decisions are made (schedulePattern's own
+    // playback/note-color decisions are made (schedulePattern's
     // isTrackMuted callback in utils/music-playback.js, patternCellStyle's
     // note-dimming) - see isMusicTrackMuted in hooks/project.js (shared with
     // the ROM generator, so the compiled output honors the exact same
@@ -2016,7 +2016,7 @@ export default defineComponent({
     // - see setTrackMuted's  comment. Needed on any mute OR solo toggle,
     // for every track in the pattern (not just the one just clicked) since
     // toggling solo on one track changes every other track's  effective
-    // state too. Only reaches the pattern whose own button was clicked
+    // state too. Only reaches the pattern whose button was clicked
     // (same pre-existing limitation as before this became song-scoped) -
     // if a DIFFERENT pattern in the same song happens to be mid-playback
     // right now (e.g. as part of a playing Sequence), its  live audio
@@ -2088,7 +2088,7 @@ export default defineComponent({
     // not a separate, permanent identity tracked alongside position (an
     // earlier version of this kept the two as distinct values, one stable
     // across reordering and one just for display - reverted at the user's
-    // own explicit request in favor of a single number that always means
+    // explicit request in favor of a single number that always means
     // "position right now"). Called after every mutation that can change
     // ANY chip's  position (add, remove, reorder) so id never drifts out
     // of sync with where a chip actually sits - existing lookups elsewhere
@@ -2131,7 +2131,7 @@ export default defineComponent({
     // currently being resize-dragged, or null - previewCount is the LIVE
     // (not yet committed) repeat count while dragging, read by
     // sequenceGroupPreviewCount/sequenceGroupChipStyle below so the chip's
-    // own label/width visibly track the drag before it's released; the
+    // label/width visibly track the drag before it's released; the
     // group's real count is only actually written once on mouseup (see
     // handleSequenceResizeStart), same "commit on release, preview during
     // the gesture" split the Length (steps) resize handle elsewhere on
@@ -2159,7 +2159,7 @@ export default defineComponent({
     // drag, not the HTML5 draggable API the chips themselves use for
     // reordering (see sequenceChipListeners below), since this needs
     // continuous pointer-position tracking rather than drop-target
-    // semantics. preventDefault on mousedown (and the handle's own
+    // semantics. preventDefault on mousedown (and the handle's
     // draggable="false" in the template) keeps this from also kicking off
     // a native chip-reorder drag, since the handle sits inside the same
     // draggable wrap.
@@ -2194,9 +2194,9 @@ export default defineComponent({
     // Drag-and-drop reordering for one song's  Sequence chips - not built
     // on hooks/drag-reorder.js's  useDragReorder, since that hook's
     // draggedIndex/dragOverIndex refs assume exactly one reorderable list
-    // exists at a time, and every song's own sequence is independently
+    // exists at a time, and every song's sequence is independently
     // reorderable. The songId in this state is a holdover from when every
-    // song was rendered as its own card at once (see git history) - only
+    // song was rendered as its card at once (see git history) - only
     // the single active song's sequence can ever be dragged now, but
     // keeping it costs nothing and avoids a wider rename. The whole chip is
     // the drag handle (not a separate strip like a song card's used to
@@ -2228,7 +2228,7 @@ export default defineComponent({
       isSequenceStepDragOver(song, group) ? dragOverSequenceStep.value.side : null;
     // Left half of the chip's  bounding box means "insert before it",
     // right half means "insert after it" - the same halfway-point
-    // convention most drag-reorder UIs use (e.g. a Kanban board's own
+    // convention most drag-reorder UIs use (e.g. a Kanban board's
     // card-drop indicator), so the highlight always lands on whichever
     // side the pointer is actually closer to instead of unconditionally
     // always showing "before".
@@ -2245,7 +2245,7 @@ export default defineComponent({
         event.stopPropagation();
         draggedSequenceStep.value = {songId: song.id, groupId: group.id};
         event.dataTransfer.effectAllowed = 'move';
-        // Same Firefox requirement as hooks/drag-reorder.js's own
+        // Same Firefox requirement as hooks/drag-reorder.js's
         // dragHandleListeners - the value itself is never read back.
         event.dataTransfer.setData('text/plain', String(group.id));
       },
@@ -2434,7 +2434,7 @@ export default defineComponent({
         // schedulePattern (utils/music-playback.js) calls this back as
         // (pattern, track) - song is bound here via closure since mute/solo
         // state is now keyed by song, not just pattern (see isTrackMuted's
-        // own comment).
+        // comment).
         isTrackMuted: (p, track) => isTrackMuted(song, p, track),
         startUnits,
         onDone: () => {
@@ -2499,7 +2499,7 @@ export default defineComponent({
       stopPlaybackHeadPolling();
     };
 
-    // A sequence chip's  click does two things while the song's own
+    // A sequence chip's  click does two things while the song's
     // sequence is mid-playback: JUMPS playback there (restarting
     // handlePlaySong at that step, the same "click seeks" affordance the
     // piano roll's  step ruler already gives a single playing pattern -
@@ -2516,7 +2516,7 @@ export default defineComponent({
       setActivePattern(song, group.patternId);
     };
 
-    // Whether THIS specific sequence GROUP (see blocks/music.js's own
+    // Whether THIS specific sequence GROUP (see blocks/music.js's
     // {id, patternId, count} shape - one chip, possibly repeating count > 1
     // times in a row) is the one currently sounding - only meaningful
     // during song (not lone pattern) playback, since a sequence step only
@@ -2581,7 +2581,7 @@ export default defineComponent({
       const soundEffect = trackSoundEffect(track);
       if (!soundEffect) return false;
       // Hit is only meaningful for an instrument with no real tunable pitch
-      // of its own (noise/untuned types) - a tunable instrument already has
+      // (noise/untuned types) - a tunable instrument already has
       // its  proper pitched rows, so Hit is greyed out for it instead of
       // offering a redundant, pitch-less way to trigger the same sound.
       if (row.midi === 'hit') return !audcHasTunableNotes(soundEffect.audc);
@@ -2589,7 +2589,7 @@ export default defineComponent({
     };
     // Same "not available to the currently active track" check
     // patternCellClasses'  piano-roll-cell-row-unavailable already
-    // applies across a row's  cells - mirrored here so the row's own
+    // applies across a row's  cells - mirrored here so the row's
     // label (see .piano-roll-label-row-unavailable) reads as unavailable
     // too, instead of looking like any other normal, playable row while
     // every cell beside it is greyed out.
@@ -2621,14 +2621,14 @@ export default defineComponent({
     const lastNoteLength = ref(null);
     const newNoteLength = () => lastNoteLength.value || subdivisionUnitLength();
 
-    // Volume override (an absolute AUDV, or null for "this instrument's own
+    // Volume override (an absolute AUDV, or null for "this instrument's
     // plain default") of the last note placed or resized/volume-edited (see
     // handlePatternCellClick, stopResize, handleVolumeBarMove/
     // handleVolumePercentChange) - tracked for a possible future feature,
-    // but NOT applied to prefill a brand new note's own volume the way
+    // but NOT applied to prefill a brand new note's volume the way
     // newNoteLength reuses the last length for a new note's length: a
     // freshly placed note (in an empty slot, nothing to preserve) always
-    // starts unset instead, so it plays at whatever volume its OWN
+    // starts unset instead, so it plays at whatever volume its
     // instrument is set to on the Sound tab (see noteAudv's fallback),
     // never a leftover custom volume from some other, possibly
     // differently-voiced note - confirmed as a real reported bug when this
@@ -2658,7 +2658,7 @@ export default defineComponent({
       return Math.max(0, Math.min(1, (noteEndUnits - stepStartUnits) / LENGTH_UNITS_PER_STEP));
     };
 
-    // Every ACTIVE TRACK note whose own unit range overlaps this step - not
+    // Every ACTIVE TRACK note whose unit range overlaps this step - not
     // just whichever one happens to be first (unlike the old noteAt-based
     // lookup this replaced). A step can hold several short, non-overlapping
     // notes at different slices (see the subdivision dropdown, and
@@ -2716,7 +2716,7 @@ export default defineComponent({
     // itself this narrower box automatically narrows the handle to match,
     // with no separate handle-sizing logic needed. Also what lets several
     // notes sharing one step (see volumeBarNotesAt) render side by side
-    // instead of overlapping - each one's  slice range gets its own
+    // instead of overlapping - each one's  slice range gets its
     // slice of the column's width.
     const noteStepSpanStyle = (note, step) => {
       const stepStartUnits = step * LENGTH_UNITS_PER_STEP;
@@ -2748,7 +2748,7 @@ export default defineComponent({
     };
 
     // Every OTHER track's  note(s) overlapping this step (if any) -
-    // shown as faint, non-interactive bars behind the active track's own,
+    // shown as faint, non-interactive bars behind the active track's,
     // so a channel/instrument switch doesn't make the rest of the
     // pattern's volume shape disappear from this row entirely. Mirrors
     // .piano-roll-cell-foreign's "still visible, just dimmed and
@@ -2780,7 +2780,7 @@ export default defineComponent({
 
     // A track is monophonic (one real hardware channel), so at most one note
     // can occupy any given UNIT of time - but several short, sequential
-    // (non-overlapping) notes can still share one step, each at its own
+    // (non-overlapping) notes can still share one step, each at its
     // slice (see the subdivision dropdown). Whole-step versions of these
     // (below) are for the grid's  per-step rendering/grey-out; the click
     // handler itself checks the exact clicked unit range instead, so
@@ -2791,7 +2791,7 @@ export default defineComponent({
           .find((note) => step >= noteStartStep(note) && step < noteEndStepExclusive(note)) || null;
 
     // TIA has 2 real hardware channels - two tracks on DIFFERENT channels can
-    // genuinely sound at once, so only a track sharing the active track's own
+    // genuinely sound at once, so only a track sharing the active track's
     // channel can block a new note here; a different-channel track's note at
     // the same step is no obstacle.
     const channelBlockingNote = (pattern, activeTrack, step) =>
@@ -2843,7 +2843,7 @@ export default defineComponent({
     // The single note this cell would report for simple (title/tip/resize)
     // purposes - the active track's  note here if it has one, otherwise
     // whichever other note is drawn. Cells with several notes (see
-    // notesInCell) only ever get a resize handle for the active track's own
+    // notesInCell) only ever get a resize handle for the active track's
     // one anyway.
     const findDisplayedNote = (pattern, row, step) => notesInCell(pattern, row, step)[0] || null;
 
@@ -2854,13 +2854,13 @@ export default defineComponent({
       // A note belonging to a DIFFERENT CHANNEL isn't a real conflict for
       // the active track - the TIA's two channels play independently, so
       // that note being here doesn't stop the active track from placing
-      // its own. Most visible on the shared "Hit" row, since every
+      // its. Most visible on the shared "Hit" row, since every
       // untunable instrument on EITHER channel shares that one row, so two
       // different channels both wanting a Hit note at the same step is
       // common - without this, the second channel's  Hit row looked
       // dimmed/blocked (piano-roll-cell-foreign below) even though
       // clicking it would have worked fine. Falls through to the same
-      // empty-cell classing as if this note weren't here at all; its own
+      // empty-cell classing as if this note weren't here at all; its
       // color still paints via patternCellStyle regardless (that's a
       // separate, unrelated layer).
       if (displayed && activeTrack && displayed.track !== activeTrack && displayed.track.channel !== activeTrack.channel) {
@@ -2896,7 +2896,7 @@ export default defineComponent({
 
     // Light vertical divider(s) marking the "Note duration snap" slices
     // within a step - lighter than the step boundary lines (.piano-roll-cell
-    // itself already draws those via its  border-left) so a step's own
+    // itself already draws those via its  border-left) so a step's
     // edge always reads as more prominent than a slice within it. null (no
     // extra lines) when the dropdown is 1 - one slice IS the whole step.
     const sliceGridImage = () => {
@@ -2909,9 +2909,9 @@ export default defineComponent({
 
     // Same slice divisions as sliceGridImage, echoed onto the step ruler
     // (.piano-roll-step-number) above the piano roll itself - fainter than
-    // both that function's  slice lines (0.08) and .piano-roll-cell's own
+    // both that function's  slice lines (0.08) and .piano-roll-cell's
     // step-edge border (0.22), so the ruler stays a quiet reference rather
-    // than competing with the piano roll's own, more prominent grid.
+    // than competing with the piano roll's, more prominent grid.
     const headerSliceGridImage = () => {
       const subdivision = effectiveSubdivision();
       if (subdivision <= 1) return null;
@@ -2927,7 +2927,7 @@ export default defineComponent({
     // separate overlay elements), so the rest of the cell (border, hover,
     // etc.) stays untouched.
     // Each kind of thing a cell can show is its  gradient layer (not
-    // stops concatenated into one gradient) - keeps the hover preview's own
+    // stops concatenated into one gradient) - keeps the hover preview's
     // 4 stops independent of however many note segments are also in this
     // cell, so there's no risk of out-of-order stop positions between them.
     // Layers are listed topmost-first: the hover preview always paints over
@@ -2987,7 +2987,7 @@ export default defineComponent({
     // would arm/seek to (see seekHover), shown on the ruler itself so it
     // never gets mistaken for either playhead color above.
     const SEEK_HOVER_COLOR = 'rgba(25, 118, 210, 0.15)';
-    // The Select tool's own marquee result (see pianoRollSelection) -
+    // The Select tool's marquee result (see pianoRollSelection) -
     // painted as a segmentGradient layer over the EXACT note range, same as
     // every other per-note layer below, rather than a plain CSS class
     // covering the whole cell (an earlier version of this did that) -
@@ -3005,7 +3005,7 @@ export default defineComponent({
     // sequencer's  playhead - a continuous, unsnapped position would
     // drift smoothly across a step instead of visibly landing on each of its
     // slices in turn as the song plays. Null (no layer) when elapsedUnits'
-    // own slice doesn't fall within this particular step at all.
+    // slice doesn't fall within this particular step at all.
     const playheadSliceLayer = (elapsedUnits, stepStartUnits, color) => {
       const slice = subdivisionUnitLength();
       const sliceStart = Math.floor(elapsedUnits / slice) * slice;
@@ -3096,7 +3096,7 @@ export default defineComponent({
       const activeTrack = activeTrackFor(pattern);
       // Same "different channel isn't a real conflict" reasoning as
       // patternCellClasses above - don't describe this cell as belonging
-      // to that other note, since the active track can still place its own
+      // to that other note, since the active track can still place its
       // here.
       if (displayed && activeTrack && displayed.track !== activeTrack && displayed.track.channel !== activeTrack.channel) {
         if (!rowIsAvailable(activeTrack, row)) return `${row.label} - not in tune for this instrument`;
@@ -3119,9 +3119,9 @@ export default defineComponent({
       return row.label;
     };
 
-    // Every ACTIVE TRACK note whose own last occupied step is this one - a
+    // Every ACTIVE TRACK note whose last occupied step is this one - a
     // step can hold several short notes at different slices (see
-    // notesInCell), and each needs its OWN resize handle. This used to go
+    // notesInCell), and each needs its resize handle. This used to go
     // through findDisplayedNote, which only ever returns the FIRST note in
     // the cell - so only whichever note happened to be first (in practice,
     // the earliest slice) ever got a handle at all; any other note sharing
@@ -3134,7 +3134,7 @@ export default defineComponent({
     };
 
     // Where within a step (in LENGTH_UNITS_PER_STEP units, from that step's
-    // own start) a click landed, snapped to the current "Note duration snap"
+    // start) a click landed, snapped to the current "Note duration snap"
     // slices - so clicking partway across a step starts a new note at that
     // slice, not always at the step's  beginning. Falls back to the
     // step's start if there's no usable click-position info (offsetX only
@@ -3150,7 +3150,7 @@ export default defineComponent({
 
     // Shared by the real click handler and the hover preview below, so the
     // preview always shows exactly what a click would actually do. The
-    // active track's OWN overlapping note (if any) isn't a blocker here -
+    // active track's overlapping note (if any) isn't a blocker here -
     // placing a new note where this instrument already has one just
     // replaces it (see handlePatternCellClick) - only a DIFFERENT track
     // sharing the channel is a real hardware conflict.
@@ -3158,7 +3158,7 @@ export default defineComponent({
     // Any instrument (tunable or noise) is allowed to overlap whatever
     // another track sharing its channel is already playing - real hardware
     // has only one waveform generator per channel, so this doesn't truly mix
-    // two sounds, it briefly "steals" the channel for the new note's own
+    // two sounds, it briefly "steals" the channel for the new note's
     // duration, then hands the interrupted note back for whatever's left of
     // its  length (see flattenPatternEvents in generators/bbasic/
     // music.js, which splits the interrupted note around it and resumes it
@@ -3204,7 +3204,7 @@ export default defineComponent({
       // can only hold one note at a time anyway, so clicking here replaces
       // whatever's there instead of being blocked by it (see
       // canPlaceNoteAt, and handlePatternCellClick which does the actual
-      // replacing). Still flagged as its own 'overwrite' mode (rather than
+      // replacing). Still flagged as its 'overwrite' mode (rather than
       // 'add') so hovering it reads as "this will replace what's here",
       // not indistinguishable from a genuinely empty slot.
       const placeable = canPlaceNoteAt(pattern, activeTrack, row, startUnits, endUnits);
@@ -3224,10 +3224,10 @@ export default defineComponent({
       // browser fires its  native "click" for that same mouseup right
       // after, landing on the cell underneath the (now-moved) resize
       // handle. Without this guard, that stray click hit the "clicking an
-      // existing own note removes it" branch below, deleting the note the
+      // existing note removes it" branch below, deleting the note the
       // user had just finished resizing. See stopResize, which sets this
       // flag right as the drag ends and clears it shortly after. Also set
-      // by stopNoteDrag below, same reasoning - a Move drag's own mouseup
+      // by stopNoteDrag below, same reasoning - a Move drag's mouseup
       // fires this same stray click too.
       if (suppressNextCellClick) return;
       if (step >= stepCount) return;
@@ -3246,10 +3246,10 @@ export default defineComponent({
       // through to Draw's placement behavior.
       if (pianoRollTool.value === 'move' || pianoRollTool.value === 'select') return;
 
-      // Erase removes whatever this track's own note occupies THIS exact
-      // row at the clicked slice - unlike Draw's own placement below, this
+      // Erase removes whatever this track's note occupies THIS exact
+      // row at the clicked slice - unlike Draw's placement below, this
       // doesn't require the note to be at the SAME pitch as the row clicked
-      // (Erase only ever "sees" its own track's notes on the row they're
+      // (Erase only ever "sees" its track's notes on the row they're
       // actually drawn on anyway, since that's the only place a user could
       // click to trigger this in the first place).
       if (pianoRollTool.value === 'erase') {
@@ -3291,13 +3291,13 @@ export default defineComponent({
       // note was already playing at its instrument's  plain default,
       // and should stay there). A genuinely NEW note (nothing overlapping
       // at all) always starts unset too, deliberately NOT carrying
-      // lastNoteAudv forward here - noteAudv's own fallback (see
+      // lastNoteAudv forward here - noteAudv's fallback (see
       // utils/music-notes.js) means an unset audv already plays at
       // whatever volume the instrument itself is set to on the Sound tab,
       // which is what a brand new note should start at, not whatever
       // custom volume was last set on some other, possibly differently-
       // voiced note (a real reported bug: placing a note on a freshly
-      // selected instrument inherited an unrelated instrument's own
+      // selected instrument inherited an unrelated instrument's
       // custom volume instead of that instrument's actual base volume).
       if (ownOverlapping.length && preservedAudv) {
         newNote.audv = preservedAudv.audv;
@@ -3326,13 +3326,13 @@ export default defineComponent({
     // below) or toggling it on/off (handlePatternCellClick's Draw/Erase
     // branches). Same window-level mousedown/mousemove/mouseup shape as
     // those, and the same "capture once at drag start, re-derive from a
-    // live clientX/clientY delta every move" reasoning startResize's own
+    // live clientX/clientY delta every move" reasoning startResize's
     // comment gives - startRowIndex/startStep never change mid-drag, only
     // the live delta does.
     const movingNote = ref(null);
-    // Plays the note's own sound at its CURRENT (post-move) pitch - same
+    // Plays the note's sound at its CURRENT (post-move) pitch - same
     // audio feedback placing a fresh note already gives (see
-    // handlePatternCellClick's own previewPatternNote call), so dragging an
+    // handlePatternCellClick's previewPatternNote call), so dragging an
     // existing one to a new pitch/step is just as audible as placing it
     // there fresh would have been.
     const playDraggedNotePreview = (moving) => {
@@ -3358,21 +3358,21 @@ export default defineComponent({
       // (startClientX/startClientY/startStep/startRowIndex, captured once
       // in handleCellMouseDown and never rebased mid-drag) - same "re-derive
       // from the live total delta, don't accumulate tick-to-tick" reasoning
-      // startResize's own handleResizeMove already uses. Rebasing those on
+      // startResize's handleResizeMove already uses. Rebasing those on
       // every move (an earlier version of this code did) rounds each
       // individual tick's tiny delta to zero against snapUnits/one row
       // independently, instead of letting a slow drag's movement actually
       // accumulate across ticks - confirmed as a real reported bug ("note
       // drag isn't keeping up with mouse position"). Both deltas are
-      // computed ONCE here, from the clicked (primary) note's own start
+      // computed ONCE here, from the clicked (primary) note's start
       // position, then applied identically to every note in the group below
       // - that's what keeps a multi-note selection moving as one rigid
-      // shape instead of each note re-deriving its own delta independently.
+      // shape instead of each note re-deriving its delta independently.
       const snapUnits = subdivisionUnitLength();
       const rawDeltaUnits = ((event.clientX - startClientX) / cellWidthPx()) * LENGTH_UNITS_PER_STEP;
       const deltaUnits = Math.round(rawDeltaUnits / snapUnits) * snapUnits;
       // Rows read top-to-bottom in SHARED_NOTE_ROWS order, same as the
-      // template's own v-for - dragging DOWN on screen means a LATER row
+      // template's v-for - dragging DOWN on screen means a LATER row
       // index, so the row delta (not the step delta above) is added, not
       // subtracted.
       const deltaRows = Math.round((event.clientY - startClientY) / PIANO_ROLL_ROW_HEIGHT_PX);
@@ -3411,7 +3411,7 @@ export default defineComponent({
       const {track, group} = movingNote.value;
       const movedNotes = group.map((member) => member.note);
       // Same "clean up whatever this note now overlaps" reasoning
-      // handlePatternCellClick's own ownOverlapping removal uses when
+      // handlePatternCellClick's ownOverlapping removal uses when
       // PLACING a note - a note dragged on top of another of this same
       // track would otherwise leave two overlapping notes behind, which
       // nothing else in this file expects to ever exist. Every OTHER moved
@@ -3436,7 +3436,7 @@ export default defineComponent({
       }, 0);
     };
     // Select tool - drags a rectangular marquee across the grid and selects
-    // every one of the ACTIVE TRACK's own notes it overlaps, for the Move
+    // every one of the ACTIVE TRACK's notes it overlaps, for the Move
     // tool (handleCellMouseDown above) to drag as one group afterward. Same
     // window-level mousedown/mousemove/mouseup shape as every other piano
     // roll drag here, but doesn't touch any note directly itself - purely a
@@ -3476,11 +3476,11 @@ export default defineComponent({
       if (!marqueeSelecting.value) return;
       const {track, startClientX, startClientY, currentClientX, currentClientY, startRowIndex, startUnits} =
         marqueeSelecting.value;
-      // Same fixed-origin delta math as the Move tool's own drag (see
+      // Same fixed-origin delta math as the Move tool's drag (see
       // handleNoteDragMove) - converts the live end corner back into a row-
       // index range and a unit range, both inclusive of whichever corner is
       // actually "first" (a marquee can be dragged in any of the 4
-      // directions from its own starting corner).
+      // directions from its starting corner).
       const deltaRows = Math.round((currentClientY - startClientY) / PIANO_ROLL_ROW_HEIGHT_PX);
       const endRowIndex = Math.max(0, Math.min(SHARED_NOTE_ROWS.length - 1, startRowIndex + deltaRows));
       const minRowIndex = Math.min(startRowIndex, endRowIndex);
@@ -3490,10 +3490,10 @@ export default defineComponent({
       const maxUnits = Math.max(startUnits, startUnits + deltaUnits);
       const selectedMidis = new Set(SHARED_NOTE_ROWS.slice(minRowIndex, maxRowIndex + 1).map((r) => r.midi));
       // note.step < maxUnits && note.step + note.length > minUnits - tests
-      // each note's own REAL [step, step+length) range against the marquee,
+      // each note's REAL [step, step+length) range against the marquee,
       // not the step column(s) it happens to sit in, so a short note only
-      // gets selected once the marquee actually overlaps ITS OWN extent
-      // (see startUnits' own comment on why the marquee's start corner is
+      // gets selected once the marquee actually overlaps ITS extent
+      // (see startUnits' comment on why the marquee's start corner is
       // slice-accurate rather than step-accurate too - confirmed as a real
       // reported bug otherwise, "only notes should be selected, not the
       // steps they're in").
@@ -3516,12 +3516,12 @@ export default defineComponent({
         pattern, track, startRowIndex, gridRect: gridEl ? gridEl.getBoundingClientRect() : null,
         // The precise slice-snapped unit position within the clicked step
         // (same helper handlePatternCellClick/handleCellHover already use
-        // for note placement itself), not just that step's own left edge -
+        // for note placement itself), not just that step's left edge -
         // confirmed as a real reported bug otherwise: starting the marquee
         // from a whole step boundary made its selection effectively
         // step-granular instead of note-granular, even though the final
         // note-overlap test (stopMarqueeSelect) already compared against
-        // each note's own real length.
+        // each note's real length.
         startUnits: step * LENGTH_UNITS_PER_STEP + clickedSliceOffsetUnits(event),
         startClientX: event.clientX, startClientY: event.clientY,
         currentClientX: event.clientX, currentClientY: event.clientY,
@@ -3530,10 +3530,10 @@ export default defineComponent({
       window.addEventListener('mouseup', stopMarqueeSelect);
     };
 
-    // Wired to the cell's own @mousedown (not @click - a drag has to start
+    // Wired to the cell's @mousedown (not @click - a drag has to start
     // capturing movement from the very first pixel, not wait for a full
     // click to complete) - same "resolve the note under this exact
-    // row/slice by hand" lookup handlePatternCellClick's own ownNoteHere
+    // row/slice by hand" lookup handlePatternCellClick's ownNoteHere
     // uses, since nothing else already has this note reference in hand at
     // mousedown time.
     const handleCellMouseDown = (song, pattern, row, step, stepCount, event) => {
@@ -3574,7 +3574,7 @@ export default defineComponent({
         startClientY: event.clientY,
         stepCount,
         // The (step, midi) pair last actually sounded during this drag -
-        // see handleNoteDragMove's own playDraggedNotePreview, which only
+        // see handleNoteDragMove's playDraggedNotePreview, which only
         // re-triggers playback when either actually changes, not on every
         // single mousemove tick.
         lastPlayedStep: note.step,
@@ -3608,7 +3608,7 @@ export default defineComponent({
       // counts as "interacting with" that note, same as placing one fresh,
       // EVEN if the mouse never actually moves (mouseup still fires stopResize
       // regardless of whether handleResizeMove ever ran) - both this note's
-      // own length AND its  volume (whatever it already was, override or
+      // length AND its  volume (whatever it already was, override or
       // not) carry forward, not just whichever one this particular gesture
       // happens to edit.
       lastNoteLength.value = resizing.value.note.length;
@@ -3751,10 +3751,10 @@ export default defineComponent({
       if (song) recalculateFitBaseWidth(song, activePattern(song));
     };
 
-    // Same letters as GraphicEditorToolbar.vue's own Move/Pencil/Eraser/
-    // Rectangle select hotkeys (V/B/E/M) - see that component's own
+    // Same letters as GraphicEditorToolbar.vue's Move/Pencil/Eraser/
+    // Rectangle select hotkeys (V/B/E/M) - see that component's
     // TOOL_HOTKEYS - so a user who already reaches for those on the graphic
-    // tabs doesn't have to learn a second set just for the piano roll's own
+    // tabs doesn't have to learn a second set just for the piano roll's
     // Move/Draw/Erase/Rectangle select.
     const PIANO_ROLL_TOOL_HOTKEYS = {v: 'move', b: 'draw', e: 'erase', m: 'select'};
     // Space/Shift+Space play/stop the song/pattern-preview (song and
@@ -3775,7 +3775,7 @@ export default defineComponent({
       // instead of once per actual press.
       if (event.repeat) return;
       // Same "skip Ctrl/Cmd/Alt combos and real text fields" guards as
-      // GraphicEditorToolbar.vue's own handleToolHotkey.
+      // GraphicEditorToolbar.vue's handleToolHotkey.
       if (event.ctrlKey || event.metaKey || event.altKey) return;
       const target = event.target;
       const tag = target && target.tagName;
@@ -3856,12 +3856,12 @@ export default defineComponent({
       rulerCellStyle, handleSeekHover, handleSeekHoverLeave,
       instrumentColor, instrumentTextColor,
       soundEffectOptions,
-      // CHANNEL_OPTIONS' own values are strings ('0'/'1') - a requirement
+      // CHANNEL_OPTIONS' values are strings ('0'/'1') - a requirement
       // of Blockly's FieldDropdown (see blocks/sound.js, which also feeds
-      // this same array to a Blockly block), not of the Music tab's own
+      // this same array to a Blockly block), not of the Music tab's
       // track.channel, which has always been stored as a NUMBER (see
       // emptyTrack/DEFAULT_SONGS in blocks/music.js). Vuetify's v-select
-      // matches its own :items value against v-model by strict ===, so a
+      // matches its :items value against v-model by strict ===, so a
       // numeric track.channel of 0 never matched the string item '0' here
       // - the Channel dropdown showed blank/placeholder even for a
       // perfectly valid, already-set channel 0 (same class of bug as the
@@ -3902,21 +3902,21 @@ export default defineComponent({
    are kept visually identical too. */
 /* padding-bottom alone (not 0, unlike padding-top) - the DIM hint
    paragraph below normally supplies the gap down to the audio toolbar via
-   its own margin-bottom, but that whole paragraph (a "v-messages__message"
+   its margin-bottom, but that whole paragraph (a "v-messages__message"
    hint) disappears entirely in Expert mode (see App.vue's shared
    .hide-description-text rule) - taking its margin with it and leaving
    the DIM switch/slider crowding the toolbar right below with nothing
    left providing any gap at all. This padding survives that regardless of
-   which the hint's own visibility. */
+   which the hint's visibility. */
 .dim-section {
   padding-bottom: 12px;
   padding-top: 0;
   /* Pulls the DIM controls up slightly closer to the intro paragraph above
      - App.vue's shared .tab-intro-section rule already zeroes that
-     paragraph's own trailing padding, leaving just its standard 16px
+     paragraph's trailing padding, leaving just its standard 16px
      v-messages__message margin-bottom as the gap (deliberately the same
-     everywhere else - see that rule's own comment), but that still read as
-     a little too much space specifically above this tab's own DIM row. */
+     everywhere else - see that rule's comment), but that still read as
+     a little too much space specifically above this tab's DIM row. */
   margin-top: -6px;
 }
 
@@ -3947,19 +3947,19 @@ export default defineComponent({
    the same classes every hint/description paragraph in the app uses. */
 .dim-hint {
   margin-top: 8px;
-  /* .dim-section's own padding-bottom is what now supplies the gap down to
-     the audio toolbar (see its own comment) - kept at 0 here so the two
+  /* .dim-section's padding-bottom is what now supplies the gap down to
+     the audio toolbar (see its comment) - kept at 0 here so the two
      don't stack into double the gap whenever this hint is actually
      visible (non-Expert-mode). */
   margin-bottom: 0;
 }
 
 /* Left/right zeroed too - .song-card is a plain div now (no border/padding
-   of its own - see its own comment), so this v-card-text's default 16px
+ - see its comment), so this v-card-text's default 16px
    side padding used to stack with the inner v-card-text sections'
-   (.music-name-section etc.) OWN default 16px, reading as double-wide
+   (.music-name-section etc.) default 16px, reading as double-wide
    padding down the left/right edges compared to the rest of the tab. Those
-   inner sections' own padding is what actually insets the content now. */
+   inner sections' padding is what actually insets the content now. */
 .song-list-section {
   /* 8px, not 0 - matches the content inset every other tab's card list
      naturally has (Vuetify's default v-list padding-top, left unoverridden
@@ -3980,14 +3980,14 @@ export default defineComponent({
 
 /* Narrow - the options themselves (1/2/4/8/16) are at most 2 characters,
    room for up to 3 is plenty; this used to be a full-width field up top
-   with a long label of its own, before moving next to each card's own
+   with a long label, before moving next to each card's
    zoom control (see .piano-roll-zoom-row). flex-shrink: 0 keeps it from
-   being squeezed by .piano-roll-zoom-controls' own claim on space (see its
-   own comment); the deep selectors strip Vuetify's default input
+   being squeezed by .piano-roll-zoom-controls' claim on space (see its
+   comment); the deep selectors strip Vuetify's default input
    padding/min-width, which otherwise renders wider than 56px regardless of
    this flex-basis, the same fix DataEditor.vue's .data-value-field uses. */
 /* Replaces the select's  floating "Snap" label (removed) - a magnet icon
-   reads as "snap" without needing text, and sitting outside the select's own
+   reads as "snap" without needing text, and sitting outside the select's
    56px-wide box (rather than Vuetify's built-in prepend-icon, which would
    have squeezed into that same tight box alongside the value) leaves room
    for both. align-items: center on the parent .piano-roll-zoom-row lines
@@ -4045,7 +4045,7 @@ export default defineComponent({
   margin: 0;
 }
 
-/* No card chrome (border/shadow/margin) of its own - this is the single
+/* No card chrome (border/shadow/margin) - this is the single
    editor now, not one card among several needing visual separation from
    its neighbors. position: relative is still needed regardless (not
    decorative) - .music-id-badge inside is absolutely positioned against
@@ -4056,15 +4056,15 @@ export default defineComponent({
 }
 
 /* .music-id-badge's shared left offset (below) exists to clear the pattern
-   card's own collapse button, still present there - the song card no
+   card's collapse button, still present there - the song card no
    longer has an equivalent button (there's nothing left to collapse when
    only one song is ever shown at a time), so its badge alone sits closer
    to the edge, matching the toolbar buttons/fields around it. */
-/* Matches the Song name field's own left edge below it (this v-card-text's
-   default 16px padding - unlike the Pattern section's own fields, this
-   row's padding was never zeroed, see .pattern-section-content's own
+/* Matches the Song name field's left edge below it (this v-card-text's
+   default 16px padding - unlike the Pattern section's fields, this
+   row's padding was never zeroed, see .pattern-section-content's
    comment) - same alignment the Pattern ID badge now gets by just being a
-   plain flex sibling of ITS OWN name field, with nothing extra reaching in
+   plain flex sibling name field, with nothing extra reaching in
    from the side to clear. */
 .song-card > .music-id-badge {
   left: 16px;
@@ -4080,7 +4080,7 @@ export default defineComponent({
   /* Without an explicit value, this inherits whatever line-height its
      surrounding context happens to resolve to - which isn't the same
      everywhere this badge is used: the song card's badge sits in a
-     context that resolves to a tight ~13px, but the pattern card's own
+     context that resolves to a tight ~13px, but the pattern card's
      (nested one level deeper) resolves to Vuetify's default ~22px
      instead, visibly pushing the id text down within that taller line
      box even though top: 10px itself was identical in both. A fixed,
@@ -4094,7 +4094,7 @@ export default defineComponent({
    it. No explicit color here - the chip itself always carries Vuetify's
    "dark" prop (white text), regardless of the chip's actual background
    lightness/darkness (see .sequence-chip's "dark" in the template), so
-   this just inherits that same white rather than computing its own
+   this just inherits that same white rather than computing its
    brightness-based color against patternSequenceColor - which looked
    inconsistent (the pattern name and count staying white while the id badge
    independently switched to black) since the two were following different
@@ -4110,15 +4110,15 @@ export default defineComponent({
   margin-right: 4px;
 }
 
-/* Export/Import/playback controls row, above the song editor's own full-
+/* Export/Import/playback controls row, above the song editor's full-
    width divider - same background/padding as GraphicEditorToolbar.vue's
-   own .graphic-editor-toolbar (that component itself isn't reused here -
-   it's built entirely around a PixelEditor instance's own tools, nothing
+   .graphic-editor-toolbar (that component itself isn't reused here -
+   it's built entirely around a PixelEditor instance's tools, nothing
    this tab has - but the visual treatment is copied so it reads as the
    same kind of toolbar). */
 /* Sticks to the top of the tab's scrolling ancestor as everything below it
    scrolls past - same position: sticky pattern as
-   GraphicEditorToolbar.vue's own .graphic-editor-toolbar. z-index keeps it
+   GraphicEditorToolbar.vue's .graphic-editor-toolbar. z-index keeps it
    above the scrolled-under song/pattern content (piano roll cells etc.). */
 .music-toolbar {
   position: sticky;
@@ -4169,14 +4169,14 @@ export default defineComponent({
   padding-bottom: 10px;
 }
 
-/* Same "Soft Colors" override as GraphicEditorToolbar.vue's own
+/* Same "Soft Colors" override as GraphicEditorToolbar.vue's
    .desaturate-app-colors .graphic-editor-toolbar rule. */
 .desaturate-app-colors .music-toolbar {
   background-color: #e1e1e1;
 }
 
-/* Same 4px gap-based spacing as GraphicEditorToolbar.vue's own .get-tools -
-   see that component's own comment on why gap (not per-button margins) is
+/* Same 4px gap-based spacing as GraphicEditorToolbar.vue's .get-tools -
+   see that component's comment on why gap (not per-button margins) is
    what actually guarantees every icon/divider gap here matches exactly. */
 .music-toolbar-row {
   display: flex;
@@ -4184,7 +4184,7 @@ export default defineComponent({
   gap: 4px;
 }
 
-/* Zeroes .music-icon-btn-size's own margin: 0 1px (needed elsewhere on
+/* Zeroes .music-icon-btn-size's margin: 0 1px (needed elsewhere on
    this tab, e.g. track rows, where there's no shared flex gap doing the
    spacing) - left as-is here, it stacked with this row's 4px gap for a
    6px total gap between icons, not the clean 4px GraphicEditorToolbar.vue
@@ -4197,13 +4197,13 @@ export default defineComponent({
   margin: 0;
 }
 
-/* .music-flat-icon-btn's own background/shadow/before/rest-hover-color
+/* .music-flat-icon-btn's background/shadow/before/rest-hover-color
    rules - see App.vue's shared, unscoped copy (moved there once confirmed
-   byte-identical to TitleScreenEditor.vue's own .titlescreen-play-btn, see
-   that file's own comment). border: none kept local rather than folded
-   into that shared rule - GraphicEditorToolbar.vue's own .get-tools >>>
+   byte-identical to TitleScreenEditor.vue's .titlescreen-play-btn, see
+   that file's comment). border: none kept local rather than folded
+   into that shared rule - GraphicEditorToolbar.vue's .get-tools >>>
    .v-btn has it, and this tab's buttons were specifically asked to match
-   that toolbar's buttons in every state, but TitleScreenEditor.vue's own
+   that toolbar's buttons in every state, but TitleScreenEditor.vue's
    button was never reported as needing it (Vuetify's "icon" v-btn has no
    border by default anyway, so this is a no-op there either way - just
    kept scoped to what was actually asked). */
@@ -4212,27 +4212,27 @@ export default defineComponent({
 }
 
 /* Momentary press feedback - a shrink, not a color change, matching
-   GraphicEditorToolbar.vue's own .get-tools >>> .v-btn:not(.v-btn--disabled):active
+   GraphicEditorToolbar.vue's .get-tools >>> .v-btn:not(.v-btn--disabled):active
    rule exactly (per an explicit request to match that toolbar's buttons in
    every state) - color is reserved for the PERSISTENT "currently on/
    playing" tint below instead, so a one-shot action button (Undo, zoom
-   reset, etc.) with no ongoing state of its own to show doesn't read as
-   if it just turned "on". :not(.v-btn--disabled), same as Graphic's own
+   reset, etc.) with no ongoing state to show doesn't read as
+   if it just turned "on". :not(.v-btn--disabled), same as Graphic's
    rule - a disabled button shouldn't visibly react to a click it can't
    actually receive in the first place. */
 .music-flat-icon-btn:not(.v-btn--disabled):active >>> .v-icon {
   transform: scale(0.82);
 }
 
-/* Disabled dimming, matching GraphicEditorToolbar.vue's own
+/* Disabled dimming, matching GraphicEditorToolbar.vue's
    .get-tools >>> .v-btn--disabled .v-icon rule exactly - icon color, not
    button opacity (the shared .player-icon-btn-size-style tabs elsewhere in
-   this app use opacity instead - see App.vue's own comment - left as-is
+   this app use opacity instead - see App.vue's comment - left as-is
    there; only this tab's buttons were asked to match Graphic's specific
    treatment). Needed at all because the rest-color rule just above
    (App.vue's shared .music-flat-icon-btn >>> .v-icon) already forces
    rgba(0,0,0,0.38) with !important, which would otherwise block Vuetify's
-   own default disabled dimming from ever showing through - a disabled
+   default disabled dimming from ever showing through - a disabled
    button would read as identically clickable to an enabled, unhovered one. */
 .music-flat-icon-btn.v-btn--disabled >>> .v-icon {
   color: rgba(0, 0, 0, 0.18) !important;
@@ -4240,8 +4240,8 @@ export default defineComponent({
 
 /* "This is currently on/playing" tint for any .music-flat-icon-btn toggle -
    the pattern loop button when looping is on, and the pattern/song Play
-   buttons while their own playback is active. Same blue as the piano roll's
-   own playhead/zoom slider (Vuetify's default theme "primary", #1976D2 - no
+   buttons while their playback is active. Same blue as the piano roll's
+   playhead/zoom slider (Vuetify's default theme "primary", #1976D2 - no
    custom theme colors are set, see plugins/vuetify.js). Needs the extra
    .music-flat-icon-btn specificity to win over that class's blanket
    !important color rule above - a plain :color="primary" prop on the v-icon
@@ -4250,21 +4250,21 @@ export default defineComponent({
   color: var(--v-primary-base, #1976d2) !important;
 }
 
-/* .music-icon-btn-size's own size/icon-font-size rules - see App.vue's
+/* .music-icon-btn-size's size/icon-font-size rules - see App.vue's
    shared, unscoped copy. */
 
 /* Same plain-inline-SVG dotted marquee icon as GraphicEditorToolbar.vue's
-   own Rectangle select button (.get-shape-icon/.get-marquee-icon there) -
+   Rectangle select button (.get-shape-icon/.get-marquee-icon there) -
    duplicated rather than shared across components since GraphicEditorToolbar's
-   own copy is reached via its own >>> deep combinator, not exposed for
+   copy is reached via its >>> deep combinator, not exposed for
    reuse. fill: none + stroke: currentColor is what lets this same button's
    .v-icon color rules just above (rest/hover/active tint) reach a plain SVG
    the same way they reach a real MDI glyph's font colour; width/height
    stand in for font-size, which has no effect on an SVG. !important + the
    same >>> .music-icon-btn-size specificity every other icon-sizing rule in
    this file already uses - confirmed as a real reported bug otherwise
-   ("the marquee icon looks too big") - Vuetify's own .v-icon.v-icon rule
-   sets width/height off ITS OWN font-size with a specificity this plain
+   ("the marquee icon looks too big") - Vuetify's .v-icon.v-icon rule
+   sets width/height off ITS font-size with a specificity this plain
    class alone couldn't out-rank. */
 .music-icon-btn-size >>> .piano-roll-marquee-icon {
   width: 19px !important;
@@ -4277,14 +4277,14 @@ export default defineComponent({
   stroke-dasharray: 0.1 4.5;
 }
 
-/* Matches GraphicEditorToolbar.vue's own Undo/Redo spacing/press-feedback
+/* Matches GraphicEditorToolbar.vue's Undo/Redo spacing/press-feedback
    exactly, per a direct request to align the two. .music-icon-btn-size's
-   own margin: 0 1px (needed elsewhere - see that class's own comment)
+   margin: 0 1px (needed elsewhere - see that class's comment)
    would otherwise stack with .subdivision-controls' 4px gap for an uneven
    6px gap between these two buttons, unlike the graphic toolbar's clean
-   4px (gap alone, zero button margin - see GraphicEditorToolbar.vue's own
+   4px (gap alone, zero button margin - see GraphicEditorToolbar.vue's
    .get-tools comment). Overrides .music-flat-icon-btn:active's shared blue
-   tint (right above) with a scale-down instead - the graphic toolbar's own
+   tint (right above) with a scale-down instead - the graphic toolbar's
    one-shot-action press feedback, rather than the "currently on" color this
    tab otherwise reserves for toggles/playback. */
 .subdivision-controls >>> .piano-roll-transport-btn {
@@ -4303,7 +4303,7 @@ export default defineComponent({
 /* This class is shared with plain text fields too (e.g. Song name), which
    have no dropdown icon at all - harmless no-op there. The Pattern name
    field is a v-combobox (editable text AND a dropdown - see
-   handlePatternFieldChange), so Vuetify gives it its own dropdown arrow
+   handlePatternFieldChange), so Vuetify gives it its dropdown arrow
    icon; without this, that icon inherited the field's text-input
    cursor (a text I-beam) instead of a pointer, reading as if clicking the
    arrow wouldn't do anything even though it does open the dropdown. */
@@ -4315,20 +4315,20 @@ export default defineComponent({
   padding-bottom: 0;
 }
 
-/* Extra clearance from the song card's own ID badge (absolutely
-   positioned so it doesn't take up flow space on its own) sitting above
+/* Extra clearance from the song card's ID badge (absolutely
+   positioned so it doesn't take up flow space by itself) sitting above
    this row - on top of .music-name-field's existing 12px margin-top
    (rather than setting padding-top directly, which would override - and
    shrink - this v-card-text's larger Vuetify default padding instead of
    adding to it). The pattern section's equivalent row doesn't need this:
-   its own
+   its
    toolbar was moved down next to the piano roll's zoom controls (see
    .pattern-playback-controls), so nothing sits above it to clear. */
 .song-name-row .music-name-field,
 .song-name-row .tempo-field {
   /* Was bumped to 20px to also clear a collapse-toggle button that used
      to sit over this same top-left corner (back when every song had its
-     own card in a list); the song card no longer has one (there's only
+     card in a list); the song card no longer has one (there's only
      ever one song shown at a time now, nothing left to collapse), so this
      reverts to the smaller value that was already enough to clear just
      the top-right toolbar alone. */
@@ -4340,7 +4340,7 @@ export default defineComponent({
   /* Zeroed (was 6px) so "Add pattern"'s  gap down to the pattern
      sub-card below matches "Add instrument"'s gap down to
      .instruments-piano-divider (see .sequence-add-row .add-track-button's
-     own margin-bottom, which is what actually sets this gap now). */
+     margin-bottom, which is what actually sets this gap now). */
   padding-bottom: 0;
   /* Pulls this section up closer to the Song name/Tempo row above it -
      that row's v-text-fields reserve space for a hint/error line even
@@ -4350,9 +4350,9 @@ export default defineComponent({
   margin-top: -10px;
 }
 
-/* The pattern sub-section's own collapse toggle used to sit absolutely
+/* The pattern sub-section's collapse toggle used to sit absolutely
    positioned over this row's top-left corner, needing enough padding-top
-   to clear it - now that it lives in its own header row above (see
+   to clear it - now that it lives in its header row above (see
    .option-section-header, matching TextFontEditor.vue's "Text Minikernel
    Font Editor" section), the only thing left to clear is the top-right
    Delete button, back to this smaller value. */
@@ -4361,9 +4361,9 @@ export default defineComponent({
 }
 
 /* flex-wrap lets .pattern-length-tempo-group (Length/tempo-checkbox/Tempo)
-   drop to its own line under the Pattern name field when both don't fit
+   drop to its line under the Pattern name field when both don't fit
    side by side - same "two atomic blocks" pattern as
-   .piano-roll-zoom-and-playback/.track-instrument-row (see their own
+   .piano-roll-zoom-and-playback/.track-instrument-row (see their
    comments). Also shared by the song card's name row (.song-name-row),
    which only ever has two fields and so rarely needs to wrap at all - this
    doesn't change its normal single-line layout. */
@@ -4383,7 +4383,7 @@ export default defineComponent({
    this pattern-only value too - confirmed directly as the cause of the
    song row suddenly looking too cramped right after this was added.
    .pattern-section-content only ever wraps the pattern sub-section's row.
-   Also covers .steps-field (Length (steps)) now - its own base rule below
+   Also covers .steps-field (Length (steps)) now - its base rule below
    sets a flat 12px unconditionally, which left it sitting visibly lower
    than this row's other fields once they were pulled up to 8px here
    without it. */
@@ -4395,7 +4395,7 @@ export default defineComponent({
 
 /* Capped to the same 360px as the Song name field (see
    .song-name-row .music-name-field) instead of growing to fill all
-   leftover row space - .pattern-length-tempo-group's own margin-left:auto
+   leftover row space - .pattern-length-tempo-group's margin-left:auto
    below is what now pushes Length/Tempo to the row's right edge instead. */
 .pattern-name-row .music-name-field {
   flex: 0 1 360px;
@@ -4406,10 +4406,10 @@ export default defineComponent({
   margin-left: auto;
 }
 
-/* The song card's .music-sequence-section (which wraps this) has its own
+/* The song card's .music-sequence-section (which wraps this) has its
    padding-bottom zeroed out (see that class's comment), so this margin is
    the ONLY thing separating the pattern section's bottom edge from the
-   song card's own bottom edge below it. */
+   song card's bottom edge below it. */
 .pattern-section-content {
   margin-bottom: 20px;
 }
@@ -4422,13 +4422,13 @@ export default defineComponent({
    into it) so it wins the same-specificity tie via source order. */
 .song-name-row .music-name-field {
   flex: 0 1 360px;
-  /* flex-grow: 0 alone isn't enough to actually cap this - Vuetify's own
-     .v-input rules set their own width, which wins over the flex item's
+  /* flex-grow: 0 alone isn't enough to actually cap this - Vuetify's
+     .v-input rules set their width, which wins over the flex item's
      basis. max-width is what actually enforces the cap. */
   max-width: 360px;
 }
 
-/* No flex-wrap of its own (unlike .pattern-name-row) - Length/tempo-checkbox/
+/* No flex-wrap (unlike .pattern-name-row) - Length/tempo-checkbox/
    Tempo always move as one block, matching the "atomic group" pattern used
    elsewhere on this tab. */
 .pattern-length-tempo-group {
@@ -4452,12 +4452,12 @@ export default defineComponent({
   margin-top: 22px;
 }
 
-/* The Song name row's own fields sit at margin-top: 16px (see
+/* The Song name row's fields sit at margin-top: 16px (see
    .song-name-row .music-name-field/.tempo-field above), 8px more than the
    Pattern row's fields (margin-top: 8px, see .pattern-section-content's
-   own rule) that .pattern-actions-row's flat 22px was tuned against -
+   rule) that .pattern-actions-row's flat 22px was tuned against -
    without a matching +8px here, the Song row's Add/Duplicate buttons sat
-   noticeably higher than its Song name/Tempo fields' own input line. */
+   noticeably higher than its Song name/Tempo fields' input line. */
 .song-name-row .pattern-actions-row {
   margin-top: 30px;
 }
@@ -4468,7 +4468,7 @@ export default defineComponent({
 }
 
 /* Pins Tempo to the row's right edge - the Pattern name field (sharing
-   this same row layout) grows to fill the leftover space on its own (see
+   this same row layout) grows to fill the leftover space by itself (see
    .pattern-name-row .music-name-field's flex: 1 1 auto), which already
    pushes Tempo to the end; the Song name field next to it is now a fixed,
    capped width instead (see .song-name-row .music-name-field above), so
@@ -4515,7 +4515,7 @@ export default defineComponent({
      (~1.43x), which reads as noticeably taller than the 12px text itself -
      align-items: center on the row centers that whole taller box, not the
      glyphs within it, leaving the actual text sitting visibly below the
-     chevron button beside it (same root cause .music-id-badge's own
+     chevron button beside it (same root cause .music-id-badge's
      line-height: 1 already fixes for that badge). */
   line-height: 1;
 }
@@ -4569,7 +4569,7 @@ export default defineComponent({
 }
 
 /* Same white-then-primary double ring as .sequence-chip-playing (see its
-   own comment on why a single white ring alone isn't visible against this
+   comment on why a single white ring alone isn't visible against this
    tab's white card background) - marks which track clicking a chip here
    last selected as active, mirroring the radio-button highlight the
    expanded Instruments list gives the same track (see isActiveTrack). */
@@ -4585,7 +4585,7 @@ export default defineComponent({
   margin-bottom: 4px;
 }
 
-/* No margin-bottom of its own - Vuetify's v-btn is inline-flex, so its own
+/* No margin-bottom - Vuetify's v-btn is inline-flex, so its
    margin-bottom (see .sequence-add-row .add-track-button below) doesn't
    collapse into this wrapper div's margin the way two plain block boxes'
    margins would, and a margin here on TOP of the button's would just
@@ -4599,7 +4599,7 @@ export default defineComponent({
    (shared with the Instruments section's "Add instrument" button) - here
    it sits right under the sequence chips instead of a whole card-text row
    below a collapse-toggle heading, so it doesn't need as much clearance
-   above, and its own gap to the pattern sub-card below is meant to match
+   above, and its gap to the pattern sub-card below is meant to match
    "Add instrument"'s gap to .instruments-piano-divider (see that
    button's override right below), not this shared class's base value. */
 .sequence-add-row .add-track-button {
@@ -4622,7 +4622,7 @@ export default defineComponent({
 }
 
 /* Same reasoning as hooks/drag-reorder.js's  CSS_CLASS_DRAGGING/
-   CSS_CLASS_DRAG_OVER (see sequenceChipListeners' own comment on why this
+   CSS_CLASS_DRAG_OVER (see sequenceChipListeners' comment on why this
    is a separate, hand-rolled drag implementation instead of that shared
    hook) - a left/right border rather than that hook's top border, since
    this list is laid out horizontally (see .sequence-row), not as stacked
@@ -4655,8 +4655,8 @@ export default defineComponent({
    primary-color outer ring is what actually shows up against the card;
    the white ring is kept as an inner separator so the two don't blend
    into the chip's color either, on a light or dark chip color alike.
-   Applied to the WHOLE wrap (chip + its own resize handle together, see
-   .sequence-chip-wrap), not just the chip on its own - confirmed directly
+   Applied to the WHOLE wrap (chip + its resize handle together, see
+   .sequence-chip-wrap), not just the chip by itself - confirmed directly
    as a real bug otherwise: once the resize handle became a visually fused
    part of the same chip (flush edges, matching height - see
    .sequence-chip-resize-handle), a ring drawn around the chip ALONE
@@ -4670,9 +4670,9 @@ export default defineComponent({
 }
 
 /* Label stays pinned to the left edge and the close (x) icon to the right
-   edge even once the chip is stretched wider than its own content (see
+   edge even once the chip is stretched wider than its content (see
    sequenceGroupChipStyle's minWidth, for a chip repeating more than once) -
-   Vuetify's .v-chip__content only ever sizes to its own content by
+   Vuetify's .v-chip__content only ever sizes to its content by
    default, so a wider outer chip otherwise left both floating together in
    the middle instead of spreading to the chip's full width. */
 .sequence-chip >>> .v-chip__content {
@@ -4691,7 +4691,7 @@ export default defineComponent({
   border-bottom-right-radius: 0 !important;
   /* Vuetify's  default right padding leaves noticeable empty space
      between the close (x) icon and the chip's right edge - tightened
-     here so it sits closer to that edge, same reasoning as the icon's own
+     here so it sits closer to that edge, same reasoning as the icon's
      already-tight left-side spacing. Left padding untouched (the text
      label's spacing is unaffected). */
   padding-right: 8px !important;
@@ -4701,16 +4701,16 @@ export default defineComponent({
    above) - dragging it repeats the chip's pattern more (or fewer)
    times in a row (see handleSequenceResizeStart), snapped to whole
    repeats. Same height as the chip itself (a "small" v-chip's fixed
-   24px) and rounded only on its own outer (right) corners, matching the
+   24px) and rounded only by itself outer (right) corners, matching the
    chip's pill shape on that side, so the combined shape reads as one
-   continuous capsule. Its own background color (see
+   continuous capsule. Its background color (see
    sequenceGroupHandleStyle) is a lighter tint of the chip's color, not
    a fixed grey, for the same "part of the same chip" reason. ew-resize
    (not the wrap's grab cursor) signals this is a horizontal resize,
    not a reorder drag, even though both live in the same small area. */
 .sequence-chip-resize-handle {
   /* At least as wide as its  12px corner radius (matching the chip's
-     own left-edge radius - see .sequence-chip) - CSS scales corner radii
+     left-edge radius - see .sequence-chip) - CSS scales corner radii
      DOWN to fit when they'd otherwise exceed the box's width, so a
      narrower handle wouldn't actually render at the full matching 12px it
      was given, despite the value itself being identical. */
@@ -4725,12 +4725,12 @@ export default defineComponent({
   filter: brightness(0.92);
 }
 
-/* Not a card anymore (see the template's own comment on this section) -
+/* Not a card anymore (see the template's comment on this section) -
    just a plain collapsible region, matching TextFontEditor.vue's "Text
    Minikernel Font Editor" section (.option-section-header/-content). */
-/* Only adds click affordance on top of .instruments-label-row's own
+/* Only adds click affordance on top of .instruments-label-row's
    layout (also carried on this element - see the template) - the Sequence
-   header uses that same class un-clickable-styled (its own chevron button
+   header uses that same class un-clickable-styled (its chevron button
    is the only click target there), but the Pattern header's whole row
    toggles on click, same as this tab's other collapsible sections. */
 .option-section-header {
@@ -4747,17 +4747,17 @@ export default defineComponent({
 
 /* No left indent for the pattern section specifically (overrides the 4px
    above) - unlike Text Minikernel's single always-narrow glyph grid, this
-   section's own piano roll/track grid should use the full width available,
+   section's piano roll/track grid should use the full width available,
    flush with the Sequence chips/Song name row above it rather than sitting
    slightly indented under the collapse arrow. */
 .pattern-section-content {
   padding-left: 0;
 }
 
-/* Zeroes the inner v-card-text elements' OWN default 16px left/right
+/* Zeroes the inner v-card-text elements' default 16px left/right
    padding - .music-sequence-section (the outer v-card-text this whole
    pattern section sits inside) already provides that same 16px inset once;
-   these inner v-card-texts stacking their own 16px on top of it left
+   these inner v-card-texts stacking their 16px on top of it left
    Pattern name/Length/Tempo and the Instruments grid/piano roll sitting a
    full 32px in from the edge, visibly further indented than the Sequence
    chips right above them (which sit directly in .music-sequence-section,
@@ -4768,21 +4768,21 @@ export default defineComponent({
   padding-right: 0;
 }
 
-/* The Pattern header's own ID badge (see the template) - .music-id-badge's
+/* The Pattern header's ID badge (see the template) - .music-id-badge's
    shared position: absolute/top/left (tuned for sitting inside a card,
-   see its own comment) doesn't apply in this plain flex header row, and
-   this needs its own left margin (no button/collapse-arrow clearance to
+   see its comment) doesn't apply in this plain flex header row, and
+   this needs its left margin (no button/collapse-arrow clearance to
    rely on here, since the chevron is a normal flex sibling now, not an
    absolutely positioned overlay). */
-/* flex-basis: 100% forces this onto its own line, above the Pattern name
+/* flex-basis: 100% forces this onto its line, above the Pattern name
    field beside it in the same flex-wrap row (see .pattern-name-row), even
-   though it's the field's own flex sibling, not a separate block ancestor. */
+   though it's the field's flex sibling, not a separate block ancestor. */
 .option-section-pattern-id-badge {
   position: static;
   flex-basis: 100%;
-  /* Pulls the Pattern name field below it closer - .pattern-name-row's own
+  /* Pulls the Pattern name field below it closer - .pattern-name-row's
      12px gap (needed for its actual side-by-side fields) otherwise left a
-     bigger gap under this badge than it needs on its own. */
+     bigger gap under this badge than it needs by itself. */
   margin-bottom: -10px;
 }
 
@@ -4806,16 +4806,16 @@ export default defineComponent({
   gap: 24px 16px;
   /* .music-section-label's  margin-bottom (4px) wasn't enough room for
      the first row's "Instrument" field label - a dense Vuetify select's
-     floating label sits right at the top of its own box, so with only 4px
+     floating label sits right at the top box, so with only 4px
      between them the two labels read as crowded/almost touching instead of
      as two clearly separate rows. */
   margin-top: 12px;
 }
 
 /* Enough vertical padding (no divider line) that dense v-selects' floating
-   labels - which sit slightly above their own box - can't read as
+   labels - which sit slightly above their box - can't read as
    overlapping the row above/below - handled by .track-grid's row gap
-   now that instruments can sit side by side, not just this row's own
+   now that instruments can sit side by side, not just this row's
    top/bottom padding (which would otherwise double up with that gap). */
 .track-row {
   display: flex;
@@ -4830,7 +4830,7 @@ export default defineComponent({
 
 /* The plus icon sits a couple pixels low against the button's  text
    baseline otherwise - Vuetify centers a v-icon against the button's full
-   line-height box, not the text glyphs' own visual baseline. */
+   line-height box, not the text glyphs' visual baseline. */
 .add-track-button .v-icon {
   vertical-align: 4px;
 }
@@ -4847,14 +4847,14 @@ export default defineComponent({
    .pattern-playback-controls in an inconsistent spot (sometimes flush
    right, sometimes not) depending on exactly how much room
    .subdivision-controls left on line 1 - confirmed directly as a real bug,
-   traced to .pattern-playback-controls' own old margin-left: 8px (fixed
-   there instead, see its own comment) and .pattern-delete-btn's old
-   margin-left: auto (also fixed at its own source). space-between itself
+   traced to .pattern-playback-controls' old margin-left: 8px (fixed
+   there instead, see its comment) and .pattern-delete-btn's old
+   margin-left: auto (also fixed at its source). space-between itself
    turned out not to be the culprit - it already does the right thing on
-   its own: pins .subdivision-controls to the left and
+   its: pins .subdivision-controls to the left and
    .piano-roll-zoom-and-playback to the right when both fit on one line,
    but falls back to flex-start (left-aligned) for a lone item once that
-   group wraps onto its own line with nothing left to space "between". */
+   group wraps onto its line with nothing left to space "between". */
 /* Sticky, same as .music-toolbar above - "top" is bound to that toolbar's
    live-measured height (musicToolbarHeight, see the comment on it in
    setup()) so this stacks directly below it with no gap/overlap as that
@@ -4885,23 +4885,23 @@ export default defineComponent({
 /* Groups the zoom controls with the pattern preview play/stop/loop buttons
    (moved in here from the pattern card's top-right toolbar) so they sit
    immediately next to each other. flex-wrap here lets
-   .pattern-playback-controls drop to its own line UNDER
+   .pattern-playback-controls drop to its line UNDER
    .piano-roll-zoom-controls when both don't fit side by side - but neither
-   of those two groups ever splits apart internally (see their own
-   flex: 0 0 auto, no wrap of their own), so it's always "zoom tools" and
+   of those two groups ever splits apart internally (see their
+   flex: 0 0 auto, no wrap), so it's always "zoom tools" and
    "playback buttons" wrapping as two whole blocks, never individual icons
-   scattering onto separate lines of their own.
+   scattering onto separate lines.
    flex: 0 1 auto (flex-grow: 0, NOT 1) + min-width: 0 - this group has to
-   be able to SHRINK down to whatever width it lands on (its own wrapped
+   be able to SHRINK down to whatever width it lands on (its wrapped
    line, once .subdivision-controls has taken the rest of line 1) before its
-   own internal flex-wrap has anything to trigger against, but must NOT
-   grow past its own content's natural width either: flex-grow: 1 let
+   internal flex-wrap has anything to trigger against, but must NOT
+   grow past its content's natural width either: flex-grow: 1 let
    .piano-roll-zoom-row's space-between stretch this group's outer box
-   to fill the row's full remaining width, while its own children (with no
-   justify-content: flex-end of their own) stayed put at the group's LEFT
+   to fill the row's full remaining width, while its children (with no
+   justify-content: flex-end) stayed put at the group's LEFT
    edge - visually reading as "not right-aligned" even though the group's
-   own (empty, oversized) box really was flush against the row's right
-   edge. flex-grow: 0 keeps this box exactly as wide as its own content, so
+   (empty, oversized) box really was flush against the row's right
+   edge. flex-grow: 0 keeps this box exactly as wide as its content, so
    space-between has an accurately-sized item to push flush right. */
 .piano-roll-zoom-and-playback {
   display: flex;
@@ -4915,7 +4915,7 @@ export default defineComponent({
 /* flex-shrink: 0 keeps this group (button/slider/label) at its  natural
    width instead of getting squeezed by .subdivision-select sharing the row
    with it now - confirmed directly as the cause of the slider rendering
-   far narrower than its own 200px flex-basis once the select moved in. */
+   far narrower than its 200px flex-basis once the select moved in. */
 .piano-roll-zoom-controls {
   display: flex;
   align-items: center;
@@ -4923,14 +4923,14 @@ export default defineComponent({
   flex: 0 0 auto;
 }
 
-/* No left margin of its own (used to have one) - a margin here stayed
-   attached to this group even when .piano-roll-zoom-and-playback's own
-   flex-wrap moved it down onto its own line under .piano-roll-zoom-controls,
+/* No left margin (used to have one) - a margin here stayed
+   attached to this group even when .piano-roll-zoom-and-playback's
+   flex-wrap moved it down onto its line under .piano-roll-zoom-controls,
    leaving a stray gap before Export/Import that made the wrapped line
    look NOT left-aligned - confirmed directly as a real bug. The visual
    separation from the zoom icons (a slightly bigger gap than between the
    zoom icons themselves) now comes from .piano-roll-zoom-and-playback's
-   own gap instead, which only ever applies BETWEEN items on the same line
+   gap instead, which only ever applies BETWEEN items on the same line
    (or between wrapped lines), never as leading space before the first item
    of a line. */
 .pattern-playback-controls {
@@ -4971,8 +4971,8 @@ export default defineComponent({
   font-size: 0.85em;
   margin-left: 2px;
   /* Sits between the reset (Fit zoom) and zoom-out buttons (moved there
-     per request), not at either end of the row - needs its own right-hand
-     clearance too, since .piano-roll-zoom-controls' own gap: 0 relies on
+     per request), not at either end of the row - needs its right-hand
+     clearance too, since .piano-roll-zoom-controls' gap: 0 relies on
      each child's margin for spacing, and .piano-roll-zoom-icon-btn
      (zoom-out, right after this) has none. */
   margin-right: 2px;
@@ -5019,7 +5019,7 @@ export default defineComponent({
 /* flex-basis dropped from 200px, and no min-width floor at all (0, not
    60px) - this shrinks as far as the pattern card's available width
    needs it to, rather than forcing .track-channel-select right beside it
-   to wrap away onto its own line. Per request, Instrument/Channel stay on
+   to wrap away onto its line. Per request, Instrument/Channel stay on
    one row together even if that means a very narrow Instrument box. */
 .track-instrument-select {
   flex: 1 1 80px;
@@ -5036,13 +5036,13 @@ export default defineComponent({
    place/remove a note, drag a held note's right edge to change its length.
 
    ONE element (this one) owns both scroll axes, capped to a fixed size, so
-   both its scrollbars sit at fixed spots along ITS OWN edges - always in
+   both its scrollbars sit at fixed spots along ITS edges - always in
    view - rather than trailing off after however many rows/steps of content
    (which is what happened when vertical and horizontal scroll were split
    across two nested elements instead). The step header and the row labels
    stay in view while scrolling via position: sticky (top and left
    respectively) instead of living outside the scrollable area, since they
-   still need to scroll WITH their own axis (a header has to track
+   still need to scroll WITH their axis (a header has to track
    horizontal scroll, just not vertical; a row label has to track vertical
    scroll, just not horizontal).
 
@@ -5054,7 +5054,7 @@ export default defineComponent({
    volume row too), rather than sitting right above it, right where the
    pitch rows actually end - confirmed directly as a real complaint once
    the volume row was first added inside here. max-height bumped up
-   (284px -> 340px) to compensate for the volume row now taking its own
+   (284px -> 340px) to compensate for the volume row now taking its
    extra space below this, rather than shrinking the pitch-row area to fit
    it in. */
 .piano-roll-scroll {
@@ -5063,7 +5063,7 @@ export default defineComponent({
      startPianoRollResize. */
   overflow: auto;
   /* Matches App.vue's darkened .v-sheet--outlined-equivalent card border
-     color (see its own comment) rather than Vuetify's default
+     color (see its comment) rather than Vuetify's default
      rgba(0, 0, 0, 0.12) - the piano roll's frame reads better a bit darker
      regardless of the surrounding (now border-less) pattern section. */
   border: 1px solid rgba(0, 0, 0, 0.24);
@@ -5125,7 +5125,7 @@ export default defineComponent({
 }
 
 /* flex-basis is set inline (see cellWidthPx), matching .piano-roll-cell's
-   own width so the header stays aligned with the grid below it. */
+   width so the header stays aligned with the grid below it. */
 .piano-roll-step-number {
   text-align: center;
   font-size: 0.7rem;
@@ -5133,14 +5133,14 @@ export default defineComponent({
   cursor: pointer;
   /* Echoes .piano-roll-cell's  step-edge border-left, fainter (0.12 vs
      0.22) so the ruler's step divisions read as a quiet reference
-     rather than competing with the piano roll's own, more prominent grid -
+     rather than competing with the piano roll's, more prominent grid -
      see headerSliceGridImage's comment for its slice-line counterpart. */
   border-left: 1px solid rgba(0, 0, 0, 0.12);
 }
 
 /* Steps beyond the pattern's current Length - visible so raising Length is
    discoverable, but visibly locked out until then (see the disabled-guard
-   on its own @click, which skips seeking there entirely). */
+   by itself @click, which skips seeking there entirely). */
 .piano-roll-step-number-disabled {
   opacity: 0.25;
   cursor: default;
@@ -5174,8 +5174,8 @@ export default defineComponent({
 }
 
 /* A black key on a real piano (see isBlackKeyRow) - dark background/light
-   text, like an actual black key with its own note name printed on it,
-   instead of the plain light .piano-roll-label above (a white key's own
+   text, like an actual black key with its note name printed on it,
+   instead of the plain light .piano-roll-label above (a white key's
    look). opacity reset to 1 (not the plain label's 0.7) - dimming a
    light color reads as "muted", but dimming this dark one just makes the
    light text harder to read against it for no benefit. */
@@ -5189,8 +5189,8 @@ export default defineComponent({
    .piano-roll-cell-row-unavailable, extended to the row's label too
    (see labelRowUnavailable) - the exact same literal background color
    (not a filter over whatever was already there) so an unavailable row's
-   label actually matches its own cells' grey instead of landing on some
-   other shade - !important to win over .piano-roll-label-black-key's own
+   label actually matches its cells' grey instead of landing on some
+   other shade - !important to win over .piano-roll-label-black-key's
    dark background when a black-key row is also unavailable. */
 .piano-roll-label-row-unavailable {
   background-color: rgba(0, 0, 0, 0.18) !important;
@@ -5210,20 +5210,20 @@ export default defineComponent({
 
 /* The Move tool drags a note rather than placing/erasing one on a plain
    click - a move cursor reads as "drag this" at a glance, the same reason
-   PixelEditor.vue's own Move tool swaps its cursor this way. */
+   PixelEditor.vue's Move tool swaps its cursor this way. */
 .piano-roll-cell-move-cursor {
   cursor: move;
 }
 
 /* The Select tool drags a marquee box rather than placing/moving/erasing a
    note on a plain click - crosshair reads as "drag to select" the same way
-   GraphicEditorToolbar.vue's own marquee select tools already do. */
+   GraphicEditorToolbar.vue's marquee select tools already do. */
 .piano-roll-cell-select-cursor {
   cursor: crosshair;
 }
 
 /* Fixed (not absolute) - sized directly off the drag's raw viewport
-   clientX/clientY corners (see the template's own :style binding), so it
+   clientX/clientY corners (see the template's :style binding), so it
    needs no container-relative offset math at all, unlike every other
    positioned element on this grid (which all measure against the
    scrolling .piano-roll-scroll instead). pointer-events: none so the drag
@@ -5261,7 +5261,7 @@ export default defineComponent({
 
 /* A note belonging to an instrument other than the one currently selected
    for editing (see the radio buttons next to each instrument row) - still
-   shown in its own color so the whole pattern is visible at once, just
+   shown in its color so the whole pattern is visible at once, just
    dimmed and non-interactive since editing it requires selecting that
    instrument first. */
 .piano-roll-cell-foreign {
@@ -5271,7 +5271,7 @@ export default defineComponent({
 
 /* A foreign note sitting on a row the active track can't use at all (e.g. a
    tuned-note row while a noise-type instrument is selected) - fully
-   desaturated and darkened on top of .piano-roll-cell-foreign's own
+   desaturated and darkened on top of .piano-roll-cell-foreign's
    dimming, so it reads as clearly "not available to you" (matching
    .piano-roll-cell-disabled's weight for empty cells on that row) instead
    of looking like any other clickable note. !important to win over the
@@ -5284,7 +5284,7 @@ export default defineComponent({
 
 /* !important so this always wins over the plain .piano-roll-cell:nth-child
    step-alternation tint above, regardless of selector specificity. Channel
-   conflicts ("blocked") are painted precisely via patternCellStyle's own
+   conflicts ("blocked") are painted precisely via patternCellStyle's
    gradient layer instead of a class here, since only part of a step can be
    blocked while the rest stays available - see blockedRangesInStep. */
 .piano-roll-cell-disabled {
@@ -5323,7 +5323,7 @@ export default defineComponent({
   cursor: ew-resize;
   background-color: rgba(255, 255, 255, 0.5);
   /* A note ending at (or very near) a step boundary positions this right at
-     its own cell's right edge, overflowing a few px into the next cell's
+     its cell's right edge, overflowing a few px into the next cell's
      box (see noteEndFraction). Without this, that next cell - a later,
      same-stacking-level sibling - paints and hit-tests over that
      overflowing sliver, so the handle stays visible but stops being
@@ -5371,7 +5371,7 @@ export default defineComponent({
 /* Drag this to resize the volume row (see startVolumeRowResize) - a plain
    horizontal strip along the row's bottom edge, same "semi-transparent
    white grab strip" language as .piano-roll-resize-handle/
-   .piano-roll-volume-handle use for their own (differently-oriented) drag
+   .piano-roll-volume-handle use for their (differently-oriented) drag
    handles, just full-width and a little taller so it's comfortable to grab
    without needing to land on a single note's handle first. */
 .piano-roll-volume-resize-handle {
@@ -5389,7 +5389,7 @@ export default defineComponent({
    sits directly on the boundary between .piano-roll-scroll and
    .piano-roll-volume-scroll, a separate flex child of .piano-roll-wrapper
    rather than living inside either of those (unlike
-   .piano-roll-volume-resize-handle, which is the volume row's own LAST
+   .piano-roll-volume-resize-handle, which is the volume row's LAST
    child - this boundary line belongs to neither side specifically). Same
    visual treatment as that handle for a consistent "this is draggable"
    affordance. */
@@ -5419,7 +5419,7 @@ export default defineComponent({
    already represents the note's volume as a fraction of the cell's
    full height, growing up from 0 exactly like a level meter. left/width
    are set inline too (see noteStepSpanStyle) - a note that starts or ends
-   mid-step only occupies its own fraction of this column, not the whole
+   mid-step only occupies its fraction of this column, not the whole
    thing, same as the note itself in the grid above. */
 .piano-roll-volume-bar {
   position: absolute;
@@ -5429,7 +5429,7 @@ export default defineComponent({
 /* A different track's  note at this same step (see
    otherTrackVolumeBars) - visible so switching the active instrument
    doesn't erase the rest of the pattern's volume shape from this row, but
-   dimmed and click-through (matching .piano-roll-cell-foreign's own
+   dimmed and click-through (matching .piano-roll-cell-foreign's
    treatment of a foreign note up in the grid) since it isn't editable
    from here. */
 .piano-roll-volume-bar-ghost {
@@ -5463,7 +5463,7 @@ export default defineComponent({
    plain <span> - typing an exact value here sets the note's volume
    directly instead of only being settable by dragging the bar. Reset back
    to looking like the plain label it replaced: no border/background/
-   padding of its own, and the browser's up/down spinner arrows hidden
+   padding, and the browser's up/down spinner arrows hidden
    (they'd otherwise eat into this already-narrow column and don't fit the
    rest of the piano roll's flat styling). */
 .piano-roll-volume-value {

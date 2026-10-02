@@ -28,8 +28,8 @@
 
 // If attack+decay+sustainLength+release together don't fit within
 // totalFrames, every stage is scaled down proportionally (rounded) rather
-// than truncated - same spirit as the old one-stage Fade's own "a note
-// shorter than its own fade length still fades for its whole duration
+// than truncated - same spirit as the old one-stage Fade's "a note
+// shorter than its fade length still fades for its whole duration
 // instead of not fading at all" clamp, just generalized to 4 stages instead
 // of 1.
 //

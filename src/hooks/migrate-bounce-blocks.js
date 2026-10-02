@@ -8,8 +8,8 @@
 // blocks/sprites.js/generators/bbasic/sprites.js for why). Unlike
 // hooks/migrate-player-blocks.js's  OLD_TYPE_TO_NEW map (a fixed
 // literal per old type), sprite_missile_bounce's  replacement OBJECT
-// value depends on that block's OWN existing MISSILE field (0 or 1) - read
-// before the block is rewritten, not a constant - so this needs its own
+// value depends on that block's existing MISSILE field (0 or 1) - read
+// before the block is rewritten, not a constant - so this needs its
 // per-block logic rather than a flat lookup table. sprite_ball_bounce has
 // no fields at all, so its  replacement is always the literal 'ball'.
 // Same overall shape as migrate-player-blocks.js otherwise (raw workspace

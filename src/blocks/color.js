@@ -23,7 +23,7 @@ const colorToDataURL = (color) => {
 };
 
 // Exported so other blocks that need the exact same visual swatch-grid
-// picker (see @blockly/field-grid-dropdown) - not just this one's own
+// picker (see @blockly/field-grid-dropdown) - not just this one's
 // color_get - can reuse it instead of duplicating the color-to-dataURL
 // rendering (see blocks/text-minikernel.js's background-color block).
 export const NTSC_COLOR_OPTIONS = NTSC_COLORS.map((color, idx) => ([

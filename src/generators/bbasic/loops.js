@@ -18,26 +18,26 @@ goog.require('Blockly.BBasic');
 
 
 // A "repeat N times" block's  count, when N is a complex expression (not
-// a plain number or bare variable name) - see controls_repeat_ext's own
+// a plain number or bare variable name) - see controls_repeat_ext's
 // comment below for why this needs a real, dedicated, properly-declared
 // variable rather than a shared scratch register like temp1 (which the
 // loop's  body can just as easily be using for something else entirely,
-// e.g. background_change_pixel, and "for X = 1 to <bound>" re-reads its own
+// e.g. background_change_pixel, and "for X = 1 to <bound>" re-reads its
 // bound from memory every iteration rather than caching it once). Reserved
 // via generators/bbasic.js's  init() pre-scan/reserveDevVar bucket - the
 // same mechanism every other feature's  hidden state uses (see e.g.
 // reserveRomNoiseDevVars in generators/bbasic/sprites.js) - NOT
-// nameDB_.getDistinctName, which (confirmed directly, see bbasic.js's own
+// nameDB_.getDistinctName, which (confirmed directly, see bbasic.js's
 // comment on why temp1-6 had to be reserved against user variable name
 // collisions) never actually gets a matching "dim" declared anywhere; a
 // symbol nothing declares. One shared var project-wide - same reasoning
 // REPEAT_COUNTER_VAR_NAME itself already gets away with sharing across every
-// repeat loop: nested repeat blocks (a repeat whose own body contains
+// repeat loop: nested repeat blocks (a repeat whose body contains
 // ANOTHER repeat block with a complex count) aren't safe with a single
 // shared var either way, an existing limitation this doesn't make any worse.
 export const REPEAT_BOUND_VAR_NAME = 'repeatBound';
 
-// The "repeat X times" block's own "for X = 1 to <bound> : ... : next" loop
+// The "repeat X times" block's "for X = 1 to <bound> : ... : next" loop
 // variable itself - used to be the literal, hardcoded bB identifier
 // "loopcounter", unconditionally reserved a whole letter (or Superchip var0-
 // 14 slot) in generators/bbasic.js's  SYSTEM_VARIABLES regardless of
@@ -49,11 +49,11 @@ export const REPEAT_BOUND_VAR_NAME = 'repeatBound';
 // as REPEAT_BOUND_VAR_NAME's  comment.
 export const REPEAT_COUNTER_VAR_NAME = 'repeatcounter';
 
-// wait_frames' own "for X = 1 to <frames>" loop counter - deliberately NOT
-// the shared REPEAT_COUNTER_VAR_NAME variable controls_repeat_ext's own
+// wait_frames' "for X = 1 to <frames>" loop counter - deliberately NOT
+// the shared REPEAT_COUNTER_VAR_NAME variable controls_repeat_ext's
 // "for" loop uses, even though that's what this block itself used to share.
 // A "Wait N frames" block placed inside a "Repeat X times" block's body is a
-// real, reported case - both blocks' own "for <counter> = 1 to ... next"
+// real, reported case - both blocks' "for <counter> = 1 to ... next"
 // constructs would fight over the exact same variable, with the INNER
 // (wait_frames) loop's  final value clobbering the OUTER (repeat) loop's
 // still-in-progress count the moment the wait finishes, corrupting however
@@ -64,10 +64,10 @@ export const WAIT_FRAMES_COUNTER_VAR_NAME = 'waitFramesCounter';
 
 // Whether a given "repeat N times" block's  TIMES input would actually
 // need REPEAT_BOUND_VAR_NAME once controls_repeat_ext's  generator runs
-// (see its own "endVar" logic below) - used by generators/bbasic.js's own
+// (see its "endVar" logic below) - used by generators/bbasic.js's
 // early pre-scan (before reserveDevVar hands out letters) to reserve
 // REPEAT_BOUND_VAR_NAME only for a project where at least one repeat block's
-// own count genuinely needs it, rather than for every project with ANY
+// count genuinely needs it, rather than for every project with ANY
 // repeat block at all (the previous, simpler-but-wasteful gate - see that
 // pre-scan's  comment for the one-byte tradeoff this replaces).
 // Deliberately conservative: anything this can't positively PROVE simple
@@ -80,7 +80,7 @@ export const repeatBoundVarNeeded = (block, Blockly) => {
   // controls_repeat (the older block, not in this app's  toolbox but
   // still valid in an existing saved project) uses a plain inline NUMBER
   // FIELD for TIMES, not a value input to plug expressions into - see the
-  // generator's own "if (block.getField('TIMES'))" branch, which always
+  // generator's "if (block.getField('TIMES'))" branch, which always
   // produces a clean decimal string from it, never anything complex.
   if (block.getField('TIMES')) return false;
   const target = block.getInputTargetBlock('TIMES');
@@ -123,7 +123,7 @@ export default (Blockly) => {
     // construct, same as "pfpixel X Y OPERATION" (see
     // background_change_pixel's  comment in generators/bbasic/
     // background.js) and wait_frames'  identical fix - a multi-token
-    // bound (e.g. a Random block's own "(rand / 4) + 1", which has spaces
+    // bound (e.g. a Random block's "(rand / 4) + 1", which has spaces
     // in it) breaks it, confirmed directly as a real build failure. A
     // plain number or bare variable name is already safe to use directly;
     // anything else needs pre-assigning to REPEAT_BOUND_VAR_NAME first
@@ -140,7 +140,7 @@ export default (Blockly) => {
 
     // Kept as real, separate lines (never colon-joined onto one physical
     // line, as an earlier version of this did) - a loop body containing
-    // ANY block that emits its  label (controls_if's own "@ _if_N_bodyN"
+    // ANY block that emits its  label (controls_if's "@ _if_N_bodyN"
     // goto targets, chief among them, but also score_set, background fades,
     // Text Minikernel blocks, etc.) breaks under colon-joining: a label has
     // to sit at the START of its  line, and squashing it onto the same
@@ -182,7 +182,7 @@ export default (Blockly) => {
     // than caching it once (see REPEAT_BOUND_VAR_NAME's  comment above),
     // and this loop's  BODY unconditionally runs "gosub commongamelogic"
     // every iteration, which itself always calls "gosub
-    // _run_once_edge_reset" first thing, whose own hand-written asm
+    // _run_once_edge_reset" first thing, whose hand-written asm
     // unconditionally does "STA temp1" - clobbering a temp1-held bound with
     // unrelated "Run once" bookkeeping bits after the very first iteration,
     // regardless of where the "Wait N frames" block itself is placed (a

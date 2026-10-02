@@ -1,7 +1,7 @@
 import * as Blockly from 'blockly/core';
 import {COMMENT_ICON, GAMEOVER_ICON, GAME_ICON, START_ICON, SYSTEM_ICON, TITLE_ICON, UPDATE_ICON} from './icon';
 
-// Distinct from every other block colour in the app (see blocks/*.js's own
+// Distinct from every other block colour in the app (see blocks/*.js's
 // palette: purple, red, blue, background's orange, score's orange-red,
 // data's brown, text's brown, sound's magenta, sprites' teal, and this
 // category's  existing rgb(39, 176, 176) teal) - plain (non-blue) grey

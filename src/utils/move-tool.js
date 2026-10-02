@@ -3,7 +3,7 @@
 /**
  * Drags the CURRENT selection's pixels around the canvas - a Tool matching
  * @curtishughes/pixel-editor's interface (handlePointerDown/
- * handlePointerMove/handlePointerUp - see its own Pencil.js), but reading a
+ * handlePointerMove/handlePointerUp - see its Pencil.js), but reading a
  * live selection (a Set of "x,y" keys, see selection-tools.js) rather than
  * a fixed color. A click that doesn't land on an already-selected cell is a
  * no-op - there's nothing to drag from empty space, unlike Pencil/Fill/etc.
@@ -100,13 +100,13 @@ export default class Move {
 
     // Squashes the clear+draw pair above into one history entry, same
     // "keep a whole drag gesture to a single undo step" reasoning as
-    // Pencil.js's own handlePointerMove - and, from the SECOND tick
-    // onward, squashes that combined entry into the PREVIOUS tick's own
+    // Pencil.js's handlePointerMove - and, from the SECOND tick
+    // onward, squashes that combined entry into the PREVIOUS tick's
     // (already-squashed) entry too, so the entire drag - however many
     // ticks it took - undoes in one step. Skipped on the very first tick
     // (only the clear+draw pair squash still runs there) since there's no
     // prior entry from THIS gesture yet to merge into - handlePointerDown
-    // doesn't push one of its own the way Pencil's does.
+    // doesn't push one the way Pencil's does.
     editor.history.squash();
     if (!this.firstMove) editor.history.squash();
     this.firstMove = false;

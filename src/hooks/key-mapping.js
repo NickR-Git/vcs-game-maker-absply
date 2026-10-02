@@ -5,7 +5,7 @@ import {ref} from '@vue/composition-api';
 import {withGopher2600, safeWithGopher2600} from './emulator';
 
 // Keyboard->controller bindings for the browser preview - a page-level
-// (not per-project) preference, same reasoning as hooks/zoom.js's own
+// (not per-project) preference, same reasoning as hooks/zoom.js's
 // comment on keeping view/input preferences out of project storage.
 const STORAGE_KEY = 'vcs-game-maker.keyMapping';
 
@@ -16,7 +16,7 @@ const STORAGE_KEY = 'vcs-game-maker.keyMapping';
 // preview's equivalent defaults (UserPreferences.js's keypadKeys):
 // Player 1's Keypad defaults to 1,2,3/Q,W,E/A,S,D/Z,X,C - this overlaps
 // Player 2's WASD joystick defaults, which is fine, since a port is only
-// ever actually Joystick OR Keypad at a time (see main.go's own
+// ever actually Joystick OR Keypad at a time (see main.go's
 // keypadModeByPort/findKeyBinding) - and Player 2's Keypad defaults to the
 // numeric keypad.
 export const DEFAULT_KEY_MAPPING = {
@@ -49,7 +49,7 @@ export const DEFAULT_KEY_MAPPING = {
   ],
 };
 
-// Which keypad rune each kN control represents - controllers.Keypad's own
+// Which keypad rune each kN control represents - controllers.Keypad's
 // HandleEvent only accepts these 12 exact runes.
 const KEYPAD_CONTROL_CHARS = {
   k1: '1', k2: '2', k3: '3', k4: '4', k5: '5', k6: '6',
@@ -149,7 +149,7 @@ export const resetKeyMapping = () => {
 // see hooks/emulator.js's comment on 'gopher2600-ready' firing again
 // after an automatic crash-recovery reinstantiation, which boots with an
 // empty keyMapping (tools/gopher2600-wasm/main.go's console struct has
-// no defaults of its own - this module is the single source of truth for
+// no defaults - this module is the single source of truth for
 // what the defaults actually are).
 window.addEventListener('gopher2600-ready', () => {
   withGopher2600((gopher2600) => gopher2600.setKeyMapping(flatten(mapping.value)));
@@ -163,7 +163,7 @@ window.addEventListener('gopher2600-ready', () => {
 // first evaluates - genuinely no guarantee that's BEFORE
 // public/index.html's gopher2600-wasm loader fires 'gopher2600-ready'
 // for the very first time; a JS event listener that starts listening after
-// an event already fired simply never sees it, unlike withGopher2600's own
+// an event already fired simply never sees it, unlike withGopher2600's
 // retry loop below, which instead POLLS for window.gopher2600 - already
 // existing or not yet - and only gives up after 40 tries. Calling that
 // directly here, once, covers the case the event's timing could miss;

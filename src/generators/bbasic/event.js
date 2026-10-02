@@ -26,7 +26,7 @@ export default (Blockly) => {
         Blockly.BBasic.getCurrentBank(), Blockly.BBasic.getEventBank(targetEvent));
     // A statement generator's  return value must include its trailing
     // newline - Blockly.BBasic.scrub_ (see bbasic.js) concatenates sequential
-    // statements in a stack with no separator of its own, so a plain "goto"
+    // statements in a stack with no separator, so a plain "goto"
     // like this one would otherwise run straight into whatever statement
     // follows it in the same block stack, on the same line. Pre-existing gap
     // (unrelated to bank-switching): found because this is the first time a
@@ -69,7 +69,7 @@ export default (Blockly) => {
     const frameDelta = block.getFieldValue('DELTA');
     const code = Blockly.BBasic.statementToCode(block, 'DO').trim();
 
-    // "- 1" compensates for commongamelogic's own "framecounter =
+    // "- 1" compensates for commongamelogic's "framecounter =
     // framecounter + 1" (see bbasic.bb.hbs), which always runs before any
     // event body (and so before this check) gets a chance to run each
     // frame - without it, the very first frame this block's  event body
@@ -101,7 +101,7 @@ export default (Blockly) => {
     // init() for where runOnceCounter/runOnceByteLetters come from (one
     // shared byte per 4 instances - low nibble bit p is instance p's
     // "touched" flag, high nibble bit p+4 is its "fired" flag), and
-    // generateRunOnceEdgeReset for the other half of this: this block's own
+    // generateRunOnceEdgeReset for the other half of this: this block's
     // code only ever runs while its gate is true, so it can mark itself
     // "touched" whenever it's reached, but can't itself detect the gate
     // going false - that's what the unconditional per-frame reset (spliced

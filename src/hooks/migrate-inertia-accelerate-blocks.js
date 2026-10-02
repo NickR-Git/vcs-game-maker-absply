@@ -4,7 +4,7 @@
 // ACTION field yet) / sprite_inertia_stop_accelerate block types into the
 // single sprite_inertia_accelerate type they now share (an ACTION dropdown
 // up front, same shape as sprite_inertia_decelerate already had - see that
-// block's own comment in blocks/sprites.js and this combination's own
+// block's comment in blocks/sprites.js and this combination's
 // comment there for why). An old sprite_inertia_accelerate block just needs
 // a new "start" ACTION field inserted at the front - every other field it
 // already has (OBJECT plus the DIRECTION/RATE/MAXSPEED value inputs) stays
@@ -12,8 +12,8 @@
 // its type attribute changed to sprite_inertia_accelerate and a "stop"
 // ACTION field inserted before its existing OBJECT field - it never had
 // DIRECTION/RATE/MAXSPEED inputs at all, which is fine, since Stop doesn't
-// read them anyway (see the merged generator's own comment).
-// Same overall shape as hooks/migrate-joystick-blocks.js's own
+// read them anyway (see the merged generator's comment).
+// Same overall shape as hooks/migrate-joystick-blocks.js's
 // migrateLegacyJoystickBlocksInWorkspaceXml (raw workspace XML STRING in,
 // string out, via DOMParser/XMLSerializer) - called from the same two
 // places that function is: main.js's startup pass (an existing

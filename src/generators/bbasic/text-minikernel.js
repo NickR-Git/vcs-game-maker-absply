@@ -15,7 +15,7 @@ import {getNamedScrollLayout, registerFreeTypedScrollMessage, buildTextScrollSet
   TEXT_SCROLL_DIR_MASK} from './text-scroll';
 import {getStaticMessageLayout, staticMessageRegionEnd, splitMessageLines} from './text-minikernel-layout';
 
-// Canonical dev var names for "Scroll text lines up/down" (see their own
+// Canonical dev var names for "Scroll text lines up/down" (see their
 // generators below) - a message with more than 2 lines (see
 // splitMessageLines in text-minikernel-layout.js) only ever shows 2 of them
 // at once (TextIndex/TextIndex+TEXT_MESSAGE_LENGTH, same as any other
@@ -30,13 +30,13 @@ import {getStaticMessageLayout, staticMessageRegionEnd, splitMessageLines} from 
 export const textLinesBaseVarName = () => 'textLinesBase';
 export const textLinesMaxVarName = () => 'textLinesMax';
 
-// Row 2's  color (settable via the merged "Text: set color" block's own
+// Row 2's  color (settable via the merged "Text: set color" block's
 // ROW dropdown, text_minikernel_set_color below) and the scroll cursor's  color
 // (via "Text: set scroll cursor color", text_minikernel_set_cursor_color
 // below) - unlike TextColor (a fixed alias onto statusbarlength, a real bB
 // built-in with a spare byte to reuse), there's no equivalent spare built-in
-// for either of these, so each needs a real dev-var-pool slot of its own.
-// Read directly by hand-written asm (text12b.asm's own "textkernel2ndrow"
+// for either of these, so each needs a real dev-var-pool slot.
+// Read directly by hand-written asm (text12b.asm's "textkernel2ndrow"
 // block for row 2, utils/text-font.js's buildTextScrollCursorOverride for
 // the cursor) - hooks/rom.js resolves the real name via
 // Blockly.BBasic.nameDB_ the same way it already does for
@@ -46,9 +46,9 @@ export const textRow2ColorVarName = () => 'textRow2Color';
 export const textScrollCursorColorVarName = () => 'textScrollCursorColor';
 // The "end of message" icon's  color (via "Text: set end icon color",
 // text_minikernel_set_end_icon_color below) - the icon draws on GRP1 (its
-// own separate COLUP1), so it can have a different color than the up/down
+// separate COLUP1), so it can have a different color than the up/down
 // arrows on GRP0/COLUP0 - see buildTextScrollCursorOverride's  comment
-// in utils/text-font.js for why it moved back to GRP1 (needing its own
+// in utils/text-font.js for why it moved back to GRP1 (needing its
 // repositioning HMOVE) after briefly sharing GRP0's  low nibble.
 export const textEndIconColorVarName = () => 'textEndIconColor';
 // The scroll cursor's  runtime show/hide flag (via "Text scroll cursor
@@ -60,7 +60,7 @@ export const textEndIconColorVarName = () => 'textEndIconColor';
 // displayed color and was otherwise always 0 anyway (the "Color" picker
 // block - see color_get in blocks/color.js - only ever emits even values,
 // the same "real color bytes are always even" assumption
-// buildTextRow2ColorOverride's own $01 sentinel already relies on). 1 =
+// buildTextRow2ColorOverride's $01 sentinel already relies on). 1 =
 // hidden, 0 (the normal/default state) = visible.
 export const TEXT_SCROLL_CURSOR_HIDDEN_BIT = 1;
 
@@ -102,7 +102,7 @@ const parseLiteralNumberField = (raw) => {
 // "data text_strings" table: upper-cased, unsupported characters become
 // spaces, and the result is always exactly TEXT_MESSAGE_LENGTH tokens long.
 // Used for every static row AND every individual scroll page (see
-// getNamedScrollLayout's own "pages" comment in text-scroll.js) - maxWidth
+// getNamedScrollLayout's "pages" comment in text-scroll.js) - maxWidth
 // is a hard cap either way, so a scroll page is really just one more
 // TEXT_MESSAGE_LENGTH-wide row built the exact same way, never a longer,
 // untruncated one.
@@ -113,7 +113,7 @@ const parseLiteralNumberField = (raw) => {
 // goes: 'left', the default, puts it all on the right, 'right' puts it all
 // on the left, 'center' splits it evenly, the smaller half (when the
 // padding is odd) going on the left, a plain floor/ceil split. maxWidth
-// (the Text tab's own "max characters to display" setting) is what totalPad
+// (the Text tab's "max characters to display" setting) is what totalPad
 // is computed from, so a narrower maxWidth shrinks the field BOTH center
 // and right justify split/pad within, not just the overall truncation
 // point. That maxWidth-wide field always starts at the row's  first
@@ -134,7 +134,7 @@ export const encodeTextMessage = (text, justify = 'left', maxWidth = resolveText
 // Same as encodeTextMessage, but for a "Wrap to line 2" entry - returns one
 // glyph row per line splitMessageLines (text-minikernel-layout.js) split
 // the text into, each independently justified/padded exactly the way a
-// plain single-row message already is (see encodeTextMessage's own
+// plain single-row message already is (see encodeTextMessage's
 // comment). Only the first two of these are ever shown at once - "Scroll
 // text lines up/down" (see their  generators below) move TextIndex to
 // bring the rest into view.
@@ -164,7 +164,7 @@ export const encodeTextMessageLines = (text, justify = 'left', maxWidth = resolv
 //     as its  lowest valid TextIndex, for "Scroll text lines up").
 //   text_has_row2 (0 or 1) - tells the kernel whether to also draw row 2
 //     automatically, alongside row 1 with no scrolling needed (see
-//     text12b.asm's own "textkernel2ndrow" block) - true only for an entry
+//     text12b.asm's "textkernel2ndrow" block) - true only for an entry
 //     with BOTH 2+ lines AND "Wrap to line 2" actually on; a multi-row entry
 //     with that toggle off still has real row 2+ data (reachable via
 //     "Scroll text lines down"), it just never draws automatically.
@@ -221,7 +221,7 @@ export const trackTextRow2OffsetUsage = (Blockly, bank) => {
 // "Show text row 2 ID [n]" (text_minikernel_show_by_id_row, ROW=2) needs a
 // row 1 it can point TextIndex at that's ALWAYS blank, immediately followed
 // by whichever entry's  first line the runtime id picks - text12b.asm's
-// own row 2 is always read from TextIndex+TEXT_MESSAGE_LENGTH (see
+// row 2 is always read from TextIndex+TEXT_MESSAGE_LENGTH (see
 // text_minikernel_show_row's  comment), so there's no shortcut here the
 // way ROW=1 gets (its  row 1 already comes from text_static_offsets
 // unmodified - see text_minikernel_show_by_id_row's  comment - and ROW=1
@@ -230,7 +230,7 @@ export const trackTextRow2OffsetUsage = (Blockly, bank) => {
 // position 0 = the same blank guard row text_static_offsets itself reserves
 // - see getStaticMessageLayout's  comment), reusing the exact same
 // freeTypedMessages array/table-building code every OTHER free-typed/row
-// entry already goes through (see registerFreeTypedRowMessage's own
+// entry already goes through (see registerFreeTypedRowMessage's
 // comment) - only built once per project (cached on Blockly.BBasic, reset
 // per build in bbasic.js's  init()) even though generateTextRow2OffsetsTable
 // below can run once per bank.
@@ -293,7 +293,7 @@ export default (Blockly) => {
   const namedMessageLineCount = (id) => getStaticMessageLayout()[namedMessagePosition(id)].lineCount;
   // Whether row 2+ should draw AUTOMATICALLY (alongside row 1, no scrolling
   // needed) for this entry - "Wrap to line 2" itself, not lineCount (which
-  // is now independent of that toggle - see getStaticMessageLayout's own
+  // is now independent of that toggle - see getStaticMessageLayout's
   // comment). A message can have real, scrollable 2nd+ row data with this
   // false: "Scroll text lines down" still reveals it, one row at a time,
   // just never automatically.
@@ -337,7 +337,7 @@ export default (Blockly) => {
   // see this.freeTypedMessages'  use near the bottom of this file), but
   // always pushes TWO entries at once (row 1's text, then row 2's text -
   // whichever one wasn't set comes out blank) so they land at consecutive
-  // offsets in the table, matching what text12b.asm's own "textkernel2ndrow"
+  // offsets in the table, matching what text12b.asm's "textkernel2ndrow"
   // expects (row 2 is always read from TextIndex+TEXT_MESSAGE_LENGTH,
   // unconditionally). Never deduped against an existing single-row entry the
   // way registerFreeTypedMessage's  text.indexOf is - an existing entry
@@ -353,7 +353,7 @@ export default (Blockly) => {
 
   // Emits the write every "Show text"/"Show text with ID"/"Clear text" code
   // path needs, telling the kernel whether TextIndex's  message (just
-  // set above/below) also has a wrapped second line - see text12b.asm's own
+  // set above/below) also has a wrapped second line - see text12b.asm's
   // "textkernel2ndrow" block. Only emitted when TextRow2Active is actually
   // dimmed (isTextRow2Used(), gated the same way in
   // generateTextMinikernelDims) - a project with no wrapping entries at all
@@ -368,7 +368,7 @@ export default (Blockly) => {
   // "Scroll text lines up/down" (see their  generators below) to know
   // the CURRENTLY shown message's  valid TextIndex range - baseExpr is
   // its row 1 offset (the lowest valid TextIndex, same value "Scroll text
-  // lines up" clamps against), maxOffsetExpr is its highest (row 1's own
+  // lines up" clamps against), maxOffsetExpr is its highest (row 1's
   // offset again, unchanged, for a message with only 1 line - i.e. no room
   // to scroll at all). Only emitted when isTextLineScrollUsed() is true - a
   // project with no "Scroll text lines" block anywhere never reserves
@@ -384,7 +384,7 @@ export default (Blockly) => {
 
   // Every "Show text" generator ends by calling this with the offset/
   // maxOffset it already knows (a compile-time constant for named/free-typed
-  // messages, a runtime table lookup for "Show text with ID" - see its own
+  // messages, a runtime table lookup for "Show text with ID" - see its
   // generators below) and the scroll speed/pause codes to use (either the
   // fixed defaults below, for the plain "Show text" blocks, or a
   // "..._scroll" block's  SCROLL_SPEED/SCROLL_PAUSE fields) - see
@@ -402,8 +402,8 @@ export default (Blockly) => {
   };
 
   // Used by the plain "Show text" blocks (no SCROLL_SPEED/SCROLL_PAUSE
-  // fields of their own) whenever a message they show turns out to be too
-  // long to fit statically - see blocks/text-minikernel.js's own "(scrolling)"
+  // fields) whenever a message they show turns out to be too
+  // long to fit statically - see blocks/text-minikernel.js's "(scrolling)"
   // block variants for ones with tunable fields instead.
   const DEFAULT_SCROLL_SPEED = '20';
   const DEFAULT_SCROLL_PAUSE = '30';
@@ -443,7 +443,7 @@ export default (Blockly) => {
   };
   // Puts a named entry's  first line on just one row, reusing the same
   // registerFreeTypedRowMessage mechanism text_minikernel_show_row uses for
-  // its  free-typed text - the entry's OWN justify setting isn't applied
+  // its  free-typed text - the entry's justify setting isn't applied
   // here (registerFreeTypedRowMessage always left-justifies, the same
   // limitation "Show text: <free-typed text>" already has - see
   // registerFreeTypedMessage's  comment), only its raw first-line text.
@@ -456,14 +456,14 @@ export default (Blockly) => {
       setTextRow2ActiveCode(true) +
       setTextLinesRangeCode(offset, offset);
   };
-  // Scroll named block: uses the SAME position to look up that entry's own
+  // Scroll named block: uses the SAME position to look up that entry's
   // page-0 offset/maxOffset in the scroll append region (see
   // getNamedScrollLayout in text-scroll.js) - naturally maxOffset = 0 for a
   // message with only one page (fits within maxWidth already), same
   // end-to-end effect as the plain block above for that message. Scrolling
   // messages never wrap (always a single line - see setTextRow2ActiveCode's
-  // own comment on its "active" parameter), regardless of whether this
-  // entry's own "Wrap to line 2" toggle happens to be on - that toggle only
+  // comment on its "active" parameter), regardless of whether this
+  // entry's "Wrap to line 2" toggle happens to be on - that toggle only
   // means anything to the plain block above. setTextLinesRangeCode(entry.offset,
   // entry.offset) pins the "Scroll text lines" range to a single point (no
   // room to move) so those blocks become harmless no-ops if used together
@@ -515,7 +515,7 @@ export default (Blockly) => {
     // embedded directly into "(argument0) * TEXT_MESSAGE_LENGTH" - VALUE can
     // be a genuine bB function call now (e.g. a dynamic-TABLE_ID "Data table
     // element by ID" block plugged in here - see generators/bbasic/data.js's
-    // own registerDataDispatchFunction), and a function call is only legal
+    // registerDataDispatchFunction), and a function call is only legal
     // when directly assigned to a variable (confirmed straight from the
     // reference bB compiler's  source: callfunction() only supports
     // "var = name(args)") - embedding it inside further arithmetic instead
@@ -528,7 +528,7 @@ export default (Blockly) => {
     // clobbering that argument the moment this ran, same class of bug
     // functionCallDiscardVarName already exists to avoid in
     // generators/bbasic/function.js - reused directly here rather than a
-    // second dedicated var of its own, same "written once, read back
+    // second dedicated var, same "written once, read back
     // immediately after, never held across another Function call" lifetime.
     // functionCallDiscardVarName now routes through reserveDevVarRW
     // (generators/bbasic.js's  init()) - captured with .write here,
@@ -539,7 +539,7 @@ export default (Blockly) => {
     // Fast path: no entry in the project can ever have a second row, so the
     // static region really is a uniform TEXT_MESSAGE_LENGTH stride - the
     // plain multiply (needing div_mul.asm - see Blockly.BBasic.usesDivMul's
-    // own comment elsewhere in this codebase) is cheaper than a table read
+    // comment elsewhere in this codebase) is cheaper than a table read
     // and stays exactly correct. isTextMultiRowUsed(), not isTextRow2Used() -
     // a plain message can need a second row purely from word-wrap now, with
     // "Wrap to line 2" never coming into it at all (see
@@ -566,7 +566,7 @@ export default (Blockly) => {
     // Bank-suffixed reads (see bankSuffixedTableName's  comment in
     // blocks/data.js) - this generator can run once per bank a "Show text
     // ID" block happens to be reached from (ordinary code, or a relocated
-    // Function's  body), and each needs to read back the SAME bank's own
+    // Function's  body), and each needs to read back the SAME bank's
     // copy of the table generateTextStaticOffsetTables emitted above.
     const staticOffsets = `${bankSuffixedTableName('text_static_offsets', bank)}[${argPair.read}]`;
     const hasRow2 = `${bankSuffixedTableName('text_has_row2', bank)}[${argPair.read}]`;
@@ -584,7 +584,7 @@ export default (Blockly) => {
   // ROW=1 is essentially "free": an entry's  row 1 IS its  first line
   // already (by construction - see getStaticMessageLayout's  comment),
   // so this reuses the EXACT SAME text_static_offsets[id] lookup (and its
-  // own fast/slow path split) text_minikernel_show_by_id already has,
+  // fast/slow path split) text_minikernel_show_by_id already has,
   // just always forcing TextRow2Active off afterward instead of ever
   // reading that entry's  real "has row 2" flag - blanking row 2
   // regardless of whether the picked entry happens to wrap.
@@ -639,8 +639,8 @@ export default (Blockly) => {
   //  1. A literal number plugged directly into VALUE (e.g. "Scroll text ID
   //     3") means the exact entry is ALSO known at compile time here, same
   //     as the named blocks above - resolve straight to that one entry's
-  //     own maxOffset (same layout[position] indexing
-  //     text_minikernel_show_named_scroll uses, since this block's own
+  //     maxOffset (same layout[position] indexing
+  //     text_minikernel_show_named_scroll uses, since this block's
   //     tooltip documents the same "position on the Text tab" numbering).
   //  2. Otherwise the id is only known at runtime, but if NO entry in the
   //     WHOLE project is long enough to ever scroll, text_scroll_max[id]
@@ -690,12 +690,12 @@ export default (Blockly) => {
     // evaluated twice over (once per table read) for no reason, since both
     // reads plug the exact same value in. temp1 itself (not this dedicated
     // var) was used here originally and reverted: this block can sit INSIDE
-    // a function whose own argument is also read via temp1 (see
+    // a function whose argument is also read via temp1 (see
     // text_minikernel_show_by_id's  identical comment just above, and
     // functionCallDiscardVarName's in blocks/function.js for the same class
     // of risk) - confirmed as a real build failure, clobbering that
     // function's  live argument. Reuses that same shared var directly
-    // rather than a second dedicated one of its own (see its  comment).
+    // rather than a second dedicated one (see its  comment).
     // functionCallDiscardVarName now routes through reserveDevVarRW (see
     // this file's  identical comment on text_minikernel_show_by_id
     // above) - .write to capture, .read for every use after.
@@ -704,7 +704,7 @@ export default (Blockly) => {
     // Bank-suffixed reads (see bankSuffixedTableName's  comment in
     // blocks/data.js) - this generator can run once per bank a "Scroll text
     // ID" block happens to be reached from (ordinary code, or a relocated
-    // Function's  body), and each needs to read back the SAME bank's own
+    // Function's  body), and each needs to read back the SAME bank's
     // copy of whichever table(s) generateTextOffsetTables emitted there.
     const bank = Blockly.BBasic.getCurrentBank();
     const offsets = `${bankSuffixedTableName('text_offsets', bank)}[${argPair.read}]`;
@@ -733,7 +733,7 @@ export default (Blockly) => {
     // goto done"), and base is reset too so a later "Show text (scrolling)"
     // call starts from a clean slate rather than whatever was left over.
     // state is set to 2, not 1 - a tri-state (see textScrollStateVarName's
-    // own comment) that also forces the NEXT "Show text" call to fully
+    // comment) that also forces the NEXT "Show text" call to fully
     // reset even if it's showing the exact same message as before the clear
     // (otherwise buildTextScrollSetupLines'  base-matches guard would
     // think nothing changed and skip re-pointing TextIndex at it - a real
@@ -771,7 +771,7 @@ export default (Blockly) => {
   // var, unlike TextColor), or "both". "Both" deliberately only writes
   // TextColor, the same as "1" - row 2 already follows TextColor
   // automatically whenever its  var hasn't been explicitly written (see
-  // buildTextRow2ColorOverride's own "$01 sentinel" comment in
+  // buildTextRow2ColorOverride's "$01 sentinel" comment in
   // utils/text-font.js), so writing a redundant second copy into row 2's
   // var here would only cost cycles/bytes for no visible difference, and
   // would stop row 2 from tracking any LATER TextColor change (a fade, or
@@ -791,7 +791,7 @@ export default (Blockly) => {
     return `TextColor = ${argument0}\n`;
   };
 
-  // The scroll cursor's  color (see textScrollCursorColorVarName's own
+  // The scroll cursor's  color (see textScrollCursorColorVarName's
   // comment above).
   Blockly.BBasic['text_minikernel_set_cursor_color'] = function(block) {
     markTextMinikernelUsed();
@@ -815,7 +815,7 @@ export default (Blockly) => {
   // The scroll cursor's  runtime show/hide flag (see
   // TEXT_SCROLL_CURSOR_HIDDEN_BIT's  comment above) - a read-modify-write
   // of the cursor color var's  bit 0, read by buildTextScrollCursorOverride's
-  // own spliced asm. Leaves every other bit (the actual color) untouched, so
+  // spliced asm. Leaves every other bit (the actual color) untouched, so
   // hiding/showing the cursor never disturbs whatever color it was last set
   // to.
   Blockly.BBasic['text_minikernel_scroll_cursor_visible'] = function(block) {
@@ -829,7 +829,7 @@ export default (Blockly) => {
   };
 
   Blockly.BBasic['text_minikernel_fade_to'] = function(block) {
-    // Text's color fade trigger - same shared mechanism as Background's own
+    // Text's color fade trigger - same shared mechanism as Background's
     // "Fade color to" (see emitColorFadeTrigger in
     // generators/bbasic/background.js), always targeting TextColor.
     markTextMinikernelUsed();
@@ -840,7 +840,7 @@ export default (Blockly) => {
 
   Blockly.BBasic['text_minikernel_fade_finished'] = function(block) {
     // Text's  fade-finished watch - same shared mechanism as
-    // Background's own "When ... color has finished fading" (see
+    // Background's "When ... color has finished fading" (see
     // emitFadeFinishedWatch in generators/bbasic/background.js), always
     // targeting TextColor. No markTextMinikernelUsed() call here (unlike
     // text_minikernel_fade_to above) - this is already a no-op unless a
@@ -852,10 +852,10 @@ export default (Blockly) => {
   };
 
   // A single comparison against the shared scroll state (see
-  // text-scroll.js) - modeled directly on background_fade_active's own
+  // text-scroll.js) - modeled directly on background_fade_active's
   // simple-bit-read pattern in generators/bbasic/background.js. TextIndex is
   // the scroll position tracker itself now (see textScrollFarEndVarName's
-  // own comment in text-scroll.js) - "Left" reads TextIndex = base (also
+  // comment in text-scroll.js) - "Left" reads TextIndex = base (also
   // true, harmlessly, for a message that never needed to scroll at all -
   // see buildTextScrollSetupLines'  comment); "Right" reads TextIndex =
   // farEnd, which is only ever reached by a message that's actually
@@ -869,7 +869,7 @@ export default (Blockly) => {
     return [code, Blockly.BBasic.ORDER_EQUALITY];
   };
 
-  // True exactly when the scroll cursor's own "end of message" icon would
+  // True exactly when the scroll cursor's "end of message" icon would
   // currently be showing (see buildTextScrollCursorOverride's  matching
   // check in utils/text-font.js) - _textLinesMax is already the highest
   // value TextIndex can hold for the currently shown message, so "nothing
@@ -898,13 +898,13 @@ export default (Blockly) => {
     const pauseDuration = resolveVar(textScrollPauseDurationVarName());
     const state = resolveVar(textScrollStateVarName());
     const action = block.getFieldValue('ACTION');
-    // Snaps back to the message's  start (TextIndex = base, its own
-    // scroll position tracker now - see textScrollFarEndVarName's own
+    // Snaps back to the message's  start (TextIndex = base, its
+    // scroll position tracker now - see textScrollFarEndVarName's
     // comment) - shared by Stop/Restart, which only differ in whether they
     // leave the paused flag set afterward. Direction isn't reset here
-    // directly (no separate write needed - see TEXT_SCROLL_DIR_BIT's own
+    // directly (no separate write needed - see TEXT_SCROLL_DIR_BIT's
     // comment) since both callers below immediately follow this with a
-    // bare "state = n" overwrite of their own, which already zeroes that
+    // bare "state = n" overwrite, which already zeroes that
     // bit as a side effect of resetting the tri-state value.
     const resetToStart = `TextIndex = ${base}\n`;
     // "Pause"/"Unpause"/"Start" specifically must NOT disturb direction (a
@@ -927,11 +927,11 @@ export default (Blockly) => {
   // Moves the CURRENTLY shown message up/down by one or two lines (the
   // block's  LINES dropdown - TextIndex +/- TEXT_MESSAGE_LENGTH, once per
   // line) when it has more than 2 lines (see splitMessageLines in
-  // text-minikernel-layout.js) - only the first 2 of any message's own
-  // lines are ever drawn at once (text12b.asm's own "textkernel2ndrow"
+  // text-minikernel-layout.js) - only the first 2 of any message's
+  // lines are ever drawn at once (text12b.asm's "textkernel2ndrow"
   // block always reads row 2 from TextIndex+TEXT_MESSAGE_LENGTH), so this is
   // how the rest come into view. Clamped directly against TextIndex itself,
-  // via _textLinesBase/_textLinesMax (see setTextLinesRangeCode's own
+  // via _textLinesBase/_textLinesMax (see setTextLinesRangeCode's
   // comment above, set by whichever "Show text" call most recently pointed
   // at the message currently showing) - a message with 2 or fewer lines has
   // base = max, so both blocks are harmless no-ops for it. No multiply
@@ -941,7 +941,7 @@ export default (Blockly) => {
   // A 2-line move is two separate single-line guarded steps in a row, NOT
   // one step of 2*TEXT_MESSAGE_LENGTH - TextIndex only ever sits at exactly
   // base + TEXT_MESSAGE_LENGTH*k (k>=0), so this single-line guard
-  // ("if TextIndex > base then ...") is already known safe on its own (the
+  // ("if TextIndex > base then ...") is already known safe by itself (the
   // same code this always was, before LINES existed) - repeating it can
   // never step past base even when only one line of room remains, because
   // the SECOND guard re-checks TextIndex fresh after the first one already
@@ -990,7 +990,7 @@ export default (Blockly) => {
 
   // Whether ANY Text tab entry has "Wrap to line 2" on - purely a Text tab
   // data check (not a workspace-block pre-scan), since the toggle lives on
-  // the entry itself, not on any block. Drives text12b.asm's own
+  // the entry itself, not on any block. Drives text12b.asm's
   // "textkernel2ndrow" ifconst gate (see generateConfiguration in
   // generators/bbasic.js) and TextRow2Active's  dim just below - both
   // only pay for this feature once a project actually uses it. The
@@ -1005,7 +1005,7 @@ export default (Blockly) => {
   // Whether TextRow2Active itself needs to be dimmed - a BROADER condition
   // than isTextRow2Used() just above, which still gates ONLY the real,
   // expensive row-2-drawing kernel feature (textkernel2ndrow). The "more
-  // below" scroll cursor (see generators/bbasic.js's own
+  // below" scroll cursor (see generators/bbasic.js's
   // textScrollCursorConfigurationCode) reads TextRow2Active directly in
   // hand-written asm too, for ANY project using it, even one where no
   // message ever actually has "Wrap to line 2" on - it still needs the
@@ -1022,9 +1022,9 @@ export default (Blockly) => {
   // than isTextRow2Used() just above, now that getStaticMessageLayout splits
   // a message into real, separate rows regardless of "Wrap to line 2" (a
   // plain overlong message word-wraps into row 2+ too, it just never draws
-  // automatically without that toggle - see namedMessageWrapToLine2's own
+  // automatically without that toggle - see namedMessageWrapToLine2's
   // comment). Drives whether the static region's  byte offsets are still
-  // a uniform TEXT_MESSAGE_LENGTH stride (text_minikernel_show_by_id's own
+  // a uniform TEXT_MESSAGE_LENGTH stride (text_minikernel_show_by_id's
   // fast/slow path) and whether text_static_offsets/text_has_row2/
   // text_lines_max get reserved/generated at all (generateTextStaticOffsetTables) -
   // a project where every message fits on one line pays nothing for any of
@@ -1068,7 +1068,7 @@ export default (Blockly) => {
   // neither TextIndex (44) nor TextDataPtr (46-47) ever claims. Dimmed
   // whenever needsTextRow2ActiveDim() is true - either "Wrap to line 2" is
   // actually used somewhere (the same condition that separately gates
-  // text12b.asm's own, far more expensive "textkernel2ndrow" ifconst block -
+  // text12b.asm's, far more expensive "textkernel2ndrow" ifconst block -
   // see generateConfiguration in generators/bbasic.js), or the "more below"
   // scroll cursor is on and needs to read this byte regardless (see
   // needsTextRow2ActiveDim's  comment above).
@@ -1079,7 +1079,7 @@ export default (Blockly) => {
     const showVariableComments = config.showVariableComments ?? true;
     const textIndexComment = showVariableComments ?
       '  ; which message/character is currently shown, and the scroll position tracker (see text-scroll.js)' : '';
-    const textDataPtrComment = showVariableComments ? '  ; Text Minikernel\'s own message-table pointer' : '';
+    const textDataPtrComment = showVariableComments ? '  ; Text Minikernel\'s message-table pointer' : '';
     const textRow2ActiveComment = showVariableComments ?
       '  ; whether the currently shown message also draws a wrapped second line' : '';
     const textIndexDim = `\n dim TextIndex = var44${textIndexComment}`;
@@ -1092,7 +1092,7 @@ export default (Blockly) => {
 
   // Spliced into bbasic.bb.hbs's Setup section, alongside the other system
   // variables' initial values (player0realcolor, etc.) - before
-  // systemStartEvent, so a "Text: set color" block placed in the player's own
+  // systemStartEvent, so a "Text: set color" block placed in the player's
   // System start event still overrides this. Without it TextColor (an alias
   // of statusbarlength - see text12a.asm) starts at whatever the standard
   // kernel's  RAM-clearing leaves it at (0, i.e. black), matching neither
@@ -1116,7 +1116,7 @@ export default (Blockly) => {
     if (this.textScrollCursorUsed) {
       // $0E's  bit 0 is already 0 (even), so this doubles as the
       // "visible by default" default too - see TEXT_SCROLL_CURSOR_HIDDEN_BIT's
-      // own comment above.
+      // comment above.
       const cursorColor = Blockly.BBasic.nameDB_.getName(
           textScrollCursorColorVarName(), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
       lines.push(` ${cursorColor} = ${colorByteToBuildBBasic(0x0E)}`);
@@ -1143,7 +1143,7 @@ export default (Blockly) => {
   // wherever they fall - matching the reference demo's  layout exactly
   // (confirmed byte-for-byte and working end to end in the emulator). On a
   // bankswitched ROM, the whole block is wrapped in "bank <kernel bank> ...
-  // bank 1" (see KERNEL_BANK_BY_ROMSIZE above) so it shares the kernel's own
+  // bank 1" (see KERNEL_BANK_BY_ROMSIZE above) so it shares the kernel's
   // bank, matching the plain (non-bankswitched) "jsr minikernel" call the
   // standard kernel makes into it.
   Blockly.BBasic.generateTextMinikernel = function() {
@@ -1155,11 +1155,11 @@ export default (Blockly) => {
     // rather than whichever message happened to be defined first. Rows
     // 1..N: every Text tab entry, in that same order (position N's  byte
     // offset - see getStaticMessageLayout() above and "Show text with ID"'s
-    // own generator - no longer a flat N*TEXT_MESSAGE_LENGTH stride once any
+    // generator - no longer a flat N*TEXT_MESSAGE_LENGTH stride once any
     // entry wraps). An entry with "Wrap to line 2" on gets one row per line
     // splitMessageLines (text-minikernel-layout.js) split its  text
     // into - explicit line breaks first, falling back to word-wrap only
-    // when there isn't one - all stored back to back (see text12b.asm's own
+    // when there isn't one - all stored back to back (see text12b.asm's
     // "textkernel2ndrow" block, which always reads row 2 from TextIndex+
     // TEXT_MESSAGE_LENGTH - this adjacency is what makes that fixed offset
     // correct, and what lets "Scroll text lines up/down" move through the
@@ -1176,7 +1176,7 @@ export default (Blockly) => {
     // actually needed one for (an entry short enough to not need scrolling
     // reuses its  static row above instead, and has no `glyphs` here at
     // all - see getNamedScrollLayout's  null-glyphs case).
-    // bB's own "data" statement caps how many comma-separated values a
+    // bB's "data" statement caps how many comma-separated values a
     // single line can hold (confirmed directly: a real build of a long
     // scrollable message failed with "Maximum line length exceeded in data
     // statement") - every row's  glyphs are chunked into lines of at
@@ -1203,9 +1203,9 @@ export default (Blockly) => {
         .flatMap(({glyphs}) => glyphRows(glyphs));
     const freeTypedScrollRows = (this.freeTypedScrollMessages || [])
         .flatMap(({glyphs}) => glyphRows(glyphs));
-    // Page-aligned (DASM's "align 256", same directive text12a.asm's own
+    // Page-aligned (DASM's "align 256", same directive text12a.asm's
     // score_loop_height guard uses right above textscoreloop) - text12b.asm's
-    // own showtextrow reads this table via "(TextDataPtr),y" with y =
+    // showtextrow reads this table via "(TextDataPtr),y" with y =
     // TextIndex..TextIndex+11 (see its  comment), a 12-value UNROLLED run
     // with no branch to absorb the 6502's well-known extra cycle whenever an
     // indexed-indirect read crosses a page boundary. Without this, whether

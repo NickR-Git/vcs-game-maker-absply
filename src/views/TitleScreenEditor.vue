@@ -376,7 +376,7 @@
                                 <span class="titlescreen-player-color-label">Fallback color</span>
                               </div>
                               <p class="v-messages theme--light v-messages__message titlescreen-player-hint">
-                                "Fallback color" is only used when the chosen animation doesn't have its own
+                                "Fallback color" is only used when the chosen animation doesn't have its
                                 per-row sprite colors (Options tab). Position with the normal "Player 0/1 set
                                 X/Y" blocks, and pick a starting frame with "Set title screen player sprite
                                 frame to" (Actions tab).
@@ -614,9 +614,9 @@ import {useTitleScreenStorage, useErrorStorage, usePixelGridOverlayStorage,
 import {useEditorZoom, ZOOM_LEVELS} from '../hooks/zoom';
 
 // A 96-wide card at 50% (the lowest level every other tab offers) can still
-// run wider than the editor column, needing its own horizontal scrollbar
-// (see .titlescreen-card-body's own comment) - 25% added here, scoped to
-// just this tab (see useEditorZoom/stepZoom's own "levels" param), so a
+// run wider than the editor column, needing its horizontal scrollbar
+// (see .titlescreen-card-body's comment) - 25% added here, scoped to
+// just this tab (see useEditorZoom/stepZoom's "levels" param), so a
 // wide card can be zoomed out small enough to see the whole thing at once
 // without scrolling.
 const TITLESCREEN_ZOOM_LEVELS = [0.25, ...ZOOM_LEVELS];
@@ -722,7 +722,7 @@ export default defineComponent({
     // rows are only 1 scanline tall - half that - so without a correction
     // its preview renders each pixel with the SAME (square) proportions as
     // 48x2, making a 48x1 card's actual half-height pixels invisible in the
-    // editor. Matches BackgroundEditor.vue's own (11/24) real-hardware
+    // editor. Matches BackgroundEditor.vue's (11/24) real-hardware
     // pixel-proportion correction, which the same single-scanline-per-row
     // case there also needs.
     const cardAspectRatio = (card, rowCount) => {
@@ -755,7 +755,7 @@ export default defineComponent({
 
     // A 48x1 card (no row colors) has its  single fixed color
     // (card.color) instead - PixelEditor.vue only ever falls back to its
-    // own fgColor prop when rowColors is null (see its own "(this.rowColors
+    // fgColor prop when rowColors is null (see its "(this.rowColors
     // && this.rowColors[y]) || this.fgColor"), which this used to hardcode
     // to plain white regardless of card.color - a real reported bug (48x1
     // cards never previewed their  picked color, always drawing white).
@@ -784,7 +784,7 @@ export default defineComponent({
     // across EVERY title screen page in the project (see
     // generators/bbasic/titlescreen.js's  assignKernelSlots), not one
     // pool per page, so this counts cards on every page, not just the one
-    // currently being edited. "player"/"score" have their own, much smaller
+    // currently being edited. "player"/"score" have their, much smaller
     // limits (MAX_PLAYER_CARDS/MAX_SCORE_CARDS - see their  comments in
     // blocks/titlescreen.js) since there's only ever one of each minikernel
     // project-wide, not a numbered pool of 8.
@@ -832,7 +832,7 @@ export default defineComponent({
     // fields - both dropdowns share the same pool of animations now (see
     // hooks/project.js's usePlayerAnimationsStorage), same "index into the
     // pool, storage read fresh every call" convention as blocks/sprites.js's
-    // own buildAnimationOptions (see its  comment), so a renamed/added
+    // buildAnimationOptions (see its  comment), so a renamed/added
     // animation shows up here without a reload. An empty option lets a card
     // draw just one of the two players, falling back to a single blank row
     // for the other (see resolvePlayerSlotFrames in generators/bbasic/
@@ -879,7 +879,7 @@ export default defineComponent({
     // back to the same default handleAddCard itself starts a new card at,
     // rather than leaving old picks behind on an otherwise blank card.
     // rowColors is per-FRAME now (see cardFrameHeight's comment in
-    // blocks/titlescreen.js), so this resets every one of the card's own
+    // blocks/titlescreen.js), so this resets every one of the card's
     // frames, not just the one whose "clear" button was actually clicked -
     // matches "clear" resetting the WHOLE card's look, not just one frame's
     // pixels, which is already what it does for the pixel data itself
@@ -1180,7 +1180,7 @@ export default defineComponent({
     const cardDragTargetListeners = (screen, index) => cardDragReorderFor(screen).dragTargetListeners(index);
 
     // Purely a visual "which card am I looking at" marker, plain local
-    // component state - same reasoning/shape as every other tab's own
+    // component state - same reasoning/shape as every other tab's
     // selectCard/deselectCard (see e.g. MusicEditor.vue's  comment).
     // Screens get their  separate selection (a page and a graphic card
     // are never the same thing to have "selected" at once).
@@ -1219,7 +1219,7 @@ export default defineComponent({
     // Tracks whichever frame's PixelEditor instance was last clicked
     // into (see its "activate" event, emitted from PixelEditor.vue's
     // handleActivate) - the single toolbar above (Eraser/Pencil/Undo/Redo/
-    // Export/Import) acts on THIS frame, since every card's own
+    // Export/Import) acts on THIS frame, since every card's
     // per-instance toolbar is now hidden (hideToolbar on the pixel-editor
     // above) in favor of this one shared row. Same mechanism as
     // PlayerEditor.vue's activeFrameEditor/setActiveFrame.
@@ -1227,7 +1227,7 @@ export default defineComponent({
     // selectedGraphicCard to decide whether this explicit click still
     // "wins" over the selected card's fallback editor - same
     // id-collision caveat as selectedGraphicCard's search above.
-    // activeFrameId (frame ids are only unique WITHIN their own card, same
+    // activeFrameId (frame ids are only unique WITHIN their card, same
     // reasoning as PlayerEditor.vue's activeFrameId) is what
     // isFrameActive below compares against to draw the "you're editing this
     // one" outline - same feature as PlayerEditor.vue's frame outline,
@@ -1253,7 +1253,7 @@ export default defineComponent({
     };
 
     // Unique per screen+card+frame (card ids are only unique WITHIN their
-    // own screen, and frame ids only unique within their own card) - used as
+    // screen, and frame ids only unique within their card) - used as
     // this frame's PixelEditor.vue $ref name (see the template) so
     // effectiveFrameEditor below can resolve straight to its component
     // instance.
@@ -1302,7 +1302,7 @@ export default defineComponent({
       heightMenuValue.value = selectedGraphicCard.value.frames[0].pixels.length;
       heightMenuScaleContents.value = false;
     };
-    // The "H" hotkey - see PlayerEditor.vue's own handleSetHeightHotkey for
+    // The "H" hotkey - see PlayerEditor.vue's handleSetHeightHotkey for
     // why this can't just call openHeightMenu alone.
     const handleSetHeightHotkey = () => {
       if (!selectedGraphicCard.value) return;
@@ -1357,7 +1357,7 @@ export default defineComponent({
   margin-bottom: 16px;
 }
 
-/* The "Set height" button passed into GraphicEditorToolbar.vue's own
+/* The "Set height" button passed into GraphicEditorToolbar.vue's
    "after-tools" slot - see PlayerEditor.vue's identical rule for why this
    stays here rather than moving into that shared component. */
 /* !important on width/min-width - see PlayerEditor.vue's identical rule for
@@ -1374,7 +1374,7 @@ export default defineComponent({
 }
 
 /* Same rest/hover/press treatment as every icon in GraphicEditorToolbar.vue
-   itself (its own .get-tools >>> .v-btn rules) - this button previously
+   itself (its .get-tools >>> .v-btn rules) - this button previously
    fell back to Vuetify's default "text" button hover (a grey background
    overlay, not the flat color-only fade the rest of the toolbar uses),
    reading as a different, out-of-place control sitting right next to them. */
@@ -1404,7 +1404,7 @@ export default defineComponent({
 .titlescreen-list {
   /* Tighter than the 16px this used to be - see PlayerEditor.vue's
      identical .animation-list rule for why: the toolbar row directly above
-     already has its own top/bottom padding, so the old value on top of
+     already has its top/bottom padding, so the old value on top of
      that read as too much combined space before the first screen card. */
   margin-top: 4px;
 }
@@ -1433,24 +1433,24 @@ export default defineComponent({
 
 /* Same fix as DataEditor.vue's  identical rule: without this,
    .v-list-item__content's default overflow: hidden clips a selected card's
-   own 2px outline on its left/right edges (min-width: 0 has to come with
+   2px outline on its left/right edges (min-width: 0 has to come with
    it - overflow: visible alone silently undoes this flex item's default
-   0 min-width, letting it refuse to shrink below its own widest content). */
+   0 min-width, letting it refuse to shrink below its widest content). */
 .entry-list-item >>> .v-list-item__content {
   padding: 0;
   overflow: visible;
   min-width: 0;
 }
 
-/* width: 100% - same fix as BackgroundEditor.vue's/PlayerEditor.vue's own
+/* width: 100% - same fix as BackgroundEditor.vue's/PlayerEditor.vue's
    identical .background-card/.animation-card rule: without it, this card
    (nested inside v-list-item-content, not the list item itself) shrinks to
-   its own content's natural width instead of filling its row, so a
+   its content's natural width instead of filling its row, so a
    collapsed card (just the title row) rendered visibly narrower than an
    expanded one (whose pixel editor forces a wider width). */
 /* margin-bottom: 8px matches BackgroundEditor.vue's .background-list
-   grid gap (its own between-card spacing) - not that same 12px this card
-   uses for its own internal padding, which is a separate value there too. */
+   grid gap (its between-card spacing) - not that same 12px this card
+   uses for its internal padding, which is a separate value there too. */
 .titlescreen-screen-card,
 .titlescreen-card {
   position: relative;
@@ -1465,22 +1465,22 @@ export default defineComponent({
    comment above) isn't rendered at all, so without this the card's box
    shrank shorter than that positioned content needed, and the toolbar/
    badge visually spilled out past its bottom edge. .titlescreen-screen-card
-   never has this problem (its own title row stays visible even collapsed),
+   never has this problem (its title row stays visible even collapsed),
    so it doesn't get this rule - it was making that card too tall. */
 .titlescreen-card {
   min-height: 44px;
 }
 
-/* A top strip, not a left one - matches BackgroundEditor.vue's own
-   .background-drag-handle exactly (see its own comment): covers the same
+/* A top strip, not a left one - matches BackgroundEditor.vue's
+   .background-drag-handle exactly (see its comment): covers the same
    header band the collapse/ID/delete controls occupy, sitting behind them
    in paint order (they're later in the DOM, so they stay clickable) but in
    front of everything else, so dragging elsewhere in the card still
    selects text/drags the pixel editor instead of starting a reorder. */
-/* v-list-item-title is a plain, non-positioned block - unlike its own
+/* v-list-item-title is a plain, non-positioned block - unlike its
    absolutely-positioned collapse-btn/badge/corner-toolbar children (which
-   already paint above .titlescreen-drag-handle on their own, position:
-   absolute vs. static), its own EMPTY space still captures pointer events
+   already paint above .titlescreen-drag-handle by themselves, position:
+   absolute vs. static), its EMPTY space still captures pointer events
    across its whole box (a transparent element still blocks clicks to
    whatever's behind it, regardless of background) - confirmed as a real
    bug: dragging never started anywhere except exactly on top of a button.
@@ -1507,7 +1507,7 @@ export default defineComponent({
 
 /* Matches every other tab's  collapse button placement exactly (see
    BackgroundEditor.vue's .background-collapse-btn/PlayerEditor.vue's
-   own .animation-collapse-btn) - absolutely positioned in the card's
+   .animation-collapse-btn) - absolutely positioned in the card's
    top-left corner, not flowed in normal layout. */
 .titlescreen-collapse-btn {
   top: 2px !important;
@@ -1516,8 +1516,8 @@ export default defineComponent({
 }
 
 /* Same placement as PlayerEditor.vue's .animation-name-field - a
-   graphic card has no name field of its own (nothing follows here), but a
-   Title Screen page does, plus its own background color swatch alongside
+   graphic card has no name field (nothing follows here), but a
+   Title Screen page does, plus its background color swatch alongside
    it on the same row. margin-top clears the absolutely positioned collapse
    button/ID badge above (see .titlescreen-id-badge/.titlescreen-collapse-
    btn) - the corner toolbar's absolute top-right position never
@@ -1542,7 +1542,7 @@ export default defineComponent({
 }
 
 /* PixelEditor.vue's outlined v-card is now the visible "frame" around
-   each individual animation frame - same as PlayerEditor.vue's own
+   each individual animation frame - same as PlayerEditor.vue's
    Sprites-tab frames (which never stripped this border to begin with; see
    that file for the closest reference). Previously stripped here (matching
    Background's single-graphic cards, which have no per-frame concept at
@@ -1557,7 +1557,7 @@ export default defineComponent({
    treatment as every other tab's "-selected" card highlight (App.vue's
    shared .titlescreen-card-selected/etc. rule), and the same blue/grey
    split as PlayerEditor.vue's identical rules (see frameHighlightState's
-   own comment). */
+   comment). */
 .pixel-editor-container-active >>> .v-card {
   border-color: var(--v-primary-base, #1976d2) !important;
   outline: 2px solid var(--v-primary-base, #1976d2) !important;
@@ -1570,7 +1570,7 @@ export default defineComponent({
 
 /* Same styling as PlayerEditor.vue's identical .frame-number-badge -
    was missing here entirely (this class name is shared with that file, but
-   had no matching rule of its own in THIS file), so it fell back to plain
+   had no matching rule in THIS file), so it fell back to plain
    unstyled text instead of reading as a small "ID: N" label. */
 .frame-number-badge {
   text-align: left;
@@ -1614,7 +1614,7 @@ export default defineComponent({
 
 /* Matches the Text tab's .text-bkcolor-label size (TextEditor.vue) -
    this page's background color now uses the same ColorSwatchPicker dot the
-   Text/Score tabs use for their own single background color, instead of
+   Text/Score tabs use for their single background color, instead of
    PlayfieldColorStrip's multi-row strip (which is meant for per-ROW
    colors, not a single project/page-wide one - a real reported style
    mismatch). */
@@ -1623,7 +1623,7 @@ export default defineComponent({
 }
 
 /* The wrapper itself is positioned (not the button inside via Vuetify's
-   own "absolute" prop) - same as BackgroundEditor.vue's own
+   "absolute" prop) - same as BackgroundEditor.vue's
    .background-corner-toolbar/PlayerEditor.vue's .animation-corner-
    toolbar. Positioning the button directly instead (an earlier version of
    this) put it outside the v-menu activator's wrapper element instead
@@ -1644,18 +1644,18 @@ export default defineComponent({
   box-shadow: none !important;
 }
 
-/* .titlescreen-icon-btn-size's own size/disabled-opacity/icon-font-size
-   rules, and .delete-icon-btn.titlescreen-icon-btn-size's own mdi-delete
+/* .titlescreen-icon-btn-size's size/disabled-opacity/icon-font-size
+   rules, and .delete-icon-btn.titlescreen-icon-btn-size's mdi-delete
    size bump - see App.vue's shared, unscoped copy (moved there once
-   confirmed byte-identical to PlayerEditor.vue's own .player-icon-btn-size -
+   confirmed byte-identical to PlayerEditor.vue's .player-icon-btn-size -
    scoped CSS can't share a rule across components even under the same
    class name, so each tab using it still has to apply it here). */
 
-/* .titlescreen-play-btn's own background/shadow/before/rest-hover-color
+/* .titlescreen-play-btn's background/shadow/before/rest-hover-color
    rules - see App.vue's shared, unscoped .music-flat-icon-btn copy (moved
-   there once confirmed byte-identical to MusicEditor.vue's own, see that
-   file's own comment). The "currently active" persistent tint below stays
-   here rather than also moving - its OWN trigger condition (:loading) is
+   there once confirmed byte-identical to MusicEditor.vue's, see that
+   file's comment). The "currently active" persistent tint below stays
+   here rather than also moving - its trigger condition (:loading) is
    genuinely different from Music's (an explicit "currently playing" class),
    even though the resulting color declaration is the same. */
 .titlescreen-play-btn:active >>> .v-icon,
@@ -1698,8 +1698,8 @@ export default defineComponent({
 }
 
 /* Comes right after .titlescreen-screen-title-row, which already clears
-   the absolutely positioned collapse button/ID badge above it (see its own
-   comment) - only needs a little breathing room of its own, not a second
+   the absolutely positioned collapse button/ID badge above it (see its
+   comment) - only needs a little breathing room, not a second
    clearance margin. */
 .titlescreen-screen-body {
   margin-top: 8px;
@@ -1711,27 +1711,27 @@ export default defineComponent({
    this margin does that job directly instead (34px clears the corner
    toolbar's delete button, the taller of the two). */
 /* overflow-x: auto - unlike BackgroundEditor.vue/PlayerEditor.vue (whose
-   own CSS grid track width is set to match editorWidth exactly - see their
-   own comments), this card stays a fixed width: 100% regardless of a
+   CSS grid track width is set to match editorWidth exactly - see their
+   comments), this card stays a fixed width: 100% regardless of a
    graphic's type/zoom. A 96-wide card (double a 48-wide one) at zoom
    above ~50% can make .pixel-editor-container's fixed pixel width
    (set inline via editorWidth) exceed THIS element's box - since this
    is the narrower, width-constrained ancestor (not .pixel-editor-container
-   itself, whose box is always exactly as wide as its own content and so
-   never clips anything on its own), this is the right place for the
+   itself, whose box is always exactly as wide as its content and so
+   never clips anything by itself), this is the right place for the
    scrollbar to actually appear. Without it, that overflow spilled out past
-   the card's (and its own screen card's, and eventually the whole page's)
+   the card's (and its screen card's, and eventually the whole page's)
    right edge instead of staying contained, a real reported bug. overflow-y
    is explicitly hidden rather than left as the default visible: CSS forces
    one axis's "visible" to compute as "auto" whenever the other axis isn't
    also visible, so leaving this "visible" produced an unwanted vertical
    scrollbar too (confirmed as a real bug) - hidden avoids that forced
    conversion, and is safe since nothing in here is ever taller than its
-   own content. */
-/* padding: 2px - this clipping box's own edges land exactly flush against
-   the first/last frame's own box on every side (nothing reserves space
+   content. */
+/* padding: 2px - this clipping box's edges land exactly flush against
+   the first/last frame's box on every side (nothing reserves space
    around them), so a selected frame's 2px outline (see
-   .pixel-editor-container-active's own comment) bled past this element's
+   .pixel-editor-container-active's comment) bled past this element's
    overflow-hidden boundary and was clipped away - visible only on the
    FIRST frame of each wrapped row (nothing to its left) and the top/bottom
    rows (nothing above/below), never on a frame with a sibling on that
@@ -1797,7 +1797,7 @@ export default defineComponent({
 /* Same reasoning/placement as PlayerEditor.vue's .add-frame-list-item -
    sits inline after the last frame, vertically centered against the frame
    cards' height via vertical-align (rather than the list item's default
-   flex centering, which only centers within its own row). */
+   flex centering, which only centers within its row). */
 .titlescreen-add-frame-list-item {
   display: inline-block;
   vertical-align: middle;
@@ -1809,7 +1809,7 @@ export default defineComponent({
 /* Same circular sizing as PlayerEditor.vue's .add-frame-buttom - a
    distinct class (not shared with this file's "Add a card" FAB button
    below, .add-frame-buttom) since that one also carries an absolute-
-   positioned "bottom: 8px" rule meant for its own corner placement, not
+   positioned "bottom: 8px" rule meant for its corner placement, not
    relevant here. */
 .titlescreen-add-frame-buttom {
   width: 36px;
@@ -1826,12 +1826,12 @@ export default defineComponent({
 
 /* Matches BackgroundEditor.vue's  identical .editor-container rule -
    without this, the card just flows in normal page scroll (this tab never
-   had its own override, unlike Background's), and .add-frame-buttom above
-   (a sibling outside this card, not inside its own scroll region) ends up
+   had its override, unlike Background's), and .add-frame-buttom above
+   (a sibling outside this card, not inside its scroll region) ends up
    anchored to some ancestor that scrolls the page along with it instead of
    staying pinned in place - a real reported bug ("the add button should not
    scroll"). Making THIS card itself the scrolling region (position:
-   absolute + overflow: auto, pinned to the full height of its own slot)
+   absolute + overflow: auto, pinned to the full height slot)
    is what lets the button sit outside it and stay fixed regardless of how
    far the card's content scrolls. */
 .editor-container {

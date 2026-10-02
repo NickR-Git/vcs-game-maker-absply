@@ -324,7 +324,7 @@ export default defineComponent({
 
     // Electron's  restore - the file may have been moved/deleted since
     // the path was persisted, so this double-checks via project:path-exists
-    // (the Electron-side equivalent of the browser restore's own
+    // (the Electron-side equivalent of the browser restore's
     // queryPermission() === 'denied' check above) rather than trusting a
     // stale path and only finding out on the next failed Save.
     if (IS_ELECTRON) {
@@ -430,7 +430,7 @@ export default defineComponent({
         'type': FORMAT_TYPE,
         'format-version': FORMAT_VERSION,
         // The actual VCS Game Maker release that wrote this file (package.json's
-        // own version, e.g. "0.50.28") - distinct from format-version above,
+        // version, e.g. "0.50.28") - distinct from format-version above,
         // which is this .vcsgm SCHEMA's  version and only bumps when the
         // save shape itself changes. Purely informational (nothing reads this
         // back on load) - lets a saved file's  history/support requests
@@ -803,7 +803,7 @@ export default defineComponent({
         this.playerAnimationsStorage = playerAnimations;
       } else if (project['player-0'] || project['player-1']) {
         // An older project saved before the two hardware players shared one
-        // pool of animations (see hooks/migrate-player-animations.js's own
+        // pool of animations (see hooks/migrate-player-animations.js's
         // comment) - combines the two legacy lists into the shared shape,
         // and remaps any sprite_player1_animation_select block's  stored
         // dropdown index (already loaded into this.workspaceStorage just
@@ -977,17 +977,17 @@ export default defineComponent({
 /* Aligns the save icon's  visible glyph (not the button's  larger,
    invisible circular hit area) with the "Project" title text's left edge
    above it - confirmed directly via getBoundingClientRect() (icon was 22px
-   further right than the title). v-card-actions' own default 16px left
+   further right than the title). v-card-actions' default 16px left
    padding plus the icon button's internal padding around its glyph
    accounted for all 22px between them. */
 .project-actions {
   padding-left: 8px;
   /* Matches the Generated tab's  flush title-to-icon-row spacing
-     (.generated-code-toolbar has 0 top padding) - v-card-actions' own
+     (.generated-code-toolbar has 0 top padding) - v-card-actions'
      default top padding otherwise left an 8px gap under "Project" that
      tab doesn't have. */
   padding-top: 0;
-  /* Plain, small flex gap between the icons - v-dialog injects its own
+  /* Plain, small flex gap between the icons - v-dialog injects its
      wrapper div around the Create New Project button's activator, which
      broke every margin/sibling-selector-based approach tried here before
      this (each button ended up with different actual DOM adjacency). gap
@@ -1011,8 +1011,8 @@ export default defineComponent({
    ".v-dialog__container" element (confirmed directly via the rendered DOM -
    [Save button, Import button, DIV.v-dialog__container, hidden input], not
    [Save, Import, Create-New-Project button, hidden input] as the template's
-   own flat appearance suggests) - THAT div, not the Create New Project
-   button itself, was the actual flex child .project-actions' own "gap"
+   flat appearance suggests) - THAT div, not the Create New Project
+   button itself, was the actual flex child .project-actions' "gap"
    was spacing against, one reason the three icons never looked evenly
    spaced no matter what margin/gap value was tried here before this.
    display: contents removes the wrapper from the box model entirely while
@@ -1025,7 +1025,7 @@ export default defineComponent({
 /* Hidden native file input backing the Import Project icon button - clicked
    programmatically (see handleImportFileInputChange) rather than shown
    itself, now that importing is an icon matching Save/Create New Project
-   instead of its own v-file-input field. */
+   instead v-file-input field. */
 .project-hidden-file-input {
   display: none;
 }
@@ -1097,7 +1097,7 @@ export default defineComponent({
 /* Puts the Auto-increment switch to the right of the Version field, in the
    same column, rather than a separate one - flex-basis matches
    .project-developer-col's so the two sides split evenly while there's
-   room, and wraps onto its own full-width row below Developer (see
+   room, and wraps onto its full-width row below Developer (see
    .project-developer-version-row's comment) once there isn't. */
 .project-version-col {
   display: flex;
@@ -1109,7 +1109,7 @@ export default defineComponent({
 /* Vuetify's selection-control margin-top (meant for a switch stacking
    BELOW another field) otherwise pushes this out of vertical alignment
    with the Version field sharing this row - same fix as this app's other
-   inline field+switch rows (e.g. TextEditor.vue's own
+   inline field+switch rows (e.g. TextEditor.vue's
    .text-scroll-cursor-switch). white-space: nowrap keeps its label on one
    line - safe now that Version/the switch always share a full row's width
    between them (see .project-version-col's comment) rather than a
@@ -1122,8 +1122,8 @@ export default defineComponent({
 }
 
 /* Same flat-icon, fade-in-on-hover/blue-on-press treatment as every other
-   icon button in the app (e.g. GeneratedCode.vue's own
-   .generated-code-flat-icon-btn, MusicEditor.vue's own
+   icon button in the app (e.g. GeneratedCode.vue's
+   .generated-code-flat-icon-btn, MusicEditor.vue's
    .music-flat-icon-btn) - transparent background (no Vuetify default hover
    circle), icon fades from a faint grey to near-black on hover, and flashes
    the app's blue on an actual click/press. */

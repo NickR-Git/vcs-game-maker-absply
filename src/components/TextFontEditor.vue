@@ -200,7 +200,7 @@ import {useEditorZoom, ZOOM_LEVELS} from '../hooks/zoom';
 // Each glyph is a tiny fixed 4x5 grid - unlike every other tab's graphics,
 // zooming below 100% here makes it too small to usefully edit at all, so
 // the shared 50%/75% stops are dropped, scoped to just this tab (see
-// useEditorZoom/stepZoom's own "levels" param).
+// useEditorZoom/stepZoom's "levels" param).
 const TEXT_FONT_ZOOM_LEVELS = ZOOM_LEVELS.filter((level) => level >= 1);
 import {
   TEXT_GLYPH_ORDER,
@@ -221,11 +221,11 @@ import {
 const PIXEL_ASPECT = 2;
 
 // Width of one glyph editor at 100% zoom - narrower than ScoreFontEditor's
-// own DIGIT_BASE_WIDTH (120px for an 8-wide digit), since these glyphs are
+// DIGIT_BASE_WIDTH (120px for an 8-wide digit), since these glyphs are
 // only 4 pixels wide.
 const GLYPH_BASE_WIDTH = 70;
 
-// One blank scanline between every real pixel row (see text12b.asm's own
+// One blank scanline between every real pixel row (see text12b.asm's
 // drawtextrow - each "Text line N/5" section draws a row's  GRP0/GRP1
 // bytes once, then a SECOND WSYNC'd scanline right after resets COLUP0/
 // COLUP1 to textbkcolor before the next row's  bytes are ready), so a
@@ -238,7 +238,7 @@ const buildBlankRow = () => new Array(TEXT_GLYPH_WIDTH).fill(0);
 // A single fixed pseudo-entry id for useCollapsedIds (hooks/collapse.js) -
 // that hook is built around a LIST of entries each with their  id (see
 // TextEditor.vue's  per-message cards), but works just as well for
-// remembering one single card's  collapsed state, keyed under its own
+// remembering one single card's  collapsed state, keyed under its
 // dedicated tab name ('text-font-card', passed to useCollapsedIds below) so
 // it can never collide with an actual text message's  id.
 const CARD_ENTRY = {id: 'glyphs'};
@@ -255,7 +255,7 @@ export default defineComponent({
     const configurationStorage = useConfigurationStorage();
     const zoom = useEditorZoom('textfont', 2, TEXT_FONT_ZOOM_LEVELS);
     // Shared with every other tab's pixel grid toggle (see
-    // PixelGridToggle.vue's own comment) - not per-tab state of its own.
+    // PixelGridToggle.vue's comment) - not per-tab state.
     const showPixelGrid = usePixelGridOverlayStorage();
     const glyphWidth = computed(() => `${Math.round(GLYPH_BASE_WIDTH * zoom.value)}px`);
     // Same width, same per-pixel size as a real glyph tile - the cursor is
@@ -306,13 +306,13 @@ export default defineComponent({
     // Tracks whichever glyph's PixelEditor instance was last clicked
     // into (see its "activate" event, emitted from PixelEditor.vue's
     // handleActivate) - the single toolbar above (Eraser/Pencil/Undo/Redo/
-    // Export/Import) acts on THIS glyph, since every glyph's own
+    // Export/Import) acts on THIS glyph, since every glyph's
     // per-instance toolbar is now hidden (hideToolbar on the pixel-editor
     // above) in favor of this one shared row. activeEditorKey is either a
     // glyph's numeric index or the literal string 'cursor' - same reasoning
     // as ScoreFontEditor.vue's activeEditor/activeEditorIndex (no
     // card-selection fallback needed, since there's no way to "select" a
-    // glyph other than clicking directly into its own PixelEditor card).
+    // glyph other than clicking directly into its PixelEditor card).
     const activeEditor = ref(null);
     const activeEditorKey = ref(null);
     const setActiveEditor = (editorInstance, key) => {
@@ -346,7 +346,7 @@ export default defineComponent({
       state.value = state.value;
     };
 
-    // Same "whole image" copy/paste pair as ScoreFontEditor.vue's own
+    // Same "whole image" copy/paste pair as ScoreFontEditor.vue's
     // handleCopyDigit/handlePasteDigit.
     const handleCopyGlyph = (index) => {
       copiedGlyphData.value = structuredClone(state.value.glyphs[index]);
@@ -365,7 +365,7 @@ export default defineComponent({
 
     // The space glyph's  char (' ') renders as empty, collapsed text -
     // without a visible stand-in, its label div has no content at all,
-    // leaving it (and it alone) shorter than every other glyph's own
+    // leaving it (and it alone) shorter than every other glyph's
     // labeled card, so its whole card sits higher than the rest of its row
     // instead of lining up with them.
     const glyphLabel = (char) => (char === ' ' ? '(space)' : char);
@@ -398,9 +398,9 @@ export default defineComponent({
 }
 
 /* Matches Configuration.vue's collapsible-section look exactly (a
-   plain left-aligned chevron + title, not a card) - this used to be its own
+   plain left-aligned chevron + title, not a card) - this used to be its
    outlined v-card, which read as one more nested card inside the Text tab's
-   own main card, unlike every other collapsible grouping in the app. */
+   main card, unlike every other collapsible grouping in the app. */
 .option-section-header {
   display: flex;
   align-items: center;
@@ -415,9 +415,9 @@ export default defineComponent({
 /* Attribute passthrough onto GraphicEditorToolbar.vue's root (see
    ScoreFontEditor.vue's identical comment) - :bleed="16" (set in the
    template) reaches TextEditor.vue's real scrolling edge one padded
-   level up (this component no longer nests its own second v-card-text now
+   level up (this component no longer nests its second v-card-text now
    that it's a plain section, not a card - just TextEditor.vue's outer
-   v-card-text). No "gap" here (tried first) - every other tab's own
+   v-card-text). No "gap" here (tried first) - every other tab's
    equivalent toolbar (e.g. ScoreFontEditor.vue's .score-editor-toolbar-row)
    relies purely on GraphicEditorToolbar.vue's internal divider margins
    for icon-to-icon spacing; adding a flex "gap" on top of those stacked an
@@ -431,7 +431,7 @@ export default defineComponent({
   margin-bottom: 0;
 }
 
-/* Same margin-top/padding-top override as TextEditor.vue's own
+/* Same margin-top/padding-top override as TextEditor.vue's
    .text-columns-switch - Vuetify's selection-control margin-top (meant
    for stacking below other fields) otherwise pushes this out of line with
    the zoom control sharing this same row. */
@@ -441,7 +441,7 @@ export default defineComponent({
   padding-top: 0 !important;
   /* GraphicEditorToolbar.vue's inner divider only carries a tight 2px
      margin on each side (meant for the small icon buttons sandwiched
-     between the other dividers) - fine for those, but this switch's own
+     between the other dividers) - fine for those, but this switch's
      track/label read as uncomfortably close to the divider line right next
      to it, unlike anything else in this toolbar. */
   margin-left: 8px;

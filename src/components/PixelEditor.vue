@@ -37,7 +37,7 @@
         </div>
       </div>
     </v-card-text>
-    <!-- Every real call site now drives this component's own tools (Eraser/
+    <!-- Every real call site now drives this component's tools (Eraser/
          Pencil/Undo/Redo/Export/Import/Set height) from a single toolbar
          shared across a whole tab (see GraphicEditorToolbar.vue) rather than
          a per-instance one - Clear is the one action still requested per
@@ -104,10 +104,10 @@ export default {
     // score font, ...) already have their  way to start a frame over
     // (switching frames, importing an image), and a stray "wipe everything"
     // button isn't worth the risk of a misclick there. Backgrounds are the
-    // one place a whole-grid clear is actually useful on its own.
+    // one place a whole-grid clear is actually useful by itself.
     showClearButton: {type: Boolean, default: false},
     // Draws a thin grid line around every cell, on a separate overlay
-    // canvas layered on top of the real drawing canvas (see mounted()'s own
+    // canvas layered on top of the real drawing canvas (see mounted()'s
     // ResizeObserver) - a pure visual aid, never part of the pixel data
     // itself.
     showGrid: {type: Boolean, default: false},
@@ -144,12 +144,12 @@ export default {
       // A Set of "x,y" cell keys, or null for "nothing selected" - see
       // selection-tools.js/move-tool.js. Reassigned wholesale (never
       // mutated in place) every time it changes, since Vue 2 can't observe
-      // a plain Set's own mutations.
+      // a plain Set's mutations.
       selection: null,
       // See handleStrokeStart/cancelStroke - the state to roll back to if
       // the current drag leaves the canvas, or null while no button is down.
       strokeStart: null,
-      // The polygon-select tool's own in-progress vertex list (see its own
+      // The polygon-select tool's in-progress vertex list (see its
       // onPreview callback), or null while it's not mid-polygon - without
       // rendering these as they're placed, every click looked like it did
       // nothing at all until a polygon happened to actually close.
@@ -158,7 +158,7 @@ export default {
       // it's outside the canvas - lets drawGridOverlay() highlight exactly
       // which pixel a click would affect right now, regardless of which
       // tool is active (draw, erase, fill, select, ...). Updated directly
-      // by handleHover below, not through handleMouse's own debounced tool-
+      // by handleHover below, not through handleMouse's debounced tool-
       // driven path - a hover highlight that lagged behind the cursor by
       // handleMouse's 10ms debounce would feel noticeably laggy for
       // something meant to track the pointer in real time.
@@ -208,16 +208,16 @@ export default {
     },
     // Recolor the existing pixels when the row colors change (e.g. the user
     // picks a new color in the strip) without disturbing the drawn shape.
-    // logToHistory: false - same reasoning as handleMouse's own recolor
+    // logToHistory: false - same reasoning as handleMouse's recolor
     // call below: this re-expresses the CURRENT pixel matrix with new
     // display colors, not a new edit, so it shouldn't consume an undo step.
     // Left true (the default) here, TitleScreenEditor.vue was a real
-    // reported case where this fired mid-drag - its own @input handler
+    // reported case where this fired mid-drag - its @input handler
     // calls ensureRowColors() on every stroke (unlike Background/Player,
     // which only do that on frame-add/resize), and editorRowColors()
     // allocates a fresh array every render, so a fresh `rowColors` prop
     // reference here is more likely there than elsewhere - each fresh
-    // reference re-pushed a history entry Rectangle/Line/Oval's own
+    // reference re-pushed a history entry Rectangle/Line/Oval's
     // undo()-then-redraw preview didn't expect, leaving old preview
     // positions never actually erased (a "trail").
     rowColors() {
@@ -253,7 +253,7 @@ export default {
         this.teardownGridOverlay();
       }
     },
-    // Same overlay-lifecycle reasoning again, for the polygon tool's own
+    // Same overlay-lifecycle reasoning again, for the polygon tool's
     // in-progress vertex list (see PolygonSelect's onPreview callback).
     polygonPreview(value) {
       if (value || this.showGrid || this.selection || this.hoverCell) {
@@ -281,20 +281,20 @@ export default {
         this.teardownGridOverlay();
       }
     },
-    // The "height" prop (used for aspectRatio's own CSS sizing upstream -
+    // The "height" prop (used for aspectRatio's CSS sizing upstream -
     // see BackgroundEditor.vue's identical background.pixels.length-based
     // expression for both) can update slightly AHEAD of the "value" prop
     // reaching this same update, within the same Vue patch - reflowing the
-    // wrapper's own on-screen box to the new row count before initEditor
+    // wrapper's on-screen box to the new row count before initEditor
     // has actually resized the underlying canvas/grid to match. Normally
     // the "value" watcher below catches up in the same tick regardless,
     // but confirmed as a real reported gap (Superchip pfres changes -
     // reflowBackgroundsToHeight): the canvas was left showing its OLD
     // row count's content stretched/squished into the NEW aspect-ratio
     // box, not just briefly but persistently, whenever something about
-    // that specific reflow's timing meant the "value" watcher's own
+    // that specific reflow's timing meant the "value" watcher's
     // reference-equality check didn't end up firing. This is a direct,
-    // redundant safety net - if the underlying editor's own row count is
+    // redundant safety net - if the underlying editor's row count is
     // already out of sync with this prop by the time it changes, fix it
     // here too, independent of whatever "value" does or doesn't do.
     height(newHeight) {
@@ -308,8 +308,8 @@ export default {
     },
     // Picks up a row-count change this component DIDN'T itself just emit -
     // needed for "Set height" resizing every frame on a card together (see
-    // e.g. PlayerEditor.vue's own handleUnifiedSetHeight): every OTHER
-    // frame's own PixelEditor instance never sees that resize happen
+    // e.g. PlayerEditor.vue's handleUnifiedSetHeight): every OTHER
+    // frame's PixelEditor instance never sees that resize happen
     // locally (only the ONE frame applyHeight was actually called on does),
     // it only sees its "value" prop change out from under it once
     // PlayerEditor.vue applies the resize to its frame.pixels - and the
@@ -358,7 +358,7 @@ export default {
     // stretched/blurred the same "pixelated" way the actual artwork is.
     // That means it has to be redrawn whenever its  rendered SIZE
     // changes - zooming, resizing the window, or the sidebar/toolbar
-    // reflowing - which a plain mounted()-once draw can't catch on its own.
+    // reflowing - which a plain mounted()-once draw can't catch by itself.
     setupGridOverlay() {
       this.teardownGridOverlay();
       const canvas = this.$refs.gridOverlay;
@@ -399,7 +399,7 @@ export default {
 
       // Guarded on showGrid specifically - this same canvas is also used
       // to draw the selection highlight below regardless of showGrid (see
-      // the template's own v-if="showGrid || selection"), so a project
+      // the template's v-if="showGrid || selection"), so a project
       // with the grid off but an active selection shouldn't also get grid
       // lines it never asked for.
       if (this.showGrid) {
@@ -425,9 +425,9 @@ export default {
       // A semi-transparent fill over every selected cell, plus a solid
       // border wherever a selected cell's edge borders a NON-selected one
       // (or the canvas edge) - drawing the border per-edge like this
-      // (rather than one rectangle around the selection's own bounding
+      // (rather than one rectangle around the selection's bounding
       // box) is what makes a non-rectangular selection (CircleSelect,
-      // PolygonSelect) read as its own actual shape instead of a plain box.
+      // PolygonSelect) read as its actual shape instead of a plain box.
       if (this.selection && this.selection.size) {
         ctx.fillStyle = 'rgba(33, 150, 243, 0.35)';
         this.selection.forEach((key) => {
@@ -463,7 +463,7 @@ export default {
         ctx.stroke();
       }
 
-      // The polygon tool's own in-progress vertex list (see PolygonSelect's
+      // The polygon tool's in-progress vertex list (see PolygonSelect's
       // onPreview callback) - a small dot at each placed vertex's cell
       // center plus an open polyline connecting them in order, so a click
       // visibly does something immediately instead of looking like a no-op
@@ -495,9 +495,9 @@ export default {
       // click would affect right now" cue (draw, erase, fill, select,
       // move, ...), drawn last so it always reads on top of the grid/
       // selection/polygon-preview layers above rather than getting
-      // visually lost under a selection's own tint. A light, neutral
+      // visually lost under a selection's tint. A light, neutral
       // overlay (not the selection's blue) so it never looks like an
-      // actual selection of its own - just a cursor-following highlight.
+      // actual selection - just a cursor-following highlight.
       if (this.hoverCell) {
         const {x: hx, y: hy} = this.hoverCell;
         ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
@@ -544,11 +544,11 @@ export default {
     // "mouseleave" handling at all. Dragging the pointer off the canvas
     // while a button is still held (a real, easy-to-do gesture, e.g.
     // drawing right up to an edge) and releasing OUTSIDE it means the
-    // canvas's own "mouseup" never fires, so the library's  tool (see
+    // canvas's "mouseup" never fires, so the library's  tool (see
     // its handlePointerDown/handlePointerUp) is left thinking the button
     // is still down - re-entering the canvas afterward, with the button
     // genuinely up, then immediately resumes drawing on the very next
-    // "mousemove", with no mousedown of its own. Confirmed as a real,
+    // "mousemove", with no mousedown. Confirmed as a real,
     // reproducible bug across every card that uses this component (Player
     // Sprite, Background, Score digits - anywhere PixelEditor.vue is used).
     // Forcing a synthetic "mouseup" the instant the pointer leaves the
@@ -601,14 +601,14 @@ export default {
     },
 
     // Tracks the cell under the pointer for the hover highlight (see
-    // drawGridOverlay's own comment) - separate from handleMouse (which
+    // drawGridOverlay's comment) - separate from handleMouse (which
     // drives the actual tool and is debounced), so the highlight tracks
     // the cursor in real time rather than lagging behind by handleMouse's
-    // own 10ms debounce. Same offsetX/offsetY-against-the-canvas's-own-
-    // intrinsic-vs-rendered-size math @curtishughes/pixel-editor's own
+    // 10ms debounce. Same offsetX/offsetY-against-the-canvas's-
+    // intrinsic-vs-rendered-size math @curtishughes/pixel-editor's
     // mousePosition() uses internally (see node_modules/@curtishughes/
     // pixel-editor/dist/PixelEditor.js) - kept in sync by hand here since
-    // that library has no public API of its own to just ask "what cell is
+    // that library has no public API to just ask "what cell is
     // this event over."
     handleHover(event) {
       if (!this.editor) return;
@@ -629,13 +629,13 @@ export default {
     // GraphicEditorToolbar.vue) knows which one to act on next. Passes
     // itself (not just an id) so the caller can call straight into
     // setTool/undo/redo/applyHeight/handle*Image/handleClear below without
-    // needing its own parallel map of ids to component instances.
+    // needing its parallel map of ids to component instances.
     handleActivate() {
       this.$emit('activate', this);
     },
 
     // 'pencil'/'eraser'/'fill' -> the real tool object driving the
-    // underlying PixelEditor library (see its own Tool interface) -
+    // underlying PixelEditor library (see its Tool interface) -
     // shared by setTool, the toggledTool watcher above, and initEditor's
     // initialTool below so all three stay in sync with a single mapping.
     toolFor(toolName) {
@@ -657,7 +657,7 @@ export default {
     },
 
     // Clears whatever's currently selected, and discards an in-progress,
-    // not-yet-closed polygon along with it (PolygonSelect's own points
+    // not-yet-closed polygon along with it (PolygonSelect's points
     // list is otherwise independent of "selection" - it hasn't produced a
     // real selection yet) - called by GraphicEditorToolbar.vue's Escape
     // hotkey handler.
@@ -684,10 +684,10 @@ export default {
         // Pixels are drawn in the pencil's fixed color; recolor them so newly
         // drawn cells adopt their row color instead of staying the draw color.
         // logToHistory: false - this recolor pass doesn't represent a new
-        // edit (see setPixels' own comment); left true here, it silently
+        // edit (see setPixels' comment); left true here, it silently
         // pushed an extra history entry on every single stroke, which
         // undo()-then-redraw preview tools (Rectangle/Line/Oval) rely on
-        // undo() popping exactly the ONE entry their own last move pushed -
+        // undo() popping exactly the ONE entry their last move pushed -
         // the extra entry meant their undo() popped this no-op recolor
         // instead, leaving the previous preview position's pixels never
         // actually erased - confirmed as the real cause of a reported
@@ -806,7 +806,7 @@ export default {
     // The actual resize - called externally by whichever tab-level "Set
     // height" menu is currently driving this instance (see
     // GraphicEditorToolbar.vue), since this component no longer has a
-    // height-menu popup of its own to call it internally.
+    // height-menu popup to call it internally.
     applyHeight(newHeight, scaleContents) {
       const pixels = this.getPixels();
       if (newHeight != this.value.length) {
@@ -831,11 +831,11 @@ export default {
       });
       return pixelMatrix;
     },
-    // logToHistory: false for handleMouse's own post-stroke recolor pass
-    // below - that call re-expresses the SAME pixel matrix a tool's own
+    // logToHistory: false for handleMouse's post-stroke recolor pass
+    // below - that call re-expresses the SAME pixel matrix a tool's
     // set() just drew, only swapping which CSS color string represents
     // "on" per row, so it isn't really a separate user edit and shouldn't
-    // consume its own undo step. Left true (an extra history entry) for
+    // consume its undo step. Left true (an extra history entry) for
     // every other caller, which is the existing, unchanged behavior.
     setPixels(pixelMatrix, logToHistory = true) {
       pixelMatrix = pixelMatrix || this.createEmptyPixelMatrix();
@@ -896,9 +896,9 @@ export default {
 </script>
 <style scoped>
 /* The root v-card has a @click handler (for canvas mouse events - see
-   handleMouse), which Vuetify treats as "interactive" and paints its own
+   handleMouse), which Vuetify treats as "interactive" and paints its
    grey hover/focus overlay over on mouseover/click, the same way it does
-   for the toolbar's own buttons (see .pixel-editor-tools >>> .v-btn::before
+   for the toolbar's buttons (see .pixel-editor-tools >>> .v-btn::before
    below) - except here it covers the WHOLE card (graphic and toolbar
    alike), reading as a stray, unexplained grey tint rather than a real
    button state, since this card isn't actually a single clickable control.
@@ -928,15 +928,15 @@ export default {
 
 /* Swaps the plain arrow cursor for a small pencil/eraser glyph while
    hovering the canvas, matching whichever tool is actually active
-   (toggledTool - see setTool) - a plain crosshair (Vuetify's own default
+   (toggledTool - see setTool) - a plain crosshair (Vuetify's default
    hover cursor here otherwise) gave no visual confirmation of WHICH tool a
    click would use, easy to lose track of once the toolbar itself moved out
    of this component (see hideToolbar) onto a shared row elsewhere on the
-   page. White fill + black outline (not the app's own plain grey/black MDI
+   page. White fill + black outline (not the app's plain grey/black MDI
    icon color) so the glyph stays visible over both the mostly-black canvas
    backgrounds these editors usually have and any bright artwork drawn on
-   them. The hotspot (the two numbers after the url()) is the pencil's own
-   drawing tip / the eraser's own bottom-left corner, so the cursor visually
+   them. The hotspot (the two numbers after the url()) is the pencil's
+   drawing tip / the eraser's bottom-left corner, so the cursor visually
    points at the exact cell a click would affect, not just floats nearby -
    "crosshair" is the fallback for browsers that don't support custom cursor
    images at all. */
@@ -948,7 +948,7 @@ export default {
   cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><path fill='white' stroke='black' stroke-width='1' d='M16.24,3.56L21.19,8.5C21.97,9.29 21.97,10.55 21.19,11.34L12,20.53C10.44,22.09 7.91,22.09 6.34,20.53L2.81,17C2.03,16.21 2.03,14.95 2.81,14.16L13.75,3.56C14.54,2.78 15.8,2.78 16.24,3.56M4.22,15.58L7.76,19.11C8.54,19.9 9.8,19.9 10.59,19.11L14.54,15.16L9.42,10.04L4.22,15.58Z'/></svg>") 4 16, crosshair;
 }
 
-/* Hotspot at the bucket's spout (matching the pencil/eraser cursors' own
+/* Hotspot at the bucket's spout (matching the pencil/eraser cursors'
    "point at the exact cell a click would affect" reasoning above). */
 .editor-canvas-tool-fill {
   cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><path fill='white' stroke='black' stroke-width='1' d='M19,11.5C19,11.5 17,13.67 17,15A2,2 0 0,0 19,17A2,2 0 0,0 21,15C21,13.67 19,11.5 19,11.5M5.21,10L10,5.21L14.79,10M16.56,8.94L7.62,0L6.21,1.41L8.59,3.79L3.44,8.94C2.85,9.5 2.85,10.47 3.44,11.06L8.94,16.56C9.23,16.85 9.62,17 10,17C10.38,17 10.77,16.85 11.06,16.56L16.56,11.06C17.15,10.47 17.15,9.5 16.56,8.94Z'/></svg>") 4 20, crosshair;
@@ -963,7 +963,7 @@ export default {
 /* Rectangle/Oval both drag out a bounding box from a corner rather than
    tracking a single drawing tip the way Pencil/Line do, so a plain
    crosshair (no custom glyph/hotspot) already communicates the gesture
-   correctly on its own. */
+   correctly by itself. */
 .editor-canvas-tool-shape {
   cursor: crosshair;
 }
@@ -976,9 +976,9 @@ export default {
 }
 
 /* Layered directly on top of .editor-canvas (same inset/height) - drawn at
-   its own CSS-rendered resolution rather than the tiny one-unit-per-cell
-   intrinsic size .editor-canvas uses (see drawGridOverlay's own comment),
-   so no border of its own (would double up with .editor-canvas's) and no
+   its CSS-rendered resolution rather than the tiny one-unit-per-cell
+   intrinsic size .editor-canvas uses (see drawGridOverlay's comment),
+   so no border (would double up with .editor-canvas's) and no
    pointer-events (drawing/erasing has to keep reaching the real canvas
    underneath, not get intercepted by this purely visual layer). */
 .grid-overlay-canvas {
@@ -998,7 +998,7 @@ export default {
   padding-bottom: 8px;
 }
 
-/* v-card-actions' own default left/right padding (8px) doesn't match
+/* v-card-actions' default left/right padding (8px) doesn't match
    v-card-text's above (16px) - left as-is, the two rows' left edges land at
    different x positions, throwing off the toolbar row/clear-colors button's
    centering under the canvas/sidebar above them (confirmed as a real
@@ -1006,7 +1006,7 @@ export default {
    v-card-text's left/right here (bottom bumped to the same 8px for a
    consistent gutter all around) so every tab using this component gets the
    same alignment without each caller redeclaring it - a caller nesting this
-   inside its own already-padded card (e.g. BackgroundEditor.vue's
+   inside its already-padded card (e.g. BackgroundEditor.vue's
    .background-card) can zero this left/right padding back out locally to
    avoid doubling up. */
 .pixel-editor-tools {
@@ -1069,9 +1069,9 @@ export default {
 }
 
 /* Sits under the color sidebar, not the canvas. Width matched to
-   PlayfieldColorStrip.vue's own 22px strip (not the generic 26px icon-
+   PlayfieldColorStrip.vue's 22px strip (not the generic 26px icon-
    button width above) so the icon centers under the swatches themselves;
-   margin-right reproduces the strip's own 4px gap to the canvas, so the
+   margin-right reproduces the strip's 4px gap to the canvas, so the
    toolbar row beside it still starts exactly where the canvas does. */
 .pixel-editor-clear-colors-btn {
   flex: 0 0 22px;
@@ -1080,7 +1080,7 @@ export default {
 }
 
 /* The Clear button - centered as one group with the "toolbar-end" slot's
-   own Copy/Paste (when a caller supplies them) under the graphic. */
+   Copy/Paste (when a caller supplies them) under the graphic. */
 .pixel-editor-hidden-toolbar-row {
   display: flex;
   align-items: center;

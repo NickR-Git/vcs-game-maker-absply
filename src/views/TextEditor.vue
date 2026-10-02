@@ -202,7 +202,7 @@ export default defineComponent({
     // The Text Minikernel's  message background color (the "textbkcolor"
     // const - see generators/bbasic.js's generateConfiguration) - a single
     // project-wide setting stored alongside the rest of Configuration.vue's
-    // own options, not per-message, since only one Text Minikernel instance
+    // options, not per-message, since only one Text Minikernel instance
     // can ever be active in a project. Defaults to black (0), matching the
     // same "?? 0" fallback generateConfiguration itself uses (and what
     // text12a.asm's  ifnconst fallback already defaults to).
@@ -225,7 +225,7 @@ export default defineComponent({
       },
     });
 
-    // Whether text12b.asm's own "more below" scroll cursor is compiled in at
+    // Whether text12b.asm's "more below" scroll cursor is compiled in at
     // all (see generators/bbasic.js's  buildRom-time
     // buildTextScrollCursorOverride splice, gated on this same field) - a
     // single project-wide toggle, same reasoning/pattern as textBkColor
@@ -271,7 +271,7 @@ export default defineComponent({
     });
 
     // How many of the Text Minikernel's  12 physical character positions
-    // this project actually uses - see TEXT_MAX_DISPLAY_WIDTH_OPTIONS' own
+    // this project actually uses - see TEXT_MAX_DISPLAY_WIDTH_OPTIONS'
     // comment in blocks/text-strings.js for why this is compile-time only
     // (never a runtime-settable block) and why a narrower setting only
     // blanks the unused tail rather than shrinking storage. Same
@@ -299,7 +299,7 @@ export default defineComponent({
 
     // Purely a visual "which card am I looking at" marker - same
     // selectCard/selectedCardId/deselectCard pattern as MusicEditor.vue's
-    // own song cards and SoundFXEditor.vue's  sound effect cards (see
+    // song cards and SoundFXEditor.vue's  sound effect cards (see
     // MusicEditor.vue's  comment for the full reasoning): plain local
     // component state, not persisted, not wired into anything else.
     const selectedCardId = ref(null);
@@ -335,8 +335,8 @@ export default defineComponent({
     const {isCollapsed, toggleCollapsed, ensureExpanded, collapseAll} = useCollapsedIds('text', true);
     collapseAll();
 
-    // Card reordering - NOT built on hooks/drag-reorder.js's own
-    // useDragReorder (used as-is by SoundFXEditor.vue/MusicEditor.vue's own
+    // Card reordering - NOT built on hooks/drag-reorder.js's
+    // useDragReorder (used as-is by SoundFXEditor.vue/MusicEditor.vue's
     // single-column card lists), since that hook's  top-border
     // drag-over convention only makes sense for a strictly vertical stack.
     // .text-list is a CSS grid (see its  comment - two or more cards can
@@ -350,7 +350,7 @@ export default defineComponent({
     // {index, side} - side is 'before' or 'after', which HALF of card
     // `index` the pointer is currently over - same halfway-point
     // convention MusicEditor.vue's  dragOverSideFor/DataEditor.vue's
-    // own valueRowListeners already use for their identical grid-drop
+    // valueRowListeners already use for their identical grid-drop
     // problem.
     const dragOverEntry = ref(null);
     const isEntryDragging = (index) => draggedEntryIndex.value === index;
@@ -371,7 +371,7 @@ export default defineComponent({
       dragstart: (event) => {
         draggedEntryIndex.value = index;
         event.dataTransfer.effectAllowed = 'move';
-        // Same Firefox requirement as hooks/drag-reorder.js's own
+        // Same Firefox requirement as hooks/drag-reorder.js's
         // dragHandleListeners - the value itself is never read back.
         event.dataTransfer.setData('text/plain', String(index));
       },
@@ -476,7 +476,7 @@ export default defineComponent({
    pushing the message card in further than the Score tab's, which sits
    directly in a v-card-text with no list-item wrapper. Zeroing both sides
    (not just left, as this used to) matches the Player/Data/Background tabs'
-   own identical fix - the unzeroed right padding was otherwise most visible
+   identical fix - the unzeroed right padding was otherwise most visible
    on the last column of .text-list's grid, sitting further from the tab's
    right edge than the left column sits from the left edge. */
 .entry-list-item {
@@ -492,7 +492,7 @@ export default defineComponent({
 }
 
 /* Same margin-top/padding-top override as .text-columns-switch below -
-   Vuetify's own selection-control margin-top (meant for stacking below
+   Vuetify's selection-control margin-top (meant for stacking below
    other fields) otherwise leaves extra space above this switch. Sits inline
    in .text-bkcolor-row now, to the right of the color picker, so no
    margin-bottom is needed either. */
@@ -503,14 +503,14 @@ export default defineComponent({
   margin-left: 16px;
 }
 
-/* Matches the Score tab's own .score-bkcolor-label size (ScoreFontEditor.vue). */
+/* Matches the Score tab's .score-bkcolor-label size (ScoreFontEditor.vue). */
 .text-bkcolor-label {
   font-size: 1rem;
 }
 
 /* Vuetify's  v-select reserves space above the input for its label,
-   sitting lower than .text-scroll-cursor-switch's own centered toggle+label
-   row right next to it - nudged up to bring its own input line back onto
+   sitting lower than .text-scroll-cursor-switch's centered toggle+label
+   row right next to it - nudged up to bring its input line back onto
    the same baseline. */
 .text-blink-speed-field {
   max-width: 160px;
@@ -530,15 +530,15 @@ export default defineComponent({
 
 .text-max-width-field {
   max-width: 320px;
-  /* Matches SoundFXEditor.vue's own .soundfx-filter margin-top - without
+  /* Matches SoundFXEditor.vue's .soundfx-filter margin-top - without
      it, this field and .soundfx-filter sit on different baselines, and
-     .text-columns-switch's own offset (tuned to match .soundfx-filter's
+     .text-columns-switch's offset (tuned to match .soundfx-filter's
      row) ends up too low relative to this field specifically. */
   margin-top: 8px;
 }
 
-/* Same margin-top/padding-top override as SoundFXEditor.vue's own
-   .soundfx-columns-switch - Vuetify's own selection-control margin-top
+/* Same margin-top/padding-top override as SoundFXEditor.vue's
+   .soundfx-columns-switch - Vuetify's selection-control margin-top
    (meant for stacking below other fields) otherwise pushes this out of
    line with the select next to it. */
 .text-columns-switch {
@@ -561,40 +561,40 @@ export default defineComponent({
      tall to match it, instead of sitting flush at the top like its card
      content actually sizes to. */
   align-items: start;
-  /* Matches BackgroundEditor.vue's own .background-list - restores the
-     space above the FIRST row that zeroing v-list-item__content's own
+  /* Matches BackgroundEditor.vue's .background-list - restores the
+     space above the FIRST row that zeroing v-list-item__content's
      top padding below removes. */
   margin-top: 12px;
 }
 
 /* Single full-width column instead of the grid .text-list defaults to
    above - toggled via the "Columns" switch next to the max-width field.
-   Same shape as SoundFXEditor.vue's own .soundfx-list--single-column. */
+   Same shape as SoundFXEditor.vue's .soundfx-list--single-column. */
 .text-list--single-column {
   display: flex;
   flex-direction: column;
 }
 
 /* Grid stretches each item to fill its  column width automatically -
-   flex doesn't do that for .entry-list-item (Vuetify's own v-list-item, the
-   actual flex child) on its own, leaving .text-card's own width: 100% only
+   flex doesn't do that for .entry-list-item (Vuetify's v-list-item, the
+   actual flex child) by itself, leaving .text-card's width: 100% only
    filling 100% of that un-stretched item instead of the whole row. Same
-   fix as SoundFXEditor.vue's own equivalent rule. */
+   fix as SoundFXEditor.vue's equivalent rule. */
 .text-list--single-column .entry-list-item {
   width: 100%;
 }
 
 /* v-list-item__content's default 12px top/bottom padding was adding extra
-   space between grid ROWS on top of this grid's own 8px gap (same issue as
-   BackgroundEditor.vue's own .background-list, see its comment there),
+   space between grid ROWS on top of this grid's 8px gap (same issue as
+   BackgroundEditor.vue's .background-list, see its comment there),
    without anything similar between columns - zeroing it here keeps this
-   grid's own gap as the only source of spacing, matching the Background
-   tab's spacing exactly. overflow: visible (see MusicEditor.vue's own
+   grid's gap as the only source of spacing, matching the Background
+   tab's spacing exactly. overflow: visible (see MusicEditor.vue's
    identical fix) stops this same element's default "overflow: hidden"
-   from clipping a selected card's own 2px outline - min-width: 0 has to
+   from clipping a selected card's 2px outline - min-width: 0 has to
    come with it (same comment there for the full explanation): overflow:
-   visible silently undoes a flex item's own default 0 min-width, letting
-   it refuse to shrink below its own widest content instead of the tab's
+   visible silently undoes a flex item's default 0 min-width, letting
+   it refuse to shrink below its widest content instead of the tab's
    width. */
 .entry-list-item >>> .v-list-item__content {
   padding: 0;
@@ -608,7 +608,7 @@ export default defineComponent({
 }
 
 /* Only this top strip is actually draggable (see hooks/drag-reorder.js's
-   own comment on why) - covers the same header band the collapse/ID/delete
+   comment on why) - covers the same header band the collapse/ID/delete
    controls already occupy. Sits behind them (they're later in DOM order,
    so they paint on top and stay clickable) but in front of everything
    else, so a click-and-drag gesture anywhere else in the card - the name/
@@ -631,8 +631,8 @@ export default defineComponent({
 
 /* Which side of THIS card a dragged one would land on (see
    entryDragOverSide/dragOverSideFor) - left/right, not hooks/
-   drag-reorder.js's own top-border convention, since .text-list is a CSS
-   grid that can put more than one card on the same row (see its own
+   drag-reorder.js's top-border convention, since .text-list is a CSS
+   grid that can put more than one card on the same row (see its
    comment) - left/right is what actually reflects reading-order position
    within it. */
 .text-card-drag-over-before {
@@ -661,7 +661,7 @@ export default defineComponent({
 
 /* Same top-edge fix as .text-delete-btn, positioned at the opposite corner -
    a smaller top offset than .text-delete-btn's, since this one has to line
-   up against .text-id-badge's own text baseline right next to it, not just
+   up against .text-id-badge's text baseline right next to it, not just
    sit inside the card. */
 .text-collapse-btn {
   top: 2px !important;
@@ -720,9 +720,9 @@ export default defineComponent({
 
 /* Vuetify's  v-text-field__details reserves a 12px left padding by
    default (tuned for the non-outlined variant's underline, which is inset
-   from the field's own edge) - the outlined Text field's hint sat 12px
-   further right than the field's own left border because of it, confirmed
-   directly via each element's own getBoundingClientRect. Zeroed here so the
+   from the field's edge) - the outlined Text field's hint sat 12px
+   further right than the field's left border because of it, confirmed
+   directly via each element's getBoundingClientRect. Zeroed here so the
    hint lines up with the outline above it instead. */
 .text-message-section >>> .v-textarea .v-text-field__details {
   padding-left: 0;

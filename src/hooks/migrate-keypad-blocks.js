@@ -2,15 +2,15 @@
 
 // One-time migration from the old, separate input_keypad0_*/input_keypad1_*
 // block types into the single combined input_keypad_* type each pair now
-// shares (see KEYPAD_OPTIONS' own comment in blocks/input.js for why:
+// shares (see KEYPAD_OPTIONS' comment in blocks/input.js for why:
 // Keypad 0/1 are otherwise-identical peripheral ports, so there's a single
 // block type with a KEYPAD dropdown field instead of two full sets of
 // blocks - same reasoning, same shape, as the earlier Joystick 0/1
-// combination). The getter's own KEY field (already a plain 1-12 key ID,
-// not port-specific) is left untouched - only the block's own "type"
+// combination). The getter's KEY field (already a plain 1-12 key ID,
+// not port-specific) is left untouched - only the block's "type"
 // attribute and a brand new KEYPAD field need to change, same as JOYSTICK
 // did.
-// Same overall shape as hooks/migrate-joystick-blocks.js's own
+// Same overall shape as hooks/migrate-joystick-blocks.js's
 // migrateLegacyJoystickBlocksInWorkspaceXml (raw workspace XML STRING in,
 // string out, via DOMParser/XMLSerializer) - called from the same two
 // places that function is: main.js's startup pass (an existing

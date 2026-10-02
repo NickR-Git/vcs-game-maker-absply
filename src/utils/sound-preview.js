@@ -48,7 +48,7 @@ const shiftClock = () => NTSC_SHIFT_CLOCK * tvAudioClockScale(useConfigurationSt
 export const shiftClockFor = (audf, {slowClock = false} = {}) =>
   (slowClock ? shiftClock() / 3 : shiftClock()) / (Number(audf) + 1);
 
-// Every buffer below is built at this rate instead of the AudioContext's own
+// Every buffer below is built at this rate instead of the AudioContext's
 // (typically 44100/48000Hz) - Web Audio resamples an AudioBuffer to the
 // destination rate automatically on playback, so this doesn't lose any
 // audible range, but it does make chipSamples below always land on an EXACT
@@ -270,7 +270,7 @@ const stopActivePreview = () => {
 // utils/music-playback.js exactly (by ARPEGGIO_RANGE_* index - see
 // blocks/soundfx.js) - duplicated rather than imported since
 // music-playback.js already imports from this module, and importing back
-// would make the two circular (same reasoning as that module's own
+// would make the two circular (same reasoning as that module's
 // duplicate of this sequence).
 const ARPEGGIO_PHASE_SEQUENCES = [
   ['base', 'alt'], // UP 1 OCT
@@ -366,7 +366,7 @@ export const previewSoundEffect = ({
   } else {
     // Held flat for the note's whole duration - real AUDV hardware writes
     // are just as abrupt, holding at whatever level they were last set to
-    // with no smoothing of their own. The guard-window ramp below (not a
+    // with no smoothing. The guard-window ramp below (not a
     // real fade - see CLICK_GUARD_SECONDS) is the only softening applied.
     gainNode.gain.setValueAtTime(peakGain, now);
     endValue = peakGain;
@@ -404,7 +404,7 @@ export const previewSoundEffect = ({
     // A buffer is pre-rendered for one fixed clock, so its pitch can't be
     // automated live like an oscillator's - scheduled as several short
     // back-to-back buffers instead, one per flip, each built at that
-    // phase's  pitch (matches how music-playback.js's own
+    // phase's  pitch (matches how music-playback.js's
     // playInstrumentHit previews a buzzy/noisy arpeggiating instrument).
     const variants = arpeggioPitchVariants(audf, Number(arpeggioInterval) || 0);
     const sequence = ARPEGGIO_PHASE_SEQUENCES[Number(arpeggioRange) || 0] || ARPEGGIO_PHASE_SEQUENCES[0];
@@ -431,7 +431,7 @@ export const previewSoundEffect = ({
     lastSource.onended = () => {
       // Only clear if this preview's sources are still the active ones - a
       // Stop press (or a newer preview replacing this one) already did its
-      // own cleanup, and this handler firing afterward (stopping a node
+      // cleanup, and this handler firing afterward (stopping a node
       // fires "ended" too) shouldn't clobber whatever's playing now.
       if (activeSources === sources) {
         activeSources = [];

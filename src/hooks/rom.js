@@ -96,7 +96,7 @@ const regenerateCode = (xmlOverride) =>
 // disabling it would leave too few letters free. Deliberately NOT just
 // Blockly.Variables.allUsedVarModels(workspace).length (pure user-created
 // variables) - with Superchip on, every app-internal dev var (missile fire's
-// own fired-direction/speed, seek's  target/throttle state, background
+// fired-direction/speed, seek's  target/throttle state, background
 // fade timers, etc. - see generators/bbasic.js's  routeDevVar) is ALSO
 // routed through the very same 26-letter pool the instant Superchip goes
 // off, competing with user variables for the exact same slots. Counting only
@@ -161,7 +161,7 @@ export const usesPlayer0RainbowColors = () => {
 // the user's  project touches (stock runtime labels like the bankswitch
 // trampoline itself, or the score digit table). The one consistent, safe-
 // to-match signature across every reproduction of this: DASM can no longer
-// resolve "BS_jsr"/"BS_return", the bankswitch call/return trampoline's own
+// resolve "BS_jsr"/"BS_return", the bankswitch call/return trampoline's
 // labels - a user's  project can never reference those directly (they're
 // pure DASM-internal symbols emitted by the "gosub"/"return" macros), so
 // this is unambiguous evidence of the same "bank 1 doesn't fit" condition
@@ -232,14 +232,14 @@ const romSizeOverflowHint = (e, config) => {
 const TITLE_SCREEN_DRIVER_CODE_BYTES = 300;
 // Per-copy code size genuinely differs by graphic type (public/bb19/
 // titlescreen/*_kernel.asm) - 96x2 pushes twice the pixel columns through
-// the same per-scanline draw loop as 48x1/48x2, and needs its own
+// the same per-scanline draw loop as 48x1/48x2, and needs its
 // row-color table logic 48x1 skips entirely, so a single flat estimate
 // for every type under- or over-counted depending on which types a
 // project actually used. Approximate (still no way to know the REAL
-// assembled size without a compile - see this function's own caller's
+// assembled size without a compile - see this function's caller's
 // comment), scaled from each type's real combined source line count
 // (48x1: 158 lines across its 1/X files, 48x2: 199, 96x2: 259 self-
-// contained) against the previous flat 150 baseline (kept as 48x2's own
+// contained) against the previous flat 150 baseline (kept as 48x2's
 // number, since it sits in the middle).
 const TITLE_SCREEN_PER_KERNEL_COPY_CODE_BYTES_BY_TYPE = {
   '48x1': 120,
@@ -253,7 +253,7 @@ const estimateTitleScreenKernelCodeBytes = () => {
   let bytes = TITLE_SCREEN_DRIVER_CODE_BYTES;
   usedKeys.forEach((key) => {
     // Strips the "_N" kernel-copy slot suffix (e.g. "96x2_3" -> "96x2") -
-    // see assignKernelSlots' own `${card.type}_${slot}` key format.
+    // see assignKernelSlots' `${card.type}_${slot}` key format.
     const type = key.replace(/_\d+$/, '');
     bytes += TITLE_SCREEN_PER_KERNEL_COPY_CODE_BYTES_BY_TYPE[type] ?? DEFAULT_PER_KERNEL_COPY_CODE_BYTES;
   });
@@ -422,7 +422,7 @@ const resolveGraphicsUnitLabel = (unitKey) => {
 // than tracked as its  relocatable unit or data table - there's no such
 // thing as "this song is in bank 3 but that one is in bank 5", every song
 // and pattern always shares musicEngine's one bank. This expands that single
-// "musicEngine" entry into the actual song names (with each song's own
+// "musicEngine" entry into the actual song names (with each song's
 // pattern count) it contains, for the ROM capacity display's bank-contents
 // listing, rather than literally showing the code-facing "musicEngine" name.
 const resolveMusicSongLabels = () => {
@@ -446,7 +446,7 @@ const resolveMusicSongLabels = () => {
 // that pool in that case either.
 const computeVariableUsage = () => {
   const config = useConfigurationStorage().value || {};
-  // The 12 SYSTEM_VARIABLES (player0frame, framecounter, etc. - see their own
+  // The 12 SYSTEM_VARIABLES (player0frame, framecounter, etc. - see their
   // comment in generators/bbasic.js) are always dimmed, but land on a
   // DIFFERENT pool depending on Superchip: real letters when it's off, or
   // var0-var11 (a fixed region OUTSIDE letterVarsAvailable/
@@ -481,7 +481,7 @@ const computeVariableUsage = () => {
       available: BlocklyBB.superchipRwAvailable || 0,
     },
     // System variables (player0frame, newbackground, etc. - see
-    // SYSTEM_VARIABLES' own comment in generators/bbasic.js) are a SEPARATE,
+    // SYSTEM_VARIABLES' comment in generators/bbasic.js) are a SEPARATE,
     // always-unconditional set of "dim" lines - never routed through
     // routeDevVar/letterVarAssignments/superchipVarAssignments at all, since
     // they're not part of that competitive pool (every one of them exists on
@@ -493,7 +493,7 @@ const computeVariableUsage = () => {
     systemAssignments: SYSTEM_VARIABLES.map(([name, letter], i) =>
       ({name, slot: config.enableSuperchip ? `var${i}` : letter})),
     // Per-slot breakdown for the dynamic dev/user var pool (see bbasic.js's
-    // own letterVarAssignments/superchipVarAssignments comment) - which
+    // letterVarAssignments/superchipVarAssignments comment) - which
     // actual name landed on which letter/var slot, for the ROM capacity
     // display's  expandable list.
     letterAssignments: BlocklyBB.letterVarAssignments || [],
@@ -564,7 +564,7 @@ const computeBankContents = (maxBanks, textMinikernelActive) => {
     contents[bank].music.push(...(labels.length ? labels : [unitKey]));
   });
   place('subroutines', BlocklyBB.getSubroutineNames(), banks.subroutineBanks || {});
-  // A function relocates as part of its own "family" (see
+  // A function relocates as part "family" (see
   // computeFunctionFamilies) rather than entirely independently, but still
   // ends up with a real per-function entry in banks.functionBanks either
   // way (see setRelocationBank's  call sites in buildRom(), which iterate
@@ -597,11 +597,11 @@ const computeBankContents = (maxBanks, textMinikernelActive) => {
   // BlocklyBB.isTextMinikernelActive() here - this function runs well after
   // that, following the real async compile/assemble steps, and BlocklyBB is
   // a shared singleton reused across every workspaceToCode() call (see its
-  // own comment in generators/bbasic.js) - anything else touching it in the
+  // comment in generators/bbasic.js) - anything else touching it in the
   // meantime (e.g. the Actions tab's  live code preview,
   // ActionEditor.vue's  workspaceToCode call) can flip textMinikernelUsed
   // back before this ever reads it, silently dropping the Text Minikernel's
-  // own real bank-8-ish usage from the display - a real reported bug (the
+  // real bank-8-ish usage from the display - a real reported bug (the
   // top bank showing real used bytes with no "Text Minikernel" entry to
   // account for them).
   if (textMinikernelActive && contents[maxBanks]) {
@@ -610,7 +610,7 @@ const computeBankContents = (maxBanks, textMinikernelActive) => {
   // generateRelocatedSections (generators/bbasic.js) always declares this
   // exact top bank on a bankswitched, non-Text-Minikernel build, even with
   // nothing relocated into it, so DASM pads it to full size instead of
-  // truncating the assembled binary - that costs real bytes (bB's own
+  // truncating the assembled binary - that costs real bytes (bB's
   // per-bank bankswitch entry code), but none of the categories above ever
   // account for it, so the top bank showed used space with an empty content
   // list whenever nothing else happened to be relocated there.
@@ -624,7 +624,7 @@ const computeBankContents = (maxBanks, textMinikernelActive) => {
 // generators/bbasic/function.js) and every function_call_statement wrapper
 // subroutine (registerFunctionCallWrapper there) needs before either can be
 // relocated safely: a bB function-call expression ("name(args)") has no
-// bank-tag syntax of its own (see codeReferencesAnyFunction's  comment in
+// bank-tag syntax (see codeReferencesAnyFunction's  comment in
 // generators/bbasic.js), so a function and everything that reaches it
 // through a plain VALUE-form call - another function's  body, or a
 // wrapper subroutine's  body, both scanned here the same way
@@ -761,7 +761,7 @@ const pickRelocationCandidate = (banks, hasReservedMusicBank) => {
   const musicCandidates = BlocklyBB.getMusicUnitKeys()
       .filter((name) => (musicBanks[name] || 1) === 1)
       .map((name) => ({kind: 'musicBanks', name, size: BlocklyBB.estimateMusicUnitSize(name)}));
-  // Music still sitting in bank 1 jumps the queue whenever it has its own
+  // Music still sitting in bank 1 jumps the queue whenever it has its
   // reserved bank waiting (see musicReservedBank) - moving it there is a
   // pure win with no downside, unlike graphics/events/subroutines, which
   // compete for space in whichever shared-pool bank they land in. Sorting
@@ -804,7 +804,7 @@ const pickRelocationCandidate = (banks, hasReservedMusicBank) => {
     // buildRom() below, which iterate candidate.members instead of a single
     // kind/name whenever this is present), sized as the sum of every
     // member's  estimate. Excludes any family an ordinary subroutine or
-    // event bare-calls directly (see familyHasExternalBareCaller's own
+    // event bare-calls directly (see familyHasExternalBareCaller's
     // comment) - such a family can never safely leave bank 1 at all, so it's
     // not a candidate here any more than an ordinary function-referencing
     // subroutine/event is above.
@@ -860,9 +860,9 @@ const estimateBank1Total = (banks) => {
 // backgrounds/animations/events pack into - see pickNextBank's  comment
 // for why a dedicated reservation was tried and reverted once before,
 // and generateMusicChecks/generatePlaySong's  comments for why music's
-// own size can vary a lot build to build in a way fixed content can't.
+// size can vary a lot build to build in a way fixed content can't.
 // Reverting that revert here, at the user's  explicit request, after a
-// real project demonstrated the earlier "shared pool" reasoning's own
+// real project demonstrated the earlier "shared pool" reasoning's
 // tradeoff cuts the other way just as easily: a project that's ALREADY
 // packed every other bank tight leaves music with nowhere to fit at all
 // otherwise, which is worse than dedicating it a bank up front. Returns null
@@ -977,7 +977,7 @@ const buildRomInner = async () => {
   const relocatedThisBuild = [];
 
   // Tracks every bank each unit has already been tried in during THIS
-  // build (keyed by "kind:name"), so the fallback below (see its own
+  // build (keyed by "kind:name"), so the fallback below (see its
   // comment) can tell which banks are left to try for whichever unit needs
   // it, rather than repeating one that already overflowed.
   const retriedBanksByUnit = new Map();
@@ -991,7 +991,7 @@ const buildRomInner = async () => {
   let stuckBank = null;
   const stuckBankTriedUnits = new Set();
 
-  // Tracks the most recent failure so the post-loop fallback (see its own
+  // Tracks the most recent failure so the post-loop fallback (see its
   // comment, right after the for loop below) can still report something
   // useful if the attempt budget runs out without the loop's "nothing
   // left to try" branch ever firing.
@@ -1023,7 +1023,7 @@ const buildRomInner = async () => {
   // that already compiled fine wouldn't leave bank 1 packed tight while
   // other banks sat empty - and was reverted after being confirmed as a net
   // loss on a large, already-tight project: every relocated unit costs its
-  // own small entry/return trampoline (wrapRelocatableGraphics) that plain
+  // small entry/return trampoline (wrapRelocatableGraphics) that plain
   // inline code in bank 1 doesn't pay, and that version moved EVERY graphics
   // unit out unconditionally, even the (usual) majority that never actually
   // needed to move - paying that overhead broadly enough to cost more room
@@ -1031,7 +1031,7 @@ const buildRomInner = async () => {
   //
   // The proactive pre-pass below is deliberately narrower, to avoid
   // repeating exactly that mistake: it only moves anything when there's a
-  // REAL, MEASURED reason to expect bank 1 won't fit - this project's own
+  // REAL, MEASURED reason to expect bank 1 won't fit - this project's
   // last successful build's actual bank 1 capacity (useRomCapacity(), set
   // at the bottom of this function on every success), not a guess made up
   // before ever compiling once. It's skipped entirely whenever no such
@@ -1103,7 +1103,7 @@ const buildRomInner = async () => {
     // chained together with awaits on already-resolved/microtask promises -
     // none of which are real macrotasks, so the browser never gets a chance
     // to repaint or process input between them. A project that needs many
-    // relocation attempts to converge (see MAX_RELOCATION_ATTEMPTS's own
+    // relocation attempts to converge (see MAX_RELOCATION_ATTEMPTS's
     // comment) used to run all of them back-to-back with zero yields at
     // all, appearing as a total tab freeze for however long that took - up
     // to roughly a minute for the full 64-attempt budget, confirmed
@@ -1167,7 +1167,7 @@ const buildRomInner = async () => {
         Object.assign(siblingFiles, await getTitleScreenSiblingFiles(BlocklyBB.titleScreenUsedKernelKeys));
         Object.assign(siblingFiles, BlocklyBB.titleScreenAsmFiles || {});
       }
-      // The compiler has no font support of its own, so point its score
+      // The compiler has no font support, so point its score
       // digits at the selected font by overriding score_graphics.asm.
       // Squish is special (see utils/score-font.js/SQUISH_SCORE_FONT): it's
       // the Text Minikernel's  extended score_graphics.asm, already
@@ -1184,7 +1184,7 @@ const buildRomInner = async () => {
       // what a font picked for the REAL score digits should also affect.
       // "Show NTSC scanlines used as the score" (config.enableScanlinesDebug)
       // forces the same thing, for the same reason - it pokes plain digits
-      // straight into the score too, sized for the standard kernel's own
+      // straight into the score too, sized for the standard kernel's
       // full-height digits, not Squish's shorter ones.
       const effectiveScoreFont = (config.enableCycleScore || config.enableScanlinesDebug) ? null : config.scoreFont;
       if (effectiveScoreFont === SQUISH_SCORE_FONT) {
@@ -1211,17 +1211,17 @@ const buildRomInner = async () => {
           siblingFiles['text12b.asm'] = buildTextRow2ColorOverride(
               siblingFiles['text12b.asm'], {colorVarName});
         }
-        // The "more below" scroll cursor (see utils/text-font.js's own
+        // The "more below" scroll cursor (see utils/text-font.js's
         // buildTextScrollCursorOverride) splices its  drawing code into
         // WHATEVER text12b.asm content is already staged above (the font
         // override, if any, otherwise the sibling file's  pristine
         // copy) - applied on top, not instead of, so a project customizing
         // both its glyphs AND the cursor gets both at once. _textLinesMax's
-        // own real resolved name is read directly off BlocklyBB.nameDB_
+        // real resolved name is read directly off BlocklyBB.nameDB_
         // here, right after this same build's regenerateCode() call
         // already resolved it the same way for the actual generated source
         // (see that function's  doc comment in utils/text-font.js for
-        // why a standalone util module can't resolve this on its own).
+        // why a standalone util module can't resolve this by itself).
         if (config.enableTextScrollCursor) {
           const glyphByte = packCursorGlyphByte(processCursorGlyphDefaults(useTextFontStorage()));
           const linesMaxVarName = BlocklyBB.nameDB_.getName(
@@ -1272,7 +1272,7 @@ const buildRomInner = async () => {
       markRomUpToDate();
       const capacity = computeRomCapacity(compiledResult);
       const maxBanks = BANK_COUNT_BY_ROMSIZE[config.romSize];
-      // Safety net for the "third overflow shape" isOverflowError's own
+      // Safety net for the "third overflow shape" isOverflowError's
       // comment documents (Superchip + a pfres above 12 + a bankswitched ROM
       // above 8k): bank 1 can overflow its RORG'd segment without DASM
       // raising ANY recognizable error at all - the assembly reports success,
@@ -1310,8 +1310,8 @@ const buildRomInner = async () => {
           bankContents: maxBanks ? computeBankContents(maxBanks, textMinikernelActive) : undefined,
           variableUsage: computeVariableUsage()} :
         capacity);
-      // Remembers THIS build's  final layout as the next build's own
-      // first-attempt hint (see seedRelocationBanksFromLastSuccess's own
+      // Remembers THIS build's  final layout as the next build's
+      // first-attempt hint (see seedRelocationBanksFromLastSuccess's
       // comment in relocation-banks.js) - recorded on every success, not
       // just ones that needed relocation at all, so a project that fits in
       // bank 1 alone keeps skipping straight to a real compile too (an empty
@@ -1371,7 +1371,7 @@ const buildRomInner = async () => {
 
         // Fallback for when nothing is left in bank 1 to relocate, but some
         // OTHER bank turns out to be too full too - the one case
-        // pickRelocationCandidate structurally can't handle on its own,
+        // pickRelocationCandidate structurally can't handle by itself,
         // since it only ever looks at units still sitting in bank 1.
         //
         // Systematically empties out ONE bank at a time (stuckBank, chosen
@@ -1418,8 +1418,8 @@ const buildRomInner = async () => {
           );
           // A function or function_call_statement wrapper subroutine can
           // never be picked as a co-resident on its  here - see
-          // computeFunctionFamilies'  comment: it has no bank-tag syntax
-          // of its own, so it can only ever move together with the rest of
+          // computeFunctionFamilies'  comment: it has no bank-tag syntax,
+          // so it can only ever move together with the rest of
           // its family. Resolved once per rederive (not per member found
           // below) since it's cheap and this fallback path is already rare.
           const wrapperNames = BlocklyBB.functionCallWrapperNames || new Set();
@@ -1499,7 +1499,7 @@ const buildRomInner = async () => {
               candidate = {kind: next.kind, name: next.name};
               bank = reservedMusicBank;
             } else if (next.kind !== 'musicBanks') {
-              // Balanced by current occupancy (same as pickNextBank's own
+              // Balanced by current occupancy (same as pickNextBank's
               // primary use above), not just "lowest untried bank number" -
               // confirmed directly as a real bug: the untried-lowest-number
               // version piled the vast majority of a project's content into
@@ -1509,7 +1509,7 @@ const buildRomInner = async () => {
               // the rest of the build goes through this exact fallback path.
               // Every bank already tried for THIS unit (triedBanks, which
               // already includes stuckBank - added a few lines above) is a
-              // HARD exclusion, not a soft penalty - see pickNextBank's own
+              // HARD exclusion, not a soft penalty - see pickNextBank's
               // comment for why a softer version of this (letting a
               // previously-tried bank stay pickable, just deprioritized)
               // caused a different real bug, a unit oscillating forever
@@ -1548,7 +1548,7 @@ const buildRomInner = async () => {
           relocatedThisBuild.push({kind: candidate.kind, name: candidate.name, bank, members: candidate.members});
           // Not an 'error'-level entry - an overflow here is an expected,
           // automatically-handled part of the relocation retry loop, not a
-          // real problem the user needs to act on (see isOverflowError's own
+          // real problem the user needs to act on (see isOverflowError's
           // comment); only a failure that survives every retry (below) is
           // shown in red.
           appendCompileLog(
@@ -1587,10 +1587,10 @@ const buildRomInner = async () => {
     }
   }
   // Reached only if every single attempt up to MAX_RELOCATION_ATTEMPTS kept
-  // finding SOME new combination worth trying (see the retry loop's own
+  // finding SOME new combination worth trying (see the retry loop's
   // comment) without ever actually succeeding - i.e. genuine exhaustion of
   // the attempt budget itself, not the "nothing left to try" case the loop
-  // above already reports on its own (that one returns straight from inside
+  // above already reports by itself (that one returns straight from inside
   // the loop, never reaching here). Without this, a project stuck this way
   // silently returned false with NOTHING shown at all - confirmed directly:
   // the error banner stayed completely empty after a build spent about a

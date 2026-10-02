@@ -24,7 +24,7 @@ const openHandleDb = () => new Promise((resolve, reject) => {
   request.onerror = () => reject(request.error);
 });
 
-// handle=null clears whatever was persisted (see Project.vue's own
+// handle=null clears whatever was persisted (see Project.vue's
 // handleNewProject - a new project has nothing to save back to, and
 // shouldn't leave the PREVIOUS project's handle sitting around to be
 // silently restored into it on the next reload).
@@ -67,7 +67,7 @@ export const loadPersistedFileHandle = async () => {
 // "Save" click that calls it are the same gesture, so this is safe to
 // call from there) - needs its write permission (re-)confirmed before
 // createWritable() is trusted to work. The browser itself decides how
-// long a "granted" answer is remembered (commonly for the page's own
+// long a "granted" answer is remembered (commonly for the page's
 // lifetime, sometimes across reloads for the same origin) - this only
 // ever ASKS, never assumes.
 export const ensureWritePermission = async (handle) => {

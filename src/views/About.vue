@@ -109,8 +109,8 @@ export default {
 /* Fills .app-main-inner's  real, deterministic height (see its comment
    in App.vue) instead of just sizing to content - a flex column so
    .about-text below can claim the leftover space (flex: 1, after the
-   title/divider's natural height) and vertically center its own
-   content within THAT, rather than only within its own content height. */
+   title/divider's natural height) and vertically center its
+   content within THAT, rather than only within its content height. */
 .about-card {
   display: flex;
   flex-direction: column;
@@ -121,7 +121,7 @@ export default {
    top/bottom padding otherwise leaves a bigger gap than intended under the
    divider above. Flex column with align-items:center centers every direct
    child (the logo block, the description, the Contributors list) as its
-   own box in the middle of the page, not just the text within each one;
+   box in the middle of the page, not just the text within each one;
    flex: 1 + justify-content: center (with .about-card's height: 100%
    above) is what centers that whole column vertically too, not just
    horizontally. */
@@ -138,8 +138,8 @@ export default {
 
 /* Flex column, centered on its  cross axis - shrinks to fit its widest
    child (the logo) so the version text below centers relative to the logo
-   specifically. Already centered as a unit by .about-text's own
-   align-items above; this only needs to handle centering ITS OWN children
+   specifically. Already centered as a unit by .about-text's
+   align-items above; this only needs to handle centering ITS children
    (the logo image and version text) against each other. */
 .about-logo-block {
   display: flex;
@@ -149,7 +149,7 @@ export default {
 }
 
 /* The logo.svg asset itself has a fair amount of transparent padding baked
-   into its own bounding box (visible directly: the "VCS GAME MAKER" text
+   into its bounding box (visible directly: the "VCS GAME MAKER" text
    inside it doesn't reach the SVG's edges) - a negative margin here
    pulls the version text up into that empty space instead of stacking a
    real gap on top of it, which otherwise reads as a much bigger gap than
@@ -197,7 +197,7 @@ export default {
 }
 
 /* Centered as a block on the page (its parent, .about-text, already does
-   that), and its own item text centers too, matching the rest of the
+   that), and its item text centers too, matching the rest of the
    page's centered layout. */
 .about-list {
   padding-top: 0;

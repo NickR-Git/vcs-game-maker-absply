@@ -53,14 +53,14 @@ import {useGeneratedBasic} from '../hooks/generated';
 import {markRomOutdated} from '../hooks/rom';
 
 // Keep in sync with --blockly-font-family in App.vue's  global <style>
-// (deliberately its OWN variable, not --app-font-family - this app's Inter
+// (deliberately its variable, not --app-font-family - this app's Inter
 // font everywhere else is unaffected, only Blockly's block/flyout text uses
 // this one) - there's no build-time bridge between a CSS custom property
 // and this JS theme config, so the two have to be updated together by hand.
 // Blockly
-// measures every block's  text width at layout time using ITS OWN
+// measures every block's  text width at layout time using ITS
 // font-metrics call (a hidden canvas context, not the DOM/CSS engine), so
-// switching the app's font via CSS alone (see App.vue's own .blocklyText
+// switching the app's font via CSS alone (see App.vue's .blocklyText
 // override) left Blockly still measuring block width as if the text were
 // still in its  default (11pt sans-serif) - text rendered in the new,
 // often-wider font then visibly overran the space Blockly had reserved for
@@ -80,7 +80,7 @@ const APP_BLOCKLY_THEME = Blockly.Theme.defineTheme('app', {
   // this file), so this app is visually back to its original look overall.
   // Briefly tried Blockly.Themes.Zelos as the base here (paired with the
   // Zelos renderer) - that made every stock block relying on its  3-tone
-  // colourPrimary/Secondary/Tertiary style (e.g. controls_if's own
+  // colourPrimary/Secondary/Tertiary style (e.g. controls_if's
   // "logic_blocks" style) render solid black, since Zelos's  blockStyles
   // weren't resolving correctly layered under this app's custom theme;
   // Classic's simpler single-colour block styles never hit that.
@@ -115,7 +115,7 @@ const APP_BLOCKLY_THEME = Blockly.Theme.defineTheme('app', {
 // disappear from the toolbox live as either toggle changes, without needing
 // a page reload. Only gates whether the blocks are OFFERED in the toolbox -
 // a block already placed on the canvas before the toggle was turned off
-// keeps working exactly as it did (see generators/bbasic.js's own
+// keeps working exactly as it did (see generators/bbasic.js's
 // isEnabled()-based pre-scan, unaffected by this), same as any other
 // toolbox-only restriction in this app.
 const buildToolboxXml = (enablePlayer0SpriteColors, enablePlayer1SpriteColors) =>
@@ -143,7 +143,7 @@ export default {
     // options.theme once, at injection time, so a live binding here
     // wouldn't do anything useful anyway - toggling this setting already
     // requires leaving and revisiting the Actions tab for the renderer/
-    // theme-level effects it has elsewhere (see ActionEditor.vue's own
+    // theme-level effects it has elsewhere (see ActionEditor.vue's
     // renderer comment). Mutates APP_BLOCKLY_THEME itself (a module-level
     // singleton reused by every mount) via setComponentStyle - the theme
     // object is otherwise defined once, at import time, well before any
@@ -161,7 +161,7 @@ export default {
         sounds: !muteBlocklySoundsStorage.value,
         theme: APP_BLOCKLY_THEME,
         // 'thrasos' keeps the original puzzle-piece block SHAPES (same tab/
-        // notch geometry as 'geras', the default, and unlike 'zelos'' own
+        // notch geometry as 'geras', the default, and unlike 'zelos''
         // rounded look) but drops Geras'  light/dark bevel highlight
         // overlay - it shares the same flat "common" drawer Zelos itself is
         // built on, just without Zelos' rounded corners. What's left is a
@@ -191,7 +191,7 @@ export default {
         // per-axis OBJECT, not the plain "true" its  hasCategories-based
         // default resolves to (see node_modules/blockly/core/options.js'
         // parseMoveOptions_) - so plain wheel silently did nothing but zoom
-        // before this, regardless of BlocklyComponent.vue's own
+        // before this, regardless of BlocklyComponent.vue's
         // shift-to-zoom patch. drag: true matches what Blockly would have
         // defaulted to anyway (scrollbars implies drag-to-pan) - listed
         // explicitly here since scrollbars is no longer left to infer it.
@@ -287,7 +287,7 @@ export default {
 
       // Plain transparent rect gives this the same 32x32 (WIDTH_/HEIGHT_)
       // clickable footprint the other three buttons get for free from
-      // their own <image> element's  bounds.
+      // their <image> element's  bounds.
       const hitArea = document.createElementNS(NS, 'rect');
       hitArea.setAttribute('width', '32');
       hitArea.setAttribute('height', '32');
@@ -314,7 +314,7 @@ export default {
 
       // Active (toggled on) is always full opacity, solid blue - it should
       // read as clearly "on" regardless of whether the mouse happens to be
-      // over it. Inactive starts fainter (.25, dimmer than Blockly's own
+      // over it. Inactive starts fainter (.25, dimmer than Blockly's
       // zoom-icon rest opacity of .4) so it visibly recedes next to the
       // solid active state, brightening the same way those icons do as the
       // mouse gets closer to actually clicking it. Fill starts from the same
@@ -456,6 +456,6 @@ export default {
 
 /* The grid-snap toggle itself is no longer an HTML element positioned over
    the canvas (see setupGridSnapZoomButton in the script) - it's a genuine
-   SVG child of Blockly's own zoom-controls group, styled inline where it's
+   SVG child of Blockly's zoom-controls group, styled inline where it's
    built rather than here. */
 </style>

@@ -7,7 +7,7 @@
           Draw full-screen playfield backgrounds here, then set one as the active background
           with a "Background" block (Actions tab). Each pixel is either on or off; if "Enable
           per-row playfield colors (pfcolors)" is turned on (Options tab), each row can have
-          its own color instead of one fixed color for the whole background.
+          its color instead of one fixed color for the whole background.
         </p>
 
         <graphic-editor-toolbar :active-editor="effectiveEditor" @height-hotkey="handleSetHeightHotkey">
@@ -198,21 +198,21 @@
                   <!-- aspectRatio is (32 * PF_COLUMN_WIDTH_PX) / (background.pixels.length *
                        pfRowDivisorFor(config)) - real screen width (32 columns *
                        PF_COLUMN_WIDTH_PX = 160px, always, regardless of pfres/Superchip - see
-                       that constant's own comment in utils/playfield-coords.js) over THIS
-                       background's own real total height (its own row count * that row
-                       count's real scanline height - pfRowDivisorFor's own comment explains
+                       that constant's comment in utils/playfield-coords.js) over THIS
+                       background's real total height (its row count * that row
+                       count's real scanline height - pfRowDivisorFor's comment explains
                        why that per-row height isn't a flat constant either). Deliberately NOT
                        a flat ratio (an earlier fix used a fixed 96-scanline total, assuming
-                       every background's own row count always exactly matches pfres) - that
+                       every background's row count always exactly matches pfres) - that
                        broke the one case a background's row count DOESN'T match pfres: a
                        background the user explicitly resized taller via "Set height"
-                       (background.customHeight - see reflowBackgroundsToHeight's own comment
+                       (background.customHeight - see reflowBackgroundsToHeight's comment
                        in blocks/background.js, which deliberately leaves such a background's
                        row count alone on every pfres change) genuinely has MORE real scanlines
-                       than a fixed 96 assumes, so it needs its own actual row count factored
+                       than a fixed 96 assumes, so it needs its actual row count factored
                        back in - confirmed as a real reported bug ("aspect ratio is not
                        updating when background graphic is taller than pfres value"). An
-                       ordinary (non-custom-height) background's own row count already tracks
+                       ordinary (non-custom-height) background's row count already tracks
                        pfres automatically, so this still lands on the exact same ratio that
                        background would have gotten from a pfres-only calculation - this isn't
                        a regression back to the ORIGINAL row-count-dependent bug (dividing by
@@ -343,9 +343,9 @@ export default defineComponent({
     const configurationStorage = useConfigurationStorage();
     const zoom = useEditorZoom('background');
     const editorWidth = computed(() => `${Math.round(EDITOR_BASE_WIDTH * zoom.value)}px`);
-    // See the template's own comment on where this background pixel editor's
+    // See the template's comment on where this background pixel editor's
     // aspectRatio comes from - real screen width (always 160px) over THIS
-    // background's own real total height (its own row count, not
+    // background's real total height (its row count, not
     // necessarily pfres's - see customHeight - times that row count's real
     // scanline height).
     const backgroundAspectRatio = (background) =>
@@ -359,12 +359,12 @@ export default defineComponent({
     const showPixelGridLabels = usePixelGridLabelsStorage();
 
     // Same "armed color for direct-painting" reasoning as PlayerEditor.vue's
-    // own selectedQuickColor - v-model'd to the QuickColorPalette instance
+    // selectedQuickColor - v-model'd to the QuickColorPalette instance
     // above, passed into PlayfieldColorStrip's  activeQuickColor prop
     // below. Read-only access to the palette DATA itself
     // (quickColorPalette) - QuickColorPalette owns writing to that shared
     // storage; this just needs the list to pass into PlayfieldColorStrip's
-    // own quickColors prop.
+    // quickColors prop.
     const selectedQuickColor = ref(null);
     const colorPaletteStorage = useColorPaletteStorage();
     const quickColorPalette = computed(() => colorPaletteStorage.value || []);
@@ -397,7 +397,7 @@ export default defineComponent({
 
     // Purely a visual "which card am I looking at" marker - same
     // selectCard/selectedCardId/deselectCard pattern as MusicEditor.vue's
-    // own song cards and the other tabs'  entry cards (see
+    // song cards and the other tabs'  entry cards (see
     // MusicEditor.vue's  comment for the full reasoning): plain local
     // component state, not persisted, not wired into anything else.
     const selectedCardId = ref(null);
@@ -411,7 +411,7 @@ export default defineComponent({
     // Tracks whichever background's PixelEditor instance was last
     // clicked into (see its "activate" event, emitted from PixelEditor.vue's
     // handleActivate) - the single toolbar above (Eraser/Pencil/Undo/Redo/
-    // Export/Import) acts on THIS editor, since every card's own
+    // Export/Import) acts on THIS editor, since every card's
     // per-instance toolbar is now hidden (hideToolbar on the pixel-editor
     // below) in favor of this one shared row. Same mechanism as
     // PlayerEditor.vue's activeFrameEditor/setActiveFrame.
@@ -425,7 +425,7 @@ export default defineComponent({
       activeBackgroundId.value = backgroundId;
     };
 
-    // Unique per background - used as its own PixelEditor.vue $ref name (see
+    // Unique per background - used as its PixelEditor.vue $ref name (see
     // the template) so effectiveEditor (declared further below, once
     // selectedBackground itself exists) can resolve straight to its
     // component instance.
@@ -494,7 +494,7 @@ export default defineComponent({
       heightMenuValue.value = selectedBackground.value.pixels.length;
       heightMenuScaleContents.value = false;
     };
-    // The "H" hotkey - see PlayerEditor.vue's own handleSetHeightHotkey for
+    // The "H" hotkey - see PlayerEditor.vue's handleSetHeightHotkey for
     // why this can't just call openHeightMenu alone.
     const handleSetHeightHotkey = () => {
       if (!selectedBackground.value) return;
@@ -542,8 +542,8 @@ export default defineComponent({
     const {isCollapsed, toggleCollapsed, collapseAll} = useCollapsedIds('background', true);
     collapseAll();
 
-    // Card reordering - NOT built on hooks/drag-reorder.js's own
-    // useDragReorder (used as-is by SoundFXEditor.vue/MusicEditor.vue's own
+    // Card reordering - NOT built on hooks/drag-reorder.js's
+    // useDragReorder (used as-is by SoundFXEditor.vue/MusicEditor.vue's
     // single-column card lists), since that hook's  top-border
     // drag-over convention only makes sense for a strictly vertical stack.
     // .background-list is a CSS grid (see its  comment - two or more
@@ -646,7 +646,7 @@ export default defineComponent({
       });
     };
 
-    // Same "colors-only" pair as PlayerEditor.vue's own
+    // Same "colors-only" pair as PlayerEditor.vue's
     // handleCopyRowColors/handlePasteRowColors, applied to a background's
     // rowColors instead of a frame's.
     const handleCopyBackgroundRowColors = (background) => {
@@ -743,7 +743,7 @@ export default defineComponent({
    directly in a v-card-text with no list-item wrapper. Zeroing both sides
    (not just left, as this used to) keeps the card's right edge from sitting
    16px further in than its left edge. */
-/* padding-top/bottom zeroed too (not just left/right) - Vuetify's own
+/* padding-top/bottom zeroed too (not just left/right) - Vuetify's
    default vertical list-item padding was adding extra space between grid
    ROWS on top of .background-list's 8px row gap, without adding
    anything similar between columns (that's handled entirely by the grid's
@@ -757,15 +757,15 @@ export default defineComponent({
 
 /* v-list-item__content (a Vuetify-owned element between .entry-list-item
    and .background-card, not directly reachable without a deep selector)
-   carries its own default 12px top/bottom padding - on top of the grid's
-   own row gap AND .background-card's 12px padding, this was adding a
+   carries its default 12px top/bottom padding - on top of the grid's
+   row gap AND .background-card's 12px padding, this was adding a
    third, easy-to-miss source of extra space above/below each card. */
 /* overflow: visible added alongside the padding reset (see MusicEditor.vue's
-   own identical fix) - stops this element's default "overflow: hidden" from
+   identical fix) - stops this element's default "overflow: hidden" from
    clipping a selected card's 2px outline - min-width: 0 has to come
    with it (same comment there for the full explanation): overflow: visible
    silently undoes a flex item's default 0 min-width, letting it refuse
-   to shrink below its own widest content instead of the tab's width. */
+   to shrink below its widest content instead of the tab's width. */
 .entry-list-item >>> .v-list-item__content {
   padding: 0;
   overflow: visible;
@@ -789,9 +789,9 @@ export default defineComponent({
    (below) - editorWidth alone is only the pixel editor's inner width,
    so a column sized to exactly that was 24px too narrow for the card
    actually wrapping it, and the card's real (wider) box overflowed into
-   its neighbor's column instead of fitting in its own. */
+   its neighbor's column instead of fitting in its. */
 /* margin-top restores the gap above the FIRST row that used to come from
-   v-list-item__content's 12px top padding (see .entry-list-item's own
+   v-list-item__content's 12px top padding (see .entry-list-item's
    comment on zeroing that) - zeroing it fixed the (unwanted) extra space
    BETWEEN rows, but also removed the (wanted) space between the editor-zoom
    control above and the first row, which this puts back without
@@ -804,22 +804,22 @@ export default defineComponent({
   /* Tighter than the 12px this used to be (matching the old margin-top
      comment further up, before the sticky toolbar row existed) - see
      PlayerEditor.vue's identical .animation-list rule for why: the toolbar
-     row directly above already has its own top/bottom padding, so the old
+     row directly above already has its top/bottom padding, so the old
      value on top of that read as too much combined space before the first
      card. */
   margin-top: 4px;
 }
 
-/* Same rounded, thin-bordered look as the Sound/Data/Text/Music tabs' own
+/* Same rounded, thin-bordered look as the Sound/Data/Text/Music tabs'
    per-item cards (e.g. SoundFXEditor's .soundfx-card) - this one wraps
    directly around the existing v-list-item-title/subtitle content (rather
    than switching to a v-card-text section like those tabs use) so the
    change is just the border, not a layout rework; padding here replaces the
    internal spacing a v-card-text would otherwise have provided. */
 /* width: 100% - without it, the card (nested inside v-list-item-content,
-   not itself the grid item .background-list sizes) shrinks to fit its OWN
+   not itself the grid item .background-list sizes) shrinks to fit its
    content's natural width instead of filling the grid column .background-
-   list already fixed to editorWidth + 24px (see its own comment). A
+   list already fixed to editorWidth + 24px (see its comment). A
    collapsed card's content (just the title row) is narrower than that
    fixed column, so it rendered visibly narrower than an expanded card
    (whose pixel editor forces the full editorWidth) instead of both being
@@ -837,19 +837,19 @@ export default defineComponent({
    same way, showing as a visible second "inner" border-plus-padding around
    just the graphic/tools. Stripped here, scoped to this nested instance
    only, rather than changing PixelEditor.vue itself (which would remove
-   the Player tabs' own only border). */
+   the Player tabs' only border). */
 .pixel-editor-container >>> .v-card {
   border: none !important;
   box-shadow: none !important;
 }
 
-/* PixelEditor.vue's own left/right v-card-text/v-card-actions padding
+/* PixelEditor.vue's left/right v-card-text/v-card-actions padding
    (see its comment) is meant for standalone use - redundant here since
    .background-card above already pads the WHOLE background entry the same
    way (12px), doubling up (12+16=28px) into a visibly wider left/right
    gutter around just the graphic/tools, and a taller bottom gutter, than
    every other tab has. Zeroed back out, scoped to this nested instance
-   only, so .background-card's own 12px is the only gutter left. */
+   only, so .background-card's 12px is the only gutter left. */
 .pixel-editor-container >>> .v-card__text {
   padding-left: 0 !important;
   padding-right: 0 !important;
@@ -861,7 +861,7 @@ export default defineComponent({
   padding-bottom: 0 !important;
 }
 
-/* Only this top strip is draggable (see hooks/drag-reorder.js's own
+/* Only this top strip is draggable (see hooks/drag-reorder.js's
    comment on why) - covers the same header band the collapse/ID/delete
    controls already occupy. Sits behind them (they're later in DOM order,
    so they paint on top and stay clickable) but in front of everything
@@ -883,7 +883,7 @@ export default defineComponent({
 /* Which side of THIS card a dragged one would land on (see
    entryDragOverSide/dragOverSideFor) - left/right, not hooks/
    drag-reorder.js's top-border convention, since .background-list is a
-   CSS grid that can put more than one card on the same row (see its own
+   CSS grid that can put more than one card on the same row (see its
    comment) - left/right is what actually reflects reading-order position
    within it. */
 .background-card-drag-over-before {
@@ -928,14 +928,14 @@ export default defineComponent({
   pointer-events: none;
 }
 
-/* .player-icon-btn-size's own size/disabled-opacity/icon-font-size rules,
-   and .delete-icon-btn.player-icon-btn-size's own mdi-delete size bump -
+/* .player-icon-btn-size's size/disabled-opacity/icon-font-size rules,
+   and .delete-icon-btn.player-icon-btn-size's mdi-delete size bump -
    see App.vue's shared, unscoped copy (moved there once confirmed
-   byte-identical to PlayerEditor.vue's own copy of this exact class name -
+   byte-identical to PlayerEditor.vue's copy of this exact class name -
    scoped CSS can't share a rule across components even under the same
    class name, so each tab using it still has to apply it here). */
 
-/* The "Set height" button passed into GraphicEditorToolbar.vue's own
+/* The "Set height" button passed into GraphicEditorToolbar.vue's
    "after-tools" slot - see PlayerEditor.vue's identical rule for why this
    stays here rather than moving into that shared component. */
 /* !important on width/min-width - see PlayerEditor.vue's identical rule for
@@ -952,7 +952,7 @@ export default defineComponent({
 }
 
 /* Same rest/hover/press treatment as every icon in GraphicEditorToolbar.vue
-   itself (its own .get-tools >>> .v-btn rules) - this button previously
+   itself (its .get-tools >>> .v-btn rules) - this button previously
    fell back to Vuetify's default "text" button hover (a grey background
    overlay, not the flat color-only fade the rest of the toolbar uses),
    reading as a different, out-of-place control sitting right next to them. */

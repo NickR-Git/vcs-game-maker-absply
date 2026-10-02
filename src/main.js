@@ -23,7 +23,7 @@ migrateLegacyPlayerAnimationsInLocalStorage();
 
 // Rewrites any old sprite_player0_*/sprite_player1_* blocks left over from
 // before Player 0/1 shared one combined block type - see that function's
-// own comment for the full reasoning, same "run before anything else reads
+// comment for the full reasoning, same "run before anything else reads
 // the workspace" timing as the animation migration just above.
 migrateLegacyPlayerBlocksInLocalStorage();
 

@@ -14,7 +14,7 @@
 // project setting) so a bank assignment, once found, didn't need
 // rediscovering on the next build. That persistence turned out to cause more
 // confusion than it saved: a project that had ever needed music relocated
-// kept carrying that assignment around - and the relocator's own "spread
+// kept carrying that assignment around - and the relocator's "spread
 // evenly"/"pack tight" heuristics changing between builds - even after the
 // music was removed again, making failures look like they depended on
 // history rather than the project's current actual content. A relocation
@@ -40,7 +40,7 @@ export const setRelocationBank = (kind, unitName, bank) => {
   banks = {...banks, [kind]: {...banks[kind], [unitName]: bank}};
 };
 
-// A NARROWER exception to this file's own "never persisted" rule above -
+// A NARROWER exception to this file's "never persisted" rule above -
 // in-memory only (never written to configurationStorage/localStorage, so it
 // never survives a reload and never gets saved with the project the way the
 // old, reverted version did), and only ever used as a first-attempt HINT
@@ -58,8 +58,8 @@ export const setRelocationBank = (kind, unitName, bank) => {
 let lastSuccessfulBanks = null;
 let lastSuccessfulRomSize = null;
 
-// Called once, right after a build actually succeeds (see rom.js's own
-// buildRom) - snapshots whatever layout got it there as next build's own
+// Called once, right after a build actually succeeds (see rom.js's
+// buildRom) - snapshots whatever layout got it there as next build's
 // first-attempt hint.
 export const recordSuccessfulRelocationBanks = (romSize) => {
   lastSuccessfulBanks = banks;

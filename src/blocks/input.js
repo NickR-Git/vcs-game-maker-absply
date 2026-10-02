@@ -117,7 +117,7 @@ registerDropdownFieldSyncExtension('input_joystick_field_sync', 'JOYSTICK',
 // if the joystick isn't currently pushed in any single clear direction
 // (centered, or a contradictory combination like Up+Down together) - see
 // generators/bbasic/input.js's  comment for the full up/down/left/right
-// -> direction table. Meant to plug straight into "Fire missile"'s own
+// -> direction table. Meant to plug straight into "Fire missile"'s
 // Angle input (see blocks/sprites.js) - a literal Math Number (matching
 // this same 0-7/255 encoding) or a variable holding a previously-computed
 // angle work there too, this block is just the common "read it from
@@ -362,7 +362,7 @@ Blockly.defineBlocksWithJsonArray([
 // plain "Number" input, so it can be typed in directly or fed from a
 // variable/math block. Unlike the two-object version, this can't be
 // deduped by (axis, object pair) content (see bbasic.js's  pre-scan
-// comment on distancePointChecks for why), so each block gets its own
+// comment on distancePointChecks for why), so each block gets its
 // hidden per-frame variable instead.
 const buildDistanceToPointBlock = (axis, icon) => ({
   'type': `distance_${axis}_to_point_get`,

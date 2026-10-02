@@ -37,7 +37,7 @@ const renumber = (animations, startId) => {
 // Player 1's are appended after - so every sprite_player0_animation_select
 // block's  stored dropdown index (a position in the list - see
 // blocks/sprites.js's  buildAnimationOptions) stays correct completely
-// unchanged, since Player 0's animations don't move. Only Player 1's own
+// unchanged, since Player 0's animations don't move. Only Player 1's
 // blocks need their stored index remapped - see
 // remapPlayer1AnimationIndexesInWorkspaceXml below.
 export const combineLegacyPlayerAnimations = (player0Data, player1Data) => {

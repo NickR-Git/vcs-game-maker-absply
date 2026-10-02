@@ -12,7 +12,7 @@
 // NTSC frames, not milliseconds.
 const NTSC_FRAMES_PER_SECOND = 60;
 
-// Aseprite stores each frame's duration in milliseconds; this app's own
+// Aseprite stores each frame's duration in milliseconds; this app's
 // frame.duration is a count of NTSC frames (see the module comment above).
 // Rounds to the nearest frame, never below 1 - a 0-frame duration would
 // make that pose invisible rather than just brief.
@@ -20,7 +20,7 @@ export const asepriteDurationToFrames = (ms) =>
   Math.max(1, Math.round((ms || 0) * NTSC_FRAMES_PER_SECOND / 1000));
 
 // Expands one frameTag's [from, to] range into the actual play-order list of
-// frame indexes, per Aseprite's own four tag directions.
+// frame indexes, per Aseprite's four tag directions.
 const frameIndexesForTag = (tag) => {
   const forward = [];
   for (let i = tag.from; i <= tag.to; i++) forward.push(i);
@@ -30,7 +30,7 @@ const frameIndexesForTag = (tag) => {
       return reversed;
     // Plays the full range forward, then back to (but not including) both
     // ends, so the first/last pose isn't held for a doubled-up frame - the
-    // same frame-count Aseprite's own pingpong preview uses.
+    // same frame-count Aseprite's pingpong preview uses.
     case 'pingpong':
       return forward.concat(reversed.slice(1, -1));
     case 'pingpong_reverse':

@@ -20,19 +20,19 @@ const DATA_DISPATCH_FUNCTION_CANONICAL_NAME = '_dataElementDispatch';
 // registerDataBitDispatchCallWrapper) - written once immediately before
 // each "gosub", read back immediately inside the wrapper, never held across
 // another nested Function call, same lifetime functionCallDiscardVarName's
-// own comment already documents for the RESULT side of this exact pattern
-// (reused here rather than a dedicated result var of its own).
+// comment already documents for the RESULT side of this exact pattern
+// (reused here rather than a dedicated result var).
 export const dataDispatchArg1VarName = () => 'dataDispatchArg1';
 export const dataDispatchArg2VarName = () => 'dataDispatchArg2';
 export const dataBitDispatchArg3VarName = () => 'dataBitDispatchArg3';
 
 // Lazily builds (once per compile) a bB `function` that dispatches on a
 // runtime table-id argument (temp1) and index argument (temp2), returning
-// whichever table's own [index] element - the one bB construct that can
+// whichever table's [index] element - the one bB construct that can
 // both branch internally AND be used as a plain inline value expression
 // (see function_call's  ORDER_FUNCTION_CALL in generators/bbasic/
 // function.js) - a raw "if/goto" dispatch chain has no such value-expression
-// form of its own (a value block can't inject a preceding statement - see
+// form (a value block can't inject a preceding statement - see
 // bitCode's  comment below for the same constraint hit elsewhere). Only
 // called when TABLE_ID actually needs it (see resolveTableIdLiteral below) -
 // a project using only literal TABLE_ID values never pays for this at all.
@@ -41,7 +41,7 @@ export const dataBitDispatchArg3VarName = () => 'dataBitDispatchArg3';
 // "auto: failed" emulator crash - root-caused, eventually, to TWO
 // pre-existing, unrelated bugs in generateFunctions() itself (bbasic.js):
 // every compiled bB function was missing its  required closing "end",
-// and had no guaranteed exit (no fallback "return") when a function's own
+// and had no guaranteed exit (no fallback "return") when a function's
 // body didn't reach a function_return block on every path - confirmed
 // directly against the reference bB compiler's  source (endfunction()
 // validates the "end" keyword; a function has no implicit exit the way a
@@ -54,7 +54,7 @@ export const dataBitDispatchArg3VarName = () => 'dataBitDispatchArg3';
 // TABLE_ID elsewhere already references - a runtime id can't be narrowed at
 // compile time, so any table could be the one actually picked. Each
 // referenced table gets trackDataTableBank(table.id, 1) - this function is
-// never relocated (bB functions are always bank 1, see this.functions' own
+// never relocated (bB functions are always bank 1, see this.functions'
 // comment in bbasic.js's init(), and the crash-fix in hooks/rom.js's
 // pickRelocationCandidate already keeps every CALLER of this function
 // pinned to bank 1 too, for the same reason), so bank 1 is the only bank
@@ -64,7 +64,7 @@ const registerDataDispatchFunction = (Blockly) => {
       DATA_DISPATCH_FUNCTION_CANONICAL_NAME, Blockly.PROCEDURE_CATEGORY_NAME);
   if (Blockly.BBasic.functions[name]) return name;
   const data = processDataTablesStorageDefaults(useDataTablesStorage());
-  // Whichever bank this dispatch function's OWN body ends up compiled into -
+  // Whichever bank this dispatch function's body ends up compiled into -
   // NOT hardcoded to 1, and NOT Blockly.BBasic.getCurrentBank() either (an
   // earlier version of this used getCurrentBank(), on the assumption that
   // WHICHEVER caller triggers this registration - a data_get_element_by_id/
@@ -86,7 +86,7 @@ const registerDataDispatchFunction = (Blockly) => {
   // function's  table reads to bank 1 (the subroutine's home) while the
   // function itself (and this dispatch, as part of its family) actually
   // landed in bank 2, corrupting every real (function-side) call's  data
-  // reads. getFunctionBank(name) - name is this dispatch function's own
+  // reads. getFunctionBank(name) - name is this dispatch function's
   // already-resolved symbol, from just above - reads back its  ACTUAL
   // relocation decision directly, unaffected by which caller happened to
   // trigger registration first. Data tables must be read from the exact same
@@ -108,13 +108,13 @@ const registerDataDispatchFunction = (Blockly) => {
         // recognized as one (confirmed directly by a real build failure:
         // "Unknown keyword: _datadispatch_0" - the indented version wasn't
         // parsed as a label at all), same "@" convention
-        // generateSubroutineBody's own "@name" already uses.
+        // generateSubroutineBody's "@name" already uses.
         `@${label}`,
     );
   });
   // No trailing "return 0" needed here - generateFunctions() already
   // appends one unconditionally after every function's  body (see its
-  // own comment in bbasic.js), specifically as a guaranteed fallback exit
+  // comment in bbasic.js), specifically as a guaranteed fallback exit
   // for exactly this "ran off the end of every branch" case. Adding one
   // here too would just be redundant dead code after that unreachable
   // point.
@@ -141,9 +141,9 @@ const registerDataDispatchFunction = (Blockly) => {
 // bitCode itself uses.
 //
 // Calling one function from inside another here is safe specifically
-// because temp1/temp2 (this function's OWN first two arguments) are never
+// because temp1/temp2 (this function's first two arguments) are never
 // needed again after that call - they're passed straight through as-is, and
-// nothing here reads them back afterward (contrast function_param_get's own
+// nothing here reads them back afterward (contrast function_param_get's
 // comment on why that's normally risky: it only matters if the CALLER still
 // needs its  temp1-6 preserved past the call, which this function does
 // not). temp3 (this function's  3rd argument, the bit index) IS read
@@ -171,13 +171,13 @@ const registerDataBitDispatchFunction = (Blockly) => {
   // unconditionally after every function's  body (see its  comment in
   // bbasic.js), but this function's  last real line is already a
   // "return" on every path anyway, so that fallback is unreachable dead
-  // code here regardless, same as it would be for any function whose own
+  // code here regardless, same as it would be for any function whose
   // blocks already guarantee a return.
   Blockly.BBasic.functions[name] = [
     // temp3 (this function's  3rd argument, the bit index) has to survive
     // PAST the call below to be usable by the shift loop afterward - but
     // temp1-temp6 aren't preserved across a nested function call (confirmed
-    // as a real reported bug elsewhere: createScene's own "Function
+    // as a real reported bug elsewhere: createScene's "Function
     // argument" reads, similarly read straight out of a raw temp slot,
     // silently went bad after the first of several nested data-table calls
     // - see functionParamVarName's  comment in blocks/function.js for the
@@ -207,7 +207,7 @@ const registerDataBitDispatchFunction = (Blockly) => {
 // subroutine, so ANY caller - not just one that's already guaranteed to be
 // part of _dataElementDispatch's  relocation family - can reach it
 // safely from any bank. A bB function-call expression ("name(args)") has no
-// bank-tag syntax of its own (see getFunctionBank's  comment above), so
+// bank-tag syntax (see getFunctionBank's  comment above), so
 // a bare call only ever worked from code guaranteed to always land in the
 // exact same bank as the function itself (another real Function, or one of
 // these wrapper subroutines) - an ordinary user-authored subroutine had no
@@ -282,7 +282,7 @@ export default (Blockly) => {
   // resolveTableIdLiteral above - the two read identically once the table
   // itself is found, findDataTableById takes either kind of value as-is).
   // Returns null if the table can't be found, so each block's  generator
-  // can fall back to its own "0"/"false" default.
+  // can fall back to its "0"/"false" default.
   // @return {?string} The table's  element expression, e.g.
   //     "_dt_1_Title[0]", or null.
   const elementCode = (block, tableId) => {
@@ -296,7 +296,7 @@ export default (Blockly) => {
     Blockly.BBasic.trackDataTableBank(table.id, bank);
 
     const name = dataTableSymbolName(table, bank);
-    // ORDER_NONE: the index sits inside the table's own "[...]" brackets,
+    // ORDER_NONE: the index sits inside the table's "[...]" brackets,
     // which already provide grouping, so it never needs extra parens.
     const index = Blockly.BBasic.valueToCode(block, 'INDEX', Blockly.BBasic.ORDER_NONE) || '0';
     return `${name}[${index}]`;
@@ -311,7 +311,7 @@ export default (Blockly) => {
   // of a TABLE dropdown field. A literal still resolves the fast, zero-cost
   // way - direct table[index], no function-call overhead. Anything else (a
   // variable, an expression) routes through registerDataDispatchCallWrapper's
-  // own bank-tagged "gosub" instead - safe from any bank, unlike a bare
+  // bank-tagged "gosub" instead - safe from any bank, unlike a bare
   // function call (see that function's  comment for the real "Auto:
   // failed" crash this fixes). Captured into shared args first, as a
   // newline-joined preamble ahead of the real value - see
@@ -339,7 +339,7 @@ export default (Blockly) => {
     ];
   };
 
-  // batari Basic's own "{n}" bit-index syntax (same one bit_get uses, see
+  // batari Basic's "{n}" bit-index syntax (same one bit_get uses, see
   // generators/bbasic/bit.js) only works on a plain variable - chaining it
   // straight onto an array read ("table[index]{n}") isn't valid syntax; a
   // real compile confirmed it (the assembler choked on a mangled
@@ -373,7 +373,7 @@ export default (Blockly) => {
   // like "%10010000" they just typed into a table cell. Flipped once here,
   // at the one spot every data_get_bit*/BIT read funnels through, rather
   // than in the arithmetic itself, so bitCode and the dispatch function's
-  // own shift count both stay in their natural "counts up from the LSB"
+  // shift count both stay in their natural "counts up from the LSB"
   // shape.
   const humanBitIndex = (block) => 7 - Number(block.getFieldValue('BIT'));
 
@@ -412,7 +412,7 @@ export default (Blockly) => {
     // newline-joined preamble ahead of the real value - see
     // Blockly.BBasic.scrub_'s  top comment in generators/bbasic.js for
     // how that preamble reaches whichever statement actually consumes this
-    // value. The result reuses function_call_statement's own
+    // value. The result reuses function_call_statement's
     // discarded-result var (functionCallDiscardVarName, see its comment in
     // blocks/function.js) rather than reserving a second dedicated one -
     // both hold nothing but a just-returned value, written and then

@@ -4,7 +4,7 @@
 // from utils/sound-preview.js's single-source preview: a pattern can have
 // several instrument tracks sounding at once, which that module's "one
 // active source at a time" design (built for the Sound tab's single "play
-// this preset" button) can't represent. Reuses sound-preview.js's own
+// this preset" button) can't represent. Reuses sound-preview.js's
 // per-AUDC waveform synthesis (buzz/div31/gatedbuzz buffers, not just a
 // plain oscillator) so a buzzy/noisy instrument like a drum "Kick" actually
 // sounds buzzy here too, not like a clean tone.
@@ -30,26 +30,26 @@ const getAudioContext = () => {
   return audioContext;
 };
 
-// Every note's own peak gain is individually capped at 0.3 (see peakGain in
-// playInstrumentHit below), but that only ever bounds ONE note on its own -
+// Every note's peak gain is individually capped at 0.3 (see peakGain in
+// playInstrumentHit below), but that only ever bounds ONE note by itself -
 // nothing stops several simultaneously-sounding notes/tracks from SUMMING
 // past 1.0 once they all reach context.destination together, which Web
 // Audio hard-clips rather than gracefully compressing. In practice this is
 // a genuinely RARE edge case, not a routine one: real hardware only has 2
 // audio channels, and 2 channels at 0.3 peak each only ever sum to 0.6 -
-// comfortably under 1.0 on its own. A single shared limiter still sits
-// between every note's own output and the real destination as a safety net
+// comfortably under 1.0 by itself. A single shared limiter still sits
+// between every note's output and the real destination as a safety net
 // for whatever rare combination (DIM off, several overlapping arpeggio
 // segments, etc.) DOES push past that, but deliberately gentle - soft knee,
 // a moderate ratio, and slower attack/release than a "true" limiter would
 // use. An earlier, much more aggressive version of this (20:1 ratio, 0dB
 // hard knee, 1ms attack) was confirmed to be the wrong tool: on this buzzy/
 // square-wave source material (not smooth musical audio), driving a fast,
-// high-ratio compressor hard enough to react produced its own audible
+// high-ratio compressor hard enough to react produced its audible
 // pumping/distortion, including bleeding into whatever played right after
 // the transient that triggered it - reported as "popping...even on
 // different channels" and continuing to glitch on the very NEXT pattern
-// after a loud one, exactly the kind of carry-over a compressor's own
+// after a loud one, exactly the kind of carry-over a compressor's
 // gain-reduction envelope recovering slowly would cause. Lazily created
 // alongside audioContext itself (one per AudioContext, same lifetime), not
 // per-call - every note/track routes through this SAME node.
@@ -124,8 +124,8 @@ const arpeggioPitchVariants = (audf, arpeggioInterval) => {
 //
 // Holds flat at peakGain for the whole note otherwise (no envelope) - real
 // AUDV hardware writes are just as abrupt, holding at whatever level they
-// were last set to with no anti-click smoothing of their own. This used to
-// hold-then-linearRampToValueAtTime(0, ...) over a chunk of the note's own
+// were last set to with no anti-click smoothing. This used to
+// hold-then-linearRampToValueAtTime(0, ...) over a chunk of the note's
 // end specifically to avoid the click a hard stop produces, which made
 // every note sound smoother/cleaner than the real hardware does. A REAL
 // instant step (jumping from full amplitude straight to 0 in a single
@@ -166,7 +166,7 @@ const buildGain = (context, {peakGain, peakVolume, startTime, seconds, envelope,
   // Re-anchors at whatever level the note ends on, right at the start of the
   // guard window, so the ramp below only covers that last sliver instead of
   // linearRampToValueAtTime interpolating all the way from the previous
-  // automation point (the envelope's last step, or this same note's own
+  // automation point (the envelope's last step, or this same note's
   // start) clear through to the end.
   if (endValue > 0 && seconds > CLICK_GUARD_SECONDS) {
     const guardStart = startTime + seconds - CLICK_GUARD_SECONDS;
@@ -178,10 +178,10 @@ const buildGain = (context, {peakGain, peakVolume, startTime, seconds, envelope,
 };
 
 // Rounds off the raw digital step at EVERY buffer boundary - not just a
-// note's overall start/end (buildGain's own CLICK_GUARD_SECONDS above), but
+// note's overall start/end (buildGain's CLICK_GUARD_SECONDS above), but
 // each individual segment within a note too. This matters because an
 // arpeggiating hit (see the while loop below) splices several DIFFERENT
-// pre-rendered buffers back-to-back, each built at its own phase's pitch -
+// pre-rendered buffers back-to-back, each built at its phase's pitch -
 // buffer A's last sample and buffer B's first sample can differ by almost
 // the full waveform amplitude, an actual signal discontinuity no amount of
 // smoothing on the OUTER note-level gain (buildGain) can fix, since that
@@ -189,17 +189,17 @@ const buildGain = (context, {peakGain, peakVolume, startTime, seconds, envelope,
 // something touching the signal at the flip itself can. Confirmed as the
 // real remaining cause of a reported "popping" bug that persisted (just
 // less severe) even after fixing the activeSources leak below: audible on
-// every arpeggio flip, not just at a note's own edges, and on a plain
+// every arpeggio flip, not just at a note's edges, and on a plain
 // (non-arpeggio) note this also finally gives its START a fade-in to match
 // the fade-out it already had - previously an instant full-volume step,
 // the exact same discontinuity class as an arpeggio flip, just once per
 // note instead of several times.
 //
 // A separate, tiny gain node per segment (not just reusing/extending
-// buildGain's own note-level one) so this works independently of whatever
+// buildGain's note-level one) so this works independently of whatever
 // that outer envelope happens to be doing at this exact instant - stacking
-// two ramps that both reach 0 at the same edge (e.g. this fade's own
-// fade-out landing exactly on a plain note's own CLICK_GUARD_SECONDS
+// two ramps that both reach 0 at the same edge (e.g. this fade's
+// fade-out landing exactly on a plain note's CLICK_GUARD_SECONDS
 // fade-out) just compounds smoothly, not a conflict.
 //
 // Widened from 3ms to 6ms - still short enough that several of these in a
@@ -285,7 +285,7 @@ const buildBufferCached = (context, approximation, chipClockHz, seconds) => {
 //     the compiled ROM uses (generators/bbasic/soundfx.js), which rounds the
 //     dimmed result back into a whole 0-15 AUDV step, since that's a real
 //     hardware constraint (AUDV IS a 4-bit register) that doesn't apply to
-//     this preview's own continuous Web Audio gain - routing the preview
+//     this preview's continuous Web Audio gain - routing the preview
 //     through that same rounding just threw away resolution for no reason
 //     (e.g. a 25% dim of AUDV 3 rounds to AUDV 1, an effective ~67% cut, not
 //     25%), confirmed as a real reported "not helpful" complaint.
@@ -351,19 +351,19 @@ let stopTimer = null;
 // playback session - without this, activeSources only ever GREW, every
 // note of every pass appending to it and nothing ever removing anything
 // until Stop, since a looping pattern/sequence can run for an arbitrarily
-// long time (see schedulePattern's own comment on trackGain needing the
+// long time (see schedulePattern's comment on trackGain needing the
 // exact same "don't just keep piling up dead nodes forever" fix for the
 // exact same reason). Confirmed as the real cause of a reported bug
 // ("popping...occur[ring] more when patterns are played for a
 // second/third/etc time"): thousands of long-dead-but-still-referenced
-// AudioBufferSourceNodes (each holding onto its own AudioBuffer) piling up
+// AudioBufferSourceNodes (each holding onto its AudioBuffer) piling up
 // over a session's worth of loop passes raises GC pressure over time,
-// which - per LOOP_RESCHEDULE_LEAD_SECONDS' own comment on this scheduler
+// which - per LOOP_RESCHEDULE_LEAD_SECONDS' comment on this scheduler
 // being vulnerable to main-thread jank - is exactly the kind of thing that
 // makes the JS-timer-driven reschedule callbacks run late, and a late
 // reschedule is audible as exactly this kind of glitch. 'ended' fires
-// whether a source ran to its own natural stop() time or was cut short by
-// stopPatternPlayback's own explicit .stop() call, so this covers both.
+// whether a source ran to its natural stop() time or was cut short by
+// stopPatternPlayback's explicit .stop() call, so this covers both.
 const pruneOnEnded = (source) => {
   source.onended = () => {
     activeSources = activeSources.filter((s) => s !== source);
@@ -392,10 +392,10 @@ const unitSecondsForTempo = (tempo) => (30 / Math.max(1, Number(tempo) || 120)) 
 // (getMasterDestination) - see schedulePattern, which creates/updates one
 // of these per track instead of connecting each note straight to the
 // limiter the way previewPatternNote's one-off click preview still does
-// (it has no track of its own to mute independently). Its whole reason to
+// (it has no track to mute independently). Its whole reason to
 // exist: a GainNode's
-// own .gain.value is live - setting it takes effect immediately on whatever
-// audio is already flowing through it, unlike an individual note's own
+// .gain.value is live - setting it takes effect immediately on whatever
+// audio is already flowing through it, unlike an individual note's
 // gain envelope (see buildGain), which is baked in once at schedule time
 // and can't be changed after the fact. setTrackMuted below is what actually
 // flips it, called from MusicEditor.vue's  mute toggle.
@@ -472,13 +472,13 @@ export const getPlaybackHead = () => {
  * Plays a single note immediately, for instant feedback when placing a note
  * in the piano roll - independent of any in-progress pattern playback.
  * @param {Object} sound The instrument's AUDC/AUDV plus the specific note's
- *     own AUDF - a real chosen pitch for a tunable instrument, or the
+ *     AUDF - a real chosen pitch for a tunable instrument, or the
  *     instrument's  preset AUDF for an untunable one's "Hit". Also the
  *     instrument's  Arpeggio settings (arpeggio/arpeggioDivision/
  *     arpeggioInterval/arpeggioRange - same fields playPattern/playSequence
- *     read off the sound effect itself) and tempo (the owning pattern's own
+ *     read off the sound effect itself) and tempo (the owning pattern's
  *     effective BPM - see effectiveTempo - defaulting to DEFAULT_TEMPO for a
- *     call site with no pattern of its own, e.g. the Sound tab's Play
+ *     call site with no pattern, e.g. the Sound tab's Play
  *     button), so a placed note previews arpeggio exactly like it'll
  *     actually play back, not as a single static pitch.
  */
@@ -489,9 +489,9 @@ export const previewPatternNote = ({audc, audf, audv, arpeggio, arpeggioDivision
   // note could be heard (pattern/song playback, the compiled ROM) - without
   // this, a click-to-place preview would sound louder than the note
   // actually plays back everywhere else. A continuous gain multiplier here
-  // (see playInstrumentHit's own dimMultiplier comment), not dimVolume()'s
+  // (see playInstrumentHit's dimMultiplier comment), not dimVolume()'s
   // AUDV-rounded version - that rounding is a real compiled-ROM hardware
-  // constraint that doesn't apply to this preview's own Web Audio gain.
+  // constraint that doesn't apply to this preview's Web Audio gain.
   const dimMultiplier = useDimSoundFxStorage().value ?
     (Number(useDimSoundFxPercentStorage(DEFAULT_DIM_PERCENT).value) || 0) / 100 : 1;
   // Same 50ms lead-in playPattern/playSequence already schedule their
@@ -524,7 +524,7 @@ export const previewPatternNote = ({audc, audf, audv, arpeggio, arpeggioDivision
 };
 
 /**
- * A pattern's  Tempo field is only used when its "use own tempo"
+ * A pattern's  Tempo field is only used when its "use this pattern's tempo"
  * checkbox is checked (see the checkbox next to the pattern's Tempo field on
  * the Music tab) - otherwise it follows its song's top-level Tempo.
  * @param {Object} song The pattern's  song.
@@ -648,10 +648,10 @@ const schedulePattern = (context, pattern, soundEffects, startTime, tempo, isTra
       const audf = isTunable && note.midi !== 'hit' ? note.audf : soundEffect.audf;
       // Per-note override (see the Music tab's  piano-roll volume row),
       // falling back to the instrument's  preset. DIM is applied as a
-      // continuous gain multiplier (see playInstrumentHit's own
+      // continuous gain multiplier (see playInstrumentHit's
       // dimMultiplier comment) rather than pre-rounding audv through
       // dimVolume() - that rounding is a real compiled-ROM AUDV-is-a-4-bit-
-      // register constraint that doesn't apply to this preview's own
+      // register constraint that doesn't apply to this preview's
       // continuous Web Audio gain.
       const audv = noteAudv(note, soundEffect);
       const dimMultiplier = dimSoundFx.value ? (Number(dimSoundFxPercent.value) || 0) / 100 : 1;
@@ -729,7 +729,7 @@ const schedulePattern = (context, pattern, soundEffects, startTime, tempo, isTra
  * @param {{onDone: Function, isTrackMuted: Function}} callbacks
  *     onDone is called once playback finishes (never, while
  *     song.patternPreviewLoop is set - only stopPatternPlayback ends it
- *     then); isTrackMuted(pattern, track) skips a muted instrument's own
+ *     then); isTrackMuted(pattern, track) skips a muted instrument's
  *     notes entirely (a Music tab view preference, not something the
  *     compiled ROM has any concept of).
  *     startUnits (default 0) seeks the first pass to start partway through
@@ -834,16 +834,16 @@ export const playPattern = (song, pattern, soundEffects, {onDone, isTrackMuted, 
 /**
  * Plays back a song's full pattern sequence, one pattern after another in
  * the order set on the Sequence (play order) list - each pattern uses its
- * own effective tempo/step count as it plays.
+ * effective tempo/step count as it plays.
  * @param {Object} song The song whose sequence to play.
  * @param {Array<Object>} soundEffects Stored Sound tab presets.
  * @param {{onDone: Function, isTrackMuted: Function, startIndex: number}} callbacks
  *     Called once playback finishes (never, while song.loop is set - see its
- *     own comment in blocks/music.js); isTrackMuted(pattern, track) skips a
+ *     comment in blocks/music.js); isTrackMuted(pattern, track) skips a
  *     muted instrument's  notes entirely (see playPattern). Whether to
  *     loop is read live off song.loop on every pass, same reasoning as
  *     playPattern's  song.patternPreviewLoop - see its comment. startIndex (default
- *     0) skips straight to that Sequence GROUP (see blocks/music.js's own
+ *     0) skips straight to that Sequence GROUP (see blocks/music.js's
  *     {id, patternId, count} shape) on the first pass instead of starting
  *     from the beginning - see handleSequenceChipClick in MusicEditor.vue,
  *     which uses this to jump playback to whichever chip was clicked while

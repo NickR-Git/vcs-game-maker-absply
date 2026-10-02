@@ -188,7 +188,7 @@ export default defineComponent({
     const configurationStorage = useConfigurationStorage();
     const zoom = useEditorZoom('scorefont', 1.5);
     // Shared with every other tab's pixel grid toggle (see
-    // PixelGridToggle.vue's own comment) - not per-tab state of its own.
+    // PixelGridToggle.vue's comment) - not per-tab state.
     const showPixelGrid = usePixelGridOverlayStorage();
     const digitWidth = computed(() => `${Math.round(DIGIT_BASE_WIDTH * zoom.value)}px`);
 
@@ -196,7 +196,7 @@ export default defineComponent({
     // then editable below like the regular Custom font) shrinks the score
     // row to make room for the Text Minikernel's  text lines underneath
     // it - always offered, even with no Text Minikernel block placed yet,
-    // since a smaller score font is a reasonable choice on its own.
+    // since a smaller score font is a reasonable choice by itself.
     const scoreFontOptions = computed(() => [...BASE_SCORE_FONT_OPTIONS,
       {text: 'Squish (compact - shrinks the score row)', value: SQUISH_SCORE_FONT},
       {text: 'Squish Custom (compact - drawn below)', value: SQUISH_CUSTOM_SCORE_FONT},
@@ -277,7 +277,7 @@ export default defineComponent({
     });
 
     // 'background' has no palette swatch of its  to highlight - the
-    // picker only understands a byte or null (its own "nothing selected"
+    // picker only understands a byte or null (its "nothing selected"
     // state), so that sentinel is translated to/from null here rather than
     // taught to the shared component.
     const scoreBkColorSwatchValue = computed(() =>
@@ -300,7 +300,7 @@ export default defineComponent({
     // instead of the standard 8-row digits), so the editor below switches
     // which one it's bound to based on the current selection.
     const isSquishCustomSelected = computed(() => selectedFont.value === SQUISH_CUSTOM_SCORE_FONT);
-    // Gates the 6 extra glyph cards (10-15, see DECIMAL_DIGIT_COUNT's own
+    // Gates the 6 extra glyph cards (10-15, see DECIMAL_DIGIT_COUNT's
     // comment) below - only the two fonts a project can actually EDIT get
     // them; every preset (and plain Squish) is a fixed, non-editable
     // bitmap already, so there's nothing useful to draw for slots those
@@ -317,14 +317,14 @@ export default defineComponent({
     // fixed, compiled-in bitmaps (see generators/score-fonts.js) with no
     // storage of their  to write to at all. Before this, the digit grid
     // stayed visible and editable regardless of selectedFont - editing it
-    // always silently wrote to the Custom (or Squish Custom) font's own
+    // always silently wrote to the Custom (or Squish Custom) font's
     // storage no matter what was actually selected, which looked like (and
     // was reported as) "editing Default" even though Default itself was
     // never actually touched - just confusingly implied to be, and any
     // edits made this way were invisible until Custom was later selected.
     const isEditableFontSelected = computed(() =>
       selectedFont.value === CUSTOM_SCORE_FONT || isSquishCustomSelected.value);
-    // Explicit, stored opt-in (see utils/score-font.js's own
+    // Explicit, stored opt-in (see utils/score-font.js's
     // customScoreFontExtraGlyphsEnabled/trimUnusedExtraGlyphs, the actual
     // source of truth this reads/writes the same configuration key as) -
     // off by default, so a project that's never visited this toggle keeps
@@ -348,9 +348,9 @@ export default defineComponent({
       },
     });
     // How many extra blank scanlines (0, 1, or 2) the score row draws of its
-    // own background color right after the digits finish (see
+    // background color right after the digits finish (see
     // generators/bbasic.js's  scorePaddingConfigurationCode, which emits
-    // "const scorepaddinglines = N" - text12a.asm's own
+    // "const scorepaddinglines = N" - text12a.asm's
     // "if scorepaddinglines >= N" checks read that). 0 by default - a
     // project that's never visited this dropdown keeps its existing frame
     // timing unchanged.
@@ -384,12 +384,12 @@ export default defineComponent({
     // Tracks whichever digit's PixelEditor instance was last clicked
     // into (see its "activate" event, emitted from PixelEditor.vue's
     // handleActivate) - the single toolbar above (Eraser/Pencil/Undo/Redo/
-    // Export/Import) acts on THIS digit, since every digit's own
+    // Export/Import) acts on THIS digit, since every digit's
     // per-instance toolbar is now hidden (hideToolbar on the pixel-editor
     // below) in favor of this one shared row. No card-selection fallback is
     // needed here (unlike PlayerEditor.vue's effectiveFrameEditor) -
     // there's no way to "select" a digit other than clicking directly into
-    // its own PixelEditor card (no separate header/name row to click that
+    // its PixelEditor card (no separate header/name row to click that
     // wouldn't also activate it), so a plain activeEditor is enough.
     const activeEditor = ref(null);
     const activeEditorIndex = ref(null);
@@ -419,7 +419,7 @@ export default defineComponent({
       state.value = state.value;
     };
 
-    // Same "whole image" copy/paste pair as PlayerEditor.vue's own
+    // Same "whole image" copy/paste pair as PlayerEditor.vue's
     // handleCopyFrame/handlePasteFrame - digits have no row colors or other
     // per-cell metadata to carry along, just the plain pixel matrix.
     const handleCopyDigit = (index) => {
@@ -499,12 +499,12 @@ export default defineComponent({
    ("Costs 48 extra bytes of ROM space.") directly above - the two sat flush
    against each other otherwise. */
 /* Unlike PlayerEditor.vue/BackgroundEditor.vue/TitleScreenEditor.vue, this
-   tab never had its own self-scrolling wrapper - it relied on some outer
+   tab never had its self-scrolling wrapper - it relied on some outer
    ancestor (app-main's overflow) to scroll instead, which is why the
    toolbar row below couldn't stick to "the top of this tab" the way theirs
    do (there was no boundary of this tab's to stick to in the first
    place). Same position: absolute + overflow: auto trick as those other
-   tabs' own .editor-container. */
+   tabs' .editor-container. */
 .editor-container {
   position: absolute;
   overflow: auto;
@@ -514,10 +514,10 @@ export default defineComponent({
 }
 
 /* Attribute passthrough - Vue applies a non-prop class/attribute given to a
-   component directly onto ITS OWN root element, so this reaches
+   component directly onto ITS root element, so this reaches
    GraphicEditorToolbar.vue's outer div despite living in a different
    file - restores the gap between the switches row above and the toolbar
-   that this tab used to set directly on its own (now-removed) wrapper. */
+   that this tab used to set directly by itself (now-removed) wrapper. */
 .score-editor-toolbar-row {
   margin-top: 12px;
 }
@@ -556,7 +556,7 @@ export default defineComponent({
 }
 
 /* Matches .score-bkcolor-label's  explicit size below - Vuetify's switch
-   label otherwise renders at its own default size, which read visibly
+   label otherwise renders at its default size, which read visibly
    smaller/larger than the plain-text label sharing this same row. */
 .score-fade-switch >>> .v-label {
   font-size: 1rem;
@@ -597,6 +597,6 @@ export default defineComponent({
   margin-top: 24px;
 }
 
-/* .player-icon-btn-size's own size/disabled-opacity/icon-font-size rules -
+/* .player-icon-btn-size's size/disabled-opacity/icon-font-size rules -
    see App.vue's shared, unscoped copy. */
 </style>

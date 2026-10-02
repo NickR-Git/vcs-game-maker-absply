@@ -11,7 +11,7 @@ import {keypadKeyVarName} from '../../utils/keypad';
 // same nibble pattern twice), then the paddle-timer inputs (INPT0-5) are
 // given `sleep` cycles to settle before being read - these exact sleep
 // counts (472 the first row, 476 every row after) are the reference file's
-// own tuned RC-discharge timings, not arbitrary.
+// tuned RC-discharge timings, not arbitrary.
 const KEYPAD_ROUNDS = [
   {swcha: '%11101110', sleep: 472},
   {swcha: '%11011101', sleep: 476},
@@ -44,7 +44,7 @@ export const keypadSwacntMask = (useLeft, useRight) => {
 // Builds the BODY of the "keypadpoll" subroutine (see
 // registerKeypadPollSubroutine below, which wraps this with the normal
 // "@keypadpoll ... return" a Blockly.BBasic.subroutines entry gets) - just
-// the interior "asm ... end" block, with no entry label of its own.
+// the interior "asm ... end" block, with no entry label.
 //
 // A first version gave this asm block its  bare "keypadpoll" label and
 // spliced it as a standalone, fixed, once-only template block (following
@@ -93,7 +93,7 @@ export const buildKeypadPollAsm = ({useLeft, useRight, leftVarName, rightVarName
     steps[roundStart].isRoundStart = true;
   });
 
-  // The very last step's own "no key in this row" branch falls through to
+  // The very last step's "no key in this row" branch falls through to
   // storing the result instead of another step - _kp_store, not a
   // numbered step label.
   const stepLabel = (index) => (index >= steps.length ? '_kp_store' : `_kp_step_${index}`);
@@ -107,9 +107,9 @@ export const buildKeypadPollAsm = ({useLeft, useRight, leftVarName, rightVarName
   // DASM requires inside a raw "asm ... end" block - confirmed directly,
   // the first version of this (hand-indented mnemonics, bare labels at
   // column 0) reproduced exactly the "Unknown Mnemonic '_kp_store'"/
-  // "Unknown Mnemonic 'end'"-class failures score.js's own
+  // "Unknown Mnemonic 'end'"-class failures score.js's
   // buildDigitPokeLines documents fixing with its "@end" trick (see its
-  // own comment) - every LABEL line here (including the closing "end")
+  // comment) - every LABEL line here (including the closing "end")
   // uses that same "@" prefix so normalizeIndents'  second pass
   // (`code.replace(/^[\t ]*@\s*/gm, '')`) strips it back down to column 0,
   // regardless of what its first pass already did to it. Mnemonic lines
@@ -118,8 +118,8 @@ export const buildKeypadPollAsm = ({useLeft, useRight, leftVarName, rightVarName
   // is already enough.
   const lines = ['asm'];
   steps.forEach((step, index) => {
-    // Step 0 needs no label of its own (control falls straight into it
-    // from this subroutine's own "@keypadpoll" entry label, supplied by
+    // Step 0 needs no label (control falls straight into it
+    // from this subroutine's "@keypadpoll" entry label, supplied by
     // generateSubroutineBody, and this round's  SWCHA/sleep setup
     // below) - every later step is itself some earlier step's  BMI
     // target, so it does.
@@ -164,7 +164,7 @@ export const registerKeypadPollSubroutine = (Blockly, {useLeft, useRight, leftVa
 // Shared by every "Distance" and "Distance to point" check (see
 // generateDistanceChecks/generateDistancePointChecks below) - computes
 // abs(temp1 - temp2) into temp1. Registered as an ordinary subroutine (see
-// subroutine.js's own "this.subroutines[name] = code" pattern) rather than
+// subroutine.js's "this.subroutines[name] = code" pattern) rather than
 // inlined at every call site: a project with several distance checks used
 // to pay this same 6-line abs-difference block in full at EACH one (with
 // only the operand/target variable NAMES differing, the actual logic
@@ -205,7 +205,7 @@ const registerDistanceAbsDiffSubroutine = (Blockly) => {
   ].join('\n');
 };
 // generateSubroutines/generateRelocatedSections still auto-append a bB
-// "return" right after whatever body they're given (see subroutine.js's own
+// "return" right after whatever body they're given (see subroutine.js's
 // comment on why), same as for every other subroutine - but the RTS above
 // already exits before that point is ever reached, so it's dead code, same
 // as buildKeypadPollAsm's  explicit RTS-before-"@end" above.
@@ -234,11 +234,11 @@ const JOY_DIR8_TABLE_NAME = '_joyDir8Table';
 // hidden var, the getter just reads it back" idiom as canonicalDistanceVarName/
 // generateDistanceChecks) rather than indexed inline at the getter's  call
 // site - a real, confirmed build failure ("Unknown Mnemonic 'ldx joy0u'",
-// reproduced from an actual compile) showed this compiler's own "complex
+// reproduced from an actual compile) showed this compiler's "complex
 // statement" handling corrupts a data-table read whose INDEX is itself a
 // compound expression (up + down*2 + left*4 + right*8) - only a single plain
 // variable index compiles correctly (confirmed working precedent:
-// text-scroll.js's own "text_offsets[id]"). So the compound index math is
+// text-scroll.js's "text_offsets[id]"). So the compound index math is
 // computed into bB's  free scratch register (temp1 - same one
 // generateDistanceChecks already reuses freely, safe here for the same
 // reason: assigned and consumed with nothing else, not even a drawscreen, in
@@ -254,11 +254,11 @@ export const joyDir8ResultVarName = (name) => `_${name}Dir8`;
 export const reserveJoystickDirection8DevVars = (reserveDevVar, usedFor) => {
   if (!usedFor || !usedFor.size) return;
   usedFor.forEach((name) =>
-    reserveDevVar(joyDir8ResultVarName(name), undefined, 'this joystick\'s own 8-way direction (0-7, or 255)'));
+    reserveDevVar(joyDir8ResultVarName(name), undefined, 'this joystick\'s 8-way direction (0-7, or 255)'));
 };
 
 // Spliced into bbasic.bb.hbs right alongside generatedDataTables - a single,
-// fixed bank-1 copy is enough (unlike generateTextOffsetTables' own
+// fixed bank-1 copy is enough (unlike generateTextOffsetTables'
 // per-relocated-bank copies): generateJoystickDirection8Checks below (which
 // is the only thing that ever reads this table) is itself always spliced
 // into commongamelogic, which is always bank 1, regardless of which bank any
@@ -282,7 +282,7 @@ export const generateJoystickDirection8Table = (Blockly) => {
 // an arithmetic expression (this file's  earlier "up + down*2 + left*4 +
 // right*8" attempt) fails outright, regardless of whether that expression
 // sits inline at a table index (the very first version of this) or in its
-// own separate assignment statement (the version right before this one) -
+// separate assignment statement (the version right before this one) -
 // neither placement matters, since the operand itself was never valid to
 // begin with. Fixed by building the same 0-15 index with four independent
 // "if joyNxxx then temp1 = temp1 + <bit>" conditionals instead - each one a
@@ -346,7 +346,7 @@ export const joyButtonHeldVarName = (name) => `_${name}FireHeld`;
 // "was it down last frame" and "released this exact frame" are both pure
 // 0/1 flags, never read as anything but a boolean (a bare "if X"/"X = 0"/
 // "X = 1") - packed into two bits of one shared byte instead of a dev var
-// each, via bB's own "{n}" single-bit read/write syntax (same pattern
+// each, via bB's "{n}" single-bit read/write syntax (same pattern
 // fadeFlagsVarName/seekArrivedFlagsVarName already use in background.js/
 // sprites.js). Safe because the two bits are never read/written together
 // as a combined numeric value anywhere - every site below only ever
@@ -360,7 +360,7 @@ export const joyButtonLastPressFramesVarName = (name) => `_${name}FireLastPressF
 // pre-scanned Set of which joysticks actually have a tap/hold/released/
 // double-tap block used anywhere in the project (has to be known before
 // reserveDevVar hands out user variable letters, well before this feature's
-// own generator would otherwise run).
+// generator would otherwise run).
 export const reserveJoystickButtonDevVars = (reserveDevVar, usedFor) => {
   if (!usedFor || !usedFor.size) return;
   usedFor.forEach((name) => {
@@ -382,7 +382,7 @@ export const reserveJoystickButtonDevVars = (reserveDevVar, usedFor) => {
 // only conditions the single statement right after "then". joyNfire is only
 // ever tested in a branch ("if joyNfire then goto ..."), never read as a
 // plain numeric/assignable value, for the same reason generateJoystickDirection8Checks'
-// own comment documents (a real, reproduced build failure using one as a
+// comment documents (a real, reproduced build failure using one as a
 // plain operand).
 export const generateJoystickButtonChecks = (Blockly) => {
   const used = Blockly.BBasic.joyButtonUsedFor;
@@ -435,7 +435,7 @@ export const generateJoystickButtonChecks = (Blockly) => {
 // One result + one countdown timer dev var PER "Fire double-tapped" block
 // instance (not shared per-joystick the way held/prev/justReleased/
 // lastPressFrames above are) - same "each instance gets its  hidden
-// state" reasoning distancePointChecks already uses (see that pre-scan's own
+// state" reasoning distancePointChecks already uses (see that pre-scan's
 // comment in bbasic.js), needed here specifically because different
 // double-tap blocks on the same joystick can each have their  WINDOW
 // field value, so the countdown itself can't be shared the way a plain
@@ -451,16 +451,16 @@ export const reserveJoystickDoubleTapDevVars = (reserveDevVar, checks) => {
   if (!checks || !checks.size) return;
   checks.forEach(({index}) => {
     reserveDevVar(joyDoubleTapResultVarName(index), undefined,
-        'this "Fire double-tapped" block\'s own result (0/1, true for one frame)');
+        'this "Fire double-tapped" block\'s result (0/1, true for one frame)');
     reserveDevVar(joyDoubleTapTimerVarName(index), undefined,
-        'this "Fire double-tapped" block\'s own window countdown');
+        'this "Fire double-tapped" block\'s window countdown');
   });
 };
 
 // Spliced into commongamelogic right after generateJoystickButtonChecks (has
 // to run AFTER it every frame - this reads justReleasedVar, which that
 // function is what actually computes each frame). One check per "Fire
-// double-tapped" block instance: on every release, if this instance's own
+// double-tapped" block instance: on every release, if this instance's
 // timer is still counting down from an EARLIER release, that's the second
 // tap - fire the result (for one frame) and clear the timer; otherwise this
 // is the first tap of a potential pair, so (re)start the timer at this
@@ -535,7 +535,7 @@ export default (Blockly) => {
   // joystick can each have a different FRAMES value - it's a pure
   // comparison against the shared lastPressFrames snapshot, so every
   // instance can safely read the same two vars with its  compile-time
-  // threshold plugged in. Composed the exact same way logic_operation's own
+  // threshold plugged in. Composed the exact same way logic_operation's
   // "&&" case is (see logic.js) - both sides are ORDER_EQUALITY/
   // ORDER_RELATIONAL, both strictly tighter-binding than ORDER_LOGICAL_AND,
   // so no parentheses are needed around either side. "double-tapped" is the
@@ -588,7 +588,7 @@ export default (Blockly) => {
   // (see keypadKeyVarName) - routed through nameDB_.getName the same way
   // getDistanceVarName below is, so this always matches whatever letter/
   // varN bbasic.js's pre-scan actually reserved for it. Same shape/
-  // order as logic_compare's own "EQ" case, since that's exactly what this
+  // order as logic_compare's "EQ" case, since that's exactly what this
   // is.
   Blockly.BBasic['input_keypad_get'] = function(block) {
     const varName = Blockly.BBasic.nameDB_.getName(
@@ -624,7 +624,7 @@ export default (Blockly) => {
   // Distance between any two objects (Player 0/1, Missile 0/1, Ball), one
   // axis at a time - a plain number, recomputed once per frame (see
   // generateDistanceChecks below) into the same hidden variable bbasic.js's
-  // own pre-scan registered for this exact (axis, object pair), so reading
+  // pre-scan registered for this exact (axis, object pair), so reading
   // it here is free regardless of how many "Distance" blocks a project has.
   // Routed through nameDB_.getName (same bucket bbasic.js used to dim it)
   // rather than the raw canonical string, so this always matches whatever
@@ -654,7 +654,7 @@ export default (Blockly) => {
   // which object is further along the axis and subtract the smaller from
   // the larger. "if X then A : B" only conditions A, not B, so this can't be
   // collapsed onto fewer lines with a trailing goto - every branch needs its
-  // own line, same as generateEnvelopeChecks.
+  // line, same as generateEnvelopeChecks.
   //
   // An "asm ... end" block (SEC+SBC's carry flag already says which operand
   // was smaller, so a BCS-guarded EOR/CLC/ADC two's-complement negate can
@@ -666,7 +666,7 @@ export default (Blockly) => {
   //
   // Each check is now a 3-line call into the shared DISTANCE_ABS_DIFF_NAME
   // subroutine (see its  comment at the top of this file) instead of its
-  // own fully inlined 6-line abs-difference block - a project with several
+  // fully inlined 6-line abs-difference block - a project with several
   // distance checks used to pay the full 6 lines EVERY time, despite the
   // logic being identical every single time (only the operand/target
   // variable names ever differed). Called with a bank suffix hardcoded to
@@ -699,7 +699,7 @@ export default (Blockly) => {
   // Same idea as getDistanceVarName above, for "Distance to point" blocks -
   // looked up by this block's  id in bbasic.js's distancePointChecks
   // pre-scan (each instance gets its  hidden variable; see that pre-scan's
-  // own comment for why these can't share one the way two-object distance
+  // comment for why these can't share one the way two-object distance
   // checks do).
   const getDistancePointVarName = (axis, block) => {
     const entry = Blockly.BBasic.distancePointChecks && Blockly.BBasic.distancePointChecks.get(block.id);
@@ -725,7 +725,7 @@ export default (Blockly) => {
   // file's  top comment - so POINT's value has to sit somewhere that
   // survives the coord0 assignment right after it) rather than reading
   // pointCode back more than once, the same reasoning random_between_set's
-  // own whitening formula captures "rand" into a temp once instead of
+  // whitening formula captures "rand" into a temp once instead of
   // inlining it three times (see generators/bbasic/random.js). Safe here
   // for the same reason it is there: this runs as plain sequential
   // statements with no drawscreen in between.
@@ -769,7 +769,7 @@ export default (Blockly) => {
 
   // SWACNT (SWCHA's  direction register) has to be set to output for
   // whichever port(s) are scanned before the very first poll runs - a
-  // one-time Setup-section line (see bbasic.bb.hbs's own
+  // one-time Setup-section line (see bbasic.bb.hbs's
   // generatedKeypadSetup splice, right alongside generatedTextMinikernelDefaults),
   // not something commongamelogic needs to redo every frame.
   Blockly.BBasic.generateKeypadSetup = function() {

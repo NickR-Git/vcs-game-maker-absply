@@ -57,7 +57,7 @@ export default {
   props: {
     // One color byte (0..254, even) per playfield row, top to bottom.
     value: {type: Array, default: () => []},
-    // Optional curated shortlist of color bytes (see PlayerEditor.vue's own
+    // Optional curated shortlist of color bytes (see PlayerEditor.vue's
     // "quick colors" palette) shown above the full palette grid in every
     // row's popup, for fast reuse without hunting through all 128 colors.
     // Empty by default so BackgroundEditor's  use of this component

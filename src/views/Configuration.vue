@@ -289,7 +289,7 @@ import {effectiveBackgroundRows, reflowBackgroundsToHeight} from '../blocks/back
 // bankswitch scheme at all (confirmed directly: still "AUTO: FAILED"/no
 // video even forcing every cartridge format it has that's remotely close).
 // No longer an issue now that the preview is gopher2600-wasm instead (see
-// hooks/emulator.js) - its own EF/EFSC cartridge mapper (hardware/memory/
+// hooks/emulator.js) - its EF/EFSC cartridge mapper (hardware/memory/
 // cartridge/mapper_atari_ef.go in the vendored source) is a real, dedicated
 // implementation of exactly this 64k/16-bank layout, Superchip RAM included.
 const ROM_SIZE_OPTIONS = ['2k', '4k', '8k', '16k', '32k', '64k'];
@@ -302,7 +302,7 @@ const MAX_PFRES = 32;
 const MIN_SUPERCHIP_ROM_SIZE_INDEX = ROM_SIZE_OPTIONS.indexOf('8k');
 
 // A view preference, not part of the project itself - same "survives
-// navigating away and back" reasoning as hooks/collapse.js's own
+// navigating away and back" reasoning as hooks/collapse.js's
 // collapsedRefs (Vue Router destroys and recreates this whole component on
 // navigation, which would otherwise reset any state kept inside setup()
 // itself). Not reused straight from that hook: its isCollapsed/
@@ -368,7 +368,7 @@ export default defineComponent({
     const darkMode = useDarkModeStorage();
     const desaturateBlocklyColors = useDesaturateBlocklyColorsStorage();
     const hideDescriptionText = useHideDescriptionTextStorage();
-    // "Never show the left sidebar" is disabled (see its own :disabled
+    // "Never show the left sidebar" is disabled (see its :disabled
     // binding in the template) whenever Expert mode is off, but disabling
     // an already-on switch just makes it unreachable, not actually off -
     // without this, turning Expert mode back off left the sidebar
@@ -382,7 +382,7 @@ export default defineComponent({
     const projectAutoIncrementVersion = useProjectAutoIncrementVersionStorage();
     const stellaPathStorage = useStellaPathStorage();
     // window.electronAPI only exists inside the desktop (Electron) build's
-    // own preload script (see preload.js) - a plain web-served copy of this
+    // preload script (see preload.js) - a plain web-served copy of this
     // same app has no such thing, so this is what tells the two apart at
     // runtime rather than any build-time flag.
     const isElectron = computed(() => !!window.electronAPI);
@@ -397,7 +397,7 @@ export default defineComponent({
     // Which sections are collapsed - a Set of section keys, matching the
     // collapse pattern already used by the other tabs'  cards (a plain
     // left-aligned chevron icon button, not Vuetify's  v-expansion-panels,
-    // which puts its arrow on the right). See collapsedSections' own
+    // which puts its arrow on the right). See collapsedSections'
     // module-scope definition above for why this isn't just a local ref.
     const isSectionCollapsed = (key) => collapsedSections.value.has(key);
     const toggleSection = (key) => {
@@ -443,7 +443,7 @@ export default defineComponent({
 
     // Whether the project uses the player0 rainbow colors block - if so,
     // "Show blank lines" can't be turned off (see usesPlayer0RainbowColors'
-    // own comment in hooks/rom.js): batari Basic's kernel_options never
+    // comment in hooks/rom.js): batari Basic's kernel_options never
     // allows "playercolors" alongside "no_blank_lines", so the toggle is
     // forced on and disabled rather than letting the user pick a
     // combination that's guaranteed to fail to build.
@@ -470,7 +470,7 @@ export default defineComponent({
     // already has it) even when the user never touches this switch directly
     // themselves - not just the handleChangeConfiguration path below, which
     // only runs when some OTHER switch on this page is what triggered the
-    // change. Also forces Player 1 sprite colors on: batari Basic's own
+    // change. Also forces Player 1 sprite colors on: batari Basic's
     // kernel_options combination table never has a valid row with
     // "playercolors" alone, it always needs "player1colors" too (see
     // generateConfiguration's  comment in generators/bbasic.js) - so
@@ -519,7 +519,7 @@ export default defineComponent({
     // The playfield's vertical resolution (pfres) is a single setting for the
     // whole ROM - batari Basic has no per-background override - so every
     // background's pixel data has to be reflowed to match whenever it or the
-    // Superchip toggle changes, rather than each background choosing its own.
+    // Superchip toggle changes, rather than each background choosing its.
     const handleChangeResolution = () => {
       const state = configurationState.value;
       state.pfres = Math.min(MAX_PFRES, Math.max(MIN_PFRES, Number(state.pfres) || MIN_PFRES));
@@ -574,7 +574,7 @@ export default defineComponent({
     // toggles specifically leaves them alone. Covers both configurationState
     // (project-scoped, saved with the .vcsgm file) and the four standing app
     // preferences kept in their  separate storage (see loadLastProject's
-    // own comment above for why those live apart from configurationState).
+    // comment above for why those live apart from configurationState).
     const handleResetToDefaults = () => {
       const state = configurationState.value;
       state.showScore = DEFAULT_CONFIGURATION.showScore;
@@ -626,8 +626,8 @@ export default defineComponent({
 <style scoped>
 /* Same pattern already used by the other editor tabs (e.g. DataEditor's
    .editor-container): absolutely positioned and stretched to its parent's
-   full height via top/bottom rather than a hardcoded height, with its own
-   overflow: auto. That keeps the scrollbar attached to this tab's own
+   full height via top/bottom rather than a hardcoded height, with its
+   overflow: auto. That keeps the scrollbar attached to this tab's
    column (matching where the other tabs already put theirs) and only
    showing up when this tab's content is actually taller than the window -
    unlike scrolling the whole document, which put the scrollbar at the far
@@ -644,15 +644,15 @@ export default defineComponent({
 }
 
 /* A solid background (no "text" prop, matching Select all/Select none/
-   Cancel/Refresh emulator - see their own comments) - a plain flat/text
+   Cancel/Refresh emulator - see their comments) - a plain flat/text
    button here read as too easy to miss for a whole-page reset action. */
 .reset-to-defaults-btn {
   margin-bottom: 16px;
 }
 
 /* Same fade-in-on-hover/blue-on-press color pattern as every flat-icon
-   button elsewhere in the app (e.g. Project.vue's own
-   .project-flat-icon-btn, GeneratedCode.vue's own
+   button elsewhere in the app (e.g. Project.vue's
+   .project-flat-icon-btn, GeneratedCode.vue's
    .generated-code-flat-icon-btn) - here applied to the button's TEXT color
    instead of an icon's, since this button has a label, not an icon. */
 .reset-to-defaults-btn.v-btn {
@@ -668,7 +668,7 @@ export default defineComponent({
 }
 
 /* Left-aligned collapse chevron + section title - matches the other tabs'
-   own per-card collapse control (e.g. DataEditor's .data-collapse-btn),
+   per-card collapse control (e.g. DataEditor's .data-collapse-btn),
    rather than Vuetify's v-expansion-panel-header, which puts its arrow
    on the right. */
 .option-section-header {
@@ -683,7 +683,7 @@ export default defineComponent({
 }
 
 /* Track width (32px) and checked-state thumb travel (18px) are now App.vue's
-   own global ".v-input--switch__track"/".v-input--switch.v-input--is-dirty
+   global ".v-input--switch__track"/".v-input--switch.v-input--is-dirty
    .v-input--switch__thumb" rules, applying the same narrower toggle style
    to every tab, not just this one - see App.vue's comment for why (a
    real reported inconsistency: every other tab's switches stayed at
@@ -696,13 +696,13 @@ export default defineComponent({
 }
 
 /* Vuetify's ".v-input--selection-controls" gives every switch a fixed
-   16px margin-top regardless of whether its own hint text is even showing
+   16px margin-top regardless of whether its hint text is even showing
    (see node_modules/vuetify/dist/vuetify.css) - once "Expert mode" (see
    App.vue's hide-description-text support) removes that hint text,
    that much space between switches reads as too generous with nothing left
    below to justify it. Only switches that FOLLOW another switch (the "+"
-   combinator, rather than a blanket ".option-switch") - the section's own
-   FIRST switch sits right under its own header instead, and that spacing
+   combinator, rather than a blanket ".option-switch") - the section's
+   FIRST switch sits right under its header instead, and that spacing
    is unrelated to any hint text, so it shouldn't change with this toggle. */
 .hide-description-text .option-switch + .option-switch {
   margin-top: 2px;
@@ -763,7 +763,7 @@ export default defineComponent({
    list), even though .pfres-field now sits between them in the DOM - the
    generic ".option-switch + .option-switch" rule above only tightens
    switches that are immediate DOM siblings, which this one no longer is,
-   so it needs its own explicit override to get the same tighter spacing
+   so it needs its explicit override to get the same tighter spacing
    once Expert mode's hint text is gone. Left alone (Vuetify's default
    spacing) while Expert mode is off. */
 .hide-description-text .pfrowheight-switch {

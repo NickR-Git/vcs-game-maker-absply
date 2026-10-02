@@ -15,7 +15,7 @@ export default (Blockly) => {
   const resolveRW = (canonicalName) => Blockly.BBasic.superchipRwPairs[canonicalName];
 
   // Lazily builds (once per compile, per distinct target function) a tiny bB
-  // subroutine that does nothing but forward function_call_statement's own
+  // subroutine that does nothing but forward function_call_statement's
   // pre-stashed arguments (see functionCallArgVarName's  comment in
   // blocks/function.js) into a real call to the function itself, then
   // discards the result the same way an inline call would. Registered into
@@ -42,21 +42,21 @@ export default (Blockly) => {
       `${resolveRW(functionCallDiscardVarName()).write} = ${targetName}(${args.join(', ')})`;
     // Tracked so hooks/rom.js's computeFunctionFamilies can recognize this
     // subroutine as a function-call wrapper (its  body is a plain
-    // value-form function call, so it has to join that function's own
+    // value-form function call, so it has to join that function's
     // relocation family) rather than an ordinary user-authored subroutine
-    // (independently relocatable on its own, via a bank-taggable "gosub").
+    // (independently relocatable by itself, via a bank-taggable "gosub").
     Blockly.BBasic.functionCallWrapperNames.add(wrapperName);
     return wrapperName;
   };
 
   // Doesn't emit inline where it's dropped on the canvas - like
-  // subroutine_define, its body is collected here and spliced into its own
+  // subroutine_define, its body is collected here and spliced into its
   // never-fallen-into spot (see generateFunctions in bbasic.js), with a real
   // "function <name>" header wrapped around it there.
   //
   // currentEventName is set to "function_<name>" - a DISTINCT prefix from
-  // subroutine_define's own "subroutine_<name>" - so getCurrentBank()
-  // resolves any bank-crossing code generated INSIDE this function's own
+  // subroutine_define's "subroutine_<name>" - so getCurrentBank()
+  // resolves any bank-crossing code generated INSIDE this function's
   // body (a subroutine_call, a data table read, a nested function call)
   // through getFunctionBank(name) instead, which reflects wherever THIS
   // function's  relocation family (see computeFunctionFamilies in
@@ -72,7 +72,7 @@ export default (Blockly) => {
     // body runs - see functionParamVarName's  comment in blocks/
     // function.js for the real bug this prevents: temp1-temp6 are shared,
     // unprotected scratch space, so any OTHER function call this body goes
-    // on to make (a nested "Call function", a dynamic data table read's own
+    // on to make (a nested "Call function", a dynamic data table read's
     // dispatch helper, ...) can freely clobber them, silently corrupting an
     // argument this function still needs to read again later. Scanning the
     // DO block's  descendants (rather than unconditionally snapshotting
@@ -99,7 +99,7 @@ export default (Blockly) => {
   // function_define's  generator above copies it into at function entry -
   // NOT the raw temp1-temp6 slot batari Basic's calling convention actually
   // delivers it in, which any OTHER function call made later in this same
-  // function's body is free to clobber (see functionParamVarName's own
+  // function's body is free to clobber (see functionParamVarName's
   // comment in blocks/function.js).
   Blockly.BBasic['function_param_get'] = function(block) {
     const index = block.getFieldValue('INDEX');
@@ -111,12 +111,12 @@ export default (Blockly) => {
   // ''" from a mangled "LDY #(" line): unlike a plain assignment, it
   // compiles to a single immediate-mode load ("LDY #(value)"), which can't
   // hold a genuine multi-operator compound expression (e.g. data_get_bit's
-  // own division/subtraction formula, or any math_arithmetic chain) the way
+  // division/subtraction formula, or any math_arithmetic chain) the way
   // "var = <expression>" can. Captured into temp6 first (an ordinary
   // statement, always legal for ANY expression) rather than risking that
   // same failure for every possible VALUE input - safe to reuse
   // unconditionally regardless of whether this function itself already uses
-  // temp6 as its  6th argument, since "return" ends the function's own
+  // temp6 as its  6th argument, since "return" ends the function's
   // execution immediately: nothing after this line ever runs, so nothing
   // ever needs temp6's PRE-return-statement value again either way.
   Blockly.BBasic['function_return'] = function(block) {
@@ -162,10 +162,10 @@ export default (Blockly) => {
   // "name(arg1, arg2, ...)" - used directly as a value expression, unlike
   // subroutine_call's "gosub" (a statement). Always inline (never routed
   // through registerFunctionCallWrapper below): a value block can't inject a
-  // preceding "gosub" statement of its own (same constraint documented on
+  // preceding "gosub" statement (same constraint documented on
   // data_get_element_by_id's dynamic path in generators/bbasic/data.js), so
   // there's no way to relocate the surrounding code out from under a call
-  // used this way regardless - only function_call_statement's OWN standalone
+  // used this way regardless - only function_call_statement's standalone
   // call needs (or can use) the wrapper.
   Blockly.BBasic['function_call'] = function(block) {
     const {name, args} = resolveFunctionCallTarget(block);
