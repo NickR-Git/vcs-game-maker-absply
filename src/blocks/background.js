@@ -307,8 +307,8 @@ export const reflowBackgroundsToHeight = (backgroundsStorage, targetRows) => {
 // row count before calling pfscroll, and a "read scroll position" getter
 // always reflects where the currently-shown background actually is. For a
 // background taller than pfres (customHeight), this same tracked row also
-// drives rewriting the live RAM window's real pixel data on every completed
-// row-step (see backgroundScrollPatchRowVarName's comment, and
+// drives overwriting the one stale row of the live RAM window on every
+// completed row-step (see the comment on backgroundScrollPacking below, and
 // generateBackgroundScrollPatch in generators/bbasic.js) - pfscroll's
 // rotate alone would otherwise just keep cycling the same rows forever.
 // Horizontal (left/right) scrolling has no equivalent, since the standard
@@ -318,50 +318,63 @@ export const reflowBackgroundsToHeight = (backgroundsStorage, targetRows) => {
 export const backgroundScrollRowVarName = () => 'backgroundScrollRow';
 export const backgroundScrollRowMaxVarName = () => 'backgroundScrollRowMax';
 
-// The absolute pixel-row index (0-based, into the background's FULL row
-// array, not just the visible window) that generateBackgroundScrollPatch's
-// shared dispatch should rewrite the ENTIRE live playfield RAM window from -
-// written by background_scroll's generator right before each gosub, always
-// equal to backgroundScrollRowVarName's current value (the window's new top
-// row) once a real row-step has completed.
+// Real pfscroll rotates the live playfield window in place - each completed
+// row-step leaves exactly ONE row's worth of stale data behind, at the
+// window's BOTTOM edge for the pfscroll direction that advances the
+// background and at its TOP edge for the other (byte-level trace of
+// public/bb19/includes/pf_scrolling.asm, and std_kernel.asm reads slot 0 as
+// screen row 0). generateBackgroundScrollPatch's shared subroutine overwrites
+// just that one row's 4 bytes from the active background's table.
 //
-// This app no longer tries to use real pfscroll's rotate-in-place at all for
-// an overflowing background, nor to patch just the one row it leaves stale -
-// after extensive, confirmed-correct-on-paper attempts at both still failing
-// in actual gameplay testing, a real, proven reference technique (Scroll3A.bas,
-// a known-working community example of scrolling a background taller than
-// the live window) was found to use a completely different, far simpler
-// design instead: manage the kernel's "playfieldpos" fine-scroll counter
-// directly (bypassing the "pfscroll" command entirely), and on every
-// completed row-step, rewrite the WHOLE visible window (every row, not just
-// one edge) from a backing data table at the new offset, via a plain "for"
-// loop indexing both "playfield" and the table directly (bB supports this
-// natively - confirmed directly from that reference's
-// "playfield[temp1] = PF_data0[temp2]" line). This sidesteps entirely the
-// question of which edge pfscroll's rotation leaves stale and in which
-// direction - there's no rotation left to reason about, since every row is
-// freshly written every time.
-export const backgroundScrollPatchRowVarName = () => 'backgroundScrollPatchRow';
+// When any background overflows the window, that whole feature runs on ONE
+// reserved variable (backgroundScrollRowVarName, packed - see
+// backgroundScrollPacking) plus bB's scratch variables:
+//  - temp5 = what the shared subroutine should do: a window slot to
+//    overwrite (0 .. visibleRows-1), 255 = load the whole first window (once,
+//    at background-switch time), or 254 = just return the active background's
+//    furthest scroll row (its row count minus the visible rows) in temp6,
+//    looked up from ROM instead of kept in RAM.
+//  - temp3 = the absolute row of the full background (0-based) to copy into
+//    that slot.
+// Those are only live between a scroll block setting them and its gosub in
+// the same frame (nothing in between touches temp3-temp6; the bankswitch
+// trampoline only uses temp7), so they need no reserved storage at all.
+// Writing only the one stale row instead of the whole window is ~25x less
+// work per row-step, which matters on Superchip RAM (slow, separate
+// read/write windows).
 
-// Which background's table generateBackgroundScrollPatch's shared dispatch
-// should use - set once, in generateBackgrounds' per-background
-// scroll-tracking reset (alongside backgroundScrollRowVarName's reset),
-// and read back by the dispatch on every gosub. NOT simply "newbackground"
-// (bB's kernel var, confirmed read directly elsewhere in this file for
-// the ONE-TIME "just switched" reload check) - that var is a one-shot
-// switch TRIGGER, not a persistent "currently active background" register:
-// it gets reset to 0 unconditionally every single frame right after its
-// one-time reload code runs (see generateBackgrounds' "newbackground
-// <> id" guard and the "backgroundchangeend: newbackground = 0" line right
-// after it), specifically so that reload code - and nothing else - only
-// ever runs once per switch, not every frame. A real confirmed bug:
-// dispatching bgscrollpatch directly on "newbackground = id" meant the
-// check could only ever match during the single frame a switch happened,
-// and resolved false forever after - the row-patch silently no-opped on
-// every subsequent frame, regardless of how many times pfscroll itself
-// rotated, so scrolling never advanced past whatever was loaded at switch
-// time.
-export const backgroundScrollPatchActiveVarName = () => 'backgroundScrollPatchActive';
+// backgroundScrollRowVarName holds TWO fields in overflow mode: the window's
+// top row in the low rowBits bits and the active background's index (which
+// background's table to read) in the remaining high bits - the index is set
+// once when a background is switched in and the row only ever changes by
+// whole row-steps, so one byte carries both. rowBits is sized to the tallest
+// background in the project (at most 64 rows, the data-table ceiling, = 6
+// bits), which leaves room for 2^(8-rowBits) backgrounds (4 at 33-64 rows, 8
+// at 17-32, ...). A project with more backgrounds than that simply doesn't
+// pack: the row variable then holds the whole byte (rowMask 255, no index
+// bits) and the index lives in a separate variable,
+// backgroundScrollActiveVarName, instead - one extra byte only for projects
+// that need it, never a cap on how many backgrounds can scroll.
+export const backgroundScrollPacking = (backgrounds) => {
+  const rowCounts = (backgrounds || []).map(({pixels}) => (pixels ? pixels.length : 0));
+  const maxRows = Math.max(2, ...rowCounts);
+  const rowBits = Math.min(7, Math.ceil(Math.log2(maxRows)));
+  const packed = (backgrounds || []).length <= (1 << (8 - rowBits));
+  if (!packed) {
+    return {packed, rowBits: 8, rowMask: 255, indexMask: 0, indexStep: 0};
+  }
+  return {
+    packed,
+    rowBits,
+    rowMask: (1 << rowBits) - 1,
+    indexMask: 255 - ((1 << rowBits) - 1),
+    indexStep: 1 << rowBits,
+  };
+};
+
+// Holds the active background's index only for a project too big to pack it
+// into backgroundScrollRowVarName's high bits - see backgroundScrollPacking.
+export const backgroundScrollActiveVarName = () => 'backgroundScrollActive';
 
 // Real batari Basic pfscroll up/down moves by ONE SCANLINE per call, not
 // one logical playfield row (confirmed directly against
@@ -380,11 +393,10 @@ export const backgroundScrollPatchActiveVarName = () => 'backgroundScrollPatchAc
 // only ever advances once a real row has genuinely completed.
 //
 // Only used for a background that does NOT overflow the live window - once
-// any background in the project does, background_scroll stops calling real
-// pfscroll altogether for every scroll block (see backgroundScrollPatchRowVarName's
-// comment) and manages the kernel's "playfieldpos" directly instead, so
-// this shadow accumulator is no longer needed there (no ambiguity left to
-// shadow - this app controls every write to playfieldpos in that mode).
+// any background in the project does, background_scroll detects a completed
+// row-step by reading the kernel's "playfieldpos" right after the pfscroll
+// call instead (pfscroll resets it to a known value exactly when it wraps),
+// so this shadow accumulator is no longer needed there.
 export const backgroundScrollSubRowVarName = () => 'backgroundScrollSubRow';
 
 // Every background whose row count overflows the live playfield RAM
@@ -395,12 +407,12 @@ export const backgroundScrollSubRowVarName = () => 'backgroundScrollSubRow';
 // the playfield RAM window at boot/background-switch time, a real silent
 // memory-corruption risk confirmed directly against 2600basic.h's
 // playfield/pfwidth addressing). Also used as the project-wide switch
-// deciding whether background_scroll needs the whole-window-rewrite
-// technique at all (see backgroundScrollPatchRowVarName's comment) - once
-// ANY background overflows, generateBackgroundScrollPatch builds a table for
-// EVERY background in the project (not just the overflowing ones), so the
-// shared dispatch has something to read from no matter which background
-// happens to be active when a scroll block runs.
+// deciding whether background_scroll needs the packed-row patching at all
+// (see backgroundScrollPacking's comment) - once ANY background overflows,
+// generateBackgroundScrollPatch builds a table for EVERY background in the
+// project (not just the overflowing ones), so the shared routine has
+// something to read from no matter which background happens to be active
+// when a scroll block runs.
 export const backgroundsWithOverflowRows = (backgrounds, visibleRows) =>
   (backgrounds || []).filter(({pixels}) => pixels && pixels.length > visibleRows);
 

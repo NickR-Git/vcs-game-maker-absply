@@ -226,3 +226,23 @@ Add playback/export/import hotkeys; fix a key-repeat bug and dim the logo under 
   instead of once per press (missing an event.repeat guard)
 - Dim the app logo under Dark Mode - full brightness read as too
   glaring against the rest of the now-dark UI
+
+
+=== 0.51.10 ===
+Rewrite tall-background vertical scrolling; fix grid snap, XY labels and canvas drawing bugs
+
+- Backgrounds taller than the playfield now scroll through their full height:
+  pfscroll rotates the window and only the one stale edge row is patched from
+  a per-background table by a single shared routine (Superchip-aware writes,
+  wraps around when not stopping at the edges, stop-at-edge settles cleanly
+  on the first/last row)
+- Scroll vars reduced: one packed row+background byte, row max read from ROM,
+  patch inputs in scratch temps; projects with no tall backgrounds and no
+  stop-at-edge, scroll position getter or sprite scroll reserve none
+- Fix the Blockly grid snap toggle doing nothing (Blockly 10 setter)
+- Fix pixel coordinate (XY) labels showing while the pixel grid is off
+- Delete/Backspace clears the pixels inside a marquee selection
+- Dragging a drawing or marquee tool off the canvas cancels the stroke, and
+  clicking outside the canvas (not the toolbar) deselects marquee tools
+- Fix stray pixels left by line/rectangle/circle previews after a late
+  update from the page redrew an older preview

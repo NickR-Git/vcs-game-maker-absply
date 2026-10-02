@@ -8,7 +8,6 @@ import {effectiveBackgroundRows, backgroundFadeTimerVarName, backgroundFadePaceV
   collisionPixelColumnVarName, collisionPixelRowVarName,
   collisionPixelNudgedColumnVarName, collisionPixelNudgedRowVarName,
   backgroundScrollRowVarName, backgroundScrollRowMaxVarName, backgroundScrollSubRowVarName,
-  backgroundScrollPatchRowVarName,
   BACKGROUND_SCROLL_PATCH_SUBROUTINE_NAME} from '../../blocks/background';
 import {pfRowDivisorFor} from '../../utils/playfield-coords';
 import {ctrlpfShadowVarName, spriteScrollFlagsVarName, spriteScrollActiveBit} from './sprites';
@@ -1166,7 +1165,7 @@ export default (Blockly) => {
   Blockly.BBasic[`background_scroll`] = function(block) {
     const direction = block.getFieldValue('DIRECTION');
     const delta = BACKGROUND_SCROLL_ROW_DELTA[direction];
-    if (!Blockly.BBasic.backgroundScrollUsed || delta == null) {
+    if (!Blockly.BBasic.backgroundScrollTracking || delta == null) {
       return `pfscroll ${direction}\n`;
     }
 
@@ -1234,75 +1233,100 @@ export default (Blockly) => {
       // scrolled, not raw scanline steps.
       nudgeSprites();
     } else {
-      // Some background in the project IS taller than the visible window -
-      // real pfscroll's rotate-in-place, plus patching just the one row it
-      // leaves stale, kept failing in actual gameplay testing despite
-      // checking out correctly on paper every time it was attempted. A
-      // proven community reference (Scroll3A.bas) uses a different,
-      // simpler technique instead: manage the kernel's "playfieldpos"
-      // fine-scroll counter directly (bypassing "pfscroll" entirely here),
-      // and rewrite the ENTIRE live window (every row, not just one) from a
-      // backing table on every completed row-step - see
-      // backgroundScrollPatchRowVarName's comment in blocks/background.js
-      // for the full account. playfieldpos is initialized to rowHeight at
-      // background-switch time (generateBackgrounds in generators/bbasic.js)
-      // to match the real kernel's boot-time convention (confirmed
-      // against startup.asm) - a "settled, no fine-scroll offset yet" state -
-      // so the same symmetric accumulate-and-wrap logic below (which
-      // tolerates upup/downdown's 2-scanline step without needing an exact
-      // boundary value, unlike Scroll3A.bas's single-step-only checks)
-      // works correctly from the very first call.
+      // Some background in the project IS taller than the visible window.
+      // Real pfscroll still rotates the live window (cheap, and it keeps the
+      // kernel's fine scroll position), and only the ONE row it leaves stale
+      // is then overwritten from the background's table - see
+      // backgroundScrollPacking's comment in blocks/background.js. The row
+      // variable is packed (low bits = top row, high bits = which background
+      // is showing), the patch inputs live in scratch temp3/temp5, and the
+      // furthest scroll row is fetched from ROM by the shared subroutine
+      // (temp5 = 254 -> temp6) whenever it's needed, so nothing else is
+      // reserved. temp4 is scratch for the unpacked row.
       //
-      // Stop-at-edge follows Scroll3A.bas's two-part shape: fine scrolling
-      // keeps moving right up to the last valid sub-row position, and only
-      // the wrap into a row past the limit is blocked (playfieldpos is
-      // clamped to the boundary instead of wrapping), so the picture settles
-      // cleanly on the edge rather than stopping partway through a row.
+      // Which pfscroll direction advances the background is fixed by the
+      // hardware (traced through pf_scrolling.asm): pfscroll "up" rotates
+      // every row toward slot 0, leaving the BOTTOM slot stale and needing
+      // the window's top row to INCREASE; "down" is the mirror image. This
+      // block's "Down" (delta > 0) is the direction that moves further into
+      // the background, so it issues pfscroll "up" (and "downdown" -> "upup"),
+      // keeping the on-screen motion each direction label already had.
+      const mechDirection = {up: 'down', down: 'up', upup: 'downdown', downdown: 'upup'}[direction];
       const step = Math.abs(delta);
-      // Without stop-at-edge the window position wraps around the whole
-      // background (its row count is maxVar + visibleRows), so the first row
-      // follows the last one - the table read in bgscrollpatch wraps the same
-      // way. rowVar is an unsigned byte, so the backward wrap checks for 0
-      // before subtracting.
       const visibleRows = effectiveBackgroundRows(config);
-      const wrapRowForward = () => {
-        lines.push(` temp1 = ${maxVar} + ${visibleRows}`);
-        lines.push(` if ${rowVar} >= temp1 then ${rowVar} = 0`);
+      const forward = delta > 0;
+      const {rowMask, indexMask} = Blockly.BBasic.backgroundScrollPacking;
+      const gosubPatch = ` gosub ${BACKGROUND_SCROLL_PATCH_SUBROUTINE_NAME}${Blockly.BBasic.bankJumpSuffix(
+          Blockly.BBasic.getCurrentBank(), Blockly.BBasic.getSubroutineBank(BACKGROUND_SCROLL_PATCH_SUBROUTINE_NAME))}`;
+      // temp6 = the active background's furthest scroll row (row count minus
+      // visible rows); leaves temp3/temp4 alone.
+      const loadMax = () => {
+        lines.push(' temp5 = 254');
+        lines.push(gosubPatch);
       };
-      const wrapRowBackward = () => {
-        lines.push(` if ${rowVar} > 0 then ${rowVar} = ${rowVar} - 1 else ${rowVar} = ${maxVar} + ${visibleRows - 1}`);
-      };
-      // playfieldpos moves OPPOSITE to the row index, exactly as in
-      // Scroll3A.bas (its Up_Scroll decrements playfieldpos while advancing
-      // the data offset): the kernel draws a smaller playfieldpos as the
-      // picture shifted further along, so wrapping it back up by a full row
-      // at the same moment the window's top row advances keeps the motion
-      // continuous. Pairing them the same way instead made the picture jump
-      // backward by a row at every row-step (very choppy scrolling).
-      if (delta > 0) {
-        // playfieldpos is an unsigned byte, so compare BEFORE subtracting
-        // (a 2-scanline step from 1 would otherwise wrap to 255).
-        lines.push(` if playfieldpos > ${step} then playfieldpos = playfieldpos - ${step} : goto ${doneLabel}`);
-        if (stopAtEdge) lines.push(` if ${rowVar} >= ${maxVar} then playfieldpos = 1 : goto ${doneLabel}`);
-        lines.push(` playfieldpos = playfieldpos + ${rowHeight} - ${step}`);
-        lines.push(` ${rowVar} = ${rowVar} + 1`);
-        if (!stopAtEdge) wrapRowForward();
-      } else {
-        lines.push(` playfieldpos = playfieldpos + ${step}`);
-        lines.push(` if playfieldpos <= ${rowHeight} then goto ${doneLabel}`);
-        if (stopAtEdge) lines.push(` if ${rowVar} <= 0 then playfieldpos = ${rowHeight} : goto ${doneLabel}`);
-        lines.push(` playfieldpos = playfieldpos - ${rowHeight}`);
-        if (stopAtEdge) {
-          lines.push(` ${rowVar} = ${rowVar} - 1`);
+      // Stop-at-edge blocks only the call that would complete a row-step
+      // past the limit (pfscroll's wrap threshold: forward wraps once
+      // playfieldpos is <= step, backward once it is > rowHeight - step), so
+      // fine scrolling still runs right up to the last position and the
+      // picture settles cleanly on the edge instead of stopping mid-row.
+      if (stopAtEdge) {
+        if (forward) {
+          loadMax();
+          lines.push(` temp4 = ${rowVar} & ${rowMask}`);
+          lines.push(` if temp4 >= temp6 && playfieldpos <= ${step} then goto ${doneLabel}`);
         } else {
-          wrapRowBackward();
+          lines.push(` temp4 = ${rowVar} & ${rowMask}`);
+          lines.push(` if temp4 <= 0 && playfieldpos > ${rowHeight - step} then goto ${doneLabel}`);
         }
       }
+      lines.push(` pfscroll ${mechDirection}`);
+      // A row-step completed exactly when pfscroll wrapped playfieldpos:
+      // forward it resets to rowHeight (a non-wrapping step always leaves it
+      // lower), backward it resets to 1 (a non-wrapping step always leaves it
+      // higher).
+      lines.push(forward ?
+        ` if playfieldpos <> ${rowHeight} then goto ${doneLabel}` :
+        ` if playfieldpos <> 1 then goto ${doneLabel}`);
+      // Row update. The row sits in the packed byte's low bits, so a plain
+      // +1/-1 is safe only while it can't carry into/borrow from the index
+      // bits: with stop-at-edge the row stays within 0..max; without it the
+      // position wraps around the whole background (row count = max +
+      // visibleRows) through temp4 first, never reaching a row value that
+      // doesn't fit its bits.
+      if (forward) {
+        if (stopAtEdge) {
+          lines.push(` ${rowVar} = ${rowVar} + 1`);
+        } else {
+          loadMax();
+          lines.push(` temp4 = ${rowVar} & ${rowMask}`);
+          lines.push(' temp4 = temp4 + 1');
+          lines.push(` temp6 = temp6 + ${visibleRows}`);
+          lines.push(` if temp4 >= temp6 then ${rowVar} = ${rowVar} & ${indexMask} else ${rowVar} = ${rowVar} + 1`);
+        }
+      } else if (stopAtEdge) {
+        lines.push(` ${rowVar} = ${rowVar} - 1`);
+      } else {
+        lines.push(` temp4 = ${rowVar} & ${rowMask}`);
+        loadMax();
+        lines.push(` temp6 = temp6 + ${visibleRows - 1}`);
+        lines.push(` if temp4 > 0 then ${rowVar} = ${rowVar} - 1 else ${rowVar} = ${rowVar} | temp6`);
+      }
       nudgeSprites();
-      const patchRowVar = resolveVar(backgroundScrollPatchRowVarName());
-      lines.push(` ${patchRowVar} = ${rowVar}`);
-      lines.push(` gosub ${BACKGROUND_SCROLL_PATCH_SUBROUTINE_NAME}${Blockly.BBasic.bankJumpSuffix(
-          Blockly.BBasic.getCurrentBank(), Blockly.BBasic.getSubroutineBank(BACKGROUND_SCROLL_PATCH_SUBROUTINE_NAME))}`);
+      if (forward) {
+        // The newly-visible BOTTOM row: top row + visibleRows - 1, wrapped
+        // around the background's row count.
+        loadMax();
+        lines.push(` temp3 = ${rowVar} & ${rowMask}`);
+        lines.push(` temp3 = temp3 + ${visibleRows - 1}`);
+        lines.push(` temp6 = temp6 + ${visibleRows}`);
+        lines.push(' if temp3 >= temp6 then temp3 = temp3 - temp6');
+        lines.push(` temp5 = ${visibleRows - 1}`);
+      } else {
+        // The newly-visible TOP row is simply the new top row.
+        lines.push(` temp3 = ${rowVar} & ${rowMask}`);
+        lines.push(' temp5 = 0');
+      }
+      lines.push(gosubPatch);
     }
     // "@ label" (not a bare label), same reasoning as collision_check_
     // position/object_bounce's own labels elsewhere in this codebase - this
@@ -1316,7 +1340,12 @@ export default (Blockly) => {
   Blockly.BBasic[`background_scroll_position`] = function(block) {
     const resolveVar = (canonicalName) =>
       Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
-    return [resolveVar(backgroundScrollRowVarName()), Blockly.BBasic.ORDER_ATOMIC];
+    const rowVar = resolveVar(backgroundScrollRowVarName());
+    // In overflow mode the variable also carries the active background's
+    // index in its high bits - see backgroundScrollPacking.
+    const packing = Blockly.BBasic.backgroundScrollPacking;
+    return [packing && packing.packed ? `(${rowVar} & ${packing.rowMask})` : rowVar,
+      Blockly.BBasic.ORDER_ATOMIC];
   };
 
   Blockly.BBasic[`draw_screen`] = function(block) {

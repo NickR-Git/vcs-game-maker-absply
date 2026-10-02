@@ -24,7 +24,7 @@ import {DEFAULT_ROW_COLOR, processBackgroundStorageDefaults,
   collisionPixelNudgedRowVarName,
   resolveBackgroundFadeFinishedWatches, hasBackgroundFadeActiveChecks,
   backgroundScrollRowVarName, backgroundScrollRowMaxVarName,
-  backgroundScrollPatchRowVarName, backgroundScrollPatchActiveVarName, backgroundScrollSubRowVarName,
+  backgroundScrollPacking, backgroundScrollActiveVarName, backgroundScrollSubRowVarName,
   backgroundsWithOverflowRows, effectiveBackgroundRows,
   BACKGROUND_SCROLL_PATCH_SUBROUTINE_NAME} from '../blocks/background';
 import {functionCallDiscardVarName, functionCallArgVarName, functionParamVarName,
@@ -1770,50 +1770,51 @@ Blockly.BBasic.init = function(workspace) {
         'shared active/finished bit-flags byte for this group of fadeable registers');
   });
 
-  // background_scroll's STOPATEDGE checkbox and background_scroll_
-  // position (see backgroundScrollRowVarName's comment in blocks/
-  // background.js) - reserved whenever either block is used anywhere,
-  // since a getter needs the same tracked position a scroll block updates,
-  // and a scroll block updates it regardless of whether ITS OWN checkbox
-  // is on (so other scroll blocks/getters in the project stay accurate).
-  // Also reserved whenever a sprite_scroll_with_playfield_set/_get block is
-  // used anywhere (spriteScrollUsedFor, pre-scanned above), even with no
-  // "Background scroll" block in the project at all - that feature reuses
-  // THIS SAME row var directly to nudge a flagged sprite's Y (see
-  // background_scroll's own generator in generators/bbasic/background.js),
-  // rather than keeping a separate per-sprite scroll offset of its own, so
-  // it needs the var reserved regardless of what else is using it.
+  // Whether any scroll feature is used at all (a background_scroll block, the
+  // background_scroll_position getter, or a sprite following the scroll) -
+  // see scrollTrackingFeatureUsed just below for which of those actually
+  // need the position tracked in reserved variables.
   this.backgroundScrollUsed = workspace.getAllBlocks(false)
       .some((block) => block.type === 'background_scroll' || block.type === 'background_scroll_position') ||
       this.spriteScrollUsedFor.size > 0;
+  // Whether the scroll position needs tracking at all (the row/max/accumulator
+  // variables and their upkeep on every scroll call): only for a stop-at-edge
+  // scroll block, a "scroll position" getter, or a sprite following the
+  // scroll - otherwise (and with no tall background, which always tracks it)
+  // a plain pfscroll is all that's needed and nothing is reserved.
+  const scrollTrackingFeatureUsed = workspace.getAllBlocks(false).some((block) =>
+    block.type === 'background_scroll_position' ||
+    (block.type === 'background_scroll' && block.getFieldValue('STOPATEDGE') === 'TRUE')) ||
+    this.spriteScrollUsedFor.size > 0;
   // Only when at least one background is actually taller than the live
   // playfield RAM window (pixels.length > visibleRows - see
   // backgroundsWithOverflowRows' comment) does scrolling need the
-  // whole-window-rewrite technique at all; a project using background_scroll
-  // only on normal-height backgrounds keeps using plain pfscroll, unchanged.
+  // packed-row patching at all; a project using background_scroll only on
+  // normal-height backgrounds keeps using plain pfscroll, unchanged.
   const backgroundsData = this.getBackgroundsData();
   this.backgroundScrollOverflowBackgrounds = this.backgroundScrollUsed ?
     backgroundsWithOverflowRows((backgroundsData && backgroundsData.backgrounds) || [], effectiveBackgroundRows(config)) :
     [];
-  if (this.backgroundScrollUsed) {
+  this.backgroundScrollPacking = this.backgroundScrollOverflowBackgrounds.length ?
+    backgroundScrollPacking((backgroundsData && backgroundsData.backgrounds) || []) : null;
+  this.backgroundScrollTracking = this.backgroundScrollOverflowBackgrounds.length > 0 ||
+    (this.backgroundScrollUsed && scrollTrackingFeatureUsed);
+  if (this.backgroundScrollTracking) {
     reserveDevVar(backgroundScrollRowVarName(), undefined,
-        'how far Up/Down scrolling has moved the current background from its own top row');
-    reserveDevVar(backgroundScrollRowMaxVarName(), undefined,
-        'the current background\'s furthest valid scroll row (its row count minus the visible rows)');
-    // Only needed for a background that never overflows - see that var's
-    // comment in blocks/background.js for why the overflow case manages the
-    // kernel's "playfieldpos" directly instead, with no shadow accumulator
-    // needed.
+        'the current background\'s top visible row (in overflow mode also holds which background is showing)');
+    // Overflow mode keeps no furthest-row variable (looked up from ROM
+    // instead) and no shadow accumulator, and the row variable also carries
+    // the active background's index - see blocks/background.js.
+    if (this.backgroundScrollPacking && !this.backgroundScrollPacking.packed) {
+      reserveDevVar(backgroundScrollActiveVarName(), undefined,
+          'which background is showing, for a project with too many backgrounds to pack it into the row variable');
+    }
     if (!this.backgroundScrollOverflowBackgrounds.length) {
+      reserveDevVar(backgroundScrollRowMaxVarName(), undefined,
+          'the current background\'s furthest valid scroll row (its row count minus the visible rows)');
       reserveDevVar(backgroundScrollSubRowVarName(), undefined,
           'scanlines accumulated toward the next full row - see its comment in blocks/background.js');
     }
-  }
-  if (this.backgroundScrollOverflowBackgrounds.length) {
-    reserveDevVar(backgroundScrollPatchRowVarName(), undefined,
-        'which absolute row of the full background a scroll needs to rewrite the live window from - see its comment in blocks/background.js');
-    reserveDevVar(backgroundScrollPatchActiveVarName(), undefined,
-        'which background is currently showing, for the row-patch dispatch - see its comment in blocks/background.js');
   }
   reserveSpriteScrollDevVars(reserveDevVar, this.spriteScrollUsedFor);
 
@@ -3924,7 +3925,7 @@ Blockly.BBasic.generateBackgrounds = function() {
   const configurationStorage = useConfigurationStorage();
   const config = (configurationStorage && configurationStorage.value) || {};
   const visibleRows = effectiveBackgroundRows(config);
-  const scrollTrackingUsed = this.backgroundScrollUsed;
+  const scrollTrackingUsed = this.backgroundScrollTracking;
   const buildPfcolors = (pixels, rowColors) => {
     const resolved = [];
     for (let i = 0; i < pixels.length; i++) {
@@ -3964,22 +3965,14 @@ Blockly.BBasic.generateBackgrounds = function() {
     const overflowUsed = this.backgroundScrollOverflowBackgrounds.length > 0;
     // A literal "playfield:" block, directly loading this background's
     // first visibleRows rows, ONLY once no background in the project
-    // overflows the live window - once any does, the initial load uses the
-    // exact same whole-window-rewrite mechanism every subsequent scroll
-    // step does (gosub bgscrollpatch at row 0, see
-    // backgroundScrollPatchRowVarName's comment in blocks/background.js),
-    // matching Scroll3A.bas's structure exactly: its single "playfield:"
-    // block is never directly executed (skipped via "goto manualdraw"), used
-    // purely as a backing data source, with its "manualdraw" initial
-    // load sharing the identical for-loop its Up_Scroll/Down_Scroll
-    // subroutines use. A literal "playfield:" block here would otherwise
-    // still need the SAME visibleRows cap this used to apply (the compiler's
-    // playfield RAM is only ever sized for the visible window, never this
-    // background's full row count - confirmed against 2600basic.h's
-    // playfield/pfwidth addressing), but there is no reason to maintain two
-    // separate "load the first screen's worth of rows" mechanisms once the
-    // table-driven one already exists and is exercised every scroll step
-    // anyway.
+    // overflows the live window - once any does, the initial load is a
+    // gosub into the shared bgscrollpatch routine (offset 255 = load the whole
+    // first window, see below) from the same table every scroll step reads
+    // its one new row from, so a background's rows live in ROM exactly once
+    // (a "playfield:" block here as well would duplicate its first
+    // visibleRows rows). Matches Scroll3A.bas's structure: its single
+    // "playfield:" block is never directly executed (skipped via "goto
+    // manualdraw") and is used purely as a backing data source.
     const payloadLines = overflowUsed ? [] : [
       ' playfield:',
       convertPlayfield(matrixToPlayfield(pixels.slice(0, visibleRows))),
@@ -3987,33 +3980,36 @@ Blockly.BBasic.generateBackgrounds = function() {
     ];
     if (pfcolorsBlock) payloadLines.push(pfcolorsBlock.replace(/\n$/, ''));
     const payload = payloadLines.join('\n');
-    // backgroundScrollPatchActiveVarName is set here (for EVERY background,
-    // not just overflowing ones - cheap, and simpler than tracking which
-    // id's turn it is) rather than read from "newbackground" directly - see
-    // that var's comment in blocks/background.js for why "newbackground"
-    // itself can't serve this purpose (it's a one-shot switch trigger,
-    // zeroed every frame right after this same reset block runs, not a
-    // persistent "currently active background" register).
-    // "playfieldpos = rowHeight" (the overflow case) instead of resetting
-    // backgroundScrollSubRowVarName to 0 - matches the real kernel's
-    // boot-time init (startup.asm sets playfieldpos to this same row-height
-    // value) so background_scroll's manual playfieldpos management (see
-    // backgroundScrollPatchRowVarName's comment) starts from the same
-    // "settled, no fine-scroll offset yet" state the kernel itself expects.
-    // The overflow branch also gosubs into bgscrollpatch immediately, at row
-    // 0 - the SAME whole-window-rewrite the subroutine does for every
-    // subsequent scroll step, reused here for the initial load too (see the
-    // payloadLines comment above for why there's no separate "playfield:"
-    // load left to do this instead).
+    // In overflow mode the background's index is stored in the row
+    // variable's high bits right here (for EVERY background, not just
+    // overflowing ones), rather than read from "newbackground" later:
+    // "newbackground" is a one-shot switch trigger, zeroed every frame right
+    // after this same reset block runs, not a persistent "currently active
+    // background" register, so a scroll routine reading it only ever matched
+    // on the exact frame of a switch (a real, confirmed bug).
+    // "playfieldpos = rowHeight" (the overflow case, where the row-step is
+    // detected from playfieldpos itself instead of a shadow accumulator)
+    // instead of resetting backgroundScrollSubRowVarName to 0 - matches the
+    // real kernel's boot-time init (startup.asm sets playfieldpos to this same row-height
+    // value) so a background switched in mid-game starts from the same
+    // "settled, no fine-scroll offset yet" state pfscroll's row-step
+    // detection (see background_scroll's generator) expects.
+    // The overflow branch also gosubs into bgscrollpatch immediately with
+    // offset 255, which loads the whole first window from the table (see
+    // that routine's comment).
+    // In overflow mode this single assignment sets row 0 AND the background's
+    // index (see backgroundScrollPacking in blocks/background.js); the
+    // gosub then loads the first window (temp5 = 255).
     const scrollTrackingLines = scrollTrackingUsed ?
-      ` ${backgroundScrollRowVarName()} = 0\n` +
-      ` ${backgroundScrollRowMaxVarName()} = ${Math.max(0, pixels.length - visibleRows)}\n` +
       (overflowUsed ?
+        ` ${backgroundScrollRowVarName()} = ${index * this.backgroundScrollPacking.indexStep}\n` +
+        (this.backgroundScrollPacking.packed ? '' : ` ${backgroundScrollActiveVarName()} = ${index}\n`) +
         ` playfieldpos = ${pfRowDivisorFor(config)}\n` +
-        ` ${backgroundScrollPatchActiveVarName()} = ${index}\n` +
-        ` ${backgroundScrollPatchRowVarName()} = 0\n` +
+        ' temp5 = 255\n' +
         ` gosub ${BACKGROUND_SCROLL_PATCH_SUBROUTINE_NAME}${Blockly.BBasic.bankJumpSuffix(
             Blockly.BBasic.getCurrentBank(), Blockly.BBasic.getSubroutineBank(BACKGROUND_SCROLL_PATCH_SUBROUTINE_NAME))}\n` :
+        ` ${backgroundScrollRowVarName()} = 0\n` +
+        ` ${backgroundScrollRowMaxVarName()} = ${Math.max(0, pixels.length - visibleRows)}\n` +
         ` ${backgroundScrollSubRowVarName()} = 0\n`) : '';
     // Only the graphics payload itself is relocatable - the guard above and
     // the endLabel below stay inline in bank 1 no matter what, since a
@@ -4031,24 +4027,19 @@ Blockly.BBasic.generateBackgrounds = function() {
 };
 
 // The subroutine that makes scrolling past a customHeight background's
-// first visibleRows rows actually work - see backgroundScrollPatchRowVarName's
-// comment in blocks/background.js for the full account of why this exists,
-// and why it no longer tries to use real pfscroll's rotate-in-place at all:
-// after extensive attempts at patching just the one row pfscroll's
-// rotation leaves stale kept failing in real gameplay testing (despite
-// checking out correctly on paper every time), a real, proven community
-// reference (Scroll3A.bas) was found using a completely different, far
-// simpler technique - manage the kernel's "playfieldpos" fine-scroll counter
-// directly (background_scroll's generator does this, bypassing the
-// "pfscroll" command entirely for an overflowing background), and on every
-// completed row-step, REWRITE THE ENTIRE live window (every row, not just
-// one) from a backing "data" table at the new offset. This subroutine is
-// that rewrite step: background_scroll sets backgroundScrollPatchRowVarName
-// to the window's new top row and backgroundScrollPatchActiveVarName to
-// which background is showing (see that var's comment in
-// blocks/background.js for why this can't just read bB's "newbackground"
-// directly, despite that being tempting - it's a one-shot switch trigger,
-// not a persistent register), then gosubs in here.
+// first visibleRows rows actually work - see the comment above
+// backgroundScrollPacking in blocks/background.js for the full account. Real pfscroll rotates
+// the live window in place (cheap) but never loads a row that isn't already
+// there, leaving exactly one row's worth of stale data behind per row-step;
+// background_scroll's generator issues the pfscroll, detects when a row-step
+// completed, sets temp5 (which window slot is stale) and temp3 (which row of
+// the full background belongs there) and gosubs in here, which copies just
+// that one row. A first attempt at this design failed in gameplay testing
+// (partly from bugs found later, e.g. dispatching on the one-shot
+// "newbackground" - see the reset block in generateBackgrounds); an
+// interim version rewrote the whole window from a table on every row-step
+// instead (after Scroll3A.bas), which worked but cost ~25x more per row-step
+// on slow Superchip RAM.
 //
 // Builds one "playfield:" block per background in the project (not just the
 // overflowing ones - see backgroundsWithOverflowRows' comment) so the
@@ -4068,15 +4059,13 @@ Blockly.BBasic.generateBackgrounds = function() {
 // fully predictable: PF_data0 for backgrounds[0], PF_data1 for
 // backgrounds[1], and so on, matching the array's declaration order.
 //
-// Reads each row via a plain "for" loop indexing both "playfield" and the
-// table directly by a single plain variable (tablename[temp2]) - confirmed
-// as valid, real bB syntax directly against Scroll3A.bas's
-// "playfield[temp1] = PF_data0[temp2]" line, and confirmed elsewhere in
-// this codebase (generators/bbasic/input.js's joyDir8ResultVarName comment)
-// that a table index must be a single plain variable, not a compound
-// expression - hence computing the row's base offset into temp2 as a
-// separate statement first, rather than indexing with "rowVar*4+temp1"
-// directly.
+// The copy itself is a small asm routine rather than bB's "playfield[i] =
+// table[j]" assignment: confirmed by compiling both through the real
+// toolchain, with Superchip RAM bB's "playfield:" loader writes to
+// "playfield-128,x" (the Superchip's separate WRITE window - "playfield"
+// itself is the READ window) but a "playfield[i] = ..." assignment emits "sta
+// playfield,x", which writes into the read window (ROM) and silently does
+// nothing, so no pixels ever showed.
 //
 // Registered into Blockly.BBasic.subroutines under
 // BACKGROUND_SCROLL_PATCH_SUBROUTINE_NAME instead of being spliced directly
@@ -4099,8 +4088,8 @@ Blockly.BBasic.generateBackgroundScrollPatch = function(backgrounds, visibleRows
   const overflowBackgrounds = backgroundsWithOverflowRows(backgrounds, visibleRows);
   if (!overflowBackgrounds.length) return;
 
-  const rowVar = backgroundScrollPatchRowVarName();
-  const activeVar = backgroundScrollPatchActiveVarName();
+  const rowVar = backgroundScrollRowVarName();
+  const packing = backgroundScrollPacking(backgrounds);
   const lastByte = visibleRows * 4 - 1;
   // One shared copy loop, parameterized entirely at runtime by rowVar and
   // whichever table the dispatch below jumps into - growing a background's
@@ -4115,59 +4104,79 @@ Blockly.BBasic.generateBackgroundScrollPatch = function(backgrounds, visibleRows
   const configurationStorage = useConfigurationStorage();
   const superchip = !!(configurationStorage && configurationStorage.value &&
     configurationStorage.value.enableSuperchip);
-  // ONE copy routine for every background: the active background's table
-  // address and byte length are looked up (by background index, kept in
-  // backgroundScrollPatchActiveVarName) from the small per-background tables
-  // emitted below, the address is put in the zero-page pointer pair
-  // temp1/temp2 (fixed, consecutive addresses $9C/$9D in 2600basic.h - the
-  // guaranteed-adjacent pair a "(zp),y" read needs, which no dev var could
-  // promise) and the loop reads through it. Adding a background therefore
-  // only adds its data plus three table bytes, never another copy of this
-  // code. The read wraps back to the first row after the last (Y compared
-  // against the table's byte length, which is 0 mod 256 for 64 rows), so a
-  // scroll that isn't stopped at an edge repeats the background from its
-  // first row instead of reading ROM past the end of the table. temp3 holds
-  // that length for the loop.
+  // ONE routine for every background: the active background's table address
+  // is looked up (by background index, kept in the row variable's high bits -
+  // see backgroundScrollPacking) from the small per-background tables
+  // emitted below and put in the zero-page pointer pair temp1/temp2 (fixed,
+  // consecutive addresses $9C/$9D in 2600basic.h - the guaranteed-adjacent
+  // pair a "(zp),y" read needs, which no dev var could promise). Adding a
+  // background therefore only adds its data plus two table bytes, never
+  // another copy of this code.
+  //
+  // Normally copies just ONE row (4 bytes) - table row temp3 into window slot
+  // temp5 - the one row real pfscroll's rotate leaves stale each row-step.
+  // temp5 = 255 instead loads the whole first window (rows 0 ..
+  // visibleRows-1), used once when a background is switched in, and temp5 =
+  // 254 just returns the active background's furthest scroll row (its row
+  // count minus the visible rows) in temp6, from a ROM table instead of RAM.
   const copyRoutine = [
     'asm',
-    `ldx ${activeVar}`,
+    ...(packing.packed ?
+      [`lda ${rowVar}`, ...new Array(packing.rowBits).fill('lsr')] :
+      [`lda ${backgroundScrollActiveVarName()}`]),
+    'tax',
+    'lda temp5',
+    'cmp #254',
+    'bne bgscrollnotmax',
+    'lda bgscroll_max,x',
+    'sta temp6',
+    'jmp bgscrolldone',
+    '@bgscrollnotmax',
     'lda bgscroll_lo,x',
     'sta temp1',
     'lda bgscroll_hi,x',
     'sta temp2',
-    'lda bgscroll_len,x',
-    'sta temp3',
-    `lda ${rowVar}`,
+    'lda temp5',
+    'cmp #255',
+    'beq bgscrollfull',
+    'asl',
+    'asl',
+    'tax',
+    'lda temp3',
     'asl',
     'asl',
     'tay',
+    ...[0, 1, 2, 3].flatMap((n) => [
+      'lda (temp1),y',
+      `sta playfield${superchip ? '-128' : ''},x`,
+      ...(n < 3 ? ['iny', 'inx'] : []),
+    ]),
+    'jmp bgscrolldone',
+    '@bgscrollfull',
+    'ldy #0',
     'ldx #0',
     '@bgscrollcopy',
     'lda (temp1),y',
     `sta playfield${superchip ? '-128' : ''},x`,
     'iny',
-    'cpy temp3',
-    'bne bgscrollnowrap',
-    'ldy #0',
-    '@bgscrollnowrap',
     'inx',
     `cpx #${lastByte + 1}`,
     'bne bgscrollcopy',
+    '@bgscrolldone',
     '@end',
   ].join('\n');
 
-  // Per-background lookup tables (low/high address of each PF_dataN block
-  // and its byte length), plain asm .byte lines - placed after the
-  // subroutine's explicit return, like the playfield blocks, so execution
-  // never falls into them.
+  // Per-background lookup tables (low/high address of each PF_dataN block),
+  // plain asm .byte lines - placed after the subroutine's explicit return,
+  // like the playfield blocks, so execution never falls into them.
   const lookupTables = [
     'asm',
     '@bgscroll_lo',
     `.byte ${backgrounds.map((_, index) => `<PF_data${index}`).join(', ')}`,
     '@bgscroll_hi',
     `.byte ${backgrounds.map((_, index) => `>PF_data${index}`).join(', ')}`,
-    '@bgscroll_len',
-    `.byte ${backgrounds.map(({pixels}) => (pixels.length * 4) & 255).join(', ')}`,
+    '@bgscroll_max',
+    `.byte ${backgrounds.map(({pixels}) => Math.max(0, pixels.length - visibleRows)).join(', ')}`,
     '@end',
   ].join('\n');
 
