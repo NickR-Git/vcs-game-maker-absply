@@ -12,7 +12,7 @@
           message's "Multiline" for word-wrap onto a second static line instead.
         </p>
 
-        <div class="text-bkcolor-row">
+        <div class="text-bkcolor-row tight-under-intro">
           <color-swatch-picker
             :value="textBkColor"
             :allow-clear="false"

@@ -11,7 +11,7 @@
           Save it to a file or copy it to the clipboard below.
         </p>
       </v-card-text>
-      <div class="generated-code-toolbar">
+      <div class="generated-code-toolbar tight-under-intro">
         <v-btn
           icon
           class="generated-code-flat-icon-btn"

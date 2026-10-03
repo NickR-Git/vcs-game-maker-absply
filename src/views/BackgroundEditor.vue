@@ -10,7 +10,7 @@
           its color instead of one fixed color for the whole background.
         </p>
 
-        <graphic-editor-toolbar :active-editor="effectiveEditor" @height-hotkey="handleSetHeightHotkey">
+        <graphic-editor-toolbar class="tight-under-intro" :active-editor="effectiveEditor" @height-hotkey="handleSetHeightHotkey">
           <template v-slot:before-tools>
             <editor-zoom v-model="zoom" />
             <pixel-grid-toggle v-model="showPixelGrid" />

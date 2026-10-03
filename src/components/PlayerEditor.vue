@@ -10,7 +10,7 @@
           player size) setting, which will be set automatically when that sprite is activated.
         </p>
 
-        <graphic-editor-toolbar :active-editor="effectiveFrameEditor" @height-hotkey="handleSetHeightHotkey">
+        <graphic-editor-toolbar class="tight-under-intro" :active-editor="effectiveFrameEditor" @height-hotkey="handleSetHeightHotkey">
           <template v-slot:before-tools>
             <editor-zoom v-model="zoom" />
             <pixel-grid-toggle v-model="showPixelGrid" />

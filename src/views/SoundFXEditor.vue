@@ -11,47 +11,6 @@
         </p>
       </v-card-text>
       <v-card-text class="soundfx-dim-section">
-        <div class="dim-controls">
-          <v-switch
-            v-model="dimSoundFx"
-            label="DIM"
-            hide-details
-            class="dim-switch"
-          />
-          <v-slider
-            :value="dimSoundFxPercentDisplay"
-            @input="(v) => (dimSoundFxPercentDisplay = v)"
-            @change="(v) => (dimSoundFxPercent = v)"
-            :disabled="!dimSoundFx"
-            min="0"
-            max="100"
-            step="1"
-            hide-details
-            class="dim-slider"
-          />
-          <span class="dim-percent">{{ dimSoundFxPercentDisplay }}%</span>
-        </div>
-        <p class="dim-hint v-messages theme--light v-messages__message">
-          When DIM is on, every sound effect plays at the volume above, as a
-          percentage of its set volume. Off: sound effects play at their
-          set volume.
-        </p>
-        <div class="soundfx-filter-row">
-          <v-select
-            v-model="soundFilter"
-            label="Show"
-            :items="soundFilterItems"
-            hide-details
-            class="soundfx-filter"
-          />
-          <v-switch
-            v-model="soundFxColumns"
-            label="Columns"
-            title="Lay sound effect cards out in multiple columns when there's room, instead of one full-width column."
-            hide-details
-            class="soundfx-columns-switch"
-          />
-        </div>
         <!-- Same sticky/full-bleed toolbar treatment as DataEditor.vue's
              .data-toolbar (see that file's comments for the full
              reasoning behind each piece - position: sticky, the bleed
@@ -164,6 +123,46 @@
             >
               <v-icon>mdi-play</v-icon>
             </v-btn>
+            <v-divider class="soundfx-toolbar-divider" vertical />
+            <div class="dim-controls" title="When DIM is on, every sound effect plays at the volume set here, as a percentage of its set volume (the same setting as the Music tab's DIM). Off: sound effects play at their set volume.">
+              <v-switch
+                v-model="dimSoundFx"
+                label="DIM"
+                hide-details
+                class="dim-switch"
+              />
+              <v-slider
+                :value="dimSoundFxPercentDisplay"
+                @input="(v) => (dimSoundFxPercentDisplay = v)"
+                @change="(v) => (dimSoundFxPercent = v)"
+                :disabled="!dimSoundFx"
+                min="0"
+                max="100"
+                step="1"
+                dense
+                hide-details
+                class="dim-slider"
+              />
+              <span class="dim-percent">{{ dimSoundFxPercentDisplay }}%</span>
+            </div>
+            <v-divider class="soundfx-toolbar-divider soundfx-toolbar-divider-wide" vertical />
+            <v-switch
+              v-model="soundFxColumns"
+              label="Columns"
+              title="Lay sound effect cards out in multiple columns when there's room, instead of one full-width column."
+              hide-details
+              class="soundfx-columns-switch"
+            />
+            <v-divider class="soundfx-toolbar-divider soundfx-toolbar-divider-wide" vertical />
+            <v-select
+              v-model="soundFilter"
+              prefix="Show"
+              :items="soundFilterItems"
+              dense
+              single-line
+              hide-details
+              class="soundfx-filter"
+            />
           </div>
         </div>
 
@@ -863,7 +862,7 @@ export default defineComponent({
       instance.proxy.$forceUpdate();
     };
 
-    // Sound effect data as a standalone .json file, for sharing an
+    // Sound effect data as a standalone .vcsbnk file, for sharing an
     // instrument between projects or keeping an external backup - same
     // pattern as MusicEditor.vue's  handleExportSong/handleImportSong
     // (including leaving the card's  id out of the export, kept as the
@@ -874,15 +873,15 @@ export default defineComponent({
       const {id, ...soundEffectData} = soundEffect;
       const blob = new Blob([JSON.stringify(soundEffectData, null, 2)], {type: 'application/json'});
       const filename = (soundEffect.name || `sound-${soundEffect.id}`).replace(/[^A-Za-z0-9]+/g, '_');
-      saveAs(blob, `Sound_${filename}-${getDateInfix()}.json`);
+      saveAs(blob, `Sound_${filename}-${getDateInfix()}.vcsbnk`);
     };
 
     // Overwrites this sound effect card's  data with a previously
-    // exported .json file's contents - keeps this card's  id (see
+    // exported .vcsbnk file's contents - keeps this card's  id (see
     // handleExportSoundEffect) untouched so every soundfx_play block and
     // Music tab track already pointing at this card keeps working.
     const handleImportSoundEffect = (soundEffect) => {
-      openFileDialog('.json,application/json')
+      openFileDialog('.vcsbnk,.json')
           .then((file) => file.text())
           .then((text) => {
             const soundEffectData = JSON.parse(text);
@@ -907,20 +906,20 @@ export default defineComponent({
           .catch((e) => console.error('Failed to import sound effect', e));
     };
 
-    // Every sound effect/instrument in this project as one standalone .json
+    // Every sound effect/instrument in this project as one standalone .vcsbnk
     // "sound bank" file - same per-card export shape as handleExportSoundEffect
     // above (id stripped, since it only ever meant anything within this one
     // project's  storage), just the whole array at once instead of a
     // single card. "type" is a lightweight self-description (not read back
     // on import, matching Project.vue's  convention of tagging a saved
-    // file's kind) purely so a stray .json opened outside this app is
+    // file's kind) purely so a stray file opened outside this app is
     // recognizable at a glance.
     const handleExportSoundBank = () => {
       const soundEffects = state.value.soundEffects.map(({id, ...rest}) => rest); // eslint-disable-line no-unused-vars
       const blob = new Blob(
           [JSON.stringify({type: 'VCS Game Maker Sound Bank', soundEffects}, null, 2)],
           {type: 'application/json'});
-      saveAs(blob, `SoundBank-${getDateInfix()}.json`);
+      saveAs(blob, `SoundBank-${getDateInfix()}.vcsbnk`);
     };
 
     // Which entries from the bank file most recently opened (see
@@ -941,7 +940,7 @@ export default defineComponent({
     // way to bring in just a few sounds from a bank without also
     // overwriting/adding every other one it happened to contain.
     const handleImportSoundBank = () => {
-      openFileDialog('.json,application/json')
+      openFileDialog('.vcsbnk,.json')
           .then((file) => file.text())
           .then((text) => {
             const bankData = JSON.parse(text);
@@ -1158,7 +1157,12 @@ export default defineComponent({
 .dim-controls {
   display: flex;
   align-items: center;
-  gap: 16px;
+  flex: 0 0 auto;
+  gap: 4px;
+  height: 26px;
+  /* Room between the divider before it and the DIM switch, on top of the
+     row's 4px gap (the same 8px as the Columns switches). */
+  margin-left: 8px;
 }
 
 /* Vuetify gives switches/checkboxes ("selection controls") a built-in
@@ -1169,19 +1173,25 @@ export default defineComponent({
    custom class on specificity alone. */
 .dim-switch {
   flex: 0 0 auto;
-  margin-top: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
 }
 
+/* A short slider: this sits at the left of the toolbar row, beside the
+   icon buttons. */
 .dim-slider {
-  flex: 0 1 200px;
-  /* Pulls the "%" label below in closer than the row's  16px gap - the
-     slider's internal thumb padding already leaves visual space after
-     it, so the label doesn't need the full gap on top of that. */
-  margin-right: -12px;
-  /* The slider's track sits a few px higher within its  box than the
-     switch's toggle does within its box, even once both boxes are centered
-     against each other - nudge it down to actually line up. */
-  margin-top: 3px;
+  flex: 0 0 90px;
+  margin: 0;
+  min-height: 0;
+}
+
+/* Keeps the slider (normally 32px tall) inside the 26px toolbar row. */
+.dim-slider >>> .v-input__control {
+  min-height: 26px;
+}
+
+.dim-slider >>> .v-input__slot {
+  margin: 0;
 }
 
 .dim-percent {
@@ -1189,32 +1199,39 @@ export default defineComponent({
   min-width: 2.5em;
 }
 
-/* font-size/color/line-height now come from the "v-messages theme--light
-   v-messages__message" classes on the element itself (see the template) -
-   the same classes every hint/description paragraph in the app uses. */
-.dim-hint {
-  margin-top: 8px;
-}
-
-.soundfx-filter-row {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
+/* The "Show" select and Columns switch sit in the toolbar row, after the Play
+   button - one 26px row tall like the icon buttons. */
 .soundfx-filter {
-  max-width: 220px;
-  margin-top: 8px;
+  flex: 0 0 auto;
+  width: 190px;
+  margin: 0 !important;
+  /* Room between the divider before it and the select, on top of the row's
+     4px gap. */
+  margin-left: 8px !important;
+  padding: 0 !important;
 }
 
-/* Same margin-top/padding-top override as .dim-switch elsewhere in this
-   file - Vuetify's selection-control margin-top (meant for stacking
-   below other fields) otherwise pushes this out of line with the Show
-   select next to it. */
+.soundfx-filter >>> .v-input__slot {
+  min-height: 26px;
+  margin: 0;
+}
+
+.soundfx-filter >>> .v-select__selections {
+  min-height: 26px;
+}
+
+.soundfx-filter >>> .v-input__append-inner {
+  margin-top: 0;
+  align-self: center;
+}
+
+/* Room between the divider before it and the switch itself, on top of the
+   row's 4px gap (the same 8px as the Data tab's Columns switch). */
 .soundfx-columns-switch {
   flex: 0 0 auto;
-  margin-top: 8px !important;
-  padding-top: 0 !important;
+  margin: 0 !important;
+  margin-left: 8px !important;
+  padding: 0 !important;
 }
 
 /* Same sticky/full-bleed toolbar treatment as DataEditor.vue's
@@ -1233,7 +1250,12 @@ export default defineComponent({
   background-color: #fff;
   padding-top: 4px;
   padding-bottom: 4px;
-  margin-top: 16px;
+  /* Close under the intro text while it is not pinned. The intro paragraph's
+     16px bottom margin collapses with this one, so a positive value
+     here changes nothing - this negative one pulls the toolbar up to a 6px
+     gap (16px matched the graphic editor toolbar, but with the DIM controls
+     inside the toolbar it read as too large). */
+  margin-top: -10px;
   margin-left: -16px;
   margin-right: -16px;
   padding-left: 16px;
@@ -1256,6 +1278,14 @@ export default defineComponent({
 
 .soundfx-toolbar-divider {
   margin: 0;
+}
+
+/* The divider between the Columns switch and the Show select: the same 8px
+   of room on its left as the select gives it on its right, so it sits
+   centered between them. (The divider after the Play button keeps the
+   toolbar's usual 4px on its left.) */
+.soundfx-toolbar-divider-wide {
+  margin-left: 8px;
 }
 
 /* Same "grows + gains a bottom border once actually scrolled" treatment as

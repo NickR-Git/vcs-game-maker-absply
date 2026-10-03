@@ -13,35 +13,27 @@
           needs one.
         </p>
       </v-card-text>
-      <v-card-text class="dim-section">
-        <div class="dim-controls">
-          <v-switch
-            v-model="dimSoundFx"
-            label="DIM"
-            hide-details
-            class="dim-switch"
-          />
-          <v-slider
-            :value="dimSoundFxPercentDisplay"
-            @input="(v) => (dimSoundFxPercentDisplay = v)"
-            @change="(v) => (dimSoundFxPercent = v)"
-            :disabled="!dimSoundFx"
-            min="0"
-            max="100"
-            step="1"
-            hide-details
-            class="dim-slider"
-          />
-          <span class="dim-percent">{{ dimSoundFxPercentDisplay }}%</span>
-        </div>
-        <p class="dim-hint v-messages theme--light v-messages__message">
-          When DIM is on, every note plays at the volume above, as a percentage of its set volume - same
-          setting as the Sound tab's DIM (changing it here changes it there too). Off: notes play at their
-          set volume.
-        </p>
-      </v-card-text>
       <div class="music-toolbar" :class="{'music-toolbar-scrolled': isMusicToolbarScrolled}" v-if="activeSong()">
         <div class="music-toolbar-row">
+          <v-btn
+            icon
+            small
+            title="Save every song in this project (with the instruments they use) to a single .JSON song bank file"
+            class="music-flat-icon-btn music-icon-btn-size"
+            @click="handleExportSongBank"
+          >
+            <v-icon>mdi-database-export</v-icon>
+          </v-btn>
+          <v-btn
+            icon
+            small
+            title="Load a .JSON song bank file - a song whose name matches one already here has its contents replaced; every other song in the file is added"
+            class="music-flat-icon-btn music-icon-btn-size"
+            @click="handleImportSongBank"
+          >
+            <v-icon>mdi-database-import</v-icon>
+          </v-btn>
+          <v-divider class="music-toolbar-divider" vertical />
           <v-btn
             icon
             small
@@ -103,6 +95,28 @@
           >
             <v-icon>{{ playingSongId === activeSong().id ? 'mdi-volume-high' : 'mdi-play' }}</v-icon>
           </v-btn>
+          <v-divider class="music-toolbar-divider" vertical />
+          <div class="dim-controls" title="When DIM is on, every note plays at the volume set here, as a percentage of its set volume (the same setting as the Sound tab's DIM, so changing it here changes it there too). Off: notes play at their set volume.">
+            <v-switch
+              v-model="dimSoundFx"
+              label="DIM"
+              hide-details
+              class="dim-switch"
+            />
+            <v-slider
+              :value="dimSoundFxPercentDisplay"
+              @input="(v) => (dimSoundFxPercentDisplay = v)"
+              @change="(v) => (dimSoundFxPercent = v)"
+              :disabled="!dimSoundFx"
+              min="0"
+              max="100"
+              step="1"
+              dense
+              hide-details
+              class="dim-slider"
+            />
+            <span class="dim-percent">{{ dimSoundFxPercentDisplay }}%</span>
+          </div>
         </div>
       </div>
       <v-card-text class="song-list-section">
@@ -1688,7 +1702,7 @@ export default defineComponent({
       forceUpdate();
     };
 
-    // Song data (name/tempo/loop/patterns/sequence) as a standalone .json
+    // Song data (name/tempo/loop/patterns/sequence) as a standalone .vcsmus
     // file, for sharing a song between projects or keeping an external
     // backup - the song's  id isn't included (see handleImportSong,
     // which keeps the IMPORTING song's id rather than the file's), since
@@ -1717,7 +1731,7 @@ export default defineComponent({
       const exportData = {...songData, soundEffects: usedSoundEffects};
       const blob = new Blob([JSON.stringify(exportData, null, 2)], {type: 'application/json'});
       const filename = (song.name || `song-${song.id}`).replace(/[^A-Za-z0-9]+/g, '_');
-      saveAs(blob, `Song_${filename}-${getDateInfix()}.json`);
+      saveAs(blob, `Song_${filename}-${getDateInfix()}.vcsmus`);
     };
 
     // Adds whichever of an imported song's  bundled instruments (see
@@ -1753,13 +1767,13 @@ export default defineComponent({
       return idMap;
     };
 
-    // Overwrites this song card's  data with a previously exported .json
+    // Overwrites this song card's  data with a previously exported .vcsmus
     // file's contents - keeps this song's  id (see handleExportSong)
     // untouched so every music_play_song/music_song_stopped block already
     // pointing at this card keeps working, exactly like handleImportCsv in
     // DataEditor.vue keeps a data table's  id on import.
     const handleImportSong = (song) => {
-      openFileDialog('.json,application/json')
+      openFileDialog('.vcsmus,.json')
           .then((file) => file.text())
           .then((text) => {
             const parsed = JSON.parse(text);
@@ -1788,7 +1802,7 @@ export default defineComponent({
             });
             // Normalized the same way a stored project's  sequence is
             // (see processSongsStorageDefaults in blocks/music.js) - an
-            // OLDER exported song .json file (from before repeat groups
+            // OLDER exported song file (from before repeat groups
             // existed) would otherwise still have its  sequence as a
             // flat array of raw patternIds, bypassing that normalization
             // entirely, since import overwrites this song's fields
@@ -1804,6 +1818,70 @@ export default defineComponent({
           .catch((e) => console.error('Failed to import song', e));
     };
 
+    // Every song in the project as one .vcsmus "song bank" file (the toolbar's
+    // database-export button): each song as handleExportSong writes it, minus
+    // its id, plus every Sound tab instrument any of them uses.
+    const handleExportSongBank = () => {
+      const usedIds = new Set();
+      state.value.songs.forEach((song) => soundEffectIdsUsedBySong(song).forEach((id) => usedIds.add(id)));
+      const usedSoundEffects = soundEffects().filter(({id}) => usedIds.has(String(id)));
+      const exportData = {
+        // eslint-disable-next-line no-unused-vars
+        songs: state.value.songs.map(({id, ...songData}) => songData),
+        soundEffects: usedSoundEffects,
+      };
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], {type: 'application/json'});
+      saveAs(blob, `Songs-${getDateInfix()}.vcsmus`);
+    };
+
+    // Loads a song bank file (see handleExportSongBank). Like the Sound tab's
+    // sound bank: a song whose name matches one already in the project has
+    // its contents replaced (keeping that song's id, so every block pointing
+    // at it still works), and every other song in the file is added as a new
+    // one. Instruments are matched by name through importSoundEffects, the
+    // same as importing one song.
+    const handleImportSongBank = () => {
+      openFileDialog('.vcsmus,.json')
+          .then((file) => file.text())
+          .then((text) => {
+            const parsed = JSON.parse(text);
+            if (!parsed || !Array.isArray(parsed.songs)) {
+              throw new Error('File does not contain a song bank');
+            }
+            const idMap = importSoundEffects(parsed.soundEffects);
+            const songs = state.value.songs;
+            let maxId = max(songs.map((o) => o.id)) || 0;
+            parsed.songs.forEach((imported) => {
+              if (!imported || !Array.isArray(imported.patterns)) return;
+              // eslint-disable-next-line no-unused-vars
+              const {id: importedId, soundEffects: bundled, ...songData} = imported;
+              songData.patterns.forEach((pattern) => {
+                (pattern.tracks || []).forEach((track) => {
+                  if (track.soundEffectId != null) {
+                    track.soundEffectId = idMap[track.soundEffectId] != null ? idMap[track.soundEffectId] : null;
+                  }
+                });
+              });
+              songData.sequence = normalizeSequenceGroups(songData.sequence);
+              const existing = songData.name && songs.find((o) => o.name === songData.name);
+              if (existing) {
+                Object.assign(existing, songData, {id: existing.id});
+                if (activePatternId(existing) && !existing.patterns.some(({id: pid}) => pid === activePatternId(existing))) {
+                  setActivePattern(existing, existing.patterns[0] && existing.patterns[0].id);
+                }
+              } else {
+                maxId += 1;
+                songs.push({
+                  loop: false, patternPreviewLoop: false, ...songData, id: maxId, name: songData.name || `Song ${maxId}`,
+                });
+              }
+            });
+            handleChildChange();
+            forceUpdate();
+          })
+          .catch((e) => console.error('Failed to import song bank', e));
+    };
+
     // Same bundled-instruments reasoning as soundEffectIdsUsedBySong above,
     // just scoped to one pattern's  tracks instead of every pattern in
     // a whole song.
@@ -1817,7 +1895,7 @@ export default defineComponent({
 
     // Same shape/reasoning as handleExportSong above, one level down - a
     // single pattern (with its  bundled instruments) as a standalone
-    // .json file, for reusing one pattern across songs/projects without
+    // .vcsmus file, for reusing one pattern across songs/projects without
     // dragging the whole song along with it.
     const handleExportPattern = (pattern) => {
       const usedIds = soundEffectIdsUsedByPattern(pattern);
@@ -1827,10 +1905,10 @@ export default defineComponent({
       const exportData = {...patternData, soundEffects: usedSoundEffects};
       const blob = new Blob([JSON.stringify(exportData, null, 2)], {type: 'application/json'});
       const filename = (pattern.name || `pattern-${pattern.id}`).replace(/[^A-Za-z0-9]+/g, '_');
-      saveAs(blob, `${filename}-${getDateInfix()}.json`);
+      saveAs(blob, `${filename}-${getDateInfix()}.vcsmus`);
     };
 
-    // Overwrites this pattern's  data with a previously exported .json
+    // Overwrites this pattern's  data with a previously exported .vcsmus
     // file's contents - keeps this pattern's  id (see
     // handleExportPattern) untouched so the song's  Sequence list
     // (which references patterns by id, not position - see
@@ -1838,7 +1916,7 @@ export default defineComponent({
     // importSoundEffects (see handleImportSong above) for the same
     // name-matched instrument reuse/creation.
     const handleImportPattern = (song, pattern) => {
-      openFileDialog('.json,application/json')
+      openFileDialog('.vcsmus,.json')
           .then((file) => file.text())
           .then((text) => {
             const parsed = JSON.parse(text);
@@ -3884,7 +3962,7 @@ export default defineComponent({
       pianoRollTool, setPianoRollTool, handleCellMouseDown,
       pianoRollSelection, isNoteSelected, marqueeSelecting, marqueeBoxStyle,
       handleTempoChange, minTempo: MIN_TEMPO, maxTempo: MAX_TEMPO,
-      handleAddSong, handleDeleteSong, handleDuplicateSong, handleExportSong, handleImportSong,
+      handleAddSong, handleDeleteSong, handleDuplicateSong, handleExportSong, handleImportSong, handleExportSongBank, handleImportSongBank,
       activeSongId, activeSong, activeSongArray, setActiveSong, songName, songOptions, handleSongFieldChange,
       handleAddPattern, handleDuplicatePattern, handleDeletePattern, handleStepCountChange,
       handlePatternFieldChange,
@@ -3951,65 +4029,50 @@ export default defineComponent({
   width: 100%;
 }
 
-/* Same control layout/spacing as SoundFXEditor.vue's  identical
-   .dim-controls/.dim-switch/.dim-slider/.dim-percent/.dim-hint rules -
-   this tab and that one share the same underlying config values (see
-   this component's dimSoundFx/dimSoundFxPercent), so the two controls
-   are kept visually identical too. */
-/* padding-bottom alone (not 0, unlike padding-top) - the DIM hint
-   paragraph below normally supplies the gap down to the audio toolbar via
-   its margin-bottom, but that whole paragraph (a "v-messages__message"
-   hint) disappears entirely in Expert mode (see App.vue's shared
-   .hide-description-text rule) - taking its margin with it and leaving
-   the DIM switch/slider crowding the toolbar right below with nothing
-   left providing any gap at all. This padding survives that regardless of
-   which the hint's visibility. */
-.dim-section {
-  padding-bottom: 12px;
-  padding-top: 0;
-  /* Pulls the DIM controls up slightly closer to the intro paragraph above
-     - App.vue's shared .tab-intro-section rule already zeroes that
-     paragraph's trailing padding, leaving just its standard 16px
-     v-messages__message margin-bottom as the gap (deliberately the same
-     everywhere else - see that rule's comment), but that still read as
-     a little too much space specifically above this tab's DIM row. */
-  margin-top: -6px;
-}
-
 .dim-controls {
   display: flex;
   align-items: center;
-  gap: 16px;
+  flex: 0 0 auto;
+  gap: 4px;
+  height: 26px;
+  /* Room between the divider before it and the DIM switch, on top of the
+     row's 4px gap (the same 8px as the Columns switches). */
+  margin-left: 8px;
 }
 
+/* Vuetify gives switches/checkboxes ("selection controls") a built-in
+   margin-top: 16px, meant for stacking them below other form fields - with
+   nothing above it here, that just pushes the switch down out of line with
+   the slider next to it (which has no such margin). !important because
+   Vuetify's ".v-input--selection-controls" rule outweighs a single
+   custom class on specificity alone. */
 .dim-switch {
   flex: 0 0 auto;
-  margin-top: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
 }
 
+/* A short slider: this sits at the left of the toolbar row, beside the
+   icon buttons. */
 .dim-slider {
-  flex: 0 1 200px;
-  margin-right: -12px;
-  margin-top: 3px;
+  flex: 0 0 90px;
+  margin: 0;
+  min-height: 0;
+}
+
+/* Keeps the slider (normally 32px tall) inside the 26px toolbar row. */
+.dim-slider >>> .v-input__control {
+  min-height: 26px;
+}
+
+.dim-slider >>> .v-input__slot {
+  margin: 0;
 }
 
 .dim-percent {
   flex: 0 0 auto;
   min-width: 2.5em;
 }
-
-/* font-size/color/line-height now come from the "v-messages theme--light
-   v-messages__message" classes on the element itself (see the template) -
-   the same classes every hint/description paragraph in the app uses. */
-.dim-hint {
-  margin-top: 8px;
-  /* .dim-section's padding-bottom is what now supplies the gap down to
-     the audio toolbar (see its comment) - kept at 0 here so the two
-     don't stack into double the gap whenever this hint is actually
-     visible (non-Expert-mode). */
-  margin-bottom: 0;
-}
-
 /* Left/right zeroed too - .song-card is a plain div now (no border/padding
  - see its comment), so this v-card-text's default 16px
    side padding used to stack with the inner v-card-text sections'
@@ -4191,15 +4254,13 @@ export default defineComponent({
      below exactly; this one, still at its original 0px-above/16px-bottom-
      padding, was the mismatch being compared against, not the other way
      around).
-     margin-top is 4px, not a flat 16px - .dim-section right above this
-     already has a 12px padding-bottom (unrelated, spacing its hint text
-     from its edge), which a flat 16px margin-top stacked on top of for a
-     real 28px total visual gap, not 16px - a real reported
-     follow-up ("still too much space above music toolbar"). 12 + 4 = 16,
-     matching GraphicEditorToolbar.vue's measured gap exactly once that
-     existing padding is accounted for instead of ignored. */
+     margin-top is -10px: close under the intro text while the toolbar is not
+     pinned. The intro paragraph's 16px bottom margin collapses with this
+     one, so a positive value changes nothing - this negative one pulls the
+     toolbar up to a 6px gap (the DIM controls that used to sit above are in
+     the toolbar now, and a 16px gap read as too much). */
   padding: 4px 16px;
-  margin-top: 4px;
+  margin-top: -10px;
   /* Also removed the plain, always-visible <v-divider> this used to have
      right after it in the template - sandwiched between this toolbar's
      padding-bottom and .song-list-section's zero padding-top, it left

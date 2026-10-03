@@ -2152,6 +2152,14 @@ export default {
   padding-bottom: 0;
 }
 
+/* Pulls a toolbar up close under its tab's intro text (Sound, Data, Sprites,
+   Background). The paragraph's 16px bottom margin collapses with this
+   negative one, leaving a 6px gap, and the same 6px remains with the
+   description text hidden (Expert mode). */
+.v-application .tight-under-intro {
+  margin-top: -10px;
+}
+
 
 /* Vuetify assigns v-menu/v-dialog overlay content its  z-index
    dynamically at open time (computed from whatever's already on the page,

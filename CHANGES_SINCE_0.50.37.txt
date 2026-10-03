@@ -358,3 +358,54 @@ Fix blocks not loading / not draggable after opening a project; widen the gap be
   per-track gains when playback stops, instead of staying connected for the
   session; the synthesized-buffer cache is capped at 400; and envelopes only
   schedule the frames where the level changes.
+
+=== 0.51.14 ===
+Song bank import/export on the Music tab, new .vcsbnk/.vcsmus file extensions, Data tab cell types, and tighter toolbar spacing under tab intro text
+
+- Data tab: the Notes field is now per value. Click a value cell (outlined in
+  blue while selected) and the field shows and edits that value's note; with
+  no cell selected (click anywhere else on the card, click the selected
+  number again, or use the icon at the field's right) it is the note for the
+  whole table, as before. A value that has a note has its number underlined
+  and shows the note when hovered. Notes follow their values when they are
+  reordered or removed, and are copied by the copy/paste and duplicate
+  buttons and covered by undo/redo.
+- Data tab: the icon button in each value cell now opens a menu listing every
+  entry mode (Decimal, Binary, Hex, Color swatch, Background, Player 0
+  animation, Player 1 animation, Sound effect, Song, Text string), with the
+  current one highlighted, instead of cycling to the next mode on each click.
+- Data tab: the Columns switch moved from above the toolbar into it, after the
+  import/export icons and a divider. The toolbar's icons now match the
+  graphic editor toolbar's states and spacing: the same dimmer disabled color,
+  hover only while enabled, and the small press-in; its height and divider
+  length line up with that toolbar too.
+- Sound tab: the Show filter and the Columns switch moved from above the
+  toolbar into it, to the right of the Play button.
+- Sound and Music tabs: the DIM switch and its (shorter) volume slider moved
+  into the toolbar, to the right of the Play button after a divider (on the
+  Sound tab before the Columns switch and Show filter); the DIM description is
+  now the controls' hover text. The toolbars sit closer under the tab's intro
+  text. The Columns/DIM switches use the same size, label and spacing as the
+  Options tab's switches (they had a smaller "dense" size, and the Data tab's
+  Columns switch a narrower gap before its label).
+- Score tab: the score background color swatch and the Score fade switch sit
+  closer under the Score font dropdown (12 px instead of 30 px).
+- Score tab (custom fonts): the "Use extra glyphs" switch and the "Add score
+  padding" dropdown now sit on the same line, and the row is closer to the
+  text above it.
+- Music tab: new song bank export/import buttons at the left of the toolbar
+  (the same database icons as the Sound tab's sound bank). Export saves every
+  song, with the instruments they use, to one .JSON file. Import adds every
+  song in the file; a song whose name matches one already in the project has
+  its contents replaced (keeping its id, so blocks pointing at it still
+  work), and instruments are matched by name like importing a single song.
+- Sound and Music tabs: exported files now use dedicated extensions: .vcsbnk
+  for sounds (single sound and sound bank) and .vcsmus for music (song, song
+  bank and pattern). Importing still accepts older .json files too.
+- Data, Sprites, Background, Title, Generated and Text tabs: the toolbar sits close under the intro text (the same 6px gap as the Sound tab), also with Expert mode on, where the gap had doubled. The
+  Data tab's toolbar margin comment is updated to match.
+- Data tab: a cell's mode menu has one "Sprite animation" entry instead of
+  separate Player 0 / Player 1 animation entries (both listed the same
+  animations). Cells saved as Player 1 animation show as Sprite animation.
+- Data tab: new "Title screen" cell type, a dropdown of the project's title
+  screens (stores the screen's id), listed above Sprite animation.

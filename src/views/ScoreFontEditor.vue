@@ -487,12 +487,21 @@ export default defineComponent({
 
 .score-extras-row {
   display: flex;
-  align-items: center;
+  /* Top-aligned (not centered): the switch's hint line below it makes it
+     taller than the select, which centered the two on different lines. The
+     select is nudged down to put its field on the switch's line instead. */
+  align-items: flex-start;
   gap: 16px;
+  /* Closer to the text above it. */
+  margin-top: -10px;
 }
 
 .score-padding-field {
   max-width: 200px;
+  /* Its value text is already on the switch's line at 4px; 6px more drops the
+     whole field, floating label included, toward the switch's middle, since
+     the label above the value makes the field read as sitting higher. */
+  margin-top: 10px;
 }
 
 /* Breathing room from the "Use extra glyphs" switch's  hint text
@@ -539,7 +548,10 @@ export default defineComponent({
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 8px;
+  /* Negative: pulls the row up under the Score font select, whose reserved
+     (empty) hint line below its field otherwise leaves about 30px between
+     the two. */
+  margin-top: -10px;
   margin-bottom: 16px;
 }
 

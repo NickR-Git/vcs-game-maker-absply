@@ -18,7 +18,7 @@
           adds a little overhead too, so stay comfortably under that.
         </p>
 
-        <graphic-editor-toolbar :active-editor="effectiveFrameEditor" @height-hotkey="handleSetHeightHotkey">
+        <graphic-editor-toolbar class="tight-under-intro" :active-editor="effectiveFrameEditor" @height-hotkey="handleSetHeightHotkey">
           <template v-slot:before-tools>
             <editor-zoom v-model="zoom" :levels="titlescreenZoomLevels" />
             <pixel-grid-toggle v-model="showPixelGrid" />
