@@ -409,3 +409,5 @@ Song bank import/export on the Music tab, new .vcsbnk/.vcsmus file extensions, D
   animations). Cells saved as Player 1 animation show as Sprite animation.
 - Data tab: new "Title screen" cell type, a dropdown of the project's title
   screens (stores the screen's id), listed above Sprite animation.
+- Options tab: the TV standard, ROM size, "Show score" and Override row height fields sit closer
+  together.

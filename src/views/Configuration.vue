@@ -21,7 +21,7 @@
           @change="handleChangeConfiguration"
           :items="tvStandardOptions"
           label="TV standard"
-          class="mb-4"
+          class="mb-0"
           hint="NTSC is the North American color standard. PAL60 is a PAL console's color signal at the same 60 Hz timing: the emulator preview follows it, each color is swapped in the ROM for the closest PAL color, and the sound previews use the PAL audio clock. Frame-based timing (durations, tempo) is identical to NTSC."
           persistent-hint
         />
@@ -40,7 +40,7 @@
           label="Show score at bottom of screen (noscore)"
           hint="Turning this off skips the score display code entirely, freeing up ROM space."
           persistent-hint
-          class="option-switch"
+          class="option-switch score-switch"
         />
         <v-switch
           v-model="configurationState.muteAllAudio"
@@ -759,14 +759,10 @@ export default defineComponent({
 }
 
 /* The "Override playfield row height" switch reads as belonging with
-   Superchip's switch (it's the next "advanced ROM knob" down the
-   list), even though .pfres-field now sits between them in the DOM - the
-   generic ".option-switch + .option-switch" rule above only tightens
-   switches that are immediate DOM siblings, which this one no longer is,
-   so it needs its explicit override to get the same tighter spacing
-   once Expert mode's hint text is gone. Left alone (Vuetify's default
-   spacing) while Expert mode is off. */
-.hide-description-text .pfrowheight-switch {
+   Superchip's switch (it's the next "advanced ROM knob" down the list),
+   even though .pfres-field sits between them in the DOM, so it sits close
+   under that field with or without the description text showing. */
+.pfrowheight-switch {
   margin-top: 2px;
 }
 </style>
