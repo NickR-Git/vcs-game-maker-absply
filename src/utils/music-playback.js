@@ -9,7 +9,8 @@
 // plain oscillator) so a buzzy/noisy instrument like a drum "Kick" actually
 // sounds buzzy here too, not like a clean tone.
 import {
-  AUDC_APPROXIMATIONS, buildBuzzBuffer, buildDiv31Buffer, buildGatedBuzzBuffer, buildSquareBuffer, shiftClockFor,
+  AUDC_APPROXIMATIONS, buildBuzzBuffer, buildDiv31Buffer, buildGatedBuzzBuffer, buildSquareBuffer, getAudioContext,
+  peekAudioContext, shiftClockFor,
 } from './sound-preview';
 import {DEFAULT_PATTERN_STEPS, DEFAULT_TEMPO, LENGTH_UNITS_PER_STEP} from '../blocks/music';
 import {DEFAULT_DIM_PERCENT} from '../generators/bbasic/soundfx';
@@ -18,17 +19,7 @@ import {useDimSoundFxPercentStorage, useDimSoundFxStorage} from '../hooks/projec
 import {audcHasTunableNotes, noteAudv} from './music-notes';
 import {buildEnvelopeCurve} from './envelope';
 
-let audioContext = null;
-const getAudioContext = () => {
-  if (!audioContext) {
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    audioContext = new AudioContextClass();
-  }
-  if (audioContext.state === 'suspended') {
-    audioContext.resume();
-  }
-  return audioContext;
-};
+// The AudioContext is shared with the Sound tab's preview (utils/sound-preview.js).
 
 // Every note's peak gain is individually capped at 0.3 (see peakGain in
 // playInstrumentHit below), but that only ever bounds ONE note by itself -
@@ -155,8 +146,12 @@ const buildGain = (context, {peakGain, peakVolume, startTime, seconds, envelope,
       releaseStartPercent: envelopeReleaseStart, sustainLength: envelopeSustainLength, release: envelopeRelease,
       peakVolume, totalFrames, loopSustain: true,
     });
+    // Only the frames where the level changes - a held level stays put until
+    // the next automation point anyway, and a long note is hundreds of frames.
     curve.forEach((step, i) => {
-      gainNode.gain.setValueAtTime(step / 15 * 0.3 * dimMultiplier, startTime + i / FRAMES_PER_SECOND);
+      if (i === 0 || step !== curve[i - 1]) {
+        gainNode.gain.setValueAtTime(step / 15 * 0.3 * dimMultiplier, startTime + i / FRAMES_PER_SECOND);
+      }
     });
     endValue = curve[curve.length - 1] / 15 * 0.3 * dimMultiplier;
   } else {
@@ -226,7 +221,7 @@ const connectWithEdgeFade = (context, source, destination, segStartTime, segSeco
   const fade = Math.min(EDGE_FADE_SECONDS, segSeconds / 2);
   if (fade <= 0) {
     source.connect(destination);
-    return;
+    return null;
   }
   const edgeGain = context.createGain();
   edgeGain.gain.setValueAtTime(0, segStartTime);
@@ -235,6 +230,24 @@ const connectWithEdgeFade = (context, source, destination, segStartTime, segSeco
   edgeGain.gain.linearRampToValueAtTime(0, segStartTime + segSeconds);
   source.connect(edgeGain);
   edgeGain.connect(destination);
+  return edgeGain;
+};
+
+// Detaches a note's gain nodes from the output once every one of its sources
+// has finished - otherwise each note (and each arpeggio segment) leaves its
+// nodes connected for good, and the click-to-place preview alone adds a few
+// per click. Listens with addEventListener so it doesn't replace the
+// source's onended (pruneOnEnded's).
+const disconnectWhenAllEnded = (sources, nodes) => {
+  let remaining = sources.length;
+  if (!remaining) {
+    nodes.forEach((node) => node.disconnect());
+    return;
+  }
+  sources.forEach((source) => source.addEventListener('ended', () => {
+    remaining--;
+    if (remaining === 0) nodes.forEach((node) => node.disconnect());
+  }));
 };
 
 // Buffer-based waveforms (square/buzz/div31/gatedbuzz) are pure functions of
@@ -248,6 +261,7 @@ const connectWithEdgeFade = (context, source, destination, segStartTime, segSeco
 // finite set in practice (a song only has so many distinct instrument/pitch/
 // duration combinations) - nowhere near large enough to worry about memory.
 const buzzBufferCache = new Map();
+const MAX_CACHED_BUFFERS = 400;
 const buildBufferCached = (context, approximation, chipClockHz, seconds) => {
   // Rounded for the cache key only (not the actual synthesis call below) -
   // two notes that are musically "the same" duration/pitch can still differ
@@ -268,6 +282,11 @@ const buildBufferCached = (context, approximation, chipClockHz, seconds) => {
       buffer = buildBuzzBuffer(context, chipClockHz, seconds, approximation.bits,
           {stepDivider: approximation.stepDivider});
     }
+    // Bounded: a long editing session with many different pitches/lengths
+    // would otherwise keep every buffer it ever built. Dropping the whole
+    // cache just means rebuilding what is still used (buffers already in use
+    // by a playing source stay alive through the source).
+    if (buzzBufferCache.size >= MAX_CACHED_BUFFERS) buzzBufferCache.clear();
     buzzBufferCache.set(key, buffer);
   }
   return buffer;
@@ -309,10 +328,11 @@ const playInstrumentHit = (context, {audc, audf, audv, arpeggioSpeed, arpeggioIn
   if (!arpeggioSpeed) {
     const source = context.createBufferSource();
     source.buffer = buildBuffer(shiftClockFor(audf, {slowClock: approximation.slowClock}), seconds);
-    connectWithEdgeFade(context, source, gainNode, startTime, seconds);
+    const edgeGain = connectWithEdgeFade(context, source, gainNode, startTime, seconds);
     source.start(startTime);
     source.stop(startTime + seconds);
     pruneOnEnded(source);
+    disconnectWhenAllEnded([source], edgeGain ? [edgeGain, gainNode] : [gainNode]);
     return [source];
   }
 
@@ -325,6 +345,7 @@ const playInstrumentHit = (context, {audc, audf, audv, arpeggioSpeed, arpeggioIn
   const sequence = ARPEGGIO_PHASE_SEQUENCES[arpeggioRange] || ARPEGGIO_PHASE_SEQUENCES[0];
   const flipSeconds = arpeggioSpeed / FRAMES_PER_SECOND;
   const sources = [];
+  const nodes = [gainNode];
   let t = startTime;
   let phase = 0;
   while (t < startTime + seconds) {
@@ -332,7 +353,8 @@ const playInstrumentHit = (context, {audc, audf, audv, arpeggioSpeed, arpeggioIn
     const chipClockHz = shiftClockFor(variants[sequence[phase % sequence.length]], {slowClock: approximation.slowClock});
     const source = context.createBufferSource();
     source.buffer = buildBuffer(chipClockHz, segmentSeconds);
-    connectWithEdgeFade(context, source, gainNode, t, segmentSeconds);
+    const edgeGain = connectWithEdgeFade(context, source, gainNode, t, segmentSeconds);
+    if (edgeGain) nodes.push(edgeGain);
     source.start(t);
     source.stop(t + segmentSeconds);
     pruneOnEnded(source);
@@ -340,6 +362,7 @@ const playInstrumentHit = (context, {audc, audf, audv, arpeggioSpeed, arpeggioIn
     phase++;
     t += flipSeconds;
   }
+  disconnectWhenAllEnded(sources, nodes);
   return sources;
 };
 
@@ -425,7 +448,7 @@ export const stopPatternPlayback = () => {
     clearTimeout(stopTimer);
     stopTimer = null;
   }
-  const context = audioContext;
+  const context = peekAudioContext();
   const now = context ? context.currentTime : 0;
   activeSources.forEach((source) => {
     try {
@@ -436,6 +459,11 @@ export const stopPatternPlayback = () => {
   });
   activeSources = [];
   playbackTimeline = [];
+  // The per-track gain nodes only exist for this playback session: dropped
+  // here so a long editing session doesn't keep one connected node for every
+  // pattern/track ever played (the next Play makes fresh ones).
+  trackMuteGains.forEach((gainNode) => gainNode.disconnect());
+  trackMuteGains.clear();
 };
 
 /**
@@ -447,8 +475,9 @@ export const stopPatternPlayback = () => {
  *     before the first note's scheduled startTime).
  */
 export const getPlaybackHead = () => {
-  if (!audioContext || !playbackTimeline.length) return null;
-  const now = audioContext.currentTime;
+  const context = peekAudioContext();
+  if (!context || !playbackTimeline.length) return null;
+  const now = context.currentTime;
   const segment = playbackTimeline.find(({startTime, endTime}) => now >= startTime && now < endTime);
   if (!segment) return null;
   return {

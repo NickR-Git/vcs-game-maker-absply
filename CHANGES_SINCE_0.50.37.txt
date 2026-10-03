@@ -320,3 +320,41 @@ Fix the Music tab's pattern row overflowing in narrow windows
   default 800 px) the old Length/Tempo group was wider than the row, so it
   stuck out past the right edge, pushed Tempo out of line with the song's and
   made the window scroll sideways.
+
+=== 0.51.13 ===
+Fix blocks not loading / not draggable after opening a project; widen the gap between Sound name and Priority
+
+- Opening a project containing a "Stop" Inertia/Accelerate block or a
+  "Joystick fire released" block could abort partway through loading the
+  Actions tab: the rest of the blocks never appeared, and Blockly's render
+  queue was left stuck so blocks dragged out of the toolbox didn't show up
+  (they appeared again after switching tabs). Those blocks now ask Blockly to
+  draw them on its next frame instead of rendering in the middle of loading.
+  Also guarded the delayed re-renders against blocks that no longer exist.
+- Sound tab: more space between the Sound name and Priority fields (8 px,
+  matching the gap between Frequency and Volume).
+- Emulator: new camera button, left of the keyboard-mapping button, that saves
+  the emulator screen as a PNG (screenshot-<date-time>.png), at the shape it
+  is shown on screen (twice as wide as the console's raw pixels) with sharp
+  pixel edges. It shares the keyboard button's flat-icon styling (faint at
+  rest, darker on hover, including with Soft Colors on) and both are 28 px so
+  the toolbar still fits the default emulator width.
+- Dark Mode: the Music tab's sequence chips and the collapsed instrument chips
+  keep their real colors instead of being inverted.
+- Music tab: the Pattern Editor section is now open or closed as one setting
+  for the whole tab, instead of being remembered separately for every song
+  and pattern. Switching patterns, or adding or duplicating a pattern or
+  song, leaves it as you set it.
+- Fixed the Music tab freezing and then crashing the browser tab while a song
+  or pattern played. Every re-render of a large piano roll (about 3,700 cells
+  in a typical song) took 300+ ms and allocated roughly 170 MB, and playback
+  re-rendered it many times a second to move the playhead; the heap reached
+  several GB. A render now takes about 45 ms and allocates a few MB: notes,
+  instrument lookups, colours, blocked ranges and the per-note AUDC tables
+  are worked out once per render instead of once per cell, and the playhead
+  only updates when it reaches another slice, at most 10 times a second.
+- Music and Sound previews: both tabs now share one audio context (they used
+  two); each note's gain nodes are disconnected when it finishes and the
+  per-track gains when playback stops, instead of staying connected for the
+  session; the synthesized-buffer cache is capped at 400; and envelopes only
+  schedule the frames where the level changes.

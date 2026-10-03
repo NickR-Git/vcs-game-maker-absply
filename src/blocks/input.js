@@ -237,7 +237,8 @@ Blockly.Extensions.register('input_fire_pattern_frames_sync', function() {
     const shouldBeVisible = mode !== 'RELEASED';
     if (input.isVisible() === shouldBeVisible) return;
     input.setVisible(shouldBeVisible);
-    if (typeof block.render === 'function') block.render();
+    if (typeof block.queueRender === 'function') block.queueRender();
+    else if (typeof block.render === 'function') block.render();
     if (block.workspace.resizeContents) block.workspace.resizeContents();
   };
   applyVisibility(modeField.getValue());

@@ -215,15 +215,11 @@ export default {
   grid-template-columns: repeat(3, 1fr);
 }
 
-/* Same flat-icon, fade-in-on-hover/blue-on-press treatment as every other
-   icon button in the app (e.g. Project.vue's .project-flat-icon-btn,
-   GeneratedCode.vue's .generated-code-flat-icon-btn) - transparent
-   background (no Vuetify default hover circle), icon fades from a faint
-   grey to near-black on hover, and flashes the app's blue on an actual
-   click/press. */
+/* The flat-icon look (transparent background, icon fading from faint grey to
+   near-black on hover and flashing blue on press) is shared with the
+   screenshot button beside this one, so it lives in App.vue's unscoped
+   .emulator-flat-icon-btn rules. Only this button's placement is here. */
 .emulator-flat-icon-btn {
-  background-color: transparent !important;
-  box-shadow: none !important;
   /* Pushes this button to the far right of .emulator-toolbar-row, flush
      with the emulator window's right edge (#gopher2600-target-container
      shares that same row's width - see App.vue's template). Auto
@@ -236,20 +232,4 @@ export default {
   margin-right: 4px !important;
 }
 
-.emulator-flat-icon-btn::before {
-  display: none;
-}
-
-.emulator-flat-icon-btn >>> .v-icon {
-  color: rgba(0, 0, 0, 0.38) !important;
-  transition: color 0.15s ease;
-}
-
-.emulator-flat-icon-btn:hover >>> .v-icon {
-  color: rgba(0, 0, 0, 0.87) !important;
-}
-
-.emulator-flat-icon-btn:active >>> .v-icon {
-  color: var(--v-primary-base, #1976d2) !important;
-}
 </style>

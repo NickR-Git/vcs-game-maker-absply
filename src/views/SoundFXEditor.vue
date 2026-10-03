@@ -1423,6 +1423,9 @@ export default defineComponent({
 .soundfx-priority {
   flex: 0 0 80px;
   margin-top: 20px;
+  /* The row's gap is 4px; this brings the Sound name -> Priority space to
+     8px, the same as Frequency -> Volume (.soundfx-basic-fields-row's gap). */
+  margin-left: 4px;
 }
 
 /* Same flat-icon, fade-in-on-hover treatment as .soundfx-stop-btn/

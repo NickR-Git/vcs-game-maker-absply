@@ -444,6 +444,7 @@
                           small
                           :color="instrumentColor(track)"
                           :style="{color: instrumentTextColor(track)}"
+                          class="instrument-summary-chip"
                           :class="{'instrument-summary-chip-active': isActiveTrack(activePattern(song), track)}"
                           title="Click to edit this instrument's notes"
                           @click="() => setActiveTrack(activePattern(song), track)"
@@ -776,7 +777,7 @@
 </template>
 <script>
 import {
-  computed, defineComponent, getCurrentInstance, nextTick, onBeforeUnmount, onMounted, ref, watch,
+  computed, defineComponent, getCurrentInstance, nextTick, onBeforeUnmount, onBeforeUpdate, onMounted, ref, watch,
 } from '@vue/composition-api';
 import {saveAs} from 'file-saver';
 import {max} from 'lodash';
@@ -1099,6 +1100,21 @@ export default defineComponent({
     // the moment the Sound tab changed anything, since Vue's ref reactivity
     // skips notifying dependents when a ref is set to a value that's
     // reference-equal to what it already held.
+    // Values the piano roll would otherwise recompute for every one of its
+    // (thousands of) cells, kept for the length of one render: the cache is
+    // emptied before each re-render, so it is rebuilt from the current data
+    // inside that render, where Vue tracks what it reads. Rendering one cell
+    // used to cost about a millisecond, and playback re-renders the roll
+    // many times a second to move the playhead - that froze the tab and then
+    // crashed it once memory ran out.
+    const newRenderCache = () => ({
+      soundEffectsById: null, instrumentColors: new WeakMap(), cellNotes: new WeakMap(), blockedRanges: new Map(),
+    });
+    let renderCache = newRenderCache();
+    onBeforeUpdate(() => {
+      renderCache = newRenderCache();
+    });
+
     const soundEffects = () => {
       try {
         return processSoundEffectsStorageDefaults(soundEffectsStorage).soundEffects;
@@ -1241,36 +1257,24 @@ export default defineComponent({
       handleChildChange();
     };
 
-    // Pattern ids are only unique WITHIN their  song (see
-    // handleAddPattern/handleDuplicatePattern), not globally, unlike
-    // song.id/soundEffect.id elsewhere - useCollapsedIds keys purely off
-    // entry.id, so a plain pattern object would collide between two
-    // different songs' "Pattern 1". A synthetic {id: "songId:patternId"}
-    // entry (see patternCollapseEntry) disambiguates that without needing
-    // to change useCollapsedIds itself. Two independent collapse states
-    // share this same keying: the whole pattern sub-card (collapsing hides
-    // everything below the Pattern name/Length/Tempo row - instruments,
-    // piano roll, zoom/playback controls, all of it), and, nested one level
-    // in, just the Instruments list by itself (collapsing that alone still
-    // leaves the piano roll and zoom/playback controls visible).
-    const patternCollapseEntry = (song, pattern) => ({id: `${song.id}:${pattern.id}`});
+    // The Pattern Editor section is open or closed as ONE setting for the whole
+    // tab - whatever the user last chose - rather than remembered per song and
+    // pattern, so every pattern (a new or duplicated one, or one picked from
+    // the sequence chips) shows it the same way. useCollapsedIds keys off
+    // entry.id, so this one fixed entry stands in for every pattern; the
+    // song/pattern arguments below only keep the template's call sites as
+    // they were. Collapsing it hides everything below the Pattern name/Length/
+    // Tempo row - instruments, piano roll, zoom/playback controls, all of it.
+    // The Instruments list nested inside has a separate state (below).
+    const PATTERN_EDITOR_COLLAPSE_ENTRY = {id: 'pattern-editor'};
     const {isCollapsed: isPatternCollapsedRaw, toggleCollapsed: togglePatternCollapsedRaw,
-      ensureExpanded: ensurePatternExpanded, setCollapsed: setPatternCollapsedRaw,
       collapseAll: collapseAllPatterns} = useCollapsedIds('music-pattern', true);
     collapseAllPatterns();
-    const isPatternCollapsed = (song, pattern) => isPatternCollapsedRaw(patternCollapseEntry(song, pattern));
-    const togglePatternCollapsed = (song, pattern) => togglePatternCollapsedRaw(patternCollapseEntry(song, pattern));
-    // See handleAddSong/handleDuplicateSong's use of this - copies a
-    // NEW song's first pattern's collapsed state from an EXISTING pattern,
-    // rather than unconditionally forcing it open the way ensurePatternExpanded
-    // does (used elsewhere, for handleAddPattern/handleDuplicatePattern,
-    // where forcing a brand new pattern open within the SAME song is still
-    // the wanted behaviour - only the new-SONG case needed this instead, a
-    // real reported refinement: "the sequencer section shouldn't open, just
-    // leave sequencer and pattern editor in whatever their current state
-    // is").
-    const setPatternCollapsed = (song, pattern, value) => setPatternCollapsedRaw(patternCollapseEntry(song, pattern), value);
-    // Keyed by song alone (not song+pattern like patternCollapseEntry above)
+    // eslint-disable-next-line no-unused-vars
+    const isPatternCollapsed = (song, pattern) => isPatternCollapsedRaw(PATTERN_EDITOR_COLLAPSE_ENTRY);
+    // eslint-disable-next-line no-unused-vars
+    const togglePatternCollapsed = (song, pattern) => togglePatternCollapsedRaw(PATTERN_EDITOR_COLLAPSE_ENTRY);
+    // Keyed by song alone (not one setting for the whole tab like the Pattern Editor above)
     // - one shared expanded/collapsed state for the whole song's Instruments
     // section, not a separate one remembered per pattern (so creating/
     // duplicating a PATTERN within an existing song never touches this at
@@ -1290,7 +1294,7 @@ export default defineComponent({
     // Same idea, one level up - the whole Sequence (play order) row (every
     // chip, plus the "Add pattern to sequence" select) collapsed away to
     // just its  label. song.id is already globally unique (unlike
-    // pattern.id - see patternCollapseEntry's  comment), so this can
+    // pattern.id), so this can
     // key off the song object directly instead of needing a synthetic
     // compound entry.
     const {isCollapsed: isSequenceCollapsed, toggleCollapsed: toggleSequenceCollapsed,
@@ -1630,8 +1634,6 @@ export default defineComponent({
       if (previousSong) {
         setSequenceCollapsed(newSong, isSequenceCollapsed(previousSong));
         setInstrumentsCollapsed(newSong, isInstrumentsCollapsed(previousSong));
-        setPatternCollapsed(newSong, newSong.patterns[0],
-            isPatternCollapsed(previousSong, activePattern(previousSong)));
       }
       setActiveSong(newSong.id);
       handleChildChange();
@@ -1671,7 +1673,6 @@ export default defineComponent({
       // actually shown either way.
       setSequenceCollapsed(newSong, isSequenceCollapsed(song));
       setInstrumentsCollapsed(newSong, isInstrumentsCollapsed(song));
-      setPatternCollapsed(newSong, newSong.patterns[0], isPatternCollapsed(song, song.patterns[0]));
       setActiveSong(newSong.id);
       handleChildChange();
       // Same DOM-not-ready-yet reasoning as handleAddSong's nextTick.
@@ -1877,14 +1878,6 @@ export default defineComponent({
         tracks: [emptyTrack(1, firstSoundEffectId)],
       };
       song.patterns.push(newPattern);
-      // Without this, a brand new pattern's synthetic collapse-state id
-      // (song.id:pattern.id) has never been in the stored map, so
-      // isPatternCollapsed falls back to useCollapsedIds'
-      // defaultCollapsed (true here) and the pattern section this new
-      // pattern becomes active in renders collapsed - confirmed as a real
-      // reported bug ("don't collapse pattern section when creating a new
-      // pattern").
-      ensurePatternExpanded(patternCollapseEntry(song, newPattern));
       // setActivePattern itself now already fits the zoom to whichever
       // pattern becomes active (see its comment), so a brand new
       // pattern gets that for free here - no separate handleFitZoom call
@@ -1903,8 +1896,6 @@ export default defineComponent({
         name: `${pattern.name || 'Pattern'} copy`,
       };
       song.patterns.push(newPattern);
-      // Same reasoning as handleAddPattern's call just above.
-      ensurePatternExpanded(patternCollapseEntry(song, newPattern));
       // Same free fit-to-length as handleAddPattern above, via
       // setActivePattern.
       setActivePattern(song, newPattern.id);
@@ -2352,9 +2343,30 @@ export default defineComponent({
       }
       playbackHead.value = null;
     };
+    // Every change to playbackHead re-renders the whole piano roll (thousands
+    // of cells), so it is only updated when the playhead has actually moved to
+    // another slice (the playhead is drawn snapped to slices - see
+    // playheadSliceLayer) and at most every PLAYHEAD_MIN_INTERVAL_MS, instead
+    // of with a fresh object on every animation frame. A move to another
+    // pattern or sequence chip is applied at once.
+    const PLAYHEAD_MIN_INTERVAL_MS = 100;
+    let lastPlaybackHeadUpdate = 0;
     const startPlaybackHeadPolling = () => {
       const tick = () => {
-        playbackHead.value = getPlaybackHead();
+        const head = getPlaybackHead();
+        const previous = playbackHead.value;
+        const now = window.performance.now();
+        let apply = head !== previous;
+        if (head && previous) {
+          const slice = subdivisionUnitLength();
+          const sameSegment = head.patternId === previous.patternId && head.sequenceIndex === previous.sequenceIndex;
+          const sameSlice = Math.floor(head.elapsedUnits / slice) === Math.floor(previous.elapsedUnits / slice);
+          apply = !sameSegment || (!sameSlice && now - lastPlaybackHeadUpdate >= PLAYHEAD_MIN_INTERVAL_MS);
+        }
+        if (apply) {
+          playbackHead.value = head;
+          lastPlaybackHeadUpdate = now;
+        }
         playbackHeadFrame = window.requestAnimationFrame(tick);
       };
       if (playbackHeadFrame == null) tick();
@@ -2563,12 +2575,27 @@ export default defineComponent({
     // Only pure-tone AUDC values (see utils/music-notes.js) have a clean,
     // tunable pitch - anything else can only be triggered on/off per step,
     // via the shared "Hit" row instead of a real pitch.
-    const trackSoundEffect = (track) => soundEffects().find(({id}) => id == track.soundEffectId);
+    // Looked up by id through a per-render map (see renderCache below), not by
+    // re-reading and re-processing the stored sound effects for every call -
+    // the piano roll calls this for every cell it draws.
+    const trackSoundEffect = (track) => {
+      if (!renderCache.soundEffectsById) {
+        renderCache.soundEffectsById = new Map(soundEffects().map((soundEffect) => [`${soundEffect.id}`, soundEffect]));
+      }
+      return renderCache.soundEffectsById.get(`${track.soundEffectId}`);
+    };
 
     // The color is set on the Sound tab (see ColorSwatchPicker there) - the
     // Music tab only displays it, keyed off whichever sound effect the
     // track is currently pointed at.
-    const instrumentColor = (track) => instrumentColorFor(trackSoundEffect(track));
+    const instrumentColor = (track) => {
+      let color = renderCache.instrumentColors.get(track);
+      if (color === undefined) {
+        color = instrumentColorFor(trackSoundEffect(track));
+        renderCache.instrumentColors.set(track, color);
+      }
+      return color;
+    };
 
     // Chip text color for the collapsed instrument summary below - a
     // hardcoded white (see the chip's  former "dark" prop) read poorly
@@ -2808,6 +2835,11 @@ export default defineComponent({
     // stay fully available.
     const blockedRangesInStep = (pattern, activeTrack, step) => {
       if (!activeTrack) return [];
+      // The same for every row of a step, so computed once per step per
+      // render rather than once per cell.
+      const cacheKey = `${pattern.id}:${activeTrack.id}:${step}`;
+      const cached = renderCache.blockedRanges.get(cacheKey);
+      if (cached) return cached;
       const stepStartUnits = step * LENGTH_UNITS_PER_STEP;
       const stepEndUnits = stepStartUnits + LENGTH_UNITS_PER_STEP;
       const ranges = [];
@@ -2819,6 +2851,7 @@ export default defineComponent({
           if (end > start) ranges.push({start, end});
         });
       });
+      renderCache.blockedRanges.set(cacheKey, ranges);
       return ranges;
     };
 
@@ -2827,18 +2860,41 @@ export default defineComponent({
     // track} touching (row.midi, step), active track's  notes first, so
     // they're never hidden behind an overlapping different-channel track's
     // note when both are drawn.
-    const notesInCell = (pattern, row, step) => {
+    //
+    // Every cell of the piano roll asks this several times per render (its
+    // style, classes and title), and a pattern can have thousands of cells, so
+    // answering each by scanning every note of every track made one render
+    // take hundreds of milliseconds and allocate hundreds of megabytes - and
+    // playback re-renders the roll many times a second to move the playhead,
+    // which froze and then crashed the browser tab. The notes are indexed by
+    // (row, step) once per render instead (the index is dropped before each
+    // re-render, so it is rebuilt from the current notes every time, inside
+    // that render, where Vue tracks what it reads).
+    const cellNotesIndex = (pattern) => {
+      let index = renderCache.cellNotes.get(pattern);
+      if (index) return index;
+      index = new Map();
+      const addTrack = (track) => {
+        (track.notes || []).forEach((note) => {
+          const lastStep = noteEndStepExclusive(note);
+          for (let step = noteStartStep(note); step < lastStep; step++) {
+            const key = `${note.midi}:${step}`;
+            const found = index.get(key);
+            if (found) found.push({note, track});
+            else index.set(key, [{note, track}]);
+          }
+        });
+      };
       const activeTrack = activeTrackFor(pattern);
-      const notesInTrack = (track) => (track.notes || [])
-          .filter((candidate) => candidate.midi === row.midi && step >= noteStartStep(candidate) &&
-            step < noteEndStepExclusive(candidate))
-          .map((note) => ({note, track}));
-      const found = (activeTrack && !isTrackHidden(pattern, activeTrack)) ? notesInTrack(activeTrack) : [];
+      if (activeTrack && !isTrackHidden(pattern, activeTrack)) addTrack(activeTrack);
       pattern.tracks.forEach((track) => {
-        if (track !== activeTrack && !isTrackHidden(pattern, track)) found.push(...notesInTrack(track));
+        if (track !== activeTrack && !isTrackHidden(pattern, track)) addTrack(track);
       });
-      return found;
+      renderCache.cellNotes.set(pattern, index);
+      return index;
     };
+    const NO_NOTES = Object.freeze([]);
+    const notesInCell = (pattern, row, step) => cellNotesIndex(pattern).get(`${row.midi}:${step}`) || NO_NOTES;
 
     // The single note this cell would report for simple (title/tip/resize)
     // purposes - the active track's  note here if it has one, otherwise

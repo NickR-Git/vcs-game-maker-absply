@@ -471,6 +471,7 @@ export const registerDropdownFieldSyncExtension = (extensionName, dropdownFieldN
         // committed AND any of this block's later field tags have
         // already applied - avoids both problems at once.
         setTimeout(() => {
+          if (!block.workspace || (typeof block.isDeadOrDying === 'function' && block.isDeadOrDying())) return;
           const oldName = namePrefixFor(oldValue);
           const newName = namePrefixFor(newValue);
           const current = varField.getValue();
@@ -694,7 +695,12 @@ Blockly.Extensions.register('sprite_player_set_loop_visibility_sync', function()
     // (which already reads isVisible() fresh regardless) has happened by
     // the time this actually runs.
     setTimeout(() => {
-      if (typeof block.render === 'function') block.render();
+      // The block may be gone by now (the tab was left or a project was
+      // imported in the meantime): rendering a disposed block throws and
+      // breaks Blockly's shared render queue for every later render.
+      if (!block.workspace || (typeof block.isDeadOrDying === 'function' && block.isDeadOrDying())) return;
+      if (typeof block.queueRender === 'function') block.queueRender();
+      else if (typeof block.render === 'function') block.render();
       if (block.workspace && block.workspace.resizeContents) block.workspace.resizeContents();
     }, 0);
   };
@@ -1151,7 +1157,8 @@ Blockly.Extensions.register('sprite_inertia_accelerate_action_sync', function() 
       changed = true;
     });
     if (!changed) return;
-    if (typeof block.render === 'function') block.render();
+    if (typeof block.queueRender === 'function') block.queueRender();
+    else if (typeof block.render === 'function') block.render();
     if (block.workspace.resizeContents) block.workspace.resizeContents();
   };
   applyVisibility(actionField.getValue());

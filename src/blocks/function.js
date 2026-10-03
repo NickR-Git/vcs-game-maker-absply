@@ -253,6 +253,8 @@ function ensureFunctionCallListener(workspace) {
  */
 function updateFunctionCallArgVisibility(block) {
   if (!block.workspace || !block.workspace.rendered) return;
+  // Called from a deferred timer too, by which time the block can be gone.
+  if (typeof block.isDeadOrDying === 'function' && block.isDeadOrDying()) return;
   let highestConnected = 0;
   for (let i = 1; i <= MAX_FUNCTION_ARGS; i++) {
     const target = block.getInputTargetBlock(`ARG${i}`);
@@ -269,7 +271,10 @@ function updateFunctionCallArgVisibility(block) {
       changed = true;
     }
   }
-  if (changed && typeof block.render === 'function') {
+  if (changed && typeof block.queueRender === 'function') {
+    block.queueRender();
+    if (block.workspace && block.workspace.resizeContents) block.workspace.resizeContents();
+  } else if (changed && typeof block.render === 'function') {
     block.render();
     if (block.workspace && block.workspace.resizeContents) block.workspace.resizeContents();
   }

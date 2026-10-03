@@ -776,6 +776,14 @@ export default {
       // diagnosed once this upgrade for a different inject()-time crash
       // (see the FieldDropdown.getOptions alt-text guard above).
       this.workspace.dispose();
+      // Marks this component as torn down so the delayed re-render calls
+      // (the font-load promise and the drag-retry poll in
+      // rerenderForFontLoad) don't run against the disposed workspace: its
+      // blocks' fields are already freed, so rendering them throws "The text
+      // content is null" and leaves Blockly's shared render queue broken -
+      // after which nothing new (a block dragged out of the toolbox, say)
+      // can render.
+      this.workspaceDisposed = true;
     }
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
@@ -858,7 +866,7 @@ export default {
     // just above) rather than a one-shot deferral, since a drag can easily
     // still be in progress the first time this checks back too.
     rerenderForFontLoad() {
-      if (!this.workspace) return;
+      if (!this.workspace || this.workspaceDisposed) return;
       if (this.workspace.isDragging && this.workspace.isDragging()) {
         setTimeout(() => this.rerenderForFontLoad(), 100);
         return;

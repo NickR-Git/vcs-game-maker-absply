@@ -21,10 +21,13 @@ import {buildEnvelopeCurve} from './envelope';
 // tones stay smooth while everything else has an audibly gritty character.
 // This is still an approximation, not a faithful emulation of the hardware.
 
-// One shared context, created lazily since browsers require a user gesture
-// before audio can start.
+// One shared context (music-playback.js uses this same one - a second context
+// would be a second audio thread running for the whole session), created
+// lazily since browsers require a user gesture before audio can start.
 let audioContext = null;
-const getAudioContext = () => {
+// The context if one has been created yet, without creating it.
+export const peekAudioContext = () => audioContext;
+export const getAudioContext = () => {
   if (!audioContext) {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     audioContext = new AudioContextClass();
@@ -359,8 +362,10 @@ export const previewSoundEffect = ({
       releaseStartPercent: envelopeReleaseStart, sustainLength: envelopeSustainLength, release: envelopeRelease,
       peakVolume: audv, totalFrames: duration,
     });
+    // Only the frames where the level actually changes - a held level
+    // stays put until the next automation point anyway.
     curve.forEach((step, i) => {
-      gainNode.gain.setValueAtTime(step / 15 * 0.3, now + i / 60);
+      if (i === 0 || step !== curve[i - 1]) gainNode.gain.setValueAtTime(step / 15 * 0.3, now + i / 60);
     });
     endValue = curve[curve.length - 1] / 15 * 0.3;
   } else {
@@ -429,6 +434,10 @@ export const previewSoundEffect = ({
   const lastSource = sources[sources.length - 1];
   if (lastSource) {
     lastSource.onended = () => {
+      // Every segment has finished (they are scheduled back to back), so the
+      // gain node has nothing left to carry - detach it from the output
+      // instead of leaving one connected node behind per preview.
+      gainNode.disconnect();
       // Only clear if this preview's sources are still the active ones - a
       // Stop press (or a newer preview replacing this one) already did its
       // cleanup, and this handler firing afterward (stopping a node

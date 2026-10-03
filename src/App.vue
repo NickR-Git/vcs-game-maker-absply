@@ -270,7 +270,17 @@
             <v-icon left small>mdi-refresh</v-icon>
             Refresh emulator
           </v-btn>
-          <key-mapping-dialog></key-mapping-dialog>
+          <div class="emulator-toolbar-icons">
+            <v-btn
+              icon
+              class="emulator-flat-icon-btn emulator-screenshot-btn"
+              title="Save a screenshot of the emulator screen as a PNG"
+              @click="handleScreenshot"
+            >
+              <v-icon :size="22" style="margin-top: -1px">mdi-camera-outline</v-icon>
+            </v-btn>
+            <key-mapping-dialog></key-mapping-dialog>
+          </div>
         </div>
         <div id="gopher2600-target-container" :style="emulatorScaleStyle"></div>
         <div class="panel-switches-row mt-2">
@@ -1076,6 +1086,32 @@ export default {
       markSkipLoadLastProjectCheckOnce();
       window.location.reload();
     },
+    // Saves what the emulator is showing as a PNG. The canvas is drawn at the
+    // console's pixel size (160 wide) and stretched to twice that width on
+    // screen, so the image is written at that displayed shape rather than the
+    // squashed raw size, with hard pixel edges.
+    handleScreenshot() {
+      const source = document.querySelector('#gopher2600-target-container canvas');
+      if (!source || !source.width || !source.height) {
+        this.errorStorage.value = 'There is no emulator picture to capture yet.';
+        return;
+      }
+      const shot = document.createElement('canvas');
+      shot.width = source.width * 2;
+      shot.height = source.height;
+      const context = shot.getContext('2d');
+      context.imageSmoothingEnabled = false;
+      context.drawImage(source, 0, 0, shot.width, shot.height);
+      const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
+      shot.toBlob((blob) => {
+        if (!blob) return;
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `screenshot-${stamp}.png`;
+        link.click();
+        URL.revokeObjectURL(link.href);
+      }, 'image/png');
+    },
     handleRomDownload() {
       if (!this.compiledRomBytes) {
         this.errorStorage.value =
@@ -1164,6 +1200,38 @@ export default {
      moved into this component's DOM by attachEmulator(), so it never
      carries this component's scope attribute. -->
 <style>
+/* The flat icon-button look of the emulator toolbar's screenshot and keyboard
+   mapping buttons - the same flat-icon treatment as every other icon button
+   in the app (e.g. Project.vue's .project-flat-icon-btn): transparent
+   background (no Vuetify default hover circle), the icon fading from a faint
+   grey to near-black on hover and flashing the app's blue on press. Unscoped
+   because the keyboard button belongs to KeyMappingDialog.vue. */
+.emulator-flat-icon-btn {
+  background-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.emulator-flat-icon-btn::before {
+  display: none;
+}
+
+/* The icon colors are scoped under .v-application .emulator-toolbar-row so they outrank
+   Soft Colors' blanket ".desaturate-app-colors .theme--light.v-icon" darkening
+   (see further below), which otherwise holds these icons at a fixed dark grey
+   with no hover change. */
+.v-application .emulator-toolbar-row .emulator-flat-icon-btn.v-btn .v-icon {
+  color: rgba(0, 0, 0, 0.38) !important;
+  transition: color 0.15s ease;
+}
+
+.v-application .emulator-toolbar-row .emulator-flat-icon-btn.v-btn:hover .v-icon {
+  color: rgba(0, 0, 0, 0.87) !important;
+}
+
+.v-application .emulator-toolbar-row .emulator-flat-icon-btn.v-btn:active .v-icon {
+  color: var(--v-primary-base, #1976d2) !important;
+}
+
 /* Dark Mode (see Configuration.vue's switch, bound to darkMode below) -
    one blanket CSS filter on the whole app, Dark Reader's (github.com/
    darkreader/darkreader) "filter" dark-theme technique: invert every
@@ -1415,7 +1483,9 @@ export default {
 .dark-mode .palette-swatch,
 .dark-mode .quick-color-swatch,
 .dark-mode .row-swatch,
-.dark-mode .color-swatch-picker-dot {
+.dark-mode .color-swatch-picker-dot,
+.dark-mode .sequence-chip,
+.dark-mode .instrument-summary-chip {
   filter: invert(1) hue-rotate(180deg);
 }
 
@@ -3043,6 +3113,28 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
   align-items: center;
   margin-top: 8px;
   margin-bottom: 4px;
+}
+
+/* Holds the screenshot and keyboard-mapping buttons together at the row's far
+   right - the keyboard button's own auto left margin (KeyMappingDialog.vue)
+   then has no spare room to take inside this shrink-wrapped group. */
+.emulator-toolbar-icons {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+}
+
+/* "Refresh emulator" plus both icon buttons have to fit the drawer's default
+   256 px width (240 px row): trimmed padding on Refresh and 28 px icon
+   buttons (the keyboard one included, so the two match) make that fit. */
+.emulator-refresh-button.v-btn {
+  padding: 0 8px !important;
+}
+
+.emulator-toolbar-icons >>> .v-btn.v-btn--icon {
+  width: 28px !important;
+  height: 28px !important;
+  margin-right: 0 !important;
 }
 
 /* A sibling of the drawer (see the template), NOT a child of it - v-

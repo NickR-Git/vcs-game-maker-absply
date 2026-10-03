@@ -221,9 +221,18 @@ export const CANONICAL_NOTE_ROWS = (() => {
  * @param {string|number} audc The AUDC value to look up.
  * @return {Map<number, number>} Map of midi number to that AUDC's  AUDF.
  */
+// Memoized per AUDC (the result never changes for a given one): the Music tab's
+// piano roll asks this for every cell it draws, and building it means
+// re-deriving every note of the AUDC each time. Callers only read the Map.
+const audfByMidiCache = new Map();
 export const audfByMidiForAudc = (audc) => {
-  const map = new Map();
-  notesForAudc(audc).forEach(({value, midi}) => map.set(midi, value));
+  const key = `${audc}`;
+  let map = audfByMidiCache.get(key);
+  if (!map) {
+    map = new Map();
+    notesForAudc(audc).forEach(({value, midi}) => map.set(midi, value));
+    audfByMidiCache.set(key, map);
+  }
   return map;
 };
 
