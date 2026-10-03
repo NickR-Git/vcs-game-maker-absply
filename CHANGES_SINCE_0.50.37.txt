@@ -310,3 +310,13 @@ Add a TV standard option (NTSC / PAL60), scroll start/edge blocks and faster tal
 - Fixed a build failure ("Unknown Mnemonic 'lda backgroundScrollRow'") for a
   project with a tall background but no scroll block: the scroll routine was
   emitted without the variables it reads.
+
+=== 0.51.12 ===
+Fix the Music tab's pattern row overflowing in narrow windows
+
+- The Pattern editor's Length (steps) field moved to the left, beside the
+  pattern name's buttons, and the pattern Tempo field stays at the right edge
+  in line with the song's Tempo field. In a narrow window (the desktop app's
+  default 800 px) the old Length/Tempo group was wider than the row, so it
+  stuck out past the right edge, pushed Tempo out of line with the song's and
+  made the window scroll sideways.

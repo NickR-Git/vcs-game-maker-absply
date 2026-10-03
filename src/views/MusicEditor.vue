@@ -256,16 +256,16 @@
                           @confirm="handleDeletePattern(song, activePattern(song))"
                         />
                       </div>
+                      <v-text-field
+                        class="steps-field"
+                        label="Length (steps)"
+                        type="number"
+                        :min="minPatternSteps"
+                        :max="maxPatternSteps"
+                        v-model.number="activePattern(song).stepCount"
+                        @change="() => handleStepCountChange(song, activePattern(song))"
+                      />
                       <div class="pattern-length-tempo-group">
-                        <v-text-field
-                          class="steps-field"
-                          label="Length (steps)"
-                          type="number"
-                          :min="minPatternSteps"
-                          :max="maxPatternSteps"
-                          v-model.number="activePattern(song).stepCount"
-                          @change="() => handleStepCountChange(song, activePattern(song))"
-                        />
                         <v-checkbox
                           class="use-song-tempo-checkbox"
                           title="Use this pattern's tempo instead of the song's"
@@ -4360,7 +4360,7 @@ export default defineComponent({
   padding-top: 6px;
 }
 
-/* flex-wrap lets .pattern-length-tempo-group (Length/tempo-checkbox/Tempo)
+/* flex-wrap lets .pattern-length-tempo-group (tempo-checkbox/Tempo)
    drop to its line under the Pattern name field when both don't fit
    side by side - same "two atomic blocks" pattern as
    .piano-roll-zoom-and-playback/.track-instrument-row (see their
@@ -4396,7 +4396,9 @@ export default defineComponent({
 /* Capped to the same 360px as the Song name field (see
    .song-name-row .music-name-field) instead of growing to fill all
    leftover row space - .pattern-length-tempo-group's margin-left:auto
-   below is what now pushes Length/Tempo to the row's right edge instead. */
+   below is what now pushes the tempo checkbox/Tempo to the row's right edge
+   (in line with the song's Tempo field) instead, while Length (steps) sits
+   beside the Pattern name's buttons on the left. */
 .pattern-name-row .music-name-field {
   flex: 0 1 360px;
   max-width: 360px;
@@ -4428,7 +4430,7 @@ export default defineComponent({
   max-width: 360px;
 }
 
-/* No flex-wrap (unlike .pattern-name-row) - Length/tempo-checkbox/
+/* No flex-wrap (unlike .pattern-name-row) - tempo-checkbox/
    Tempo always move as one block, matching the "atomic group" pattern used
    elsewhere on this tab. */
 .pattern-length-tempo-group {
