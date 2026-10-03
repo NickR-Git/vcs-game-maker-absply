@@ -188,9 +188,7 @@
                     @input="(v) => handleNotesInput(table, v)"
                     @change="handleChildChange"
                     :label="noteLabel(table)"
-                    :append-icon="noteTargetIndex(table) === null ? undefined : 'mdi-table'"
                     title="Shows the note for the value cell you last clicked (outlined in blue below); with no cell selected it is a note for the whole table"
-                    @click:append="() => handleClearSelectedValue(table)"
                     outlined
                     rows="2"
                     hide-details

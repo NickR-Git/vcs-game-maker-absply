@@ -364,8 +364,8 @@ Song bank import/export on the Music tab, new .vcsbnk/.vcsmus file extensions, D
 
 - Data tab: the Notes field is now per value. Click a value cell (outlined in
   blue while selected) and the field shows and edits that value's note; with
-  no cell selected (click anywhere else on the card, click the selected
-  number again, or use the icon at the field's right) it is the note for the
+  no cell selected (click anywhere else on the card, or click the selected
+  number again) it is the note for the
   whole table, as before. A value that has a note has its number underlined
   and shows the note when hovered. Notes follow their values when they are
   reordered or removed, and are copied by the copy/paste and duplicate
