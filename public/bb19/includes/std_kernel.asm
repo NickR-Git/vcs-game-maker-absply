@@ -207,56 +207,6 @@ noreadpaddle
              sleep 2
              jmp continuekernel
          else
-             ; --- VCS Game Maker custom kernel option: see
-             ; UPSTREAM_CHANGES.md in this directory for the full writeup
-             ; (intended for eventual upstream submission to the batari
-             ; Basic project).
-             ;
-             ; ball_blank_lines is emitted ALONGSIDE a real
-             ; "set kernel_options no_blank_lines" (see the comment in
-             ; generators/bbasic.js) - it doesn't reimplement no_blank_
-             ; lines' gap-elimination mechanism (routing row transitions
-             ; through THIS branch/altkernel2 instead of altkernel's
-             ; slower fallback, further down), it reuses stock
-             ; no_blank_lines exactly as-is for that, going through
-             ; 2600basic.wasm's full, proven handling rather than a
-             ; hand-rolled duplicate (an earlier version of this feature
-             ; tried duplicating altkernel2/lastkernelline under a
-             ; separate symbol and it did not actually eliminate the
-             ; gaps - safer to reuse the real, working mechanism than
-             ; re-derive it by hand).
-             ;
-             ; What this DOES change: stock no_blank_lines sacrifices
-             ; missile0's per-scanline math for this exact slot (replaced
-             ; by the readpaddle/PFcolors/kernelmacro/sleep12 chain below)
-             ; - ball_blank_lines adds one more alternative here, giving
-             ; the ball (ENABL) that slot instead, so missile0 stays
-             ; available as a normal (coarse, once-per-row) object. Only
-             ; relevant with pfcolors off (enforced by the Configuration.
-             ; vue switch) and a single solid playfield color: the ball
-             ; always draws in COLUPF (no color register of its own), so
-             ; its fill pixels already match without any COLUP0/1
-             ; juggling - a missile drawn here would show in its parent
-             ; player's color instead.
-             ;
-             ; Cycle accounting: reuses "lda ballheight / dcp bally /
-             ; sbc temp4 / sta ENABL" verbatim from this same file's
-             ; lastkernelline tail section (already proven-correct stock
-             ; code, not new math - temp4 holds ballheight+2, set once near
-             ; the top of this file and untouched until the tail section,
-             ; the ball-side equivalent of stack1/missile0height+2). That
-             ; costs 14 cycles versus this slot's stock "no other filler"
-             ; sleep12 cost of 12 - made up by jumping to continuekernel2
-             ; instead of continuekernel (skipping continuekernel's
-             ; "sleep 2"), the same technique the readpaddle sub-case just
-             ; above already uses for the same reason.
-             ifconst ball_blank_lines
-                 lda ballheight ;3
-                 dcp bally ;5
-                 sbc temp4 ;3
-                 sta ENABL ;3
-                 jmp continuekernel2
-             else
              ifnconst playercolors
                  ifconst PFcolors
                      txa
@@ -281,7 +231,6 @@ noreadpaddle
                  sleep 4
              endif
              jmp continuekernel
-             endif
          endif
 altkernel2
          txa

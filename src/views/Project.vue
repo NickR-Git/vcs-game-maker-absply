@@ -1,6 +1,13 @@
 <template>
-  <v-card flat>
+  <v-card flat class="editor-container">
     <v-card-title>Project</v-card-title>
+    <v-card-text class="tab-intro-section">
+      <p class="v-messages theme--light v-messages__message project-intro-paragraph">
+        Save your project to a .vcsgm file, or open one you saved earlier - everything on every
+        other tab lives in this one file. The fields below (Title, Developer, Version, etc.) are
+        saved with it too, and shape the suggested filename when you save.
+      </p>
+    </v-card-text>
 
     <v-card-actions class="project-actions">
       <v-btn
@@ -91,27 +98,44 @@
 
     <v-card-text class="project-settings-text">
       <span class="text-subtitle-1 project-settings-label">Project Settings</span>
-      <v-text-field
-        v-model="projectTitle"
-        label="Project Title"
-        persistent-placeholder
-      />
-      <v-row>
-        <v-col cols="6">
+      <div class="project-title-row">
+        <v-text-field
+          v-model="projectTitle"
+          label="Project Title"
+          persistent-placeholder
+          class="project-title-field"
+        />
+        <v-switch
+          v-model="projectIncludeDateInFilename"
+          label="Include date/time in filename"
+          title="Adds the current date and time to the saved filename. Only optional once Project Title is filled in - with no title, the date is the only thing keeping repeated saves from overwriting each other, so it stays on regardless of this switch."
+          hide-details
+          class="project-auto-increment-switch"
+        />
+      </div>
+      <div class="project-developer-version-row">
+        <div class="project-developer-col">
           <v-text-field
             v-model="projectDeveloper"
             label="Developer"
             persistent-placeholder
           />
-        </v-col>
-        <v-col cols="6">
+        </div>
+        <div class="project-version-col">
           <v-text-field
             v-model="projectVersion"
             label="Version"
             persistent-placeholder
           />
-        </v-col>
-      </v-row>
+          <v-switch
+            v-model="projectAutoIncrementVersion"
+            label="Increment on Save"
+            title="Bumps the last segment of this Version field (e.g. 1.2.3 -> 1.2.4) every time you save the project."
+            hide-details
+            class="project-auto-increment-switch"
+          />
+        </div>
+      </div>
       <v-row class="project-tight-row">
         <v-col cols="6">
           <v-text-field
@@ -144,15 +168,20 @@ import {defineComponent, reactive, computed, onMounted} from '@vue/composition-a
 import {saveAs} from 'file-saver';
 import YAML from 'yaml';
 
-import {appendCompileLog, useBackgroundsStorage, useConfigurationStorage, useDataTablesStorage, usePlayerAnimationsStorage, useProjectAutoIncrementVersionStorage, useScoreFontStorage, useSongsStorage, useSoundEffectsStorage, useSquishCustomScoreFontStorage, useTextFontStorage, useTextStringsStorage, useWorkspaceStorage} from '../hooks/project';
+import {appendCompileLog, useBackgroundsStorage, useConfigurationStorage, useDataTablesStorage, usePlayerAnimationsStorage, useProjectAutoIncrementVersionStorage, useProjectIncludeDateInFilenameStorage, useScoreFontStorage, useSongsStorage, useSoundEffectsStorage, useSquishCustomScoreFontStorage, useTextFontStorage, useTextStringsStorage, useTitleScreenStorage, useWorkspaceStorage} from '../hooks/project';
 import {combineLegacyPlayerAnimations, remapPlayer1AnimationIndexesInWorkspaceXml} from '../hooks/migrate-player-animations';
 import {migrateLegacyPlayerBlocksInWorkspaceXml} from '../hooks/migrate-player-blocks';
 import {migrateLegacyBounceBlocksInWorkspaceXml} from '../hooks/migrate-bounce-blocks';
+import {migrateLegacyInertiaAccelerateBlocksInWorkspaceXml} from '../hooks/migrate-inertia-accelerate-blocks';
+import {migrateLegacyJoystickBlocksInWorkspaceXml} from '../hooks/migrate-joystick-blocks';
+import {migrateLegacyKeypadBlocksInWorkspaceXml} from '../hooks/migrate-keypad-blocks';
 import {getDateInfix} from '../utils/date';
 import {resetMusicEditorActiveState} from '../hooks/music-editor-state';
+import {clearEmulatorRom} from '../hooks/emulator';
 import {matrixToPlayfield, playfieldToMatrix} from '../utils/pixels';
 import {persistActiveFileHandle, loadPersistedFileHandle, ensureWritePermission, persistActiveFilePath, loadPersistedFilePath} from '../utils/file-handle-storage';
-import {version as appVersion} from '../../package.json';
+import pkg from '../../package.json';
+const appVersion = pkg.version;
 
 const FORMAT_TYPE = 'VCS Game Maker Project';
 const FORMAT_VERSION = 1.0;
@@ -190,7 +219,7 @@ const FILE_PICKER_TYPES = [{
 // Strips characters Windows/macOS/Linux all disallow (or treat specially)
 // in a filename, and collapses whitespace to single underscores - a title
 // like "My Cool Game!" becomes "My_Cool_Game", safe to drop straight into
-// the saved .vcsgm's own filename with no further escaping needed.
+// the saved .vcsgm's  filename with no further escaping needed.
 const sanitizeForFilename = (text) =>
   String(text).trim().replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, '_');
 
@@ -209,12 +238,12 @@ export default defineComponent({
       // even with the exact same project still open, since a
       // FileSystemFileHandle used to live in memory only.
       activeFileHandle: null,
-      // The Electron build's own equivalent of activeFileHandle above - a
+      // The Electron build's  equivalent of activeFileHandle above - a
       // plain absolute path (see background.js's project:save-as/
       // project:open handlers) rather than a FileSystemFileHandle, since
       // Electron never exposes the File System Access API SUPPORTS_FILE_
       // SYSTEM_ACCESS checks for. Restored from localStorage on mount (see
-      // onMounted below), same reasoning as activeFileHandle's own restore.
+      // onMounted below), same reasoning as activeFileHandle's  restore.
       activeFilePath: null,
     });
     const router = context.root.$router;
@@ -230,10 +259,11 @@ export default defineComponent({
     const textFontStorage = useTextFontStorage();
     const soundEffectsStorage = useSoundEffectsStorage();
     const songsStorage = useSongsStorage();
+    const titleScreenStorage = useTitleScreenStorage();
 
     // Kept directly on the same configuration bag every other project-wide
     // setting already lives in (scoreBkColor, textBkColor, etc. - see
-    // ScoreFontEditor.vue's own scoreBkColor for the identical pattern),
+    // ScoreFontEditor.vue's  scoreBkColor for the identical pattern),
     // rather than a separate storage key - it's saved/loaded as part of the
     // project file for free that way (buildProjectYaml/loadProjectFromFile
     // below already round-trip the whole configuration object), with no
@@ -256,12 +286,15 @@ export default defineComponent({
     const projectVersion = useConfigField('projectVersion', '0.0.0');
     const projectWebsite = useConfigField('projectWebsite');
     const projectEmail = useConfigField('projectEmail');
-    // A standing app preference (see Configuration.vue's own Options tab
+    // A standing app preference (see Configuration.vue's  Options tab
     // switch), not part of the project itself - unlike projectTitle/
     // projectVersion/etc above, this shouldn't reset to off every time you
     // switch or start a new project, so it deliberately does NOT live on
     // configurationStorage via useConfigField.
     const projectAutoIncrementVersion = useProjectAutoIncrementVersionStorage();
+    // Same "standing app preference, not a project setting" reasoning as
+    // projectAutoIncrementVersion above.
+    const projectIncludeDateInFilename = useProjectIncludeDateInFilenameStorage();
 
     // Restores whatever file handle was persisted from the last Save
     // As.../Open Project this browser did (see utils/file-handle-storage.js)
@@ -289,9 +322,9 @@ export default defineComponent({
       });
     }
 
-    // Electron's own restore - the file may have been moved/deleted since
+    // Electron's  restore - the file may have been moved/deleted since
     // the path was persisted, so this double-checks via project:path-exists
-    // (the Electron-side equivalent of the browser restore's own
+    // (the Electron-side equivalent of the browser restore's
     // queryPermission() === 'denied' check above) rather than trusting a
     // stale path and only finding out on the next failed Save.
     if (IS_ELECTRON) {
@@ -308,8 +341,9 @@ export default defineComponent({
 
     return {data, router, backgroundsStorage, playerAnimationsStorage,
       workspaceStorage, configurationStorage, scoreFontStorage, squishCustomScoreFontStorage, dataTablesStorage,
-      textStringsStorage, textFontStorage, soundEffectsStorage, songsStorage, projectTitle, projectDescription,
-      projectDeveloper, projectVersion, projectAutoIncrementVersion, projectWebsite, projectEmail};
+      textStringsStorage, textFontStorage, soundEffectsStorage, songsStorage, titleScreenStorage, projectTitle,
+      projectDescription, projectDeveloper, projectVersion, projectAutoIncrementVersion, projectIncludeDateInFilename,
+      projectWebsite, projectEmail};
   },
   methods: {
     // Bumps the last dot-separated segment of the version string (e.g.
@@ -367,22 +401,39 @@ export default defineComponent({
       const textFont = !this.textFontStorage ? null : {
         ...this.textFontStorage,
         glyphs: this.textFontStorage.glyphs.map(matrixToPlayfield),
-        // The scroll cursor's own shape (see components/TextFontEditor.vue) -
+        // The scroll cursor's  shape (see components/TextFontEditor.vue) -
         // optional: an older saved project (or one that's never opened the
-        // Text Font Editor card at all) has no cursor of its own yet, and
+        // Text Font Editor card at all) has no cursor of its  yet, and
         // processCursorGlyphDefaults already falls back to a sensible
         // default whenever this key is missing on load.
         cursor: this.textFontStorage.cursor ? matrixToPlayfield(this.textFontStorage.cursor) : undefined,
+      };
+
+      // Was never wired into save/load at all, same gap "songs" fell into
+      // (see that comment below) - a saved .vcsgm silently dropped every
+      // Title tab page/graphic, confirmed as a real reported bug. Only
+      // bitmap-type cards (48x1/48x2/96x2) have frames at all - space/
+      // player/score cards pass through untouched, same reasoning
+      // preparePlayerSave's frame mapping doesn't need for THOSE types.
+      const titleScreen = !this.titleScreenStorage ? null : {
+        ...this.titleScreenStorage,
+        screens: this.titleScreenStorage.screens.map((screen) => ({
+          ...screen,
+          cards: (screen.cards || []).map((card) => !card.frames ? card : ({
+            ...card,
+            frames: card.frames.map((frame) => ({...frame, pixels: matrixToPlayfield(frame.pixels)})),
+          })),
+        })),
       };
 
       const projectYaml = YAML.stringify({
         'type': FORMAT_TYPE,
         'format-version': FORMAT_VERSION,
         // The actual VCS Game Maker release that wrote this file (package.json's
-        // own version, e.g. "0.50.28") - distinct from format-version above,
-        // which is this .vcsgm SCHEMA's own version and only bumps when the
+        // version, e.g. "0.50.28") - distinct from format-version above,
+        // which is this .vcsgm SCHEMA's  version and only bumps when the
         // save shape itself changes. Purely informational (nothing reads this
-        // back on load) - lets a saved file's own history/support requests
+        // back on load) - lets a saved file's  history/support requests
         // say which app build produced it, same reasoning generation-time
         // already does for when.
         'app-version': appVersion,
@@ -391,6 +442,7 @@ export default defineComponent({
         'blockly-workspace': this.workspaceStorage,
         'player-animations': playerAnimations,
         backgrounds,
+        'title-screen': titleScreen,
         'score-font': scoreFont,
         'squish-custom-score-font': squishCustomScoreFont,
         'data-tables': this.dataTablesStorage,
@@ -411,7 +463,7 @@ export default defineComponent({
     },
 
     // Builds the suggested filename for a new save - empty title prefix
-    // when the Project tab's own Title field was never filled in, same as
+    // when the Project tab's  Title field was never filled in, same as
     // before (just the date, no stray leading "_"). Version is appended
     // last (also underscore-led) so two saves of the same project on the
     // same day - a common case with projectAutoIncrementVersion on, see
@@ -420,12 +472,20 @@ export default defineComponent({
     // version like "0.50.23") become dashes - sanitizeForFilename itself
     // leaves periods alone (they're valid on every platform, unlike the
     // characters it actually strips), but "0.50.23.vcsgm" reads as though
-    // ".23" were the file's own extension, not part of the version.
+    // ".23" were the file's  extension, not part of the version.
+    // The date/time stamp itself is only actually optional once a Title is
+    // filled in (see the "Include date/time" switch next to that field) -
+    // with no title at all, the date is the only thing keeping repeated
+    // saves from colliding on a bare "0-0-8.vcsgm", so it always stays on
+    // regardless of the switch in that case.
     buildSaveFilename() {
-      const titlePrefix = this.projectTitle ? `${sanitizeForFilename(this.projectTitle)}_` : '';
-      const versionSuffix = this.projectVersion ?
-        `_${sanitizeForFilename(this.projectVersion).replace(/\./g, '-')}` : '';
-      return `${titlePrefix}${getDateInfix()}${versionSuffix}.vcsgm`;
+      const includeDate = !this.projectTitle || this.projectIncludeDateInFilename;
+      const parts = [
+        this.projectTitle ? sanitizeForFilename(this.projectTitle) : '',
+        includeDate ? getDateInfix() : '',
+        this.projectVersion ? sanitizeForFilename(this.projectVersion).replace(/\./g, '-') : '',
+      ].filter(Boolean);
+      return `${parts.join('_')}.vcsgm`;
     },
 
     // Always prompts, regardless of whether a "Save" handle already exists
@@ -479,15 +539,31 @@ export default defineComponent({
           }
         }
         if (handle) {
-          const writable = await handle.createWritable();
-          await writable.write(projectYaml);
-          await writable.close();
-          this.data.activeFileHandle = handle;
-          // So "Save" keeps working as "Save" after a reload too - see
-          // utils/file-handle-storage.js's own comment.
-          persistActiveFileHandle(handle);
-          appendCompileLog(`Game saved to ${handle.name}`, 'stage');
-          return;
+          try {
+            const writable = await handle.createWritable();
+            await writable.write(projectYaml);
+            await writable.close();
+            this.data.activeFileHandle = handle;
+            // So "Save" keeps working as "Save" after a reload too - see
+            // utils/file-handle-storage.js's  comment.
+            persistActiveFileHandle(handle);
+            appendCompileLog(`Game saved to ${handle.name}`, 'stage');
+            return;
+          } catch (e) {
+            // Same cross-origin-iframe restriction as the showSaveFilePicker
+            // catch above, just surfacing at a different call - confirmed
+            // directly as a real reported bug ("can't open any vcsgm
+            // files", the matching Open Project failure): showSaveFilePicker
+            // itself can succeed while the handle it returns still can't
+            // actually be written to, throwing NotAllowedError here instead.
+            // Falls through to the same download-based fallback used for a
+            // SecurityError above, rather than leaving "Save"/"Save As"
+            // silently doing nothing.
+            if (!(e && (e.name === 'SecurityError' || e.name === 'NotAllowedError'))) {
+              console.error('Error while saving project', e);
+              return;
+            }
+          }
         }
       }
 
@@ -556,10 +632,10 @@ export default defineComponent({
             // Without this, IndexedDB kept holding whichever handle was
             // persisted at the very first save/open - never updated after
             // any later rename. Harmless as long as the SAME mount of this
-            // component just keeps reusing its own in-memory
+            // component just keeps reusing its  in-memory
             // data.activeFileHandle (the live, just-renamed object) - but
             // this app destroys/recreates this component on navigation (see
-            // hooks/collapse.js's own comment on that same lifecycle), and
+            // hooks/collapse.js's  comment on that same lifecycle), and
             // the onMounted restore below always reloads from IndexedDB, so
             // navigating away and back before the next save silently swapped
             // back in the STALE, pre-rename handle - confirmed as the actual
@@ -589,50 +665,77 @@ export default defineComponent({
     // that way, since there's no way to silently write back to a file
     // picked through a plain <input type="file">.
     async handleOpenProjectClick() {
-      if (IS_ELECTRON) {
-        const result = await window.electronAPI.openProject();
-        if (!result) return; // The user cancelled the native dialog.
-        this.data.activeFilePath = result.path;
-        persistActiveFilePath(result.path);
-        this.applyProjectYaml(result.content, result.name);
-        return;
-      }
-
-      if (SUPPORTS_FILE_SYSTEM_ACCESS) {
-        let handles;
-        try {
-          handles = await window.showOpenFilePicker({types: FILE_PICKER_TYPES});
-        } catch (e) {
-          if (e && e.name === 'AbortError') return;
-          // Same cross-origin-iframe SecurityError as handleSaveProjectAs
-          // above - falls through to the plain file input below instead of
-          // leaving "Open Project" dead in that context.
-          if (!(e && e.name === 'SecurityError')) {
-            console.error('Error while opening project', e);
-            return;
-          }
-          this.$refs.importFileInput.click();
+      // Re-entrancy guard: a real reported bug ("the open window opening
+      // twice", the SAME native picker flashing closed and immediately
+      // reopening before anything was picked) traces to this handler firing
+      // twice for one click - Chrome's spec for showOpenFilePicker()
+      // aborts and replaces any picker already open when called again
+      // before the first resolves, which looks exactly like a flash/reopen
+      // rather than two separate dialogs. Persisted across the whole click
+      // (not just the picker await) since the plain <input> fallback's
+      // .click() below is just as capable of firing twice from the same
+      // underlying double-invocation. Not on `this.data` - this doesn't
+      // need to be reactive, just shared across re-entrant calls to this
+      // same method.
+      if (this._openingProject) return;
+      this._openingProject = true;
+      try {
+        if (IS_ELECTRON) {
+          const result = await window.electronAPI.openProject();
+          if (!result) return; // The user cancelled the native dialog.
+          this.data.activeFilePath = result.path;
+          persistActiveFilePath(result.path);
+          this.applyProjectYaml(result.content, result.name);
           return;
         }
-        const [handle] = handles;
-        const file = await handle.getFile();
-        this.data.activeFileHandle = handle;
-        persistActiveFileHandle(handle);
-        this.loadProjectFromFile(file);
-        return;
+
+        if (SUPPORTS_FILE_SYSTEM_ACCESS) {
+          let handle;
+          let file;
+          try {
+            const [pickedHandle] = await window.showOpenFilePicker({types: FILE_PICKER_TYPES});
+            handle = pickedHandle;
+            // Same cross-origin-iframe restriction as handleSaveProjectAs
+            // above, just surfacing at a different call: showOpenFilePicker
+            // itself can succeed (the native picker UI opens and the user
+            // picks a file) while the handle it returns still can't actually
+            // be read - handle.getFile() throws NotAllowedError in that case,
+            // confirmed directly as a real reported bug ("can't open any
+            // vcsgm files"): that error was previously thrown OUTSIDE this
+            // try/catch entirely, so it just became an unhandled promise
+            // rejection with "Open Project" silently doing nothing, instead
+            // of falling through to the plain file input below like every
+            // other cross-origin-iframe failure here does.
+            file = await handle.getFile();
+          } catch (e) {
+            if (e && e.name === 'AbortError') return;
+            if (!(e && (e.name === 'SecurityError' || e.name === 'NotAllowedError'))) {
+              console.error('Error while opening project', e);
+              return;
+            }
+            this.$refs.importFileInput.click();
+            return;
+          }
+          this.data.activeFileHandle = handle;
+          persistActiveFileHandle(handle);
+          this.loadProjectFromFile(file);
+          return;
+        }
+        this.$refs.importFileInput.click();
+      } finally {
+        this._openingProject = false;
       }
-      this.$refs.importFileInput.click();
     },
 
     // The native file input (replacing the old v-file-input, now that
     // importing is an icon button matching Save/Create New Project rather
-    // than its own field) fires a plain change event with the picked file
+    // than its  field) fires a plain change event with the picked file
     // on event.target.files - only reached on a browser without the File
     // System Access API (see handleOpenProjectClick above), so
     // data.activeFileHandle stays null and "Save" stays unavailable.
     handleImportFileInputChange(event) {
       const file = event.target.files[0] || null;
-      // Clears the native input's own value too - without this, picking
+      // Clears the native input's  value too - without this, picking
       // the SAME file twice in a row wouldn't fire another change event at
       // all, since the browser only fires "change" when the input's value
       // actually differs from before.
@@ -654,7 +757,7 @@ export default defineComponent({
     },
 
     // Shared by loadProjectFromFile (FileReader-based, used by the browser
-    // build's own File System Access/plain-input paths) and Electron's
+    // build's  File System Access/plain-input paths) and Electron's
     // handleOpenProjectClick above, which already has the file's content as
     // a plain string via IPC (fs.readFileSync in the main process) with no
     // File/FileReader involved at all.
@@ -666,7 +769,7 @@ export default defineComponent({
       // value) - confirmed as a real reported crash this way: unguarded,
       // "project.type" below threw "Cannot read properties of null
       // (reading 'type')", a confusing raw TypeError instead of this same
-      // file's own clear "not a valid project" message every OTHER
+      // file's  clear "not a valid project" message every OTHER
       // malformed-file case already gets.
       const project = YAML.parse(projectYaml);
       if (!project || typeof project !== 'object') {
@@ -700,9 +803,9 @@ export default defineComponent({
         this.playerAnimationsStorage = playerAnimations;
       } else if (project['player-0'] || project['player-1']) {
         // An older project saved before the two hardware players shared one
-        // pool of animations (see hooks/migrate-player-animations.js's own
+        // pool of animations (see hooks/migrate-player-animations.js's
         // comment) - combines the two legacy lists into the shared shape,
-        // and remaps any sprite_player1_animation_select block's own stored
+        // and remaps any sprite_player1_animation_select block's  stored
         // dropdown index (already loaded into this.workspaceStorage just
         // above) to match its animation's new position in the combined
         // pool.
@@ -718,7 +821,7 @@ export default defineComponent({
 
       // Rewrites any old sprite_player0_*/sprite_player1_* blocks a project
       // saved before Player 0/1 shared one combined block type still has -
-      // see that function's own comment in hooks/migrate-player-blocks.js.
+      // see that function's  comment in hooks/migrate-player-blocks.js.
       // Has to run AFTER remapPlayer1AnimationIndexesInWorkspaceXml just
       // above, not before: that remap finds its target blocks by the OLD
       // "sprite_player1_animation_select" type string, which this migration
@@ -727,9 +830,28 @@ export default defineComponent({
 
       // Rewrites any old sprite_missile_bounce/sprite_ball_bounce blocks
       // a project saved before Bounce became one unified object_bounce
-      // block still has - see that function's own comment in
+      // block still has - see that function's  comment in
       // hooks/migrate-bounce-blocks.js.
       this.workspaceStorage = migrateLegacyBounceBlocksInWorkspaceXml(this.workspaceStorage);
+
+      // Rewrites any old sprite_inertia_accelerate blocks missing their
+      // ACTION field, and any old sprite_inertia_stop_accelerate blocks, a
+      // project saved before Accelerate/Stop accelerating became one
+      // combined block still has - see that function's comment in
+      // hooks/migrate-inertia-accelerate-blocks.js.
+      this.workspaceStorage = migrateLegacyInertiaAccelerateBlocksInWorkspaceXml(this.workspaceStorage);
+
+      // Rewrites any old input_joy0_*/input_joy1_* blocks a project saved
+      // before Joystick 0/1 shared one combined block type per feature
+      // still has - see that function's comment in
+      // hooks/migrate-joystick-blocks.js.
+      this.workspaceStorage = migrateLegacyJoystickBlocksInWorkspaceXml(this.workspaceStorage);
+
+      // Rewrites any old input_keypad0_*/input_keypad1_* blocks a project
+      // saved before Keypad 0/1 shared one combined block type per feature
+      // still has - see that function's comment in
+      // hooks/migrate-keypad-blocks.js.
+      this.workspaceStorage = migrateLegacyKeypadBlocksInWorkspaceXml(this.workspaceStorage);
 
       if (project['score-font']) {
         this.scoreFontStorage = {
@@ -752,6 +874,20 @@ export default defineComponent({
               .map((bkg) => ({...bkg, pixels: playfieldToMatrix(bkg.pixels)})),
         };
         this.backgroundsStorage = backgrounds;
+      }
+
+      if (project['title-screen']) {
+        const titleScreen = {
+          ...project['title-screen'],
+          screens: project['title-screen'].screens.map((screen) => ({
+            ...screen,
+            cards: (screen.cards || []).map((card) => !card.frames ? card : ({
+              ...card,
+              frames: card.frames.map((frame) => ({...frame, pixels: playfieldToMatrix(frame.pixels)})),
+            })),
+          })),
+        };
+        this.titleScreenStorage = titleScreen;
       }
 
       if (project.configuration) {
@@ -784,16 +920,17 @@ export default defineComponent({
 
       // Song/pattern/track IDs in the loaded project collide with
       // whatever the previous project used (both start counting from 1) -
-      // without this, the Music tab's own active pattern/track selection
+      // without this, the Music tab's  active pattern/track selection
       // (see hooks/music-editor-state.js) would keep pointing at IDs left
       // over from before, showing the piano roll against the wrong
       // pattern/track, or one that doesn't exist in this project at all.
       resetMusicEditorActiveState();
       // Unlike an earlier version of this, deliberately stays on this tab
       // rather than navigating to Actions - same reasoning as
-      // handleNewProject's own identical change: the user may still want
-      // to check/adjust the imported project's own Title/Developer/
+      // handleNewProject's  identical change: the user may still want
+      // to check/adjust the imported project's  Title/Developer/
       // Version/Description right here first.
+      clearEmulatorRom();
       appendCompileLog(`Imported project ${sourceName}`, 'stage');
     },
 
@@ -802,6 +939,7 @@ export default defineComponent({
       this.workspaceStorage = null;
       this.playerAnimationsStorage = null;
       this.backgroundsStorage = null;
+      this.titleScreenStorage = null;
       this.scoreFontStorage = null;
       this.squishCustomScoreFontStorage = null;
       this.dataTablesStorage = null;
@@ -811,8 +949,8 @@ export default defineComponent({
       // the old project's handle right back onto this new, unrelated one.
       this.data.activeFileHandle = null;
       persistActiveFileHandle(null);
-      // The Electron build's own equivalent of the above - see
-      // data.activeFilePath's own comment in setup().
+      // The Electron build's  equivalent of the above - see
+      // data.activeFilePath's  comment in setup().
       this.data.activeFilePath = null;
       persistActiveFilePath(null);
       this.textStringsStorage = null;
@@ -820,10 +958,11 @@ export default defineComponent({
       this.soundEffectsStorage = null;
       this.songsStorage = null;
 
-      // Same reasoning as loadProjectFromFile's own call - a fresh project's
+      // Same reasoning as loadProjectFromFile's  call - a fresh project's
       // song/pattern/track IDs start counting from 1 again too, colliding
       // with whatever the previous project used.
       resetMusicEditorActiveState();
+      clearEmulatorRom();
 
       this.data.newProjectDialog = false;
       // Unlike loadProjectFromFile, deliberately stays on this tab rather than
@@ -835,20 +974,20 @@ export default defineComponent({
 });
 </script>
 <style scoped>
-/* Aligns the save icon's own visible glyph (not the button's own larger,
+/* Aligns the save icon's  visible glyph (not the button's  larger,
    invisible circular hit area) with the "Project" title text's left edge
    above it - confirmed directly via getBoundingClientRect() (icon was 22px
-   further right than the title). v-card-actions' own default 16px left
-   padding plus the icon button's own internal padding around its glyph
+   further right than the title). v-card-actions' default 16px left
+   padding plus the icon button's internal padding around its glyph
    accounted for all 22px between them. */
 .project-actions {
   padding-left: 8px;
-  /* Matches the Generated tab's own flush title-to-icon-row spacing
-     (.generated-code-toolbar has 0 top padding) - v-card-actions' own
+  /* Matches the Generated tab's  flush title-to-icon-row spacing
+     (.generated-code-toolbar has 0 top padding) - v-card-actions'
      default top padding otherwise left an 8px gap under "Project" that
      tab doesn't have. */
   padding-top: 0;
-  /* Plain, small flex gap between the icons - v-dialog injects its own
+  /* Plain, small flex gap between the icons - v-dialog injects its
      wrapper div around the Create New Project button's activator, which
      broke every margin/sibling-selector-based approach tried here before
      this (each button ended up with different actual DOM adjacency). gap
@@ -858,7 +997,7 @@ export default defineComponent({
   gap: 0;
 }
 
-/* Vuetify's own base styles apply "margin-left" to a v-btn that DIRECTLY
+/* Vuetify's  base styles apply "margin-left" to a v-btn that DIRECTLY
    follows another v-btn (confirmed directly: computed margin-left was 8px
    on the Import button - which sits right after the plain Save button - and
    0px on both Save and Create New Project, which sit after a non-button
@@ -868,12 +1007,12 @@ export default defineComponent({
   margin-left: 0 !important;
 }
 
-/* v-dialog renders its own activator slot content wrapped in a real
+/* v-dialog renders its  activator slot content wrapped in a real
    ".v-dialog__container" element (confirmed directly via the rendered DOM -
    [Save button, Import button, DIV.v-dialog__container, hidden input], not
    [Save, Import, Create-New-Project button, hidden input] as the template's
-   own flat appearance suggests) - THAT div, not the Create New Project
-   button itself, was the actual flex child .project-actions' own "gap"
+   flat appearance suggests) - THAT div, not the Create New Project
+   button itself, was the actual flex child .project-actions' "gap"
    was spacing against, one reason the three icons never looked evenly
    spaced no matter what margin/gap value was tried here before this.
    display: contents removes the wrapper from the box model entirely while
@@ -886,7 +1025,7 @@ export default defineComponent({
 /* Hidden native file input backing the Import Project icon button - clicked
    programmatically (see handleImportFileInputChange) rather than shown
    itself, now that importing is an icon matching Save/Create New Project
-   instead of its own v-file-input field. */
+   instead v-file-input field. */
 .project-hidden-file-input {
   display: none;
 }
@@ -897,7 +1036,7 @@ export default defineComponent({
   line-height: 1.3;
 }
 
-/* v-card-text's own default top/bottom padding otherwise leaves a bigger
+/* v-card-text's  default top/bottom padding otherwise leaves a bigger
    gap than intended, both under the divider above and before the buttons
    below it. */
 .project-settings-text {
@@ -912,7 +1051,7 @@ export default defineComponent({
 
 /* Matches the tight gap between the Project Title field and the Developer/
    Version row below it (a plain v-text-field followed by a v-row collapses
-   to a small negative margin, -12px, by Vuetify's own default) - two v-rows
+   to a small negative margin, -12px, by Vuetify's default) - two v-rows
    stacked back to back don't get that same collapse (confirmed directly:
    +12px instead), leaving a visibly bigger gap before this row than every
    other row on this tab. */
@@ -920,12 +1059,74 @@ export default defineComponent({
   margin-top: -24px !important;
 }
 
+/* Plain flexbox (not v-row/v-col, tried first) - Vuetify's grid breaks on
+   VIEWPORT width (its "sm" breakpoint etc, a media query under the hood),
+   but this tab's actual available width is the CONTENT area, which is the
+   viewport MINUS whatever the left nav-drawer/right emulator-drawer
+   currently take up - confirmed as the real reason the earlier v-row/v-col
+   version never actually wrapped: the browser window could easily stay
+   above Vuetify's "sm" breakpoint (600px) while the content column itself
+   was already down to a couple hundred cramped pixels with both drawers
+   open. flex-wrap here reacts to this row's real rendered width
+   instead, however that width got there. */
+.project-developer-version-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 24px;
+}
+
+/* Same reasoning as .project-developer-version-row above (Vuetify's grid
+   breakpoints don't react to the actual available content width, plain
+   flexbox does) - puts the "Include date/time" switch beside the Title
+   field, wrapping onto a separate row once there isn't room. */
+.project-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 24px;
+}
+
+.project-title-field {
+  flex: 1 1 220px;
+}
+
+.project-developer-col {
+  flex: 1 1 220px;
+}
+
+/* Puts the Auto-increment switch to the right of the Version field, in the
+   same column, rather than a separate one - flex-basis matches
+   .project-developer-col's so the two sides split evenly while there's
+   room, and wraps onto its full-width row below Developer (see
+   .project-developer-version-row's comment) once there isn't. */
+.project-version-col {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1 1 220px;
+}
+
+/* Vuetify's selection-control margin-top (meant for a switch stacking
+   BELOW another field) otherwise pushes this out of vertical alignment
+   with the Version field sharing this row - same fix as this app's other
+   inline field+switch rows (e.g. TextEditor.vue's
+   .text-scroll-cursor-switch). white-space: nowrap keeps its label on one
+   line - safe now that Version/the switch always share a full row's width
+   between them (see .project-version-col's comment) rather than a
+   half-width column that could get narrower than the label itself. */
+.project-auto-increment-switch {
+  margin-top: 0;
+  padding-top: 0;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 /* Same flat-icon, fade-in-on-hover/blue-on-press treatment as every other
-   icon button in the app (e.g. GeneratedCode.vue's own
-   .generated-code-flat-icon-btn, MusicEditor.vue's own
+   icon button in the app (e.g. GeneratedCode.vue's
+   .generated-code-flat-icon-btn, MusicEditor.vue's
    .music-flat-icon-btn) - transparent background (no Vuetify default hover
    circle), icon fades from a faint grey to near-black on hover, and flashes
-   the app's own blue on an actual click/press. */
+   the app's blue on an actual click/press. */
 .project-flat-icon-btn {
   background-color: transparent !important;
   box-shadow: none !important;
@@ -945,6 +1146,6 @@ export default defineComponent({
 }
 
 .project-flat-icon-btn:active >>> .v-icon {
-  color: #1976d2 !important;
+  color: var(--v-primary-base, #1976d2) !important;
 }
 </style>

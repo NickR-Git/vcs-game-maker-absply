@@ -2,8 +2,8 @@ import {ref} from '@vue/composition-api';
 
 // Click-and-drag reordering for a list of cards, built to be reusable
 // across any tab that renders one - TextEditor.vue and SoundFXEditor.vue
-// are the current callers, with Music/etc's own card lists expected to
-// adopt this same hook later rather than growing their own copy. Uses the
+// are the current callers, with Music/etc's  card lists expected to
+// adopt this same hook later rather than growing their  copy. Uses the
 // browser's native HTML5 drag-and-drop (no external library): dragover/drop
 // compute the new order.
 //
@@ -11,7 +11,7 @@ import {ref} from '@vue/composition-api';
 // current array (in display order), setItems(newArray) is called with the
 // reordered array once a drop lands - deliberately unopinionated about
 // where/how that array is stored, so each tab can wire it straight into
-// whatever storage setter it already uses (see TextEditor.vue's own
+// whatever storage setter it already uses (see TextEditor.vue's
 // handleChildChange-based example).
 //
 // dragAttrs(index)/dragHandleListeners(index) are meant for a template's
@@ -20,15 +20,15 @@ import {ref} from '@vue/composition-api';
 // split): v-bind="dragAttrs(index)" v-on="dragHandleListeners(index)" on a
 // small drag handle within the top of the card, NOT the whole card. Making
 // the whole card draggable was tried first and reverted: `draggable="true"`
-// on an ancestor intercepts the browser's own click-and-drag
+// on an ancestor intercepts the browser's  click-and-drag
 // text-selection gesture for everything inside it, so a user could no
-// longer select text in a card's own fields.
+// longer select text in a card's  fields.
 //
 // dragTargetListeners(index) is separate and goes on the CARD itself
 // (v-on="dragTargetListeners(index)", no v-bind needed - the card itself
 // was never draggable, only a valid drop target): dragover/drop need to
 // work anywhere a dragged card might be dropped ON, not just over the
-// target's own small handle, which dragHandleListeners alone can't cover
+// target's  small handle, which dragHandleListeners alone can't cover
 // since drag-and-drop only starts from - not lands on - a `draggable`
 // element itself.
 //
@@ -78,12 +78,23 @@ export const useDragReorder = (getItems, setItems) => {
       event.preventDefault();
       event.dataTransfer.dropEffect = 'move';
       dragOverIndex.value = index;
+      // Stops this dragover from also reaching an ANCESTOR's
+      // dragTargetListeners (e.g. TitleScreenEditor.vue's per-screen card
+      // list nested inside that screen's draggable-card list) -
+      // without this, dragover bubbling up the DOM marked the outer
+      // screen/card as "dragged over" too, showing its drag-above
+      // highlight for a drag that can only ever reorder within this
+      // nested list, never actually move onto that outer target
+      // (confirmed as a real reported bug).
+      event.stopPropagation();
     },
-    dragleave: () => {
+    dragleave: (event) => {
       if (dragOverIndex.value === index) dragOverIndex.value = null;
+      event.stopPropagation();
     },
     drop: (event) => {
       event.preventDefault();
+      event.stopPropagation();
       const from = draggedIndex.value;
       reset();
       if (from == null || from === index) return;

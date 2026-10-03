@@ -3,7 +3,6 @@
     <v-card-title>Options</v-card-title>
     <v-card-text>
       <v-btn
-        text
         class="reset-to-defaults-btn"
         @click="handleResetToDefaults"
       >
@@ -17,6 +16,15 @@
         <span class="text-subtitle-1">ROM Options</span>
       </div>
       <div v-if="!isSectionCollapsed('rom')" class="option-section-content">
+        <v-select
+          v-model="configurationState.tvStandard"
+          @change="handleChangeConfiguration"
+          :items="tvStandardOptions"
+          label="TV standard"
+          class="mb-4"
+          hint="NTSC is the North American color standard. PAL60 is a PAL console's color signal at the same 60 Hz timing: the emulator preview follows it, each color is swapped in the ROM for the closest PAL color, and the sound previews use the PAL audio clock. Frame-based timing (durations, tempo) is identical to NTSC."
+          persistent-hint
+        />
         <v-select
           v-if="!kernelIsDpcPlus"
           v-model="configurationState.romSize"
@@ -259,13 +267,6 @@
           class="option-switch"
         />
         <v-switch
-          v-model="projectAutoIncrementVersion"
-          label="Auto-increment version on save"
-          hint="Bumps the last segment of the Project tab's Version field (e.g. 1.2.3 -> 1.2.4) every time you save the project."
-          persistent-hint
-          class="option-switch"
-        />
-        <v-switch
           v-model="muteBlocklySounds"
           label="Mute Blockly sounds"
           hint="Silences the click, delete, and disconnect sounds heard while editing blocks on the Actions tab. Doesn't affect the game itself - see &quot;Mute in-game audio&quot; above for that."
@@ -281,23 +282,16 @@
           class="option-switch"
         />
         <v-switch
-          v-model="hideSidebar"
-          label="Never show the left sidebar"
-          hint="Keeps the left navigation sidebar closed at all times, reclaiming its space for the rest of the app instead of leaving it available to open."
-          persistent-hint
-          class="option-switch"
-        />
-        <v-switch
-          v-model="blocklyControlsHorizontal"
-          label="Arrange Blockly controls horizontally"
-          hint="When off (default), the zoom in/out/reset/grid-snap buttons on the Actions tab's Blockly canvas are stacked vertically along the right edge. When on, they're arranged in a row along the bottom edge instead."
+          v-model="darkMode"
+          label="Dark Mode"
+          hint="Inverts the app's colors for a dark theme. Combines with Subdued Palette below."
           persistent-hint
           class="option-switch"
         />
         <v-switch
           v-model="desaturateBlocklyColors"
-          label="Soft Blockly colors"
-          hint="Mutes block colors to half their normal saturation for a calmer, less colorful Blockly view."
+          label="Subdued Palette"
+          hint="Mutes block and app colors to half their normal saturation for a calmer, less colorful view."
           persistent-hint
           class="option-switch"
         />
@@ -305,6 +299,14 @@
           v-model="hideDescriptionText"
           label="Expert mode"
           hint="Hides the small explanatory hint text under fields and switches throughout the app (including this one), for a more compact layout once you already know what everything does."
+          persistent-hint
+          class="option-switch"
+        />
+        <v-switch
+          v-model="hideSidebar"
+          :disabled="!hideDescriptionText"
+          label="Never show the left sidebar"
+          hint="Only available in Expert mode. Turn it on to always hide the left app toolbar."
           persistent-hint
           class="option-switch"
         />
@@ -328,21 +330,25 @@
 </template>
 <script>
 import {computed, defineComponent, ref, watch} from '@vue/composition-api';
+import {TV_STANDARD_OPTIONS} from '../utils/tv-standard';
 
 import {USER_VARIABLE_LETTERS_WITHOUT_SUPERCHIP} from '../generators/bbasic';
-import {useBackgroundsStorage, useBlocklyControlsHorizontalStorage, useConfigurationStorage,
-  useDesaturateBlocklyColorsStorage, useErrorStorage,
+import {useBackgroundsStorage, useConfigurationStorage,
+  useDarkModeStorage, useDesaturateBlocklyColorsStorage, useErrorStorage,
   useHideDescriptionTextStorage, useHideSidebarStorage, useLoadLastProjectStorage, useMuteBlocklySoundsStorage,
   useProjectAutoIncrementVersionStorage, useStellaPathStorage} from '../hooks/project';
 import {BANK_COUNT_BY_ROMSIZE, countUsedVariables, usesPlayer0RainbowColors} from '../hooks/rom';
 import {effectiveBackgroundRows, reflowBackgroundsToHeight} from '../blocks/background';
 
-// 64k was withheld here under the previous Javatari-based preview, which had
-// no support for bB's EF bankswitch scheme at all (confirmed directly:
-// "AUTO: FAILED"/no video even forcing every cartridge format it has that's
-// remotely close). Gopher2600 (see tools/gopher2600-wasm) has a real EF
-// mapper (hardware/memory/cartridge/mapper_atari_ef.go), so this is no
-// longer withheld.
+// 64k compiles correctly (see generators/bbasic.js's  SUPPORTED_ROM_SIZES/
+// BANK_COUNT_BY_ROMSIZE_MINI) - used to be left out of this list because the
+// old bundled preview emulator (public/js/javatari.js) couldn't run bB's 64k
+// bankswitch scheme at all (confirmed directly: still "AUTO: FAILED"/no
+// video even forcing every cartridge format it has that's remotely close).
+// No longer an issue now that the preview is gopher2600-wasm instead (see
+// hooks/emulator.js) - its EF/EFSC cartridge mapper (hardware/memory/
+// cartridge/mapper_atari_ef.go in the vendored source) is a real, dedicated
+// implementation of exactly this 64k/16-bank layout, Superchip RAM included.
 const ROM_SIZE_OPTIONS = ['2k', '4k', '8k', '16k', '32k', '64k'];
 const MIN_PFRES = 1;
 const MAX_PFRES = 32;
@@ -353,7 +359,7 @@ const MAX_PFRES = 32;
 const MIN_SUPERCHIP_ROM_SIZE_INDEX = ROM_SIZE_OPTIONS.indexOf('8k');
 
 // A view preference, not part of the project itself - same "survives
-// navigating away and back" reasoning as hooks/collapse.js's own
+// navigating away and back" reasoning as hooks/collapse.js's
 // collapsedRefs (Vue Router destroys and recreates this whole component on
 // navigation, which would otherwise reset any state kept inside setup()
 // itself). Not reused straight from that hook: its isCollapsed/
@@ -361,7 +367,7 @@ const MIN_SUPERCHIP_ROM_SIZE_INDEX = ROM_SIZE_OPTIONS.indexOf('8k');
 // collapsed," whereas this page wants every section collapsed the FIRST
 // time (before the user has ever toggled anything) - a plain module-scope
 // ref, hydrated from localStorage once here, covers both without changing
-// that shared hook's own contract for its other callers.
+// that shared hook's  contract for its other callers.
 const OPTIONS_COLLAPSED_SECTIONS_KEY = 'vcs-game-maker.collapsed.options-sections';
 const DEFAULT_COLLAPSED_SECTIONS = ['rom', 'kernel', 'compiler', 'vcsgm'];
 const loadCollapsedSections = () => {
@@ -375,7 +381,7 @@ const loadCollapsedSections = () => {
 };
 const collapsedSections = ref(loadCollapsedSections());
 
-// Hoisted out of configurationState's own getter (module scope, like
+// Hoisted out of configurationState's  getter (module scope, like
 // collapsedSections above) so handleResetToDefaults can reuse the exact
 // same values rather than keeping a second, easily-drifting copy of every
 // default in sync by hand.
@@ -387,7 +393,6 @@ const DEFAULT_CONFIGURATION = {
   showScore: true,
   enableScoreFade: false,
   showBlankLines: true,
-  enableBallBlankLines: false,
   enablePlayer0SpriteColors: false,
   enablePlayer1SpriteColors: false,
   enablePfColors: false,
@@ -400,6 +405,7 @@ const DEFAULT_CONFIGURATION = {
   pfres: 24,
   enablePfRowHeight: false,
   pfrowheight: 8,
+  tvStandard: 'ntsc',
   romSize: '4k',
   scoreFont: '',
   muteAllAudio: false,
@@ -419,7 +425,7 @@ export default defineComponent({
     const configurationStorage = useConfigurationStorage();
     const backgroundsStorage = useBackgroundsStorage();
     // A standing app preference, not part of the project itself (see
-    // hooks/project.js's own comment) - kept separate from configurationState
+    // hooks/project.js's  comment) - kept separate from configurationState
     // below so it survives clearProjectStorage() and can be checked at
     // startup, before deciding whether to call that at all.
     const loadLastProject = useLoadLastProjectStorage();
@@ -428,28 +434,39 @@ export default defineComponent({
     // every time you switched or started a new project.
     const muteBlocklySounds = useMuteBlocklySoundsStorage();
     const hideSidebar = useHideSidebarStorage();
-    const blocklyControlsHorizontal = useBlocklyControlsHorizontalStorage();
+    const darkMode = useDarkModeStorage();
     const desaturateBlocklyColors = useDesaturateBlocklyColorsStorage();
     const hideDescriptionText = useHideDescriptionTextStorage();
+    // "Never show the left sidebar" is disabled (see its :disabled
+    // binding in the template) whenever Expert mode is off, but disabling
+    // an already-on switch just makes it unreachable, not actually off -
+    // without this, turning Expert mode back off left the sidebar
+    // permanently hidden with no visible way to re-enable it short of
+    // turning Expert mode back on first. Turning hideSidebar off here too
+    // keeps the switch's on/off state consistent with whether it's
+    // actually possible to turn it back on.
+    watch(hideDescriptionText, (expertModeOn) => {
+      if (!expertModeOn) hideSidebar.value = false;
+    });
     const projectAutoIncrementVersion = useProjectAutoIncrementVersionStorage();
     const stellaPathStorage = useStellaPathStorage();
     // window.electronAPI only exists inside the desktop (Electron) build's
-    // own preload script (see preload.js) - a plain web-served copy of this
+    // preload script (see preload.js) - a plain web-served copy of this
     // same app has no such thing, so this is what tells the two apart at
     // runtime rather than any build-time flag.
     const isElectron = computed(() => !!window.electronAPI);
     const handleBrowseForStella = async () => {
       const picked = await window.electronAPI.pickStellaPath();
       // null specifically means the user cancelled the dialog (see
-      // background.js's own "stella:pick-path" handler) - leaves whatever
+      // background.js's "stella:pick-path" handler) - leaves whatever
       // was already saved untouched rather than clearing it.
       if (picked) stellaPathStorage.value = picked;
     };
 
     // Which sections are collapsed - a Set of section keys, matching the
-    // collapse pattern already used by the other tabs' own cards (a plain
-    // left-aligned chevron icon button, not Vuetify's own v-expansion-panels,
-    // which puts its arrow on the right). See collapsedSections' own
+    // collapse pattern already used by the other tabs'  cards (a plain
+    // left-aligned chevron icon button, not Vuetify's  v-expansion-panels,
+    // which puts its arrow on the right). See collapsedSections'
     // module-scope definition above for why this isn't just a local ref.
     const isSectionCollapsed = (key) => collapsedSections.value.has(key);
     const toggleSection = (key) => {
@@ -468,7 +485,7 @@ export default defineComponent({
 
           // Spread (not a DEFAULT_CONFIGURATION-keys-only rebuild) so fields
           // this page doesn't know about - graphicsBanks/eventBanks, the
-          // auto-relocation system's own bank-assignment cache (see
+          // auto-relocation system's  bank-assignment cache (see
           // hooks/rom.js) - pass through untouched instead of silently
           // vanishing the moment this getter runs.
           return {...DEFAULT_CONFIGURATION, ...configuration};
@@ -495,7 +512,7 @@ export default defineComponent({
 
     // Whether the project uses the player0 rainbow colors block - if so,
     // "Show blank lines" can't be turned off (see usesPlayer0RainbowColors'
-    // own comment in hooks/rom.js): batari Basic's kernel_options never
+    // comment in hooks/rom.js): batari Basic's kernel_options never
     // allows "playercolors" alongside "no_blank_lines", so the toggle is
     // forced on and disabled rather than letting the user pick a
     // combination that's guaranteed to fail to build.
@@ -526,10 +543,10 @@ export default defineComponent({
     // already has it) even when the user never touches this switch directly
     // themselves - not just the handleChangeConfiguration path below, which
     // only runs when some OTHER switch on this page is what triggered the
-    // change. Also forces Player 1 sprite colors on: batari Basic's own
+    // change. Also forces Player 1 sprite colors on: batari Basic's
     // kernel_options combination table never has a valid row with
     // "playercolors" alone, it always needs "player1colors" too (see
-    // generateConfiguration's own comment in generators/bbasic.js) - so
+    // generateConfiguration's  comment in generators/bbasic.js) - so
     // whenever playercolors is needed (a player0 rainbow-colors block, OR
     // the "Enable per-row Player 0 sprite colors" toggle), player1colors has
     // to come along with it, same reasoning/pattern as showBlankLines just
@@ -537,10 +554,9 @@ export default defineComponent({
     watch(player0RainbowColorsActive, (active) => {
       if (!active) return;
       const state = configurationState.value;
-      if (state.showBlankLines && state.enablePlayer1SpriteColors && !state.enableBallBlankLines) return;
+      if (state.showBlankLines && state.enablePlayer1SpriteColors) return;
       state.showBlankLines = true;
       state.enablePlayer1SpriteColors = true;
-      state.enableBallBlankLines = false;
       configurationState.value = state;
     }, {immediate: true});
 
@@ -595,7 +611,7 @@ export default defineComponent({
     // The playfield's vertical resolution (pfres) is a single setting for the
     // whole ROM - batari Basic has no per-background override - so every
     // background's pixel data has to be reflowed to match whenever it or the
-    // Superchip toggle changes, rather than each background choosing its own.
+    // Superchip toggle changes, rather than each background choosing its.
     const handleChangeResolution = () => {
       const state = configurationState.value;
       state.pfres = Math.min(MAX_PFRES, Math.max(MIN_PFRES, Number(state.pfres) || MIN_PFRES));
@@ -610,12 +626,12 @@ export default defineComponent({
     // Unlike pfres above, this doesn't change how many rows the playfield
     // has (no reflow needed) - it only overrides the row HEIGHT the kernel
     // draws each one at (see pfRowDivisorFor in utils/playfield-coords.js,
-    // which prefers this value over its own round(96/pfres) calculation
+    // which prefers this value over its  round(96/pfres) calculation
     // whenever the "Override playfield row height" switch above is on), so
     // background pixel data stays exactly as-is. Whether the override is
-    // APPLIED is entirely the switch's own job (enablePfRowHeight) - this
-    // field's own stored number is just clamped to a sane positive integer
-    // here, same as pfres's own handleChangeResolution just above, so an
+    // APPLIED is entirely the switch's  job (enablePfRowHeight) - this
+    // field's  stored number is just clamped to a sane positive integer
+    // here, same as pfres's  handleChangeResolution just above, so an
     // invalid/emptied field can't leave a NaN or 0 behind for whenever the
     // switch gets turned back on.
     const handleChangePfRowHeight = () => {
@@ -624,7 +640,7 @@ export default defineComponent({
       configurationState.value = state;
     };
 
-    // With Superchip off, the app's own bookkeeping variables have to live on
+    // With Superchip off, the app's  bookkeeping variables have to live on
     // letters, leaving only USER_VARIABLE_LETTERS_WITHOUT_SUPERCHIP free for
     // user-created ones (see bbasic.js's SYSTEM_VARIABLES comment) - turning
     // Superchip off is blocked if the project already uses more variables
@@ -649,8 +665,8 @@ export default defineComponent({
     // real project choices, not toggles, so a "reset to defaults" for
     // toggles specifically leaves them alone. Covers both configurationState
     // (project-scoped, saved with the .vcsgm file) and the four standing app
-    // preferences kept in their own separate storage (see loadLastProject's
-    // own comment above for why those live apart from configurationState).
+    // preferences kept in their  separate storage (see loadLastProject's
+    // comment above for why those live apart from configurationState).
     const handleResetToDefaults = () => {
       const state = configurationState.value;
       state.kernel = DEFAULT_CONFIGURATION.kernel;
@@ -660,7 +676,6 @@ export default defineComponent({
       state.showScore = DEFAULT_CONFIGURATION.showScore;
       state.enableScoreFade = DEFAULT_CONFIGURATION.enableScoreFade;
       state.showBlankLines = DEFAULT_CONFIGURATION.showBlankLines;
-      state.enableBallBlankLines = DEFAULT_CONFIGURATION.enableBallBlankLines;
       state.enablePlayer0SpriteColors = DEFAULT_CONFIGURATION.enablePlayer0SpriteColors;
       state.enablePlayer1SpriteColors = DEFAULT_CONFIGURATION.enablePlayer1SpriteColors;
       state.enablePfColors = DEFAULT_CONFIGURATION.enablePfColors;
@@ -676,7 +691,6 @@ export default defineComponent({
 
       loadLastProject.value = false;
       muteBlocklySounds.value = false;
-      blocklyControlsHorizontal.value = false;
       hideDescriptionText.value = false;
       projectAutoIncrementVersion.value = false;
     };
@@ -689,14 +703,15 @@ export default defineComponent({
       handleToggleSuperchip,
       handleResetToDefaults,
       romSizeOptions,
+      tvStandardOptions: TV_STANDARD_OPTIONS,
       romSizeIsBankswitched,
       player0RainbowColorsActive,
       kernelIsDpcPlus,
       kernelOptions: KERNEL_OPTIONS,
       enableMissile0BlankLines,
       loadLastProject,
-      muteBlocklySounds, hideSidebar, blocklyControlsHorizontal, desaturateBlocklyColors,
-      hideDescriptionText, projectAutoIncrementVersion,
+      muteBlocklySounds, hideSidebar, darkMode, desaturateBlocklyColors,
+      hideDescriptionText,
       stellaPathStorage, isElectron, handleBrowseForStella,
       isSectionCollapsed,
       toggleSection,
@@ -709,8 +724,8 @@ export default defineComponent({
 <style scoped>
 /* Same pattern already used by the other editor tabs (e.g. DataEditor's
    .editor-container): absolutely positioned and stretched to its parent's
-   full height via top/bottom rather than a hardcoded height, with its own
-   overflow: auto. That keeps the scrollbar attached to this tab's own
+   full height via top/bottom rather than a hardcoded height, with its
+   overflow: auto. That keeps the scrollbar attached to this tab's
    column (matching where the other tabs already put theirs) and only
    showing up when this tab's content is actually taller than the window -
    unlike scrolling the whole document, which put the scrollbar at the far
@@ -726,20 +741,18 @@ export default defineComponent({
   width: 100%;
 }
 
-/* A solid background (no "text" prop, unlike this app's usual flat-icon
-   buttons) - this is a destructive-ish, whole-page action, so it reads as
-   more deliberate/prominent than the section toggles below it. */
+/* A solid background (no "text" prop, matching Select all/Select none/
+   Cancel/Refresh emulator - see their comments) - a plain flat/text
+   button here read as too easy to miss for a whole-page reset action. */
 .reset-to-defaults-btn {
   margin-bottom: 16px;
 }
 
-/* Same flat-icon, fade-in-on-hover/blue-on-press color pattern as every
-   icon button elsewhere in the app (e.g. Project.vue's own
-   .project-flat-icon-btn, GeneratedCode.vue's own
+/* Same fade-in-on-hover/blue-on-press color pattern as every flat-icon
+   button elsewhere in the app (e.g. Project.vue's
+   .project-flat-icon-btn, GeneratedCode.vue's
    .generated-code-flat-icon-btn) - here applied to the button's TEXT color
-   instead of an icon's, since this button has a label, not an icon.
-   Vuetify's own "text" prop already gives the transparent background/no
-   box-shadow those other buttons get from more manual CSS. */
+   instead of an icon's, since this button has a label, not an icon. */
 .reset-to-defaults-btn.v-btn {
   color: rgba(0, 0, 0, 0.38) !important;
 }
@@ -749,12 +762,12 @@ export default defineComponent({
 }
 
 .reset-to-defaults-btn.v-btn:active {
-  color: #1976d2 !important;
+  color: var(--v-primary-base, #1976d2) !important;
 }
 
 /* Left-aligned collapse chevron + section title - matches the other tabs'
-   own per-card collapse control (e.g. DataEditor's .data-collapse-btn),
-   rather than Vuetify's own v-expansion-panel-header, which puts its arrow
+   per-card collapse control (e.g. DataEditor's .data-collapse-btn),
+   rather than Vuetify's v-expansion-panel-header, which puts its arrow
    on the right. */
 .option-section-header {
   display: flex;
@@ -768,26 +781,26 @@ export default defineComponent({
 }
 
 /* Track width (32px) and checked-state thumb travel (18px) are now App.vue's
-   own global ".v-input--switch__track"/".v-input--switch.v-input--is-dirty
+   global ".v-input--switch__track"/".v-input--switch.v-input--is-dirty
    .v-input--switch__thumb" rules, applying the same narrower toggle style
-   to every tab, not just this one - see App.vue's own comment for why (a
+   to every tab, not just this one - see App.vue's comment for why (a
    real reported inconsistency: every other tab's switches stayed at
    Vuetify's wider default). Nothing left to scope here.
 
    Vuetify aligns a switch's hint under the toggle track by default; indent it
-   to line up under the label text instead, matching the toggle's own width. */
+   to line up under the label text instead, matching the toggle's width. */
 .option-switch >>> .v-messages {
   margin-left: 46px;
 }
 
-/* Vuetify's own ".v-input--selection-controls" gives every switch a fixed
-   16px margin-top regardless of whether its own hint text is even showing
+/* Vuetify's ".v-input--selection-controls" gives every switch a fixed
+   16px margin-top regardless of whether its hint text is even showing
    (see node_modules/vuetify/dist/vuetify.css) - once "Expert mode" (see
-   App.vue's own hide-description-text support) removes that hint text,
+   App.vue's hide-description-text support) removes that hint text,
    that much space between switches reads as too generous with nothing left
    below to justify it. Only switches that FOLLOW another switch (the "+"
-   combinator, rather than a blanket ".option-switch") - the section's own
-   FIRST switch sits right under its own header instead, and that spacing
+   combinator, rather than a blanket ".option-switch") - the section's
+   FIRST switch sits right under its header instead, and that spacing
    is unrelated to any hint text, so it shouldn't change with this toggle. */
 .hide-description-text .option-switch + .option-switch {
   margin-top: 2px;
@@ -795,15 +808,31 @@ export default defineComponent({
 
 /* Reads as a sub-option of the Superchip switch above it, so it's indented to
    line up under that switch's label text rather than its toggle track.
-   margin-top adds a bit of breathing room from that switch's own hint text
-   directly above - the two otherwise sat flush against each other. */
+   margin-top adds a bit of breathing room from that switch's hint text
+   directly above - the two otherwise sat flush against each other. The
+   field itself stays full-width (no max-width here) - only the actual
+   input BOX is capped, via the deep .v-input__slot rule below - a real
+   reported request: the number box (same width as MusicEditor.vue's
+   .tempo-field) shouldn't stretch the whole window, but the hint text
+   underneath it still should, same as every other field's hint on this
+   tab, rather than wrapping narrowly beneath a tiny box. */
 .pfres-field {
   margin-left: 46px;
   margin-top: 12px;
-  max-width: calc(100% - 46px);
 }
 
-/* See App.vue's own "Hide small description text" support - with that
+/* >>> (deep combinator) reaches Vuetify's internal .v-input__slot - the
+   actual bordered input box - without pulling .v-text-field__details (the
+   hint/error text right below it, a SIBLING of .v-input__slot, not a
+   descendant) along with it, which capping .pfres-field itself (see the
+   comment above) would otherwise do, since that outer element is the
+   shared ancestor of both. 110px matches MusicEditor.vue's .tempo-field's
+   fixed width. */
+.pfres-field >>> .v-input__slot {
+  max-width: 110px;
+}
+
+/* See App.vue's "Hide small description text" support - with that
    switch's hint text gone, there's no longer anything for the margin-top
    above to create breathing room from, so it can sit right under the
    switch itself again. */
@@ -811,13 +840,16 @@ export default defineComponent({
   margin-top: 0;
 }
 
-/* Same reasoning as .pfres-field above, one level further down - it reads
-   as a sub-option of the "Override playfield row height" switch right
-   above it. */
+/* Same reasoning as .pfres-field above (including the deep .v-input__slot
+   cap), one level further down - it reads as a sub-option of the "Override
+   playfield row height" switch right above it. */
 .pfrowheight-field {
   margin-left: 46px;
   margin-top: 12px;
-  max-width: calc(100% - 46px);
+}
+
+.pfrowheight-field >>> .v-input__slot {
+  max-width: 110px;
 }
 
 .hide-description-text .pfrowheight-field {
@@ -825,12 +857,12 @@ export default defineComponent({
 }
 
 /* The "Override playfield row height" switch reads as belonging with
-   Superchip's own switch (it's the next "advanced ROM knob" down the
+   Superchip's switch (it's the next "advanced ROM knob" down the
    list), even though .pfres-field now sits between them in the DOM - the
    generic ".option-switch + .option-switch" rule above only tightens
    switches that are immediate DOM siblings, which this one no longer is,
-   so it needs its own explicit override to get the same tighter spacing
-   once Expert mode's hint text is gone. Left alone (Vuetify's own default
+   so it needs its explicit override to get the same tighter spacing
+   once Expert mode's hint text is gone. Left alone (Vuetify's default
    spacing) while Expert mode is off. */
 .hide-description-text .pfrowheight-switch {
   margin-top: 2px;

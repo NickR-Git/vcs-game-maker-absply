@@ -1,4 +1,4 @@
- set tv ntsc
+ set tv {{{generatedTv}}}
  {{{ generatedRomSize }}}
 
  rem **************************************************************************
@@ -15,8 +15,8 @@
  rem Setup:
  rem - set initial values
  rem **************************************************************************
- COLUBK = $0F
- score = 00000 :  scorecolor = $08
+ COLUBK = {{{ defaultInitialBackgroundColor }}}
+ score = 00000 :  scorecolor = {{{ defaultScoreColor }}}
 
  const true = 1
  const false = 0
@@ -24,15 +24,16 @@
 {{{ generatedSystemDims }}}
 
  newbackground = 1
+{{{ generatedScrollDefaults }}}
 
  player0x = 75 : player0y = 75
  player1x = 75 : player1y = 25
  ballx = 0 : bally = 0
 
- player1realcolor = $80
- player0realcolor = $40
- playfieldrealcolor = $0E
- backgroundrealcolor = $C4
+ player1realcolor = {{{ defaultPlayer1Color }}}
+ player0realcolor = {{{ defaultPlayer0Color }}}
+ playfieldrealcolor = {{{ defaultPlayfieldColor }}}
+ backgroundrealcolor = {{{ defaultBackgroundColor }}}
  player1size = $00
  player0size = $00
  COLUBK = backgroundrealcolor
@@ -159,6 +160,7 @@ backgroundchangeend
 
 {{{ generatedRainbowColorGraphics }}}
 {{{ generatedRomNoiseChecks }}}
+{{{ generatedTitleScreenAnimationChecks }}}
 {{{ generatedRainbowColorChecks }}}
 {{{ generatedMissileFireChecks }}}
 {{{ generatedSeekChecks }}}

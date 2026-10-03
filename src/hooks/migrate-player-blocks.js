@@ -3,7 +3,7 @@
 // One-time migration from the old, separate sprite_player0_*/sprite_player1_*
 // and sprite_missile0_*/sprite_missile1_* block types into the single
 // combined sprite_player_*/sprite_missile_* type each pair now shares (see
-// PLAYER_OPTIONS'/MISSILE_OPTIONS' own comments in blocks/sprites.js for
+// PLAYER_OPTIONS'/MISSILE_OPTIONS' comments in blocks/sprites.js for
 // why: Player 0/1 and Missile 0/1 are each otherwise-identical hardware
 // objects, so there's a single block type with a PLAYER/MISSILE dropdown
 // field instead of two full sets of blocks - Ball is NOT part of this, it
@@ -11,12 +11,12 @@
 // (VAR/SIZE/STATE/OFFSET/HEIGHT/X/Y/ANGLE/etc.) already holds a real,
 // object-specific value or an object-independent choice (e.g. VAR is
 // already the literal bB variable name "player0x"/"missile1height", not a
-// generic index) - untouched by this migration, only the block's own
+// generic index) - untouched by this migration, only the block's
 // "type" attribute and a brand new PLAYER/MISSILE field need to change.
-// Same overall shape as hooks/migrate-player-animations.js's own
+// Same overall shape as hooks/migrate-player-animations.js's
 // remapPlayer1AnimationIndexesInWorkspaceXml (raw workspace XML STRING in,
 // string out, via DOMParser/XMLSerializer) - called from the same two
-// places that function is: main.js's own startup pass (an existing
+// places that function is: main.js's  startup pass (an existing
 // localStorage-persisted project) and Project.vue's "Open Project" handler
 // (a freshly opened .vcsgm file), since either path can hand this a
 // workspace that still has the old block types in it.
