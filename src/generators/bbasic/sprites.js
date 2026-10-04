@@ -3,6 +3,7 @@
 import {playfieldToMatrix} from '../../utils/pixels';
 import {useConfigurationStorage} from '../../hooks/project';
 import {pfRowDivisorFor} from '../../utils/playfield-coords';
+import {flagPoolVar, flagPoolBit} from './flag-pool';
 import {fadeFlagsVarName, fadeActiveBit, effectiveBackgroundRows} from '../../blocks/background';
 
 
@@ -235,18 +236,23 @@ const romNoiseBaseHighByteHex = (config) => {
 // players - only ever 4 possible bits total (2 features x 2 players), same
 // reasoning fadeFlagsVarName's  shared byte uses in
 // blocks/background.js.
-export const romNoiseFlagsVarName = () => 'romNoiseFlags';
-export const romNoiseActiveBit = (name) => name === 'player1' ? 1 : 0;
+export const ROM_NOISE_FLAGS_FAMILY = 'romNoiseFlags';
+export const romNoiseFlagsVarName = () => flagPoolVar(ROM_NOISE_FLAGS_FAMILY);
+export const romNoiseOwnBit = (name) => name === 'player1' ? 1 : 0;
+export const romNoiseActiveBit = (name) => flagPoolBit(ROM_NOISE_FLAGS_FAMILY, romNoiseOwnBit(name));
 export const romNoiseOffsetVarName = (name) => `${name}RomNoiseOffset`;
 export const romNoiseHeightVarName = (name) => `${name}RomNoiseHeight`;
-export const rainbowColorActiveBit = (name) => name === 'player1' ? 3 : 2;
+export const rainbowColorOwnBit = (name) => name === 'player1' ? 3 : 2;
+export const rainbowColorActiveBit = (name) => flagPoolBit(ROM_NOISE_FLAGS_FAMILY, rainbowColorOwnBit(name));
 export const rainbowColorOffsetVarName = (name) => `${name}RainbowColorOffset`;
 // The playfield twin of the player rainbow colors: the same shared flags byte
 // (bit 4) and a separate offset var.
-export const backgroundRainbowActiveBit = 4;
+export const BACKGROUND_RAINBOW_OWN_BIT = 4;
+export const backgroundRainbowActiveBit = () => flagPoolBit(ROM_NOISE_FLAGS_FAMILY, BACKGROUND_RAINBOW_OWN_BIT);
 export const backgroundRainbowOffsetVarName = () => 'backgroundRainbowColorOffset';
-// The loaded background's color table pointer, saved when it loads so "Stop
-// background rainbow colors" can put it back.
+// Where the loaded background's color table is (address low and high byte),
+// saved when it loads so "Stop background rainbow colors" can point the kernel
+// back at it.
 export const backgroundColorTableLoVarName = () => 'backgroundColorTableLo';
 export const backgroundColorTableHiVarName = () => 'backgroundColorTableHi';
 
@@ -261,8 +267,10 @@ export const backgroundColorTableHiVarName = () => 'backgroundColorTableHi';
 // why ball width/priority can't safely read the real hardware register back.
 export const ctrlpfShadowVarName = () => '_ctrlpf';
 
-export const missileFireFlagsVarName = () => 'missileFireFlags';
-export const missileFireActiveBit = (name) => ({missile0: 0, missile1: 1, ball: 2})[name];
+export const MISSILE_FIRE_FLAGS_FAMILY = 'missileFireFlags';
+export const missileFireFlagsVarName = () => flagPoolVar(MISSILE_FIRE_FLAGS_FAMILY);
+export const missileFireOwnBit = (name) => ({missile0: 0, missile1: 1, ball: 2})[name];
+export const missileFireActiveBit = (name) => flagPoolBit(MISSILE_FIRE_FLAGS_FAMILY, missileFireOwnBit(name));
 export const missileFireDirVarName = (name) => `${name}FireDir`;
 export const missileFireSpeedVarName = (name) => `${name}FireSpeed`;
 // Only reserved for a sprite using 16-way Fire (missileFire16UsedFor) - see
@@ -274,7 +282,6 @@ export const missileFireSpeedVarName = (name) => `${name}FireSpeed`;
 // speedVar/2 clamped to a minimum of 1, computed once per frame instead of
 // per dispatch line.
 export const missileFireHalfSpeedVarName = (name) => `${name}FireHalfSpeed`;
-export const missileFireStepsVarName = (name) => `${name}FireSteps`;
 
 // sprite_*_seek_to's  dev vars (see its  trigger generator and
 // generateSeekChecks below) - same shape as sprite_*_fire's  above: one
@@ -283,11 +290,14 @@ export const missileFireStepsVarName = (name) => `${name}FireSteps`;
 // plus, per sprite, the target X/Y and speed, captured once when the block
 // runs so the per-frame check never has to re-evaluate the original X/Y/
 // SPEED block inputs.
-export const seekFlagsVarName = () => 'seekFlags';
-export const seekActiveBit = (name) => {
+export const SEEK_FLAGS_FAMILY = 'seekFlags';
+export const seekFlagsVarName = () => flagPoolVar(SEEK_FLAGS_FAMILY);
+// The bit number of a sprite in the seek, scroll and inertia flag bytes.
+export const spriteOwnBit = (name) => {
   const bits = {player0: 0, player1: 1, missile0: 2, missile1: 3, ball: 4};
   return bits[name];
 };
+export const seekActiveBit = (name) => flagPoolBit(SEEK_FLAGS_FAMILY, spriteOwnBit(name));
 export const seekXVarName = (name) => `${name}SeekX`;
 export const seekYVarName = (name) => `${name}SeekY`;
 export const seekSpeedVarName = (name) => `${name}SeekSpeed`;
@@ -300,8 +310,9 @@ export const seekSpeedVarName = (name) => `${name}SeekSpeed`;
 // generator, generators/bbasic/background.js) reuses backgroundScrollRow
 // directly rather than keeping a second, per-sprite scroll offset of its
 // ; see backgroundScrollRowVarName's comment in blocks/background.js.
-export const spriteScrollFlagsVarName = () => 'spriteScrollFlags';
-export const spriteScrollActiveBit = (name) => seekActiveBit(name);
+export const SPRITE_SCROLL_FLAGS_FAMILY = 'spriteScrollFlags';
+export const spriteScrollFlagsVarName = () => flagPoolVar(SPRITE_SCROLL_FLAGS_FAMILY);
+export const spriteScrollActiveBit = (name) => flagPoolBit(SPRITE_SCROLL_FLAGS_FAMILY, spriteOwnBit(name));
 
 // object_seek_arrived's "finished" bits - deliberately a SEPARATE byte
 // from seekFlagsVarName's  active bits above (not packed into the same
@@ -312,8 +323,9 @@ export const spriteScrollActiveBit = (name) => seekActiveBit(name);
 // map. Only reserved at all when resolveSeekArrivedWatches (blocks/
 // sprites.js) finds at least one object_seek_arrived block actually
 // watching - see this file's  reserveSeekArrivedDevVars.
-export const seekArrivedFlagsVarName = () => 'seekArrivedFlags';
-export const seekArrivedBit = (name) => seekActiveBit(name);
+export const SEEK_ARRIVED_FLAGS_FAMILY = 'seekArrivedFlags';
+export const seekArrivedFlagsVarName = () => flagPoolVar(SEEK_ARRIVED_FLAGS_FAMILY);
+export const seekArrivedBit = (name) => flagPoolBit(SEEK_ARRIVED_FLAGS_FAMILY, spriteOwnBit(name));
 
 // "throttle movement" (see object_seek_to/sprite_*_fire's  checkbox
 // field) - an opt-in countdown that slows the per-frame movement check
@@ -355,15 +367,15 @@ export const missileFireThrottleResetVarName = (name) => `${name}FireThrottleRes
 // toward-zero step need to treat it as signed, which bB's  unsigned-only
 // "if" comparisons can't safely do (see generateInertiaChecks'  comment
 // on the hand-asm clamp this requires).
-export const inertiaAccelFlagsVarName = () => 'inertiaAccelFlags';
-export const inertiaDecelFlagsVarName = () => 'inertiaDecelFlags';
+export const INERTIA_ACCEL_FLAGS_FAMILY = 'inertiaAccelFlags';
+export const INERTIA_DECEL_FLAGS_FAMILY = 'inertiaDecelFlags';
+export const inertiaAccelFlagsVarName = () => flagPoolVar(INERTIA_ACCEL_FLAGS_FAMILY);
+export const inertiaDecelFlagsVarName = () => flagPoolVar(INERTIA_DECEL_FLAGS_FAMILY);
 // Same bit-per-name layout as seekActiveBit's  map - a separate function
 // (not a direct reuse) since these are two entirely separate flag bytes,
 // not a shared one, even though the layout happens to match.
-export const inertiaActiveBit = (name) => {
-  const bits = {player0: 0, player1: 1, missile0: 2, missile1: 3, ball: 4};
-  return bits[name];
-};
+export const inertiaAccelActiveBit = (name) => flagPoolBit(INERTIA_ACCEL_FLAGS_FAMILY, spriteOwnBit(name));
+export const inertiaDecelActiveBit = (name) => flagPoolBit(INERTIA_DECEL_FLAGS_FAMILY, spriteOwnBit(name));
 export const inertiaVelocityXVarName = (name) => `${name}VelocityX`;
 export const inertiaVelocityYVarName = (name) => `${name}VelocityY`;
 // Only reserved for a sprite with an actual "Accelerate" block targeting
@@ -514,19 +526,25 @@ export const reserveRomNoiseDevVars = (reserveDevVar, usedFor) => {
 // since either block can be used without the other. Shares the SAME flags
 // byte (romNoiseFlagsVarName) rather than a byte - see that
 // function's "one shared flags byte" comment.
-export const reserveBackgroundRainbowDevVars = (reserveDevVar, used) => {
+export const reserveBackgroundRainbowDevVars = (reserveDevVar, reserveDevVarRW, used, simpleOffsets) => {
   if (!used) return;
   reserveDevVar(romNoiseFlagsVarName(), undefined, 'shared active-bit byte (ROM noise + rainbow colors)');
-  reserveDevVar(backgroundRainbowOffsetVarName(), undefined, 'playfield rainbow colors: cycle offset');
-  reserveDevVar(backgroundColorTableLoVarName(), undefined, 'loaded background row colors: table address, low byte');
-  reserveDevVar(backgroundColorTableHiVarName(), undefined, 'loaded background row colors: table address, high byte');
+  if (!(simpleOffsets && simpleOffsets.background)) {
+    reserveDevVarRW(backgroundRainbowOffsetVarName(), 'playfield rainbow colors: cycle offset');
+  }
+  // Only ever written when a background loads and read by Stop, so they live in
+  // the read/write pool.
+  reserveDevVarRW(backgroundColorTableLoVarName(), 'loaded background row colors: table address, low byte');
+  reserveDevVarRW(backgroundColorTableHiVarName(), 'loaded background row colors: table address, high byte');
 };
 
-export const reserveRainbowColorDevVars = (reserveDevVar, usedFor) => {
+export const reserveRainbowColorDevVars = (reserveDevVar, reserveDevVarRW, usedFor, simpleOffsets) => {
   if (!usedFor || !usedFor.size) return;
   reserveDevVar(romNoiseFlagsVarName(), undefined, 'shared active-bit byte (ROM noise + rainbow colors)');
   usedFor.forEach((name) => {
-    reserveDevVar(rainbowColorOffsetVarName(name), undefined, 'rainbow colors: cycle offset');
+    if (!(simpleOffsets && simpleOffsets[name])) {
+      reserveDevVarRW(rainbowColorOffsetVarName(name), 'rainbow colors: cycle offset');
+    }
   });
 };
 
@@ -545,24 +563,24 @@ export const reserveRainbowColorDevVars = (reserveDevVar, usedFor) => {
 // automatically whenever Superchip is off, pfres is too high, or the r/w
 // pool is already full, so this is free real-var savings on Superchip
 // builds with no fallback risk.
-export const reserveMissileFireDevVars = (reserveDevVar, reserveDevVarRW, usedFor, used16, usedPfCheck, usedThrottle) => {
+export const reserveMissileFireDevVars = (reserveDevVar, reserveDevVarRW, usedFor, used16, usedPfCheck, usedThrottle, constSpeed) => {
   if (!usedFor || !usedFor.size) return;
   reserveDevVar(missileFireFlagsVarName(), undefined, 'shared active-bit byte for fired missiles');
   usedFor.forEach((name) => {
     reserveDevVar(missileFireDirVarName(name), undefined, 'this missile\'s fired direction (0-7, or 255 for none)');
-    reserveDevVar(missileFireSpeedVarName(name), undefined, 'this missile\'s fired speed (pixels/frame)');
+    const speedIsConst = !!(constSpeed && constSpeed.has(name));
+    if (!speedIsConst) {
+      reserveDevVarRW(missileFireSpeedVarName(name), 'fired speed (pixels/frame)');
+    }
     if (usedThrottle && usedThrottle.has(name)) {
       reserveDevVarRW(missileFireThrottleVarName(name), 'this missile\'s "throttle movement" countdown');
       reserveDevVarRW(missileFireThrottleResetVarName(name),
           'this missile\'s "throttle movement" countdown reset value');
     }
-    if (used16 && used16.has(name)) {
-      reserveDevVar(missileFireHalfSpeedVarName(name), undefined,
-          'this missile\'s fired speed / 2, clamped to a minimum of 1, for 16-way\'s halfway directions');
-    }
-    if (usedPfCheck && usedPfCheck.has(name)) {
-      reserveDevVar(missileFireStepsVarName(name), undefined,
-          'this missile\'s one-pixel sub-steps left this frame, for "check playfield while moving"');
+    // The half speed is only used by the plain movement, not the pixel-by-pixel one.
+    if (used16 && used16.has(name) && !speedIsConst && !(usedPfCheck && usedPfCheck.has(name))) {
+      reserveDevVarRW(missileFireHalfSpeedVarName(name),
+          'fired speed / 2, at least 1, for the halfway directions of 16 directions');
     }
   });
 };
@@ -870,27 +888,40 @@ export const generateRainbowColorGraphics = (Blockly) => {
 // but entirely independent of it - see sprite_*_rainbow_colors'  block
 // comment for why this is a separate block/check rather than folded into
 // the noise one.
+// How the per-frame check reads the offset: the plan from bbasic.js's
+// simpleOffset (a number, a variable or the frame counter), or the offset
+// variable the block stored.
+const rainbowOffsetExpression = (Blockly, plan, varName) => {
+  if (plan && plan.kind === 'number') return String(plan.value);
+  if (plan && plan.kind === 'variable') {
+    return Blockly.BBasic.nameDB_.getName(plan.id, Blockly.VARIABLE_CATEGORY_NAME);
+  }
+  if (plan) return 'framecounter';
+  return Blockly.BBasic.superchipRwPairs[varName].read;
+};
+
 export const generateRainbowColorChecks = (Blockly) => {
   const used = Blockly.BBasic.rainbowColorUsedFor;
   const backgroundLines = [];
   if (Blockly.BBasic.backgroundRainbowUsed && Blockly.BBasic.usePlayfieldRowColors()) {
     const flags = Blockly.BBasic.nameDB_.getName(romNoiseFlagsVarName(), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
-    const offset = Blockly.BBasic.nameDB_.getName(
-        backgroundRainbowOffsetVarName(), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+    const offset = rainbowOffsetExpression(Blockly,
+        (Blockly.BBasic.rainbowSimpleOffset || {}).background, backgroundRainbowOffsetVarName());
     const config = (useConfigurationStorage() && useConfigurationStorage().value) || {};
     // The kernel reads each row's color through the pfcolortable pointer
     // (low byte pfcolortable, high byte aux2): aim it at ROM bytes.
     backgroundLines.push(
-        ` if !${flags}{${backgroundRainbowActiveBit}} then goto _rainbowcolor_background_done`,
+        ` if !${flags}{${backgroundRainbowActiveBit()}} then goto _rainbowcolor_background_done`,
         ` pfcolortable = ${offset}`,
         ` aux2 = ${romNoiseBaseHighByteHex(config)}`,
-        // The top row's color is not in that table: the background loader puts it
-        // in playfieldrealcolor (which becomes COLUPF), so it gets one of the same
-        // ROM bytes too.
+        // The top row's color is not in that table: it is whatever COLUPF holds at the
+        // start of the frame, so it gets one of the same ROM bytes too. Written to
+        // COLUPF itself, not the playfield color variable: the next frame's
+        // "COLUPF = playfieldrealcolor" puts the real color back without any saving.
         ' asm',
         '       ldy #0',
         '       lda (pfcolortable),y',
-        '       sta playfieldrealcolor',
+        '       sta COLUPF',
         'end',
         '_rainbowcolor_background_done');
   }
@@ -905,7 +936,8 @@ export const generateRainbowColorChecks = (Blockly) => {
   ['player0', 'player1'].forEach((name) => {
     if (!used.has(name)) return;
     const doneLabel = `_rainbowcolor_${name}_done`;
-    const offsetVar = resolveVar(rainbowColorOffsetVarName(name));
+    const offsetVar = rainbowOffsetExpression(Blockly, (Blockly.BBasic.rainbowSimpleOffset || {})[name],
+        rainbowColorOffsetVarName(name));
     const registers = ROM_NOISE_COLOR_REGISTERS[name];
     lines.push(
         ` if !${flagsVar}{${rainbowColorActiveBit(name)}} then goto ${doneLabel}`,
@@ -1039,14 +1071,18 @@ export const generateMissileFireChecks = (Blockly) => {
     if (!used.has(name)) return;
     const doneLabel = `_missilefire_${name}_done`;
     const dirVar = resolveVar(missileFireDirVarName(name));
-    const speedVar = resolveVar(missileFireSpeedVarName(name));
+    const constSpeed = (Blockly.BBasic.missileFireConstSpeed || new Map()).get(name);
+    const speedPair = constSpeed !== undefined ? null : resolveRW(missileFireSpeedVarName(name));
+    const speedVar = constSpeed !== undefined ? String(constSpeed) : speedPair.read;
     const activeBit = missileFireActiveBit(name);
     const throttlePair = resolveRW(missileFireThrottleVarName(name));
     const throttleResetPair = resolveRW(missileFireThrottleResetVarName(name));
     const throttled = !!throttlePair;
     const is16 = used16 && used16.has(name);
     const pfChecked = usedPfCheck.has(name);
-    const halfSpeedVar = is16 ? resolveVar(missileFireHalfSpeedVarName(name)) : null;
+    const halfSpeedPair = (!is16 || constSpeed !== undefined) ? null : resolveRW(missileFireHalfSpeedVarName(name));
+    const halfSpeedVar = !is16 ? null : constSpeed !== undefined ?
+      String(Math.max(1, Math.floor(constSpeed / 2))) : (halfSpeedPair ? halfSpeedPair.read : null);
     // Every "if dirVar = N then ..." line only ever conditions the ONE
     // statement right after "then" (see this function's long-standing
     // comment further down) - a step whose (x, y) pair has BOTH a nonzero x
@@ -1114,14 +1150,18 @@ export const generateMissileFireChecks = (Blockly) => {
         ] : []),
         // Speed 0 means stand still: nothing below (the half-speed minimum of
         // 1, or the pixel-step counter) may run for it.
-        ` if ${speedVar} = 0 then goto ${doneLabel}`,
-        ...(is16 && !pfChecked ? [
-          ` ${halfSpeedVar} = ${speedVar} / 2`,
-          ` if ${halfSpeedVar} = 0 then ${halfSpeedVar} = 1`,
+        ...(constSpeed === undefined ? [` if ${speedVar} = 0 then goto ${doneLabel}`] :
+          constSpeed === 0 ? [` goto ${doneLabel}`] : []),
+        ...(is16 && !pfChecked && constSpeed === undefined ? [
+          ` ${halfSpeedPair.write} = ${speedVar} / 2`,
+          ` if ${halfSpeedVar} = 0 then ${halfSpeedPair.write} = 1`,
         ] : []),
         ...(pfChecked ?
           buildPlayfieldCheckedMovement({
-            Blockly, name, is16, dirVar, speedVar, stepsVar: resolveVar(missileFireStepsVarName(name)),
+            Blockly, name, is16, dirVar, speedVar,
+            // temp3 survives the playfield reads (only temp1/temp2 are overwritten),
+            // so the sub-step counter needs no variable.
+            stepsVar: 'temp3',
           }) :
           dispatch),
         // Off-screen (standard NTSC playfield bounds) stops the movement -
@@ -1440,7 +1480,8 @@ export const generateInertiaChecks = (Blockly) => {
     if (!usedFor.has(name)) return;
     const velocityXVar = resolveVar(inertiaVelocityXVarName(name));
     const velocityYVar = resolveVar(inertiaVelocityYVarName(name));
-    const activeBit = inertiaActiveBit(name);
+    const accelBit = () => inertiaAccelActiveBit(name);
+    const decelBit = () => inertiaDecelActiveBit(name);
     const uid = Blockly.BBasic.blockNumbers.next(`inertia_${name}`);
     const isFine = fineUsedFor.has(name);
     const velocityFracXVar = isFine ? resolveVar(inertiaVelocityFracXVarName(name)) : null;
@@ -1547,7 +1588,7 @@ export const generateInertiaChecks = (Blockly) => {
           ` if ${dirVar} = 1 then ${velocityYVar} = ${velocityYVar} - ${rateVar}`,
         ];
       lines.push(
-          ` if !${accelFlagsVar}{${activeBit}} then goto ${skipLabel}`,
+          ` if !${accelFlagsVar}{${accelBit()}} then goto ${skipLabel}`,
           ...(is16 ? [
             ` ${halfRateVar} = ${rateVar} / 2`,
             ` if ${halfRateVar} = 0 then ${halfRateVar} = 1`,
@@ -1580,7 +1621,7 @@ export const generateInertiaChecks = (Blockly) => {
         ...(isFine ? [velocityFracXVar, velocityFracYVar] : [])]
           .map((v) => ` if ${v} <> 0 then goto ${skipLabel}`);
       lines.push(
-          ` if !${decelFlagsVar}{${activeBit}} then goto ${skipLabel}`,
+          ` if !${decelFlagsVar}{${decelBit()}} then goto ${skipLabel}`,
           ' asm',
           ...(isFine ? [
             ...buildFineDecelerateAsm(velocityXVar, velocityFracXVar, rateVar, `${uid}x`),
@@ -1591,7 +1632,7 @@ export const generateInertiaChecks = (Blockly) => {
           ]),
           'end',
           ...autoStopChecks,
-          ` ${decelFlagsVar}{${activeBit}} = 0`,
+          ` ${decelFlagsVar}{${decelBit()}} = 0`,
           skipLabel,
       );
     }
@@ -1872,11 +1913,12 @@ export default (Blockly) => {
       const name = resolvePlayerName(block);
       const resolveVar = (canonicalName) =>
         Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
-      const offsetVar = resolveVar(rainbowColorOffsetVarName(name));
+      const offsetPair = Blockly.BBasic.superchipRwPairs[rainbowColorOffsetVarName(name)];
       const flagsVar = resolveVar(romNoiseFlagsVarName());
       const offset = Blockly.BBasic.valueToCode(block, 'OFFSET', Blockly.BBasic.ORDER_ASSIGNMENT) ||
         'framecounter';
-      return `${offsetVar} = ${offset}\n` +
+      const simple = !!(Blockly.BBasic.rainbowSimpleOffset || {})[name];
+      return (simple ? '' : `${offsetPair.write} = ${offset}\n`) +
         `${flagsVar}{${rainbowColorActiveBit(name)}} = 1\n`;
     };
 
@@ -1961,7 +2003,8 @@ export default (Blockly) => {
       const resolveVar = (canonicalName) =>
         Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
       const dirVar = resolveVar(missileFireDirVarName(name));
-      const speedVar = resolveVar(missileFireSpeedVarName(name));
+      const speedIsConst = (Blockly.BBasic.missileFireConstSpeed || new Map()).has(name);
+      const speedPair = speedIsConst ? null : Blockly.BBasic.superchipRwPairs[missileFireSpeedVarName(name)];
       const flagsVar = resolveVar(missileFireFlagsVarName());
       const x = Blockly.BBasic.valueToCode(block, 'X', Blockly.BBasic.ORDER_ASSIGNMENT) || '0';
       const y = Blockly.BBasic.valueToCode(block, 'Y', Blockly.BBasic.ORDER_ASSIGNMENT) || '0';
@@ -1990,9 +2033,9 @@ export default (Blockly) => {
         `if ${dirVar} = 255 then ${dirVar} = ${defaultAngle}\n` +
         `${name}x = ${x}\n` +
         `${name}y = ${y}\n` +
-        `${speedVar} = ${speed}\n` +
+        (speedIsConst ? '' : `${speedPair.write} = ${speed}\n` +
         // The speed is held to 0-7 whatever was plugged in.
-        `if ${speedVar} > 7 then ${speedVar} = 7\n` +
+        `if ${speedPair.read} > 7 then ${speedPair.write} = 7\n`) +
         (throttled ? `${throttleResetPair.write} = ${interval}\n` : '') +
         // Was "= 1", forcing the very FIRST step to fire after just 1
         // frame regardless of interval, before falling into the correct
@@ -2151,7 +2194,7 @@ export default (Blockly) => {
     const resolveVar = (canonicalName) =>
       Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
     const flagsVar = resolveVar(inertiaAccelFlagsVarName());
-    const activeBit = inertiaActiveBit(name);
+    const activeBit = inertiaAccelActiveBit(name);
     if (block.getFieldValue('ACTION') === 'stop') return `${flagsVar}{${activeBit}} = 0\n`;
     const dirVar = resolveVar(inertiaAccelDirVarName(name));
     const rateVar = resolveVar(inertiaAccelRateVarName(name));
@@ -2177,7 +2220,7 @@ export default (Blockly) => {
     const resolveVar = (canonicalName) =>
       Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
     const flagsVar = resolveVar(inertiaDecelFlagsVarName());
-    const activeBit = inertiaActiveBit(name);
+    const activeBit = inertiaDecelActiveBit(name);
     const action = block.getFieldValue('ACTION');
     if (action === 'stop') return `${flagsVar}{${activeBit}} = 0\n`;
     const rateVar = resolveVar(inertiaDecelRateVarName(name));

@@ -7,12 +7,19 @@
 // the plugin keeps in localStorage); a paste first looks at the clipboard and,
 // when it holds blocks newer than the ones in localStorage, moves them into
 // localStorage, then lets the plugin's own paste run.
+//
+// Goes through the browser's copy/cut/paste events (the clipboard data of the
+// event itself) rather than the asynchronous clipboard API, so the browser
+// never asks for permission to read the clipboard.
 import Blockly from 'blockly';
 
 const PREFIX = 'VCSGM-BLOCKS:';
 const MULTI_KEY = 'blocklyStashMulti';
 const CONNECTION_KEY = 'blocklyStashConnection';
 const TIME_KEY = 'blocklyStashTime';
+
+// How long to wait for the browser event before carrying on without it.
+const EVENT_WAIT_MS = 120;
 
 const readStash = () => {
   try {
@@ -29,23 +36,9 @@ const readStash = () => {
   }
 };
 
-const writeClipboard = async (stash) => {
-  try {
-    await navigator.clipboard.writeText(PREFIX + JSON.stringify(stash));
-  } catch (e) {
-    console.warn('Could not put the copied blocks on the clipboard', e);
-  }
-};
-
-// Moves blocks found on the clipboard into the plugin's localStorage copy when
-// they are newer than what it already holds. Returns whether anything changed.
-const importFromClipboard = async () => {
-  let text = '';
-  try {
-    text = await navigator.clipboard.readText();
-  } catch (e) {
-    return false;
-  }
+// Moves blocks found in clipboard text into the plugin's localStorage copy when
+// they are newer than what it already holds.
+const importFromText = (text) => {
   if (!text || !text.startsWith(PREFIX)) return false;
   let stash;
   try {
@@ -71,31 +64,72 @@ const isTextTarget = (event) => {
 
 // Starts watching Ctrl/Cmd+C, X and V; returns a function that stops.
 export const installBlocklyClipboardSync = () => {
-  if (typeof navigator === 'undefined' || !navigator.clipboard) return () => {};
+  if (typeof document === 'undefined') return () => {};
+  let copiedBefore = null;
+  let copyTimer = null;
+  let pendingPaste = null;
+
   const onKeyDown = (event) => {
     if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || isTextTarget(event)) return;
     const key = (event.key || '').toLowerCase();
     if (key === 'c' || key === 'x') {
-      // The plugin's handler runs after this one; look at what it stored once it has.
-      const before = localStorage.getItem(TIME_KEY);
-      setTimeout(() => {
+      // The plugin's handler runs after this one and stores the blocks; the
+      // browser's copy/cut event follows and picks them up from there.
+      copiedBefore = localStorage.getItem(TIME_KEY);
+      clearTimeout(copyTimer);
+      copyTimer = setTimeout(() => {
+        // No copy event arrived: fall back to the clipboard API (writing needs
+        // no permission prompt while the key press is recent).
         const stash = readStash();
-        if (stash && String(stash.time) !== before) writeClipboard(stash);
-      }, 0);
+        if (stash && String(stash.time) !== copiedBefore && navigator.clipboard) {
+          navigator.clipboard.writeText(PREFIX + JSON.stringify(stash)).catch(() => {});
+        }
+      }, 400);
       return;
     }
     if (key === 'v') {
       const workspace = Blockly.common.getMainWorkspace();
       if (!workspace) return;
-      // Hold the paste until the clipboard has been checked, then let the
-      // plugin's paste shortcut handle it as usual.
-      event.preventDefault();
+      // Hold the plugin's paste until the browser's paste event has delivered
+      // the clipboard text (no preventDefault: the event has to fire).
       event.stopPropagation();
-      importFromClipboard().finally(() => {
-        Blockly.ShortcutRegistry.registry.onKeyDown(workspace, event);
-      });
+      const run = () => {
+        if (!pendingPaste) return;
+        const paste = pendingPaste;
+        pendingPaste = null;
+        clearTimeout(paste.timer);
+        Blockly.ShortcutRegistry.registry.onKeyDown(workspace, paste.event);
+      };
+      pendingPaste = {event, run, timer: setTimeout(run, EVENT_WAIT_MS)};
     }
   };
+
+  const onCopyOrCut = (event) => {
+    if (isTextTarget(event) || !event.clipboardData) return;
+    const stash = readStash();
+    if (!stash || String(stash.time) === copiedBefore) return;
+    clearTimeout(copyTimer);
+    event.clipboardData.setData('text/plain', PREFIX + JSON.stringify(stash));
+    event.preventDefault();
+  };
+
+  const onPaste = (event) => {
+    if (!pendingPaste || isTextTarget(event)) return;
+    const text = event.clipboardData ? event.clipboardData.getData('text/plain') : '';
+    importFromText(text);
+    pendingPaste.run();
+  };
+
   document.addEventListener('keydown', onKeyDown, true);
-  return () => document.removeEventListener('keydown', onKeyDown, true);
+  document.addEventListener('copy', onCopyOrCut, true);
+  document.addEventListener('cut', onCopyOrCut, true);
+  document.addEventListener('paste', onPaste, true);
+  return () => {
+    document.removeEventListener('keydown', onKeyDown, true);
+    document.removeEventListener('copy', onCopyOrCut, true);
+    document.removeEventListener('cut', onCopyOrCut, true);
+    document.removeEventListener('paste', onPaste, true);
+    clearTimeout(copyTimer);
+    if (pendingPaste) clearTimeout(pendingPaste.timer);
+  };
 };

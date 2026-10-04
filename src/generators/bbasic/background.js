@@ -376,13 +376,13 @@ export default (Blockly) => {
     if (sprite === 'ball') {
       const shadowVar = Blockly.BBasic.nameDB_.getName(
           ctrlpfShadowVarName(), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
-      return {x: 'ballx', y: 'bally', stretched: `${shadowVar} & $30 <> 0`};
+      return {x: 'ballx', y: 'bally', stretched: `${shadowVar} & $30 <> 0`, sizeBits: shadowVar, heightVar: 'ballheight'};
     }
     const byName = {
       player0: {x: 'player0x', y: 'player0y', stretched: 'player0size & $05 = $05'},
       player1: {x: 'player1x', y: 'player1y', stretched: 'player1size & $05 = $05'},
-      missile0: {x: 'missile0x', y: 'missile0y', stretched: 'player0size & $30 <> 0'},
-      missile1: {x: 'missile1x', y: 'missile1y', stretched: 'player1size & $30 <> 0'},
+      missile0: {x: 'missile0x', y: 'missile0y', stretched: 'player0size & $30 <> 0', sizeBits: 'player0size', heightVar: 'missile0height'},
+      missile1: {x: 'missile1x', y: 'missile1y', stretched: 'player1size & $30 <> 0', sizeBits: 'player1size', heightVar: 'missile1height'},
     };
     return byName[sprite];
   };
@@ -479,15 +479,136 @@ export default (Blockly) => {
     ].join('\n') + '\n';
   };
 
-  // The direction version of the block above. The direction (0-7 clockwise
-  // from Up, anything else for none) is held in the nudged-row scratch var
-  // while it is classified. Only the axes the direction actually moves along
-  // are nudged: a straight horizontal or vertical direction takes the
-  // neighboring cell ahead of the sprite, and a diagonal runs the same
-  // escalating check as the two-input block (column, then row, then both).
+  // The direction version of the block above. The sprite's direction (0-7 clockwise
+  // from Up, or 0-15 when it comes from a Fire block set to 16 directions;
+  // anything else for none) says which playfield cells to look at. The work is
+  // done by one shared routine per sprite (see buildFindPixelBody) instead of
+  // being copied into every block.
+  const findPixelSubroutineName = (sprite, is16) => `_findpixel_${sprite}_${is16 ? 16 : 8}`;
+
+  // Looks at the cells the sprite touches and the ones just ahead of it, and
+  // keeps the first lit one. A ball or missile can be wider than one pixel and
+  // taller than one row unit, so it can touch up to 2 columns and 2 rows: those
+  // (up to) 4 cells come first, then the cells straight above or below it (both
+  // columns), then the cells beside it in the direction it is moving (both
+  // rows), then the diagonal one. So a pixel directly above, directly beside or
+  // a little below and to the side of a sprite moving at an angle is found
+  // without needing anything else lit around it.
+  // Input: temp5 = direction. Result: the collision column/row variables.
+  // Scratch: temp3 = horizontal step, then the column beside the sprite; temp4 =
+  // the sprite's right column; temp5 = the sprite's bottom row; temp6 = vertical
+  // step, then the row above or below (all of temp3-temp6 survive pfread, which
+  // only overwrites temp1/temp2).
+  const buildFindPixelBody = ({sprite, is16, maxRow, rowDivisor, col, row}) => {
+    const coords = spriteCollisionCoords(sprite);
+    const label = (part) => `_fp_${sprite}_${is16 ? 16 : 8}_${part}`;
+    const lab = (part) => `@ ${label(part)}`;
+    const widthBits = coords.sizeBits || null;
+    const lines = ['temp3 = 0', 'temp6 = 0'];
+    const steps = is16 ? DIRECTION16_STEPS : [[0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1]];
+    steps.forEach(([xStep, yStep], dir) => {
+      if (xStep) lines.push(`if temp5 = ${dir} then temp3 = ${xStep > 0 ? 1 : 2}`);
+      if (yStep) lines.push(`if temp5 = ${dir} then temp6 = ${yStep > 0 ? 1 : 2}`);
+    });
+    lines.push(
+        `${col.write} = (${coords.x} - 17) / 4`,
+        ...(widthBits ? [] : [`if ${coords.stretched} then ${col.write} = (${coords.x} - 16) / 4`]),
+        `if ${col.read} > 31 then ${col.write} = 31`,
+        `temp4 = ${col.read}`);
+    if (widthBits) {
+      // The right-hand column: the sprite is 1, 2, 4 or 8 pixels wide.
+      lines.push(
+          `temp5 = ${widthBits} & 48`,
+          // One pixel wider than the size says, in case the sprite is drawn a pixel
+          // further right than its position suggests.
+          `temp4 = ${coords.x} - 16`,
+          `if temp5 = 16 then temp4 = temp4 + 1`,
+          `if temp5 = 32 then temp4 = temp4 + 3`,
+          `if temp5 = 48 then temp4 = temp4 + 7`,
+          `temp4 = temp4 / 4`,
+          `if temp4 > 31 then temp4 = 31`);
+    }
+    lines.push(
+        `${row.write} = (${coords.y} - 1) / ${rowDivisor}`,
+        `if ${row.read} > ${maxRow} then ${row.write} = ${maxRow}`,
+        // The bottom row: a sprite more than one row unit tall can reach into the next row.
+        `temp5 = ${row.read}`,
+        ...(coords.heightVar ? [
+          // One row unit taller than the height says, for the same reason.
+          `if ${coords.heightVar} > 0 then temp5 = (${coords.y} + ${coords.heightVar} - 1) / ${rowDivisor}`,
+          `if temp5 > ${maxRow} then temp5 = ${maxRow}`,
+          `if temp5 < ${row.read} then temp5 = ${row.read}`,
+        ] : []),
+        // The column beside the sprite, ahead of it.
+        `if temp3 = 1 then goto ${label('cright')}`,
+        `if temp3 = 2 then goto ${label('cleft')}`,
+        `temp3 = ${col.read}`,
+        `goto ${label('cdone')}`,
+        lab('cright'),
+        `temp3 = temp4`,
+        `if temp3 < 31 then temp3 = temp3 + 1`,
+        `goto ${label('cdone')}`,
+        lab('cleft'),
+        `temp3 = ${col.read}`,
+        `if temp3 > 0 then temp3 = temp3 - 1`,
+        lab('cdone'),
+        // The row above or below, ahead of it.
+        `if temp6 = 1 then goto ${label('rdown')}`,
+        `if temp6 = 2 then goto ${label('rup')}`,
+        `temp6 = ${row.read}`,
+        `goto ${label('rdone')}`,
+        lab('rdown'),
+        `temp6 = temp5`,
+        `if temp6 < ${maxRow} then temp6 = temp6 + 1`,
+        `goto ${label('rdone')}`,
+        lab('rup'),
+        `temp6 = ${row.read}`,
+        `if temp6 > 0 then temp6 = temp6 - 1`,
+        lab('rdone'),
+        // The cells the sprite touches (left/right column, top/bottom row).
+        `if pfread(${col.read}, ${row.read}) then goto ${label('done')}`,
+        `if pfread(temp4, ${row.read}) then goto ${label('hit_r')}`,
+        `if pfread(${col.read}, temp5) then goto ${label('hit_b')}`,
+        `if pfread(temp4, temp5) then goto ${label('hit_rb')}`,
+        // The cells above or below it.
+        `if pfread(${col.read}, temp6) then goto ${label('hit_v')}`,
+        `if pfread(temp4, temp6) then goto ${label('hit_rv')}`,
+        // The cells beside it.
+        `if pfread(temp3, ${row.read}) then goto ${label('hit_e')}`,
+        `if pfread(temp3, temp5) then goto ${label('hit_eb')}`,
+        // Nothing lit: the diagonal cell ahead.
+        `${col.write} = temp3`,
+        `${row.write} = temp6`,
+        `goto ${label('done')}`,
+        lab('hit_r'),
+        `${col.write} = temp4`,
+        `goto ${label('done')}`,
+        lab('hit_b'),
+        `${row.write} = temp5`,
+        `goto ${label('done')}`,
+        lab('hit_rb'),
+        `${col.write} = temp4`,
+        `${row.write} = temp5`,
+        `goto ${label('done')}`,
+        lab('hit_v'),
+        `${row.write} = temp6`,
+        `goto ${label('done')}`,
+        lab('hit_rv'),
+        `${col.write} = temp4`,
+        `${row.write} = temp6`,
+        `goto ${label('done')}`,
+        lab('hit_e'),
+        `${col.write} = temp3`,
+        `goto ${label('done')}`,
+        lab('hit_eb'),
+        `${col.write} = temp3`,
+        `${row.write} = temp5`,
+        lab('done'));
+    return lines.join('\n');
+  };
+
   Blockly.BBasic['background_collision_pixel_direction'] = function(block) {
     const sprite = block.getFieldValue('SPRITE');
-    const coords = spriteCollisionCoords(sprite);
     const direction = Blockly.BBasic.valueToCode(block, 'DIRECTION', Blockly.BBasic.ORDER_NONE) || '255';
     const configurationStorage = useConfigurationStorage();
     const config = (configurationStorage && configurationStorage.value) || {};
@@ -497,14 +618,8 @@ export default (Blockly) => {
 
     const col = Blockly.BBasic.superchipRwPairs[collisionPixelColumnVarName()];
     const row = Blockly.BBasic.superchipRwPairs[collisionPixelRowVarName()];
-    // Scratch for the neighbor checks: temp3/temp4 survive pfread (which only
-    // overwrites temp1/temp2), so no variables are needed for them.
-    const col2 = {read: 'temp3', write: 'temp3'};
-    const row2 = {read: 'temp4', write: 'temp4'};
-
     const id = Blockly.BBasic.blockNumbers.next('collisionPixel');
     const label = (name) => `_collision_pixel_${id}_${name}`;
-    const gotoIf = (dirs, target) => dirs.map((d) => `if ${row2.read} = ${d} then goto ${label(target)}`);
 
     // Bounce turns a fired object around the moment it hits, so a Fire angle
     // read after it points away from what was hit. For that case, use the
@@ -517,139 +632,50 @@ export default (Blockly) => {
       const field = dirBlock.getFieldValue('MISSILE');
       const fired = field === 'ball' ? 'ball' : `missile${field === '1' ? '1' : '0'}`;
       is16 = (Blockly.BBasic.missileFire16UsedFor || new Set()).has(fired);
-      const pairs = Blockly.BBasic.superchipRwPairs;
-      const stage = pairs[missileBounceStageVarName(fired)];
+      const stage = Blockly.BBasic.superchipRwPairs[missileBounceStageVarName(fired)];
       if (stage) {
         bounceLines.push(
-            `temp5 = ${stage.read} & 48`,
-            `if temp5 = 0 then goto ${label('nobounce')}`,
-            `${row2.write} = ${stage.read} & 15`,
+            `temp6 = ${stage.read} & 48`,
+            `if temp6 = 0 then goto ${label('nobounce')}`,
+            `temp5 = ${stage.read} & 15`,
             `@ ${label('nobounce')}`);
       }
     }
 
-    // 16-direction diagonals as [rightFlag + downFlag, directions].
-    const diag16Groups = {};
-    DIRECTION16_STEPS.forEach(([xStep, yStep], dir) => {
-      if (!xStep || !yStep) return;
-      const key = `${xStep > 0 ? 1 : 0}${yStep > 0 ? 1 : 0}`;
-      (diag16Groups[key] = diag16Groups[key] || []).push(dir);
-    });
-    const diag16 = is16 ? Object.entries(diag16Groups) : [];
-
+    const name = findPixelSubroutineName(sprite, is16);
+    if (!Blockly.BBasic.subroutines[name]) {
+      Blockly.BBasic.subroutines[name] = buildFindPixelBody({sprite, is16, maxRow, rowDivisor, col, row});
+    }
+    const suffix = Blockly.BBasic.bankJumpSuffix(
+        Blockly.BBasic.getCurrentBank(), Blockly.BBasic.getSubroutineBank(name));
     return [
-      // The direction, kept in the row scratch var until it is classified.
-      `${row2.write} = ${direction}`,
+      `temp5 = ${direction}`,
       ...bounceLines,
-      // Exact column/row, clamped before anything ever reads them.
-      `${col.write} = (${coords.x} - 17) / 4`,
-      `if ${coords.stretched} then ${col.write} = (${coords.x} - 16) / 4`,
-      `if ${col.read} > 31 then ${col.write} = 31`,
-      `${row.write} = (${coords.y} - 1) / ${rowDivisor}`,
-      `if ${row.read} > ${maxRow} then ${row.write} = ${maxRow}`,
-      // Exact cell.
-      `if pfread(${col.read}, ${row.read}) then goto ${label('done')}`,
-      // Classify the direction: straight, diagonal, or none (exact cell only).
-      ...(is16 ? [
-        ...gotoIf([4], 'right'),
-        ...gotoIf([12], 'left'),
-        ...gotoIf([0], 'up'),
-        ...gotoIf([8], 'down'),
-        // Every other direction, grouped by which way it leans on each axis.
-        ...diag16.flatMap(([key, dirs]) => gotoIf(dirs, `d16_${key}`)),
-      ] : [
-        ...gotoIf([2], 'right'),
-        ...gotoIf([6], 'left'),
-        ...gotoIf([0], 'up'),
-        ...gotoIf([4], 'down'),
-        ...gotoIf([1, 3, 5, 7], 'diagonal'),
-      ]),
-      `goto ${label('done')}`,
-      // Straight directions: the neighboring cell ahead of the sprite.
-      `@ ${label('right')}`,
-      `if ${col.read} < 31 then ${col.write} = ${col.read} + 1`,
-      `goto ${label('done')}`,
-      `@ ${label('left')}`,
-      `if ${col.read} > 0 then ${col.write} = ${col.read} - 1`,
-      `goto ${label('done')}`,
-      `@ ${label('up')}`,
-      `if ${row.read} > 0 then ${row.write} = ${row.read} - 1`,
-      `goto ${label('done')}`,
-      `@ ${label('down')}`,
-      `if ${row.read} < ${maxRow} then ${row.write} = ${row.read} + 1`,
-      `goto ${label('done')}`,
-      // Diagonals: the right flag goes in the column scratch var and the down
-      // flag in the row scratch var (replacing the direction), then the same
-      // column / row / both escalation as the two-input block.
-      ...diag16.flatMap(([key]) => [
-        `@ ${label(`d16_${key}`)}`,
-        `${col2.write} = ${key[0]}`,
-        `${row2.write} = ${key[1]}`,
-        `goto ${label('flagsdone')}`,
-      ]).slice(0, is16 ? undefined : 0),
-      `@ ${label('diagonal')}`,
-      `${col2.write} = 0`,
-      `if ${row2.read} = 1 then ${col2.write} = 1`,
-      `if ${row2.read} = 3 then ${col2.write} = 1`,
-      `if ${row2.read} = 3 then goto ${label('setdown')}`,
-      `if ${row2.read} = 5 then goto ${label('setdown')}`,
-      `${row2.write} = 0`,
-      `goto ${label('flagsdone')}`,
-      `@ ${label('setdown')}`,
-      `${row2.write} = 1`,
-      `@ ${label('flagsdone')}`,
-      // Nudged column alone.
-      `if ${col2.read} then goto ${label('colright')}`,
-      `${col2.write} = ${col.read}`,
-      `if ${col2.read} > 0 then ${col2.write} = ${col2.read} - 1`,
-      `goto ${label('aftercol')}`,
-      `@ ${label('colright')}`,
-      `${col2.write} = ${col.read}`,
-      `if ${col2.read} < 31 then ${col2.write} = ${col2.read} + 1`,
-      `@ ${label('aftercol')}`,
-      `if pfread(${col2.read}, ${row.read}) then goto ${label('usecol2')}`,
-      // Nudged row alone.
-      `if ${row2.read} then goto ${label('rowdown')}`,
-      `${row2.write} = ${row.read}`,
-      `if ${row2.read} > 0 then ${row2.write} = ${row2.read} - 1`,
-      `goto ${label('afterrow')}`,
-      `@ ${label('rowdown')}`,
-      `${row2.write} = ${row.read}`,
-      `if ${row2.read} < ${maxRow} then ${row2.write} = ${row2.read} + 1`,
-      `@ ${label('afterrow')}`,
-      `if pfread(${col.read}, ${row2.read}) then goto ${label('userow2')}`,
-      // Neither single-axis nudge found it: the diagonal cell, trusted.
-      `${col.write} = ${col2.read}`,
-      `${row.write} = ${row2.read}`,
-      `goto ${label('done')}`,
-      `@ ${label('usecol2')}`,
-      `${col.write} = ${col2.read}`,
-      `goto ${label('done')}`,
-      `@ ${label('userow2')}`,
-      `${row.write} = ${row2.read}`,
-      `@ ${label('done')}`,
+      `gosub ${name}${suffix}`,
     ].join('\n') + '\n';
   };
 
   Blockly.BBasic['background_rainbow_colors'] = function(block) {
     const resolveVar = (canonicalName) =>
       Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
-    const offsetVar = resolveVar(backgroundRainbowOffsetVarName());
+    const offsetPair = Blockly.BBasic.superchipRwPairs[backgroundRainbowOffsetVarName()];
     const flagsVar = resolveVar(romNoiseFlagsVarName());
     const offset = Blockly.BBasic.valueToCode(block, 'OFFSET', Blockly.BBasic.ORDER_ASSIGNMENT) ||
       'framecounter';
-    return `${offsetVar} = ${offset}\n${flagsVar}{${backgroundRainbowActiveBit}} = 1\n`;
+    const simple = !!(Blockly.BBasic.rainbowSimpleOffset || {}).background;
+    return (simple ? '' : `${offsetPair.write} = ${offset}\n`) + `${flagsVar}{${backgroundRainbowActiveBit()}} = 1\n`;
   };
 
   Blockly.BBasic['background_rainbow_colors_stop'] = function(block) {
-    const flagsVar = Blockly.BBasic.nameDB_.getName(romNoiseFlagsVarName(), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
     const resolve = (name) => Blockly.BBasic.nameDB_.getName(name, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
-    // Also points the kernel back at the loaded background's row colors.
-    return `${flagsVar}{${backgroundRainbowActiveBit}} = 0\n` +
-      `pfcolortable = ${resolve(backgroundColorTableLoVarName())}\n` +
-      `aux2 = ${resolve(backgroundColorTableHiVarName())}\n` +
-      // The top row's color is the first entry of that table: read it back.
-      'asm\nldy #0\nlda (pfcolortable),y\nsta playfieldrealcolor\n@end\n';
+    const pairs = Blockly.BBasic.superchipRwPairs;
+    const flagsVar = resolve(romNoiseFlagsVarName());
+    // Points the kernel back at the loaded background's row color table. The top
+    // row's color comes back by itself on the next frame.
+    return `${flagsVar}{${backgroundRainbowActiveBit()}} = 0\n` +
+      (Blockly.BBasic.usePlayfieldRowColors() ?
+        `pfcolortable = ${pairs[backgroundColorTableLoVarName()].read}\n` +
+        `aux2 = ${pairs[backgroundColorTableHiVarName()].read}\n` : '');
   };
 
   Blockly.BBasic['background_collision_pixel_column'] = function(block) {

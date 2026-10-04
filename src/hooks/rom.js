@@ -425,14 +425,39 @@ const resolveGraphicsUnitLabel = (unitKey) => {
 // "musicEngine" entry into the actual song names (with each song's
 // pattern count) it contains, for the ROM capacity display's bank-contents
 // listing, rather than literally showing the code-facing "musicEngine" name.
+// How many ROM bytes the data of a song takes: the note data of the pages that
+// belong to it plus its sequence order and repeat tables. The instrument and
+// envelope tables are shared by every song and the music engine's code is not
+// counted, so this is the data alone.
+const songDataBytes = (music, builtSong) => {
+  let total = 0;
+  Object.entries(music.channelPages || {}).forEach(([channel, pages]) => {
+    const pageSongIds = (music.channelPageSongIds && music.channelPageSongIds[channel]) || [];
+    pages.forEach((bytes, page) => {
+      if (pageSongIds[page] === builtSong.songId) total += bytes.length;
+    });
+    const sequence = builtSong.sequenceStartPage && builtSong.sequenceStartPage[channel];
+    if (sequence && builtSong.totalSteps > 1) total += sequence.length;
+  });
+  if (music.hasRepeats && builtSong.sequenceRepeatPacked && builtSong.totalSteps > 1) {
+    total += builtSong.sequenceRepeatPacked.length;
+  }
+  return total;
+};
+
 const resolveMusicSongLabels = () => {
   const music = BlocklyBB.projectMusic;
   if (!music || !music.songs || !music.songs.length) return [];
-  return music.songs.map(({songId}) => {
+  return music.songs.map((builtSong) => {
+    const {songId} = builtSong;
     const song = findSongById(songId);
     const name = (song && song.name) || `Song ${songId}`;
     const patternCount = song ? (song.patterns || []).length : 0;
-    return patternCount ? `${name} (${patternCount} pattern${patternCount === 1 ? '' : 's'})` : name;
+    const bytes = songDataBytes(music, builtSong);
+    const details = [];
+    if (patternCount) details.push(`${patternCount} pattern${patternCount === 1 ? '' : 's'}`);
+    if (bytes) details.push(`${bytes.toLocaleString()} bytes`);
+    return details.length ? `${name} (${details.join(', ')})` : name;
   });
 };
 
@@ -586,8 +611,9 @@ const computeBankContents = (maxBanks, textMinikernelActive) => {
   ((dataTablesData && dataTablesData.dataTables) || [])
       .filter((table) => table.values && table.values.length)
       .forEach((table) => {
+        // A table no block reads is not in the ROM, so it is not listed.
         const usage = dataTableUsage[table.id];
-        const tableBanks = usage && usage.size ? [...usage] : [1];
+        const tableBanks = usage && usage.size ? [...usage] : [];
         tableBanks.forEach((bank) => {
           if (contents[bank]) contents[bank].dataTables.push(table.name || `Unnamed ${table.id}`);
         });

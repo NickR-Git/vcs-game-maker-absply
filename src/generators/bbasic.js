@@ -51,6 +51,9 @@ import {scoreBkColorVarName, generateScanlinesDebugScoreCode} from './bbasic/sco
 import {processPlayerAnimationsStorageDefaults, generateRomNoiseChecks, generateRainbowColorChecks,
   generateRainbowColorGraphics, rainbowColorNeedsPlayerColors, rainbowColorNeedsPlayer1Colors,
   reserveRomNoiseDevVars, reserveRainbowColorDevVars, reserveBackgroundRainbowDevVars,
+  ROM_NOISE_FLAGS_FAMILY, MISSILE_FIRE_FLAGS_FAMILY, SEEK_FLAGS_FAMILY, SEEK_ARRIVED_FLAGS_FAMILY,
+  SPRITE_SCROLL_FLAGS_FAMILY, INERTIA_ACCEL_FLAGS_FAMILY, INERTIA_DECEL_FLAGS_FAMILY,
+  romNoiseOwnBit, rainbowColorOwnBit, BACKGROUND_RAINBOW_OWN_BIT, missileFireOwnBit, spriteOwnBit,
   backgroundColorTableLoVarName, backgroundColorTableHiVarName,
   generateMissileFireChecks, generateBounceStageChecks, reserveMissileFireDevVars, reserveMissileBounceDevVars,
   generateSeekChecks, reserveSeekDevVars, reserveSeekArrivedDevVars,
@@ -58,6 +61,7 @@ import {processPlayerAnimationsStorageDefaults, generateRomNoiseChecks, generate
   resolvePlayerAnimationFinishedWatches,
   generateInertiaChecks, reserveInertiaDevVars, reserveSpriteScrollDevVars} from './bbasic/sprites';
 import {resolveSeekArrivedWatches} from '../blocks/sprites';
+import {planFlagPool} from './bbasic/flag-pool';
 import {resolveProjectMusic, MUSIC_PLAY_RESET_NAME, MUSIC_PLAY_BY_ID_NAME,
   musicPlayByIdArgVarName, musicPlaySongResetName,
   registerMusicPlayResetSubroutine, resolveMusicEventFlags,
@@ -499,6 +503,30 @@ Blockly.BBasic.init = function(workspace) {
   // before any block generator runs) knows whether to include
   // "playercolors"/"player1colors".
   this.rainbowColorUsedFor = new Set();
+  // An offset that is a plain number, a variable or left empty (the frame
+  // counter) can be read where it is used, so the block needs no variable to hold it.
+  // Anything else (an expression, a random number) keeps one.
+  // Per target: null when a variable is needed, else how to read the offset.
+  const simpleOffset = (blocks) => {
+    if (!blocks.length) return null;
+    const plans = blocks.map((block) => {
+      const target = block.getInputTargetBlock('OFFSET');
+      if (!target) return {kind: 'framecounter'};
+      if (target.type === 'math_number') return {kind: 'number', value: Math.round(Number(target.getFieldValue('NUM')) || 0)};
+      if (target.type === 'variables_get') return {kind: 'variable', id: target.getFieldValue('VAR')};
+      return null;
+    });
+    const first = JSON.stringify(plans[0]);
+    return plans.every((plan) => plan && JSON.stringify(plan) === first) ? plans[0] : null;
+  };
+  this.rainbowSimpleOffset = {
+    background: simpleOffset(workspace.getAllBlocks(false).filter((block) =>
+      block.type === 'background_rainbow_colors' && block.isEnabled())),
+    player0: simpleOffset(workspace.getAllBlocks(false).filter((block) =>
+      block.type === 'sprite_player_rainbow_colors' && block.isEnabled() && block.getFieldValue('PLAYER') === '0')),
+    player1: simpleOffset(workspace.getAllBlocks(false).filter((block) =>
+      block.type === 'sprite_player_rainbow_colors' && block.isEnabled() && block.getFieldValue('PLAYER') === '1')),
+  };
   this.backgroundRainbowUsed = workspace.getAllBlocks(false).some((block) =>
     (block.type === 'background_rainbow_colors' || block.type === 'background_rainbow_colors_stop') &&
     block.isEnabled());
@@ -582,6 +610,25 @@ Blockly.BBasic.init = function(workspace) {
       block.type === 'sprite_missile_fire' && block.isEnabled() && block.getFieldValue('DIRECTIONS16') === 'TRUE' &&
       block.getFieldValue('MISSILE') === fireObjectFieldValue(name))) {
       this.missileFire16UsedFor.add(name);
+    }
+  });
+
+  // Objects whose Fire blocks all use the same plain number for the speed: that
+  // speed is a constant, so no variable is needed to hold it.
+  this.missileFireConstSpeed = new Map();
+  ['missile0', 'missile1', 'ball'].forEach((name) => {
+    const blocks = workspace.getAllBlocks(false).filter((block) =>
+      block.type === 'sprite_missile_fire' && block.isEnabled() &&
+      block.getFieldValue('MISSILE') === fireObjectFieldValue(name));
+    if (!blocks.length) return;
+    const values = blocks.map((block) => {
+      const target = block.getInputTargetBlock('SPEED');
+      if (!target || target.type !== 'math_number') return null;
+      const value = Math.round(Number(target.getFieldValue('NUM')));
+      return Number.isFinite(value) ? Math.max(0, Math.min(7, value)) : null;
+    });
+    if (values.every((value) => value !== null && value === values[0])) {
+      this.missileFireConstSpeed.set(name, values[0]);
     }
   });
 
@@ -1592,20 +1639,40 @@ Blockly.BBasic.init = function(workspace) {
   // Same bucket again, for the ROM noise feature's  per-player state (see
   // reserveRomNoiseDevVars'  comment in generators/bbasic/sprites.js) - a
   // no-op unless romNoiseUsedFor's  early pre-scan (above) found it used.
+  // Share the small single-bit flag bytes of the sprite features (see
+  // generators/bbasic/flag-pool.js): each family lists the bit numbers it
+  // actually uses, and gets a run of bits inside one of a few pooled bytes
+  // instead of a separate byte. The fade, music and scroll-edge flags (read as
+  // whole bytes by assembly) and Run once are not part of this.
+  const ownBits = (set, bitOf) => [...(set || [])].map(bitOf).filter((bit) => bit !== undefined);
+  planFlagPool([
+    {family: ROM_NOISE_FLAGS_FAMILY, bits: [
+      ...ownBits(this.romNoiseUsedFor, romNoiseOwnBit),
+      ...ownBits(this.rainbowColorUsedFor, rainbowColorOwnBit),
+      ...(this.backgroundRainbowUsed ? [BACKGROUND_RAINBOW_OWN_BIT] : []),
+    ]},
+    {family: MISSILE_FIRE_FLAGS_FAMILY, bits: ownBits(this.missileFireUsedFor, missileFireOwnBit)},
+    {family: SEEK_FLAGS_FAMILY, bits: ownBits(this.seekUsedFor, spriteOwnBit)},
+    {family: SEEK_ARRIVED_FLAGS_FAMILY, bits: ownBits(this.seekArrivedWatches, spriteOwnBit)},
+    {family: SPRITE_SCROLL_FLAGS_FAMILY, bits: ownBits(this.spriteScrollUsedFor, spriteOwnBit)},
+    {family: INERTIA_ACCEL_FLAGS_FAMILY, bits: ownBits(this.inertiaAccelUsedFor, spriteOwnBit)},
+    {family: INERTIA_DECEL_FLAGS_FAMILY, bits: ownBits(this.inertiaDecelUsedFor, spriteOwnBit)},
+  ]);
+
   reserveRomNoiseDevVars(reserveDevVar, this.romNoiseUsedFor);
 
   // Same bucket again, for the separate rainbow-colors block's  per-
   // player state - a no-op unless rainbowColorUsedFor's  early pre-scan
   // (above) found it used.
-  reserveRainbowColorDevVars(reserveDevVar, this.rainbowColorUsedFor);
-  reserveBackgroundRainbowDevVars(reserveDevVar, this.backgroundRainbowUsed);
+  reserveRainbowColorDevVars(reserveDevVar, reserveDevVarRW, this.rainbowColorUsedFor, this.rainbowSimpleOffset);
+  reserveBackgroundRainbowDevVars(reserveDevVar, reserveDevVarRW, this.backgroundRainbowUsed, this.rainbowSimpleOffset);
 
   // Same bucket again, for "Fire missile"'s  per-missile fired-direction/
   // speed state (see reserveMissileFireDevVars'  comment in generators/
   // bbasic/sprites.js) - a no-op unless missileFireUsedFor's  early
   // pre-scan (above) found it used.
   reserveMissileFireDevVars(reserveDevVar, reserveDevVarRW, this.missileFireUsedFor, this.missileFire16UsedFor,
-      this.missileFirePfCheckUsedFor, this.missileFireThrottleUsedFor);
+      this.missileFirePfCheckUsedFor, this.missileFireThrottleUsedFor, this.missileFireConstSpeed);
 
   // Same bucket again, for "Bounce"'s Combat-style stage/original-
   // direction/last-frame state (see reserveMissileBounceDevVars' comment
@@ -4025,7 +4092,6 @@ Blockly.BBasic.generateBackgrounds = function() {
   // subroutines) instead of always being inline-spliced into bank 1.
   Blockly.BBasic.generateBackgroundScrollPatch(backgrounds, visibleRows);
 
-  const nameOf = (name) => Blockly.BBasic.nameDB_.getName(name, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
   return backgrounds.map(({id, pixels, rowColors}, index) => {
     const endLabel = `background${id}end`;
     // Capped to the live playfield RAM window's real size (visibleRows),
@@ -4102,8 +4168,8 @@ Blockly.BBasic.generateBackgrounds = function() {
     // With background rainbow colors in use, remember where this background's
     // row color table is so Stop can point the kernel back at it.
     const colorTableSaveLines = (usePfColors && this.backgroundRainbowUsed) ?
-      ` ${nameOf(backgroundColorTableLoVarName())} = pfcolortable\n` +
-      ` ${nameOf(backgroundColorTableHiVarName())} = aux2\n` : '';
+      ` ${Blockly.BBasic.superchipRwPairs[backgroundColorTableLoVarName()].write} = pfcolortable\n` +
+      ` ${Blockly.BBasic.superchipRwPairs[backgroundColorTableHiVarName()].write} = aux2\n` : '';
     return ` if newbackground <> ${id} then goto ${endLabel}` + '\n' +
       scrollTrackingLines +
       Blockly.BBasic.wrapRelocatableGraphics(`background${id}`, payload) + '\n' +
@@ -4369,6 +4435,9 @@ Blockly.BBasic.linkDataTablesToBackgrounds = function() {
     if (!tableName) return;
     const background = backgrounds.find((bg) => (bg.name || '').trim() === tableName);
     if (!background) return;
+    // Only a table some block actually reads has anything to place; one nothing
+    // reads is not included in the ROM at all.
+    if (!Blockly.BBasic.dataTableBankUsage[table.id]) return;
     const bank = Blockly.BBasic.graphicsUnitBank(`background${background.id}`);
     Blockly.BBasic.trackDataTableBank(table.id, bank);
   });
@@ -4395,8 +4464,7 @@ Blockly.BBasic.linkDataTablesToBackgrounds = function() {
 // in that bank - callers pass the bank they're currently emitting content
 // for (bank 1's copies go in the shared "Data tables" section below; a
 // relocated event's  bank gets its copies alongside that event's code).
-// A table nothing ever read still gets a bank 1 copy, matching this app's
-// behavior before bank-switching support existed.
+// A table nothing ever read is not emitted at all.
 Blockly.BBasic.generateDataTables = function(bank) {
   const data = Blockly.BBasic.getDataTablesData();
   if (!data) return '';
@@ -4404,8 +4472,9 @@ Blockly.BBasic.generateDataTables = function(bank) {
   return data.dataTables
       .filter((table) => table.values && table.values.length)
       .filter((table) => {
+        // A table no block reads is left out of the ROM entirely.
         const usage = Blockly.BBasic.dataTableBankUsage[table.id];
-        return usage ? usage.has(bank) : bank === 1;
+        return !!usage && usage.has(bank);
       })
       .map((table) => {
         const name = dataTableSymbolName(table, bank);

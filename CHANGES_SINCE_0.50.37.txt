@@ -593,8 +593,8 @@ Bounce manual angle, Background rainbow colors, shared bounce routine, sound env
   even when the two windows do not share storage (a different browser or
   profile, or the desktop app next to the web app). Ctrl+C / Ctrl+X put the
   blocks on the clipboard as a "VCSGM-BLOCKS:" line; Ctrl+V reads the clipboard
-  first (the browser may ask for permission the first time) and falls back to
-  the previous behaviour when it holds nothing from this app.
+  through the paste event, so the browser never asks for permission,
+  and falls back to the previous behaviour when it holds nothing from this app.
 - Fewer variables used by blocks: Fire only reserves its throttle countdown
   variables when a Fire block on that object has throttle movement ticked; Bounce
   keeps its whole state for an object in one variable (it was three); Find
@@ -603,3 +603,44 @@ Bounce manual angle, Background rainbow colors, shared bounce routine, sound env
   no longer keeps two variables per player; the joystick Fire button blocks use
   two variables per joystick instead of three. Superchip RAM for Breakanoid went
   from 41 to 37 of 44 bytes and read/write variables from 11 to 4 of 44.
+
+=== 0.51.20 ===
+Fewer variables (packed flag bytes, read/write pool), Find playfield pixel covers the cells beside and below a sprite, unread data tables left out of the ROM, song size in bytes, no clipboard permission prompt
+
+- Fewer variables, part 2: a Fire block whose speed is the same plain number everywhere
+  keeps the speed as a constant (no variable, no half-speed variable); the
+  "check playfield while moving" step counter no longer needs a variable; rainbow
+  colors blocks whose offset is a number, a variable or left empty read it where
+  it is used instead of storing a copy; Background rainbow colors keeps one
+  variable (which background is loaded) instead of two.
+- Background rainbow colors: Stop now sets the top row color correctly. It had been
+  taken from the second row. Stop restores the loaded background color table
+  through a small shared routine, with a copy of the table for each background.
+- Find playfield pixel (direction version): now looks at every cell the ball or
+  missile touches (a sprite 2, 4 or 8 pixels wide can sit in two columns), then the
+  cells straight above or below it, then the cell beside it in the direction it is
+  moving, then the diagonal one. A pixel directly above or below a sprite moving at
+  an angle is now found even when nothing is beside it. The code is one shared
+  routine per sprite instead of a copy in every block.
+- Background rainbow colors: Stop keeps the two table address variables (the table is
+  found again from them) and the top row color comes back by itself on the next frame,
+  since the rainbow now writes the top row color to COLUPF instead of the saved color.
+- Actions tab: pasting blocks no longer makes the browser ask for permission to read the
+  clipboard. Copy, cut and paste now use the browser copy, cut and paste events.
+- Fewer variables, part 3: the single-bit flag bytes of ROM noise, Rainbow colors, Fire,
+  Seek, Seek arrived, sprites following the playfield scroll and Inertia accelerate and
+  decelerate are now packed together into shared bytes, one bit per thing the project
+  actually uses (Fire for the ball and the rainbow blocks used to take a byte each, and
+  now share one). The background color table address, the rainbow offsets and the Fire
+  speed and half speed are kept in the Superchip read/write pool, which frees ordinary
+  variables on Superchip builds. For Breakanoid, Superchip RAM went from 41 to 31 of 44.
+- Data tables that no block reads are no longer put in the ROM (before, an unread table
+  still took space in bank 1) and are no longer listed under a bank on the Project tab.
+- Project tab bank listing: each song now shows its data size in bytes next to its pattern
+  count (the note data and sequence tables of that song; the instrument tables shared by
+  every song and the music engine code are not counted).
+- Find playfield pixel (direction version): also looks at the row the ball or missile reaches
+  into when it is taller than one row unit, and allows a pixel more on the right and
+  bottom edges, so a pixel beside or a little below a sprite moving at an angle is found
+  and cleared. The cells are tried in this order: the ones the sprite touches, the ones
+  above or below it, the ones beside it, then the diagonal one.
