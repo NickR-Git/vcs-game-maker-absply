@@ -474,3 +474,30 @@ Fix the Create New Project popup colors with Subdued Palette or Dark Mode on
 - Project tab: the Create New Project popup's title bar is no longer a fixed
   light grey, so the whole popup is one color with Subdued Palette or Dark
   Mode on (the title bar used to stay lighter than the rest).
+- ROM noise: fixed the playfield shifting on some rows when the offset was
+  large (for example the frame counter as the offset, which runs through 0-255).
+  The kernel reads the noise sprite with an indexed load that takes an extra
+  cycle whenever it crosses a 256-byte page, which pushed the playfield timing
+  later on those rows. The offset is now folded into the range where no row of
+  the sprite can cross a page (0 to 255 minus the height).
+- Blockly: the box that opens over a text field while you type (comment
+  blocks, number fields) now has a solid white background, so the field's
+  text no longer shows through and overlaps what you type.
+- Fire and Inertia "16 directions": the halfway angles leaned toward the wrong
+  axis (for example "Up (leaning right)" moved mostly right), so the angles
+  were out of order. Each halfway direction now moves at full speed on its
+  main axis and half speed on the other, matching its label.
+- Background: "Find playfield pixel [sprite] collided with" now has a version
+  that takes one direction (0-7 clockwise from Up, the same as the Fire
+  block's angle and the joystick direction; 255 or anything else for none)
+  instead of the two "moving right / moving down" inputs, so all four
+  directions and the diagonals work. Straight directions take the pixel
+  ahead of the sprite; diagonals check the column, then the row, then both.
+  The new block replaces the old one in the toolbox; the old block still
+  works in existing projects. The Shoot the Wall example uses it.
+- Sprites: new "Stop fired [object]" block (next to Fire in the Sprites
+  toolbox) that stops a missile or ball a Fire block launched, leaving it
+  where it is. Its height and visibility are not touched.
+- Joystick [0/1] Up/Down/Left/Right block: all eight directions are now in the
+  dropdown (the four diagonals are true while both of their directions are
+  pushed), listed clockwise from Up. Existing blocks are unchanged.

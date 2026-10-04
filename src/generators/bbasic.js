@@ -702,7 +702,9 @@ Blockly.BBasic.init = function(workspace) {
     // background.js - the real CTRLPF register can't be read back safely)
     // whenever it targets Ball, even if no other block in the project ever
     // touches ball width/priority itself.
-    if (block.type === 'background_collision_pixel') return block.getFieldValue('SPRITE') === 'ball';
+    if (block.type === 'background_collision_pixel' || block.type === 'background_collision_pixel_direction') {
+      return block.getFieldValue('SPRITE') === 'ball';
+    }
     return false;
   });
 
@@ -711,7 +713,8 @@ Blockly.BBasic.init = function(workspace) {
   // anywhere in the project, regardless of which SPRITE it targets (unlike
   // ctrlpfShadowUsed just above, which only cares about the Ball case).
   this.collisionPixelUsed = workspace.getAllBlocks(false).some((block) =>
-    block.type === 'background_collision_pixel' && block.isEnabled());
+    (block.type === 'background_collision_pixel' || block.type === 'background_collision_pixel_direction') &&
+    block.isEnabled());
 
   // Same early block-type pre-scan reasoning as the ones above - see
   // controls_repeat_ext's  comment in generators/bbasic/loops.js for

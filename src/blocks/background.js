@@ -948,6 +948,49 @@ Blockly.defineBlocksWithJsonArray([
       `doesn't land precisely on a playfield pixel. Read the result with "Playfield collision column" ` +
       `/ "Playfield collision row" right after this runs.`,
   },
+  // The same block, but taking one direction of travel instead of the two
+  // "moving right"/"moving down" true/false inputs, so every direction works
+  // (up and left too, and the diagonals) and a sprite that is not moving can
+  // say so. The direction is 0-7 clockwise from Up, the same scale as the Fire
+  // block's angle and the "Joystick direction (8-way)" block; any other value
+  // (255 for "no direction") checks only the exact cell. The older block above
+  // still works in existing projects but is no longer in the toolbox.
+  {
+    'type': `background_collision_pixel_direction`,
+    'message0': `${BACKGROUND_ICON} Find playfield pixel %1 collided with`,
+    'message1': `moving in direction %1`,
+    'args0': [
+      {
+        'type': 'field_dropdown',
+        'name': 'SPRITE',
+        'options': [
+          [PLAYER_ICON + ' Player 0', 'player0'],
+          [PLAYER_ICON + ' Player 1', 'player1'],
+          [MISSILE_ICON + ' Missile 0', 'missile0'],
+          [MISSILE_ICON + ' Missile 1', 'missile1'],
+          [BALL_ICON + ' Ball', 'ball'],
+        ],
+      },
+    ],
+    'args1': [
+      {
+        'type': 'input_value',
+        'name': 'DIRECTION',
+        'check': 'Number',
+      },
+    ],
+    'inputsInline': true,
+    'previousStatement': null,
+    'nextStatement': null,
+    'colour': BACKGROUND_COLOR,
+    'tooltip': `Works out which exact playfield column/row the chosen sprite is touching right now ` +
+      `- place this right after a "Collided <sprite> and Playfield" check. "Moving in direction" is ` +
+      `the way the sprite is travelling: 0 Up, 1 Up-Right, 2 Right, 3 Down-Right, 4 Down, 5 Down-Left, ` +
+      `6 Left, 7 Up-Left (the same numbers as the Fire block's angle and the joystick direction ` +
+      `block), or 255 for no direction. It is used to pick the right neighboring pixel if the ` +
+      `sprite's exact position doesn't land precisely on a playfield pixel. Read the result with ` +
+      `"Playfield collision column" / "Playfield collision row" right after this runs.`,
+  },
   {
     'type': `background_collision_pixel_column`,
     'message0': `${BACKGROUND_ICON} Playfield collision column`,

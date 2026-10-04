@@ -505,10 +505,17 @@ const joystickNameFromBlock = (block) => `joy${block && block.getFieldValue('JOY
 
 export default (Blockly) => {
   Blockly.BBasic['input_joystick_get'] = function(block) {
+    const varName = block.getFieldValue('VAR');
+    const getName = (name) => Blockly.BBasic.nameDB_.getName(name, Blockly.VARIABLE_CATEGORY_NAME);
+    // A diagonal is the two straight directions it is made of, both pushed.
+    const diagonal = /^(joy[01])(up|down)(left|right)$/.exec(varName);
+    if (diagonal) {
+      const [, joystick, vertical, horizontal] = diagonal;
+      return [`${getName(joystick + vertical)} && ${getName(joystick + horizontal)}`,
+        Blockly.BBasic.ORDER_LOGICAL_AND];
+    }
     // Variable getter.
-    const code = Blockly.BBasic.nameDB_.getName(block.getFieldValue('VAR'),
-        Blockly.VARIABLE_CATEGORY_NAME);
-    return [code, Blockly.BBasic.ORDER_ATOMIC];
+    return [getName(varName), Blockly.BBasic.ORDER_ATOMIC];
   };
 
   // "Joystick [0/1] direction (8-way)" - just reads back whatever

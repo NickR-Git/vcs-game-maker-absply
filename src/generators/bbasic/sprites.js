@@ -759,6 +759,20 @@ export const generateRomNoiseChecks = (Blockly) => {
         // "if !${activeBit} then goto ..." in generators/bbasic/
         // background.js, the proven working precedent this mirrors).
         ` if !${flagsVar}{${romNoiseActiveBit(name)}} then goto ${doneLabel}`,
+        // The kernel reads the sprite with "lda (pointer),y", which takes an
+        // extra cycle whenever pointer low + y carries into the next page.
+        // Every scanline the sprite covers is timed to the cycle, so that extra
+        // cycle shifted the playfield on those rows (seen with offsets over
+        // 255 - height). The offset is folded into 0..255-height, so no row
+        // of the sprite can cross a page: subtract the range size when the
+        // offset is past it (twice, which covers heights up to 128 fully and
+        // larger ones approximately), then clamp.
+        ` temp1 = 255 - ${heightVar}`,
+        ` temp2 = ${offsetVar}`,
+        ` temp3 = temp1 + 1`,
+        ` if temp2 >= temp3 then temp2 = temp2 - temp3`,
+        ` if temp2 >= temp3 then temp2 = temp2 - temp3`,
+        ` if temp2 > temp1 then temp2 = temp1`,
         // Sets player0pointer's  hi/lo bytes DIRECTLY (2600basic.h
         // aliases player0pointerlo/player0pointerhi onto the exact same
         // zero-page pair player0pointer itself uses) instead of the
@@ -776,7 +790,7 @@ export const generateRomNoiseChecks = (Blockly) => {
         // this reads real code starting from the very base of bank 1's
         // mapped ROM, offset by 0-255 bytes into it - genuine Yars'
         // Revenge-style "read whatever code is there", zero ROM cost.
-        ` ${name}pointerlo = ${offsetVar}`,
+        ` ${name}pointerlo = temp2`,
         ` ${name}pointerhi = ${baseHigh}`,
         ` ${name}height = ${heightVar}`,
         `${doneLabel}`,
@@ -883,6 +897,14 @@ const DIRECTION16_STEPS = [
   [-1, 0], [-2, -1], [-1, -1], [-1, -2],
 ];
 
+// In DIRECTION16_STEPS an axis value of 2 marks the dominant axis of a halfway
+// direction and 1 the minor one (a pure compass point or a diagonal uses 1 on
+// each axis it moves along, at full speed). So an axis steps at HALF speed only
+// when its value is 1 and the other axis is 2. This used to be read the other
+// way round (2 meant half), which made every halfway direction lean toward the
+// wrong axis (the 16-way angles came out in the wrong order).
+const isHalfStep = (step, otherStep) => Math.abs(step) === 1 && Math.abs(otherStep) === 2;
+
 export const generateMissileFireChecks = (Blockly) => {
   const used = Blockly.BBasic.missileFireUsedFor;
   if (!used || !used.size) return '';
@@ -916,9 +938,9 @@ export const generateMissileFireChecks = (Blockly) => {
     const dispatch = is16 ?
       DIRECTION16_STEPS.flatMap(([xStep, yStep], dir) => [
         ...(xStep ? [` if ${dirVar} = ${dir} then ${name}x = ${name}x ${xStep > 0 ? '+' : '-'} ` +
-          `${Math.abs(xStep) === 1 ? speedVar : halfSpeedVar}`] : []),
+          `${isHalfStep(xStep, yStep) ? halfSpeedVar : speedVar}`] : []),
         ...(yStep ? [` if ${dirVar} = ${dir} then ${name}y = ${name}y ${yStep > 0 ? '+' : '-'} ` +
-          `${Math.abs(yStep) === 1 ? speedVar : halfSpeedVar}`] : []),
+          `${isHalfStep(yStep, xStep) ? halfSpeedVar : speedVar}`] : []),
       ]) :
       [
         // X dispatch: Up-Right/Right/Down-Right (1,2,3) step +speed,
@@ -1373,9 +1395,9 @@ export const generateInertiaChecks = (Blockly) => {
         is16 ?
         DIRECTION16_STEPS.flatMap(([xStep, yStep], dir) => [
           ...(xStep ? [` if ${dirVar} = ${dir} then ${velocityXVar} = ${velocityXVar} ${xStep > 0 ? '+' : '-'} ` +
-            `${Math.abs(xStep) === 1 ? rateVar : halfRateVar}`] : []),
+            `${isHalfStep(xStep, yStep) ? halfRateVar : rateVar}`] : []),
           ...(yStep ? [` if ${dirVar} = ${dir} then ${velocityYVar} = ${velocityYVar} ${yStep > 0 ? '+' : '-'} ` +
-            `${Math.abs(yStep) === 1 ? rateVar : halfRateVar}`] : []),
+            `${isHalfStep(yStep, xStep) ? halfRateVar : rateVar}`] : []),
         ]) :
         [
           ` if ${dirVar} = 1 then ${velocityXVar} = ${velocityXVar} + ${rateVar}`,
@@ -2090,6 +2112,19 @@ export default (Blockly) => {
   // exactly 1 frame resets stageVar back to 0. reserveMissileBounceDevVars
   // (bbasic.js's  init()) guarantees stageVar/frameVar/origDirVar (if
   // hasFire)/origVelocityX/Y (if hasInertia) already exist here.
+  // Clears the object's "fired" flag - the same thing that happens when it
+  // goes off-screen - so generateMissileFireChecks stops stepping it. Nothing
+  // to do (and no flag byte to write) for an object no Fire or Bounce block
+  // uses, which includes both players.
+  Blockly.BBasic['object_fire_stop'] = function(block) {
+    const name = block.getFieldValue('OBJECT');
+    const used = Blockly.BBasic.missileFireUsedFor;
+    if (!used || !used.has(name)) return '';
+    const flagsVar = Blockly.BBasic.nameDB_.getName(
+        missileFireFlagsVarName(), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+    return `${flagsVar}{${missileFireActiveBit(name)}} = 0\n`;
+  };
+
   Blockly.BBasic['object_bounce'] = function(block) {
     const name = block.getFieldValue('OBJECT');
     const resolveVar = (canonicalName) =>

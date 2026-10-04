@@ -474,6 +474,109 @@ export default (Blockly) => {
     ].join('\n') + '\n';
   };
 
+  // The direction version of the block above. The direction (0-7 clockwise
+  // from Up, anything else for none) is held in the nudged-row scratch var
+  // while it is classified. Only the axes the direction actually moves along
+  // are nudged: a straight horizontal or vertical direction takes the
+  // neighboring cell ahead of the sprite, and a diagonal runs the same
+  // escalating check as the two-input block (column, then row, then both).
+  Blockly.BBasic['background_collision_pixel_direction'] = function(block) {
+    const sprite = block.getFieldValue('SPRITE');
+    const coords = spriteCollisionCoords(sprite);
+    const direction = Blockly.BBasic.valueToCode(block, 'DIRECTION', Blockly.BBasic.ORDER_NONE) || '255';
+    const configurationStorage = useConfigurationStorage();
+    const config = (configurationStorage && configurationStorage.value) || {};
+    const maxRow = effectiveBackgroundRows(config) - 1;
+    const rowDivisor = pfRowDivisorFor(config);
+    Blockly.BBasic.usesDivMul = true;
+
+    const col = Blockly.BBasic.superchipRwPairs[collisionPixelColumnVarName()];
+    const row = Blockly.BBasic.superchipRwPairs[collisionPixelRowVarName()];
+    const col2 = Blockly.BBasic.superchipRwPairs[collisionPixelNudgedColumnVarName()];
+    const row2 = Blockly.BBasic.superchipRwPairs[collisionPixelNudgedRowVarName()];
+
+    const id = Blockly.BBasic.blockNumbers.next('collisionPixel');
+    const label = (name) => `_collision_pixel_${id}_${name}`;
+    const gotoIf = (dirs, target) => dirs.map((d) => `if ${row2.read} = ${d} then goto ${label(target)}`);
+
+    return [
+      // The direction, kept in the row scratch var until it is classified.
+      `${row2.write} = ${direction}`,
+      // Exact column/row, clamped before anything ever reads them.
+      `${col.write} = (${coords.x} - 17) / 4`,
+      `if ${coords.stretched} then ${col.write} = (${coords.x} - 16) / 4`,
+      `if ${col.read} > 31 then ${col.write} = 31`,
+      `${row.write} = (${coords.y} - 1) / ${rowDivisor}`,
+      `if ${row.read} > ${maxRow} then ${row.write} = ${maxRow}`,
+      // Exact cell.
+      `if pfread(${col.read}, ${row.read}) then goto ${label('done')}`,
+      // Classify the direction: straight, diagonal, or none (exact cell only).
+      ...gotoIf([2], 'right'),
+      ...gotoIf([6], 'left'),
+      ...gotoIf([0], 'up'),
+      ...gotoIf([4], 'down'),
+      ...gotoIf([1, 3, 5, 7], 'diagonal'),
+      `goto ${label('done')}`,
+      // Straight directions: the neighboring cell ahead of the sprite.
+      `@ ${label('right')}`,
+      `if ${col.read} < 31 then ${col.write} = ${col.read} + 1`,
+      `goto ${label('done')}`,
+      `@ ${label('left')}`,
+      `if ${col.read} > 0 then ${col.write} = ${col.read} - 1`,
+      `goto ${label('done')}`,
+      `@ ${label('up')}`,
+      `if ${row.read} > 0 then ${row.write} = ${row.read} - 1`,
+      `goto ${label('done')}`,
+      `@ ${label('down')}`,
+      `if ${row.read} < ${maxRow} then ${row.write} = ${row.read} + 1`,
+      `goto ${label('done')}`,
+      // Diagonals: the right flag goes in the column scratch var and the down
+      // flag in the row scratch var (replacing the direction), then the same
+      // column / row / both escalation as the two-input block.
+      `@ ${label('diagonal')}`,
+      `${col2.write} = 0`,
+      `if ${row2.read} = 1 then ${col2.write} = 1`,
+      `if ${row2.read} = 3 then ${col2.write} = 1`,
+      `if ${row2.read} = 3 then goto ${label('setdown')}`,
+      `if ${row2.read} = 5 then goto ${label('setdown')}`,
+      `${row2.write} = 0`,
+      `goto ${label('flagsdone')}`,
+      `@ ${label('setdown')}`,
+      `${row2.write} = 1`,
+      `@ ${label('flagsdone')}`,
+      // Nudged column alone.
+      `if ${col2.read} then goto ${label('colright')}`,
+      `${col2.write} = ${col.read}`,
+      `if ${col2.read} > 0 then ${col2.write} = ${col2.read} - 1`,
+      `goto ${label('aftercol')}`,
+      `@ ${label('colright')}`,
+      `${col2.write} = ${col.read}`,
+      `if ${col2.read} < 31 then ${col2.write} = ${col2.read} + 1`,
+      `@ ${label('aftercol')}`,
+      `if pfread(${col2.read}, ${row.read}) then goto ${label('usecol2')}`,
+      // Nudged row alone.
+      `if ${row2.read} then goto ${label('rowdown')}`,
+      `${row2.write} = ${row.read}`,
+      `if ${row2.read} > 0 then ${row2.write} = ${row2.read} - 1`,
+      `goto ${label('afterrow')}`,
+      `@ ${label('rowdown')}`,
+      `${row2.write} = ${row.read}`,
+      `if ${row2.read} < ${maxRow} then ${row2.write} = ${row2.read} + 1`,
+      `@ ${label('afterrow')}`,
+      `if pfread(${col.read}, ${row2.read}) then goto ${label('userow2')}`,
+      // Neither single-axis nudge found it: the diagonal cell, trusted.
+      `${col.write} = ${col2.read}`,
+      `${row.write} = ${row2.read}`,
+      `goto ${label('done')}`,
+      `@ ${label('usecol2')}`,
+      `${col.write} = ${col2.read}`,
+      `goto ${label('done')}`,
+      `@ ${label('userow2')}`,
+      `${row.write} = ${row2.read}`,
+      `@ ${label('done')}`,
+    ].join('\n') + '\n';
+  };
+
   Blockly.BBasic['background_collision_pixel_column'] = function(block) {
     const pair = Blockly.BBasic.superchipRwPairs[collisionPixelColumnVarName()];
     return [pair.read, Blockly.BBasic.ORDER_ATOMIC];

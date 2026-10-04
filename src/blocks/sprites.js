@@ -2,7 +2,7 @@ import * as Blockly from 'blockly/core';
 
 import {processPlayerAnimationsStorageDefaults} from '../generators/bbasic/sprites';
 import {usePlayerAnimationsStorage} from '../hooks/project';
-import {PLAYER_ICON, MISSILE_ICON, BALL_ICON, COLOR_ICON, HEIGHT_ICON, ANIMATION_ICON, VISIBILITY_ICON, HORIZONTAL_ICON, VERTICAL_ICON, MIRROR_ICON, FRAME_ICON, PLAY_ICON, PAUSE_ICON, PRIORITY_ICON, DATA_ICON, SEEK_ICON, INERTIA_ICON} from './icon';
+import {PLAYER_ICON, MISSILE_ICON, BALL_ICON, COLOR_ICON, HEIGHT_ICON, ANIMATION_ICON, VISIBILITY_ICON, HORIZONTAL_ICON, VERTICAL_ICON, MIRROR_ICON, FRAME_ICON, PLAY_ICON, PAUSE_ICON, PRIORITY_ICON, DATA_ICON, SEEK_ICON, INERTIA_ICON, STOP_ICON} from './icon';
 
 const PRIORITY_COLOUR = '#009688';
 
@@ -1492,6 +1492,27 @@ Blockly.defineBlocksWithJsonArray([
       'EVERY frame the collision persists (place it behind whatever check decides it should bounce ' +
       '- a collision block, a screen-edge X/Y comparison, etc. - it doesn\'t detect anything by ' +
       'itself) so it can tell consecutive stuck frames apart from a brand new hit.',
+  },
+  // Cancels what a Fire block started: the object stops moving where it is.
+  // Same OBJECT dropdown and colour sync as object_bounce above.
+  {
+    'type': 'object_fire_stop',
+    'message0': `${STOP_ICON} Stop fired %1`,
+    'args0': [
+      {
+        'type': 'field_dropdown',
+        'name': 'OBJECT',
+        'options': SEEK_OBJECT_OPTIONS,
+      },
+    ],
+    'previousStatement': null,
+    'nextStatement': null,
+    'colour': 'purple',
+    'extensions': ['object_seek_colour_sync'],
+    'tooltip': 'Stops a missile or ball that a "Fire" block launched from moving, leaving it exactly ' +
+      'where it is right now - its height and visibility are not touched (use "Missile: set ' +
+      'Height" to hide it), and a later "Fire" block launches it again. Has no effect on a player, ' +
+      'or on an object no "Fire" block ever launched.',
   },
 ]);
 

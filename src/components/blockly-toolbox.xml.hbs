@@ -444,6 +444,8 @@
             </value>
         </block>
 
+        <block type="object_fire_stop"></block>
+
         <block type="object_seek_to">
             <value name="X">
                 <shadow type="math_number">
@@ -635,7 +637,13 @@
                 </shadow>
             </value>
         </block>
-        <block type="background_collision_pixel"></block>
+        <block type="background_collision_pixel_direction">
+            <value name="DIRECTION">
+                <shadow type="math_number">
+                    <field name="NUM">2</field>
+                </shadow>
+            </value>
+        </block>
         <block type="background_collision_pixel_column"></block>
         <block type="background_collision_pixel_row"></block>
         <block type="background_clear"></block>

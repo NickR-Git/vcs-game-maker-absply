@@ -2475,6 +2475,14 @@ html {
    renderers/common/renderer.js), and this app has already switched which
    renderer it uses more than once (geras -> zelos -> thrasos), so a fixed
    class here would go stale again the next time it does. */
+/* The editing box that opens over a block's text field (comment blocks, number
+   fields...) has no background of its own here, so the field's text stayed
+   visible underneath and the two overlapped while typing. Give it a solid
+   one so it covers that text. */
+.blocklyWidgetDiv .blocklyHtmlInput {
+  background-color: #fff;
+}
+
 [class*="-renderer"][class*="-theme"] .blocklyText,
 [class*="-renderer"][class*="-theme"] .blocklyFlyoutLabelText {
   font-family: var(--blockly-font-family) !important;

@@ -43,11 +43,20 @@ const buildDistanceBlock = (axis, icon) => ({
     `${axis === 'x' ? 'left' : 'up'}. Recomputed automatically once per frame.`,
 });
 
+// The four diagonals are not real bB switches: the generator turns each one
+// into the two straight directions it is made of (see the input_joystick_get
+// generator in generators/bbasic/input.js), so their option values are only
+// markers. All eight run clockwise from Up, the same order as the Fire
+// block's angles.
 const buildInputOptions = (name, difficultySwitchName) => [
   ['\u2B06 Up', `${name}up`],
-  ['\u2B07 Down', `${name}down`],
-  ['\u2B05 Left', `${name}left`],
+  ['\u2197 Up-Right', `${name}upright`],
   ['\u27A1 Right', `${name}right`],
+  ['\u2198 Down-Right', `${name}downright`],
+  ['\u2B07 Down', `${name}down`],
+  ['\u2199 Down-Left', `${name}downleft`],
+  ['\u2B05 Left', `${name}left`],
+  ['\u2196 Up-Left', `${name}upleft`],
   [FIRE_ICON + ' Fire', `${name}fire`],
   [DIFFICULTY_ADVANCED_ICON + ' Difficulty A', `not ${difficultySwitchName}`],
   [DIFFICULTY_BEGINNER_ICON + ' Difficulty B', `${difficultySwitchName}`],
@@ -105,7 +114,8 @@ Blockly.defineBlocksWithJsonArray([
     'output': 'Boolean',
     'colour': 'red',
     'extensions': ['input_joystick_field_sync'],
-    'tooltip': 'Reads status of the chosen joystick input.',
+    'tooltip': 'Reads status of the chosen joystick input. A diagonal (such as Up-Right) is true ' +
+      'while both of its directions are pushed.',
   },
 ]);
 
