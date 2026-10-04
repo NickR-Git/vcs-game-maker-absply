@@ -402,7 +402,7 @@ Song bank import/export on the Music tab, new .vcsbnk/.vcsmus file extensions, D
 - Sound and Music tabs: exported files now use dedicated extensions: .vcsbnk
   for sounds (single sound and sound bank) and .vcsmus for music (song, song
   bank and pattern). Importing still accepts older .json files too.
-- Data, Sprites, Background, Title, Generated and Text tabs: the toolbar sits close under the intro text (the same 6px gap as the Sound tab), also with Expert mode on, where the gap had doubled. The
+- Data, Sprites, Background, Title, Generated, Project and Text tabs: the toolbar sits close under the intro text (the same 6px gap as the Sound tab), also with Expert mode on, where the gap had doubled. The
   Data tab's toolbar margin comment is updated to match.
 - Data tab: a cell's mode menu has one "Sprite animation" entry instead of
   separate Player 0 / Player 1 animation entries (both listed the same
@@ -415,3 +415,34 @@ Song bank import/export on the Music tab, new .vcsbnk/.vcsmus file extensions, D
   project clears it) the blank screen now has the same proportions as a
   running game (it was drawn shorter, so it looked too wide, and after
   clearing it kept whatever size the previous game used).
+
+=== 0.51.15 ===
+Example Projects on the Project tab (downloaded from GitHub), a screenshot saved in each project file, and a matching pinned Project toolbar
+
+- Emulator: a once-a-second check puts the canvas back if it has gone missing
+  from its panel, is hidden, or its panel's height no longer matches it, and
+  logs what it found to the browser console ("Emulator canvas problem") so a
+  repeat of the vanishing canvas can be traced.
+- Saving a project (.vcsgm) now also stores a screenshot of the emulator, the
+  same picture the camera button saves, as a PNG in a "screenshot" field. It
+  is only taken while a ROM is running, and nothing reads it back on load.
+- Project tab: new Example Projects button in the toolbar. It swaps the Project
+  Settings section for the Example Projects section, a grid of cards with the
+  project's saved screenshot, title, version and developer. Clicking a card
+  opens a popup with all of that project's settings (including email, website
+  and description) and Open example / Close buttons. The examples come from
+  the repo's examples folder (see src/hooks/examples.js): once per page load
+  the app checks the folder, downloads new or changed .vcsgm files into the
+  browser's IndexedDB, and deletes local copies of files removed from the
+  folder. The list works offline from the stored copies.
+  While the app checks for or downloads example projects, the Example
+  Projects toolbar button shows a spinner and the section shows "Downloading
+  example projects (n of m)..." (or "Checking for example projects...").
+  The folder check bypasses the browser's one-minute cache of GitHub's
+  listing (so added/removed example files show on the next page load), and
+  each file is fetched by its hash from GitHub's git blob API so old content
+  is never stored under a new hash.
+- Project tab: the toolbar now matches the graphic editor toolbar - same icon
+  size and hover/pressed/disabled states, and it stays pinned to the top of
+  the window while the tab scrolls, with a bottom border once content has
+  scrolled under it.

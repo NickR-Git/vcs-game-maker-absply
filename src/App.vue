@@ -489,6 +489,8 @@ import {buildRom, useRomCapacity, useRomOutdated, useHasCompiledRom, useCompiled
   useBuildInProgress} from './hooks/rom';
 import {safeWithGopher2600} from './hooks/emulator';
 import {escapeHtml} from './utils/build-error';
+import {captureEmulatorScreenshot} from './utils/emulator-screenshot';
+import {syncExamples} from './hooks/examples';
 import KeyMappingDialog from './components/KeyMappingDialog.vue';
 import pkg from '../package.json';
 const {productName, version} = pkg;
@@ -527,6 +529,8 @@ const ERROR_HEIGHT_KEY = 'vcs-game-maker.errorHeight';
 // when the window is in the background.
 const EMULATOR_MEASURE_RETRIES = 60;
 const EMULATOR_MEASURE_INTERVAL = 50;
+// How often checkEmulatorCanvas looks for a vanished/mis-sized emulator canvas.
+const EMULATOR_WATCHDOG_INTERVAL = 1000;
 
 // Alphabetizes the "Variables" panel's  per-slot lists (a-z for a plain
 // letter slot; numeric-aware for a Superchip "varN" slot, so var2 sorts
@@ -592,12 +596,16 @@ export default {
     };
   },
   mounted() {
+    // Once per page load: fetch new/changed example projects (see hooks/examples.js).
+    syncExamples();
     this.attachEmulator();
     window.addEventListener('resize', this.handleWindowResize);
     window.addEventListener('gopher2600-ready', this.handleGopher2600Ready);
+    this.emulatorWatchdogTimer = window.setInterval(this.checkEmulatorCanvas, EMULATOR_WATCHDOG_INTERVAL);
   },
   beforeDestroy() {
     this.stopResize();
+    window.clearInterval(this.emulatorWatchdogTimer);
     window.removeEventListener('resize', this.handleWindowResize);
     window.removeEventListener('gopher2600-ready', this.handleGopher2600Ready);
     if (this.emulatorResizeObserver) {
@@ -883,12 +891,42 @@ export default {
     // observing its size.
     attachEmulator() {
       const container = document.getElementById('gopher2600-target-container');
-      const screen = document.getElementById('gopher2600-screen');
+      // Falls back to the remembered element: if the canvas was ever removed
+      // from the page along with a re-rendered container, it can't be found
+      // by id any more but is still there to put back.
+      const screen = document.getElementById('gopher2600-screen') || this.emulatorScreenEl;
       if (!container || !screen) return;
+      this.emulatorScreenEl = screen;
       container.appendChild(screen);
       screen.style.display = '';
       this.observeEmulatorSize(container, screen);
       this.updateEmulatorScale();
+    },
+    // Safety net for the emulator canvas vanishing (reported as happening
+    // sometimes after a refresh, cause not pinned down): once a second,
+    // checks that the canvas is still inside its container, shown, and that
+    // the container's height matches the canvas's scaled height, and
+    // repairs whichever is off. Logs what it found so a repeat can be traced.
+    checkEmulatorCanvas() {
+      const container = document.getElementById('gopher2600-target-container');
+      const screen = document.getElementById('gopher2600-screen') || this.emulatorScreenEl;
+      if (!container || !screen || !container.clientWidth || document.hidden) return;
+      const problems = [];
+      if (screen.parentElement !== container) problems.push('canvas not in its container');
+      if (screen.style.display === 'none') problems.push('canvas hidden');
+      if (screen.offsetWidth && screen.offsetHeight) {
+        const marginBottom = parseFloat(getComputedStyle(screen).marginBottom) || 0;
+        const expected = Math.round((screen.offsetHeight + marginBottom) *
+          (container.clientWidth / screen.offsetWidth));
+        if (Math.abs(container.clientHeight - expected) > 2) {
+          problems.push(`container height ${container.clientHeight}px, expected ${expected}px`);
+        }
+      } else {
+        problems.push(`canvas size ${screen.offsetWidth}x${screen.offsetHeight}`);
+      }
+      if (!problems.length) return;
+      console.warn('Emulator canvas problem, repairing:', problems.join('; '));
+      this.attachEmulator();
     },
     // Fires on every 'gopher2600-ready' event - the real first page load,
     // a full "Refresh emulator" reload, and (see public/index.html's
@@ -1086,22 +1124,13 @@ export default {
       markSkipLoadLastProjectCheckOnce();
       window.location.reload();
     },
-    // Saves what the emulator is showing as a PNG. The canvas is drawn at the
-    // console's pixel size (160 wide) and stretched to twice that width on
-    // screen, so the image is written at that displayed shape rather than the
-    // squashed raw size, with hard pixel edges.
+    // Saves what the emulator is showing as a PNG.
     handleScreenshot() {
-      const source = document.querySelector('#gopher2600-target-container canvas');
-      if (!source || !source.width || !source.height) {
+      const shot = captureEmulatorScreenshot();
+      if (!shot) {
         this.errorStorage.value = 'There is no emulator picture to capture yet.';
         return;
       }
-      const shot = document.createElement('canvas');
-      shot.width = source.width * 2;
-      shot.height = source.height;
-      const context = shot.getContext('2d');
-      context.imageSmoothingEnabled = false;
-      context.drawImage(source, 0, 0, shot.width, shot.height);
       const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
       shot.toBlob((blob) => {
         if (!blob) return;
@@ -1483,6 +1512,7 @@ export default {
 .dark-mode .palette-swatch,
 .dark-mode .quick-color-swatch,
 .dark-mode .row-swatch,
+.dark-mode .example-screenshot-frame,
 .dark-mode .color-swatch-picker-dot,
 .dark-mode .sequence-chip,
 .dark-mode .instrument-summary-chip {

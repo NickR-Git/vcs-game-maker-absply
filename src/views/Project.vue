@@ -9,94 +9,114 @@
       </p>
     </v-card-text>
 
-    <v-card-actions class="project-actions">
-      <v-btn
-        icon
-        class="project-flat-icon-btn"
-        title="Save"
-        @click="handleSaveProject"
-      >
-        <v-icon>mdi-content-save</v-icon>
-      </v-btn>
-      <v-btn
-        icon
-        class="project-flat-icon-btn"
-        title="Save As..."
-        @click="handleSaveProjectAs"
-      >
-        <v-icon>mdi-content-save-edit</v-icon>
-      </v-btn>
-      <v-btn
-        icon
-        class="project-flat-icon-btn"
-        title="Open Project"
-        @click="handleOpenProjectClick"
-      >
-        <v-icon>mdi-folder-open</v-icon>
-      </v-btn>
-      <template>
-          <v-dialog
-            v-model="data.newProjectDialog"
-            width="500"
-          >
-            <template v-slot:activator="{ on, attrs }">
-              <v-btn
-                icon
-                class="project-flat-icon-btn"
-                title="Create New Project"
-                v-bind="attrs"
-                v-on="on"
-              >
-                <v-icon>mdi-file-plus-outline</v-icon>
-              </v-btn>
-            </template>
-
-            <v-card>
-              <v-card-title class="text-h5 grey lighten-2">
-                Do you really want to start a new project?
-              </v-card-title>
-
-              <v-card-text class="mt-4">
-                This will create a new project, clearing all the blocks on the actions tab,
-                all the graphics and animations on the player 0 and player 1 tab, all of the
-                backgrounds on the backgrounds tab and replace all the options with default
-                values.
-              </v-card-text>
-
-              <v-divider></v-divider>
-
-              <v-card-actions>
+    <div class="project-toolbar tight-under-intro" :class="{'project-toolbar-scrolled': isToolbarScrolled}">
+      <div class="project-toolbar-row">
+        <v-btn
+          icon
+          small
+          class="project-flat-icon-btn data-icon-btn-size"
+          title="Save"
+          @click="handleSaveProject"
+        >
+          <v-icon>mdi-content-save</v-icon>
+        </v-btn>
+        <v-btn
+          icon
+          small
+          class="project-flat-icon-btn data-icon-btn-size"
+          title="Save As..."
+          @click="handleSaveProjectAs"
+        >
+          <v-icon>mdi-content-save-edit</v-icon>
+        </v-btn>
+        <v-btn
+          icon
+          small
+          class="project-flat-icon-btn data-icon-btn-size"
+          title="Open Project"
+          @click="handleOpenProjectClick"
+        >
+          <v-icon>mdi-folder-open</v-icon>
+        </v-btn>
+        <template>
+            <v-dialog
+              v-model="data.newProjectDialog"
+              width="500"
+            >
+              <template v-slot:activator="{ on, attrs }">
                 <v-btn
-                  color="primary"
-                  text
-                  @click="handleNewProject"
+                  icon
+                  small
+                  class="project-flat-icon-btn data-icon-btn-size"
+                  title="Create New Project"
+                  v-bind="attrs"
+                  v-on="on"
                 >
-                  Create new project
+                  <v-icon>mdi-file-plus-outline</v-icon>
                 </v-btn>
-                <v-spacer></v-spacer>
-                <v-btn
-                  color="secondary"
-                  text
-                  @click="data.newProjectDialog = false"
-                >
-                  Nevermind
-                </v-btn>
-              </v-card-actions>
+              </template>
+
+              <v-card>
+                <v-card-title class="text-h5 grey lighten-2">
+                  Do you really want to start a new project?
+                </v-card-title>
+
+                <v-card-text class="mt-4">
+                  This will create a new project, clearing all the blocks on the actions tab,
+                  all the graphics and animations on the player 0 and player 1 tab, all of the
+                  backgrounds on the backgrounds tab and replace all the options with default
+                  values.
+                </v-card-text>
+
+                <v-divider></v-divider>
+
+                <v-card-actions>
+                  <v-btn
+                    color="primary"
+                    text
+                    @click="handleNewProject"
+                  >
+                    Create new project
+                  </v-btn>
+                  <v-spacer></v-spacer>
+                  <v-btn
+                    color="secondary"
+                    text
+                    @click="data.newProjectDialog = false"
+                  >
+                    Nevermind
+                  </v-btn>
+                </v-card-actions>
             </v-card>
           </v-dialog>
-      </template>
-      <input
-        ref="importFileInput"
-        type="file"
-        accept=".vcsgm"
-        class="project-hidden-file-input"
-        @change="handleImportFileInputChange"
-      >
-    </v-card-actions>
+        </template>
+        <v-btn
+          icon
+          small
+          class="project-flat-icon-btn data-icon-btn-size"
+          :class="{'project-flat-icon-btn-active': data.showExamples}"
+          :title="examples.status === 'loading' ? 'Example Projects (checking for updates...)' : 'Example Projects'"
+          @click="data.showExamples = !data.showExamples"
+        >
+          <v-progress-circular
+            v-if="examples.status === 'loading'"
+            indeterminate
+            :size="18"
+            :width="2"
+          />
+          <v-icon v-else>mdi-folder-star-outline</v-icon>
+        </v-btn>
+        <input
+          ref="importFileInput"
+          type="file"
+          accept=".vcsgm"
+          class="project-hidden-file-input"
+          @change="handleImportFileInputChange"
+        >
+      </div>
+    </div>
 
-    <v-divider class="my-0" />
-
-    <v-card-text class="project-settings-text">
+    <v-card-text v-if="!data.showExamples" class="project-settings-text">
       <span class="text-subtitle-1 project-settings-label">Project Settings</span>
       <div class="project-title-row">
         <v-text-field
@@ -161,10 +181,125 @@
         class="project-description-field"
       />
     </v-card-text>
+
+    <v-card-text v-else class="project-settings-text">
+      <span class="text-subtitle-1 project-settings-label">Example Projects</span>
+      <div v-if="examples.status === 'loading'" class="example-progress">
+        <v-progress-circular indeterminate :size="16" :width="2" />
+        <span v-if="examples.total">
+          Downloading example projects ({{ examples.done }} of {{ examples.total }})...
+        </span>
+        <span v-else>Checking for example projects...</span>
+      </div>
+      <p v-if="!examples.entries.length && examples.status !== 'loading'" class="v-messages theme--light v-messages__message example-status">
+        <template v-if="examples.status === 'error'">
+          Could not get the examples ({{ examples.message }}). They will be available once the
+          app can reach GitHub.
+        </template>
+        <template v-else>There are no examples yet.</template>
+      </p>
+      <div class="example-list">
+        <v-card
+          v-for="example in examples.entries"
+          :key="example.name"
+          outlined
+          :ripple="false"
+          class="example-card"
+          @click="handleSelectExample(example)"
+        >
+          <div class="example-screenshot-frame">
+            <img
+              v-if="example.screenshot"
+              :src="example.screenshot"
+              :alt="exampleTitle(example)"
+              class="example-screenshot"
+            >
+            <v-icon v-else class="example-screenshot-placeholder">mdi-image-off-outline</v-icon>
+          </div>
+          <div class="example-card-text">
+            <div class="example-card-title">{{ exampleTitle(example) }}</div>
+            <div v-if="example.version" class="example-card-line">Version {{ example.version }}</div>
+            <div v-if="example.developer" class="example-card-line">{{ example.developer }}</div>
+          </div>
+        </v-card>
+      </div>
+    </v-card-text>
+
+    <v-dialog v-model="data.exampleDialog" width="640">
+      <v-card v-if="data.selectedExample">
+        <v-card-title>{{ exampleTitle(data.selectedExample) }}</v-card-title>
+        <v-card-text>
+          <div v-if="data.selectedExample.screenshot" class="example-screenshot-frame example-dialog-screenshot">
+            <img
+              :src="data.selectedExample.screenshot"
+              :alt="exampleTitle(data.selectedExample)"
+              class="example-screenshot"
+            >
+          </div>
+          <v-text-field
+            :value="data.selectedExample.title"
+            label="Project Title"
+            persistent-placeholder
+            readonly
+          />
+          <v-row class="project-tight-row">
+            <v-col cols="6">
+              <v-text-field
+                :value="data.selectedExample.developer"
+                label="Developer"
+                persistent-placeholder
+                readonly
+              />
+            </v-col>
+            <v-col cols="6">
+              <v-text-field
+                :value="data.selectedExample.version"
+                label="Version"
+                persistent-placeholder
+                readonly
+              />
+            </v-col>
+          </v-row>
+          <v-row class="project-tight-row">
+            <v-col cols="6">
+              <v-text-field
+                :value="data.selectedExample.website"
+                label="Website"
+                persistent-placeholder
+                readonly
+              />
+            </v-col>
+            <v-col cols="6">
+              <v-text-field
+                :value="data.selectedExample.email"
+                label="Email"
+                persistent-placeholder
+                readonly
+              />
+            </v-col>
+          </v-row>
+          <v-textarea
+            :value="data.selectedExample.description"
+            label="Project Description"
+            persistent-placeholder
+            outlined
+            readonly
+            rows="6"
+            hide-details
+          />
+          <p v-if="data.exampleError" class="example-error">{{ data.exampleError }}</p>
+        </v-card-text>
+        <v-card-actions>
+          <v-btn text color="primary" @click="handleOpenExample">Open example</v-btn>
+          <v-spacer></v-spacer>
+          <v-btn text @click="data.exampleDialog = false">Close</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-card>
 </template>
 <script>
-import {defineComponent, reactive, computed, onMounted} from '@vue/composition-api';
+import {defineComponent, reactive, computed, onMounted, onBeforeUnmount, ref, getCurrentInstance} from '@vue/composition-api';
 import {saveAs} from 'file-saver';
 import YAML from 'yaml';
 
@@ -178,8 +313,11 @@ import {migrateLegacyKeypadBlocksInWorkspaceXml} from '../hooks/migrate-keypad-b
 import {getDateInfix} from '../utils/date';
 import {resetMusicEditorActiveState} from '../hooks/music-editor-state';
 import {clearEmulatorRom} from '../hooks/emulator';
+import {useLastLoadedRomBytes} from '../hooks/rom-status';
+import {captureEmulatorScreenshot} from '../utils/emulator-screenshot';
 import {matrixToPlayfield, playfieldToMatrix} from '../utils/pixels';
 import {persistActiveFileHandle, loadPersistedFileHandle, ensureWritePermission, persistActiveFilePath, loadPersistedFilePath} from '../utils/file-handle-storage';
+import {examplesState} from '../hooks/examples';
 import pkg from '../../package.json';
 const appVersion = pkg.version;
 
@@ -227,6 +365,12 @@ export default defineComponent({
   setup(props, context) {
     const data = reactive({
       newProjectDialog: false,
+      // Whether the Examples section replaces the Project Settings section,
+      // and the example card whose popup is open (see hooks/examples.js).
+      showExamples: false,
+      selectedExample: null,
+      exampleDialog: false,
+      exampleError: '',
       // The handle "Save" writes back to, from the last "Save As..." or
       // "Open Project" that went through the File System Access API (see
       // SUPPORTS_FILE_SYSTEM_ACCESS above) - null whenever there's nothing
@@ -247,6 +391,17 @@ export default defineComponent({
       activeFilePath: null,
     });
     const router = context.root.$router;
+
+    // Same "growing padding + a bottom border once actually scrolled"
+    // treatment as the graphic editor toolbar. This component's root is the
+    // scrolling .editor-container itself.
+    const instance = getCurrentInstance();
+    const isToolbarScrolled = ref(false);
+    const handleToolbarScroll = (event) => {
+      isToolbarScrolled.value = event.target.scrollTop > 0;
+    };
+    onMounted(() => instance.proxy.$el.addEventListener('scroll', handleToolbarScroll));
+    onBeforeUnmount(() => instance.proxy.$el.removeEventListener('scroll', handleToolbarScroll));
 
     const backgroundsStorage = useBackgroundsStorage();
     const playerAnimationsStorage = usePlayerAnimationsStorage();
@@ -339,7 +494,7 @@ export default defineComponent({
       });
     }
 
-    return {data, router, backgroundsStorage, playerAnimationsStorage,
+    return {data, router, isToolbarScrolled, examples: examplesState, backgroundsStorage, playerAnimationsStorage,
       workspaceStorage, configurationStorage, scoreFontStorage, squishCustomScoreFontStorage, dataTablesStorage,
       textStringsStorage, textFontStorage, soundEffectsStorage, songsStorage, titleScreenStorage, projectTitle,
       projectDescription, projectDeveloper, projectVersion, projectAutoIncrementVersion, projectIncludeDateInFilename,
@@ -426,6 +581,12 @@ export default defineComponent({
         })),
       };
 
+      // A picture of what the emulator is showing, as a PNG data URL, so a
+      // saved project can be recognised at a glance. Only taken while a ROM
+      // is running (otherwise it would just be a black screen), and nothing
+      // reads it back on load.
+      const screenshot = useLastLoadedRomBytes().value ? captureEmulatorScreenshot() : null;
+
       const projectYaml = YAML.stringify({
         'type': FORMAT_TYPE,
         'format-version': FORMAT_VERSION,
@@ -438,6 +599,7 @@ export default defineComponent({
         // already does for when.
         'app-version': appVersion,
         'generation-time': new Date(),
+        'screenshot': screenshot ? screenshot.toDataURL('image/png') : undefined,
         configuration,
         'blockly-workspace': this.workspaceStorage,
         'player-animations': playerAnimations,
@@ -934,6 +1096,39 @@ export default defineComponent({
       appendCompileLog(`Imported project ${sourceName}`, 'stage');
     },
 
+    handleSelectExample(example) {
+      this.data.selectedExample = example;
+      this.data.exampleError = '';
+      this.data.exampleDialog = true;
+    },
+
+    exampleTitle(example) {
+      return example.title || example.name.replace(/\.vcsgm$/i, '');
+    },
+
+    // Opens the example in the popup like a project file opened from disk,
+    // except nothing is saved back to it: the example is a read-only copy, so
+    // the active file handle/path from whatever project was open before is
+    // dropped, the same as for a new project.
+    handleOpenExample() {
+      const example = this.data.selectedExample;
+      if (!example) return;
+      try {
+        this.applyProjectYaml(example.text, example.name);
+      } catch (e) {
+        console.error('Could not open the example', e);
+        this.data.exampleError = `Could not open this example: ${e.message}`;
+        return;
+      }
+      this.data.activeFileHandle = null;
+      persistActiveFileHandle(null);
+      this.data.activeFilePath = null;
+      persistActiveFilePath(null);
+      this.data.exampleError = '';
+      this.data.exampleDialog = false;
+      this.data.showExamples = false;
+    },
+
     handleNewProject() {
       this.configurationStorage = null;
       this.workspaceStorage = null;
@@ -974,37 +1169,74 @@ export default defineComponent({
 });
 </script>
 <style scoped>
-/* Aligns the save icon's  visible glyph (not the button's  larger,
-   invisible circular hit area) with the "Project" title text's left edge
-   above it - confirmed directly via getBoundingClientRect() (icon was 22px
-   further right than the title). v-card-actions' default 16px left
-   padding plus the icon button's internal padding around its glyph
-   accounted for all 22px between them. */
-.project-actions {
-  padding-left: 8px;
-  /* Matches the Generated tab's  flush title-to-icon-row spacing
-     (.generated-code-toolbar has 0 top padding) - v-card-actions'
-     default top padding otherwise left an 8px gap under "Project" that
-     tab doesn't have. */
-  padding-top: 0;
-  /* Plain, small flex gap between the icons - v-dialog injects its
-     wrapper div around the Create New Project button's activator, which
-     broke every margin/sibling-selector-based approach tried here before
-     this (each button ended up with different actual DOM adjacency). gap
-     applies evenly around each direct child regardless of what's inside it. */
-  display: flex;
-  align-items: center;
-  gap: 0;
+/* The scrolling area, so the toolbar can stay pinned to its top (same as the
+   Data tab). */
+.editor-container {
+  position: absolute;
+  overflow: auto;
+  top: 0;
+  bottom: 0;
+  width: 100%;
 }
 
-/* Vuetify's  base styles apply "margin-left" to a v-btn that DIRECTLY
-   follows another v-btn (confirmed directly: computed margin-left was 8px
-   on the Import button - which sits right after the plain Save button - and
-   0px on both Save and Create New Project, which sit after a non-button
-   sibling instead). That built-in rule fights the plain "gap" this file
-   uses for spacing instead, so it's zeroed out here. */
-.project-actions .project-flat-icon-btn {
-  margin-left: 0 !important;
+/* Same toolbar treatment as the graphic editor toolbar (and the Data tab's):
+   pinned to the top of the scrolling area, with a bottom border and extra
+   padding once something has scrolled under it. */
+.project-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background-color: #fff;
+  padding: 4px 16px;
+  transition: padding 0.15s ease;
+}
+
+.project-toolbar-scrolled {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.24);
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.desaturate-app-colors .project-toolbar {
+  background-color: #e1e1e1;
+}
+
+/* Plain, small flex gap between the icons - v-dialog injects its wrapper div
+   around the Create New Project button's activator, so spacing comes from the
+   row's gap rather than per-button margins. */
+.project-toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+}
+
+.project-toolbar-row >>> .data-icon-btn-size {
+  margin: 0;
+}
+
+/* Icon states copied from the graphic editor toolbar: faint at rest, darker
+   on hover, shrinking slightly while pressed, and dimmer still when disabled. */
+.project-toolbar-row >>> .v-btn .v-icon {
+  color: var(--editor-icon-rest-color, rgba(0, 0, 0, 0.38)) !important;
+  transition: color 0.15s ease, transform 0.08s ease;
+}
+
+.project-toolbar-row >>> .v-btn--disabled .v-icon {
+  color: rgba(0, 0, 0, 0.18) !important;
+}
+
+.project-toolbar-row >>> .v-btn:not(.v-btn--disabled):hover .v-icon {
+  color: rgba(0, 0, 0, 0.87) !important;
+}
+
+.project-toolbar-row >>> .v-btn:not(.v-btn--disabled):active .v-icon {
+  transform: scale(0.82);
+}
+
+/* The Example Projects button while its section is showing. */
+.project-toolbar-row >>> .project-flat-icon-btn-active .v-icon {
+  color: var(--v-primary-base, #1976d2) !important;
 }
 
 /* v-dialog renders its  activator slot content wrapped in a real
@@ -1012,13 +1244,13 @@ export default defineComponent({
    [Save button, Import button, DIV.v-dialog__container, hidden input], not
    [Save, Import, Create-New-Project button, hidden input] as the template's
    flat appearance suggests) - THAT div, not the Create New Project
-   button itself, was the actual flex child .project-actions' "gap"
+   button itself, was the actual flex child .project-toolbar-row's "gap"
    was spacing against, one reason the three icons never looked evenly
    spaced no matter what margin/gap value was tried here before this.
    display: contents removes the wrapper from the box model entirely while
    keeping its child (the real button) exactly where it sits in the DOM, so
    gap now applies between the three ICONS themselves, uniformly. */
-.project-actions >>> .v-dialog__container {
+.project-toolbar-row >>> .v-dialog__container {
   display: contents;
 }
 
@@ -1121,31 +1353,84 @@ export default defineComponent({
   white-space: nowrap;
 }
 
-/* Same flat-icon, fade-in-on-hover/blue-on-press treatment as every other
-   icon button in the app (e.g. GeneratedCode.vue's
-   .generated-code-flat-icon-btn, MusicEditor.vue's
-   .music-flat-icon-btn) - transparent background (no Vuetify default hover
-   circle), icon fades from a faint grey to near-black on hover, and flashes
-   the app's blue on an actual click/press. */
+/* Flat, transparent buttons; the icon colors and press effect come from the
+   toolbar row's rules below, the same as the graphic editor toolbar's. */
 .project-flat-icon-btn {
   background-color: transparent !important;
   box-shadow: none !important;
+  border: none !important;
 }
 
 .project-flat-icon-btn::before {
   display: none;
 }
 
-.project-flat-icon-btn >>> .v-icon {
-  color: rgba(0, 0, 0, 0.38) !important;
-  transition: color 0.15s ease;
+
+/* Example cards: the same outlined card look as the cards on the other tabs,
+   in a grid like the Data tab's. */
+.example-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 8px;
+  margin-top: 8px;
 }
 
-.project-flat-icon-btn:hover >>> .v-icon {
-  color: rgba(0, 0, 0, 0.87) !important;
+.example-card {
+  cursor: pointer;
+  overflow: hidden;
 }
 
-.project-flat-icon-btn:active >>> .v-icon {
-  color: var(--v-primary-base, #1976d2) !important;
+.example-screenshot-frame {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #000;
+  aspect-ratio: 320 / 220;
+}
+
+.example-screenshot {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+.example-screenshot-placeholder {
+  color: rgba(255, 255, 255, 0.4) !important;
+}
+
+.example-card-text {
+  padding: 8px 12px 12px;
+}
+
+.example-card-title {
+  font-weight: 500;
+}
+
+.example-card-line {
+  font-size: 0.85em;
+  opacity: 0.7;
+}
+
+.example-dialog-screenshot {
+  margin-bottom: 16px;
+}
+
+.example-error {
+  color: var(--destructive-color, #b71c1c);
+  margin: 8px 0 0;
+}
+
+.example-status {
+  margin-top: 8px;
+}
+
+.example-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 0.85em;
+  opacity: 0.7;
 }
 </style>
