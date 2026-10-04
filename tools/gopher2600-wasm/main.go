@@ -217,31 +217,39 @@ type keyBinding struct {
 	Control string
 }
 
-// defaultCropWidth/Height are the standard NTSC visible-picture dimensions
-// (before overscan), used only until the first real frame renders and sets
-// the canvas's true size from frameinfo.Current.Crop(). Without this, the
+// defaultCropWidth/Height are the picture size a compiled game normally
+// renders at (160x220 for the bB kernel), used while no ROM is running -
+// before the first ROM loads and after clearRom - and until a real frame
+// renders and sets the canvas's true size from frameinfo.Current.Crop(). A
+// shorter size such as 192 rows showed the idle screen visibly wider than a
+// running game. Without this, the
 // canvas sits at the browser's default <canvas> size (300x150) - neither the
 // right resolution nor the right aspect ratio - for the entire span between
 // page load and the first ROM's first rendered frame.
 const (
 	defaultCropWidth  = 160
-	defaultCropHeight = 192
+	defaultCropHeight = 220
 )
 
 func newConsole(canvas js.Value) *console {
 	c := &console{canvas: canvas, keypadModeByPort: map[plugging.PortID]bool{}}
 	c.ctx = canvas.Call("getContext", "2d")
 
-	canvas.Set("width", defaultCropWidth)
-	canvas.Set("height", defaultCropHeight)
-	style := canvas.Get("style")
-	style.Set("width", fmt.Sprintf("%dpx", defaultCropWidth*2)) // see onAnimationFrame's comment on the 2x stretch
-	style.Set("height", fmt.Sprintf("%dpx", defaultCropHeight))
-	c.ctx.Set("fillStyle", "#000")
-	c.ctx.Call("fillRect", 0, 0, defaultCropWidth, defaultCropHeight)
-
+	c.resetCanvasSize()
 	c.renderFrame = js.FuncOf(c.onAnimationFrame)
 	return c
+}
+
+// resetCanvasSize puts the canvas back at the idle size and blanks it. The
+// next rendered frame resizes it again (jsBufSize 0 forces that).
+func (c *console) resetCanvasSize() {
+	c.canvas.Set("width", defaultCropWidth)
+	c.canvas.Set("height", defaultCropHeight)
+	style := c.canvas.Get("style")
+	style.Set("width", fmt.Sprintf("%dpx", defaultCropWidth*2)) // see onAnimationFrame's comment on the 2x stretch
+	style.Set("height", fmt.Sprintf("%dpx", defaultCropHeight))
+	c.jsBufSize = 0
+	c.fillBlack()
 }
 
 func (c *console) onAnimationFrame(this js.Value, args []js.Value) (result any) {
@@ -457,7 +465,7 @@ func (c *console) clearRom() {
 	if c.mixer != nil {
 		c.mixer.Reset()
 	}
-	c.fillBlack()
+	c.resetCanvasSize()
 }
 
 func (c *console) attachRom(romData []byte) error {

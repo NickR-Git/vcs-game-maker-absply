@@ -411,3 +411,7 @@ Song bank import/export on the Music tab, new .vcsbnk/.vcsmus file extensions, D
   screens (stores the screen's id), listed above Sprite animation.
 - Options tab: the TV standard, ROM size, "Show score" and Override row height fields sit closer
   together.
+- Emulator: with no ROM running (a fresh page, or after a new/imported
+  project clears it) the blank screen now has the same proportions as a
+  running game (it was drawn shorter, so it looked too wide, and after
+  clearing it kept whatever size the previous game used).
