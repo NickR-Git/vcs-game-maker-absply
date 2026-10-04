@@ -1009,6 +1009,40 @@ Blockly.defineBlocksWithJsonArray([
     'tooltip': `The playfield row found by the last "Find playfield pixel collided with" block that ` +
       `ran - meaningless if read before that block has run this frame.`,
   },
+  // Per-row color noise for the playfield, the background twin of the player
+  // "rainbow colors" block.
+  {
+    'type': `background_rainbow_colors`,
+    'message0': `${BACKGROUND_ICON} Background rainbow colors, offset %1`,
+    'args0': [
+      {
+        'type': 'input_value',
+        'name': 'OFFSET',
+        'check': 'Number',
+      },
+    ],
+    'inputsInline': true,
+    'previousStatement': null,
+    'nextStatement': null,
+    'colour': BACKGROUND_COLOR,
+    'tooltip': `Gives every playfield row a different color, reading real ROM bytes the same way ` +
+      `the player "rainbow colors" block does. Leave "offset" unplugged for an automatically ` +
+      `shimmering pattern (it defaults to the frame counter), or plug in a number to hold or ` +
+      `scroll the pattern yourself. Needs "Playfield row colors" turned on in Options; with it ` +
+      `off this block does nothing. Loading a background restores that background's row colors ` +
+      `only until the next frame, so use "Stop background rainbow colors" to go back to its row colors.`,
+  },
+  {
+    'type': `background_rainbow_colors_stop`,
+    'message0': `${BACKGROUND_ICON} Stop background rainbow colors`,
+    'args0': [],
+    'previousStatement': null,
+    'nextStatement': null,
+    'colour': BACKGROUND_COLOR,
+    'tooltip': `Stops "Background rainbow colors" and puts the playfield rows back to the row colors of the ` +
+      `background that is loaded (the colors set for it in the Background tab). The playfield pixels ` +
+      `are left alone.`,
+  },
   // Block for clearing every playfield pixel at once
   {
     'type': `background_clear`,

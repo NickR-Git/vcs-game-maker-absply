@@ -36,6 +36,7 @@ import Blockly from 'blockly';
 import {debounce} from 'lodash';
 import {WorkspaceSearch} from '@blockly/plugin-workspace-search';
 import {Multiselect, MultiselectBlockDragger} from '@mit-app-inventor/blockly-plugin-workspace-multiselect';
+import {installBlocklyClipboardSync} from '../utils/blockly-clipboard';
 // Side-effecting only - registers a 'search' toolbox item kind via
 // Blockly.registry.register() at module load (node_modules/@blockly/
 // toolbox-search/src/toolbox_search.ts), the same self-registering pattern
@@ -515,6 +516,7 @@ export default {
       workspace: null,
       workspaceSearch: null,
       multiselect: null,
+      stopClipboardSync: null,
       lastSavedWorkspace: null,
     };
   },
@@ -584,6 +586,9 @@ export default {
     // created once.
     this.workspaceSearch = new WorkspaceSearch(this.workspace);
     this.workspaceSearch.init();
+
+    // Copy/paste of blocks between browser windows, through the system clipboard.
+    this.stopClipboardSync = installBlocklyClipboardSync();
 
     // Lets the user drag a rubber-band selection box (or ctrl/shift-click)
     // over several blocks and move/delete/duplicate them as one group -
@@ -735,6 +740,10 @@ export default {
       }
       this.workspaceSearch.dispose();
       this.workspaceSearch = null;
+    }
+    if (this.stopClipboardSync) {
+      this.stopClipboardSync();
+      this.stopClipboardSync = null;
     }
     if (this.multiselect) {
       // Unlike workspaceSearch above, this plugin's dispose() DOES

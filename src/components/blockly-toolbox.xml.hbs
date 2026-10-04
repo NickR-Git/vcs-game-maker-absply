@@ -359,6 +359,11 @@
                     <field name="NUM">0</field>
                 </shadow>
             </value>
+            <value name="SPEED">
+                <shadow type="math_number">
+                    <field name="NUM">1</field>
+                </shadow>
+            </value>
         </block>
 
         <block type="sprite_missile_get">
@@ -409,6 +414,11 @@
                     <field name="NUM">0</field>
                 </shadow>
             </value>
+            <value name="SPEED">
+                <shadow type="math_number">
+                    <field name="NUM">1</field>
+                </shadow>
+            </value>
         </block>
 
         <block type="sprite_ball_get"></block>
@@ -426,7 +436,8 @@
                 </shadow>
             </value>
         </block>
-        <block type="sprite_ball_fire">
+        <block type="sprite_missile_fire">
+            <field name="MISSILE">ball</field>
             <value name="X">
                 <shadow type="math_number">
                     <field name="NUM">0</field>
@@ -442,9 +453,15 @@
                     <field name="NUM">0</field>
                 </shadow>
             </value>
+            <value name="SPEED">
+                <shadow type="math_number">
+                    <field name="NUM">1</field>
+                </shadow>
+            </value>
         </block>
 
         <block type="object_fire_stop"></block>
+        <block type="sprite_fire_angle_get"></block>
 
         <block type="object_seek_to">
             <value name="X">
@@ -500,7 +517,13 @@
                 </shadow>
             </value>
         </block>
-        <block type="object_bounce"></block>
+        <block type="object_bounce">
+            <value name="ANGLE">
+                <shadow type="math_number">
+                    <field name="NUM">0</field>
+                </shadow>
+            </value>
+        </block>
 
     </category>
     <category name="Background" colour="rgb(255, 152, 0)">
@@ -647,6 +670,14 @@
         </block>
         <block type="background_collision_pixel_column"></block>
         <block type="background_collision_pixel_row"></block>
+        <block type="background_rainbow_colors">
+            <value name="OFFSET">
+                <shadow type="math_number">
+                    <field name="NUM">0</field>
+                </shadow>
+            </value>
+        </block>
+        <block type="background_rainbow_colors_stop"></block>
         <block type="background_clear"></block>
         <block type="screen_shake">
             <value name="FRAMES">

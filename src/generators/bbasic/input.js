@@ -343,18 +343,13 @@ export const generateJoystickDirection8Checks = (Blockly) => {
 //                       different thresholds can share these same four vars
 //                       with no per-instance state of their  needed.
 export const joyButtonHeldVarName = (name) => `_${name}FireHeld`;
-// "was it down last frame" and "released this exact frame" are both pure
-// 0/1 flags, never read as anything but a boolean (a bare "if X"/"X = 0"/
-// "X = 1") - packed into two bits of one shared byte instead of a dev var
-// each, via bB's "{n}" single-bit read/write syntax (same pattern
-// fadeFlagsVarName/seekArrivedFlagsVarName already use in background.js/
-// sprites.js). Safe because the two bits are never read/written together
-// as a combined numeric value anywhere - every site below only ever
-// touches one bit at a time by name.
-export const joyButtonFlagsVarName = (name) => `_${name}FireFlags`;
-export const JOY_BUTTON_PREV_BIT = 0;
-export const JOY_BUTTON_JUST_RELEASED_BIT = 1;
+// Only two variables per joystick. "Was it down last frame" is just "Held is not
+// 0" (Held counts the frames of the current press and drops to 0 on release).
+// "Released this exact frame" is bit 7 of LastPressFrames: on the release frame
+// LastPressFrames holds 128 + how long the press lasted (capped at 127), and
+// the next frame clears the bit.
 export const joyButtonLastPressFramesVarName = (name) => `_${name}FireLastPressFrames`;
+export const JOY_BUTTON_JUST_RELEASED_BIT = 7;
 
 // Reserves the three dev vars above - called from bbasic.js's init() with a
 // pre-scanned Set of which joysticks actually have a tap/hold/released/
@@ -366,10 +361,8 @@ export const reserveJoystickButtonDevVars = (reserveDevVar, usedFor) => {
   usedFor.forEach((name) => {
     reserveDevVar(joyButtonHeldVarName(name), undefined,
         'this joystick\'s Fire button: frames continuously held (saturates at 255)');
-    reserveDevVar(joyButtonFlagsVarName(name), undefined,
-        'this joystick\'s Fire button: was it down last frame (bit 0), released this exact frame (bit 1)');
     reserveDevVar(joyButtonLastPressFramesVarName(name), undefined,
-        'this joystick\'s Fire button: how long the press that just ended lasted');
+        'this joystick Fire button: how long the press that just ended lasted (low bits), released this frame (bit 7)');
   });
 };
 
@@ -396,10 +389,8 @@ export const generateJoystickButtonChecks = (Blockly) => {
     if (!used.has(name)) return;
     const fireVar = resolveSystemVar(`${name}fire`);
     const heldVar = resolveDevVar(joyButtonHeldVarName(name));
-    const flagsVar = resolveDevVar(joyButtonFlagsVarName(name));
-    const prevVar = `${flagsVar}{${JOY_BUTTON_PREV_BIT}}`;
-    const justReleasedVar = `${flagsVar}{${JOY_BUTTON_JUST_RELEASED_BIT}}`;
     const lastPressFramesVar = resolveDevVar(joyButtonLastPressFramesVarName(name));
+    const justReleasedVar = `${lastPressFramesVar}{${JOY_BUTTON_JUST_RELEASED_BIT}}`;
     lines.push(
         ` if ${fireVar} then goto _${name}btn_down`,
         // A bit-indexed read ("VAR{n}") is only ever used bare or negated
@@ -410,22 +401,20 @@ export const generateJoystickButtonChecks = (Blockly) => {
         // doing that: real batari Basic's  grammar doesn't accept a
         // bit-read as the left side of a "=" comparison, only as a bare
         // boolean.
-        ` if !${prevVar} then goto _${name}btn_up_done`,
+        ` if ${heldVar} = 0 then goto _${name}btn_up_done`,
         // Was down last frame, up now - the release transition.
-        ` ${justReleasedVar} = 1`,
         ` ${lastPressFramesVar} = ${heldVar}`,
+        ` if ${lastPressFramesVar} > 127 then ${lastPressFramesVar} = 127`,
+        ` ${justReleasedVar} = 1`,
         ` ${heldVar} = 0`,
-        ` ${prevVar} = 0`,
         ` goto _${name}btn_done`,
         `_${name}btn_up_done`,
         // Already up last frame too - nothing changed.
         ` ${justReleasedVar} = 0`,
-        ` ${heldVar} = 0`,
         ` goto _${name}btn_done`,
         `_${name}btn_down`,
         ` ${justReleasedVar} = 0`,
         ` if ${heldVar} <> 255 then ${heldVar} = ${heldVar} + 1`,
-        ` ${prevVar} = 1`,
         `_${name}btn_done`,
     );
   });
@@ -474,7 +463,7 @@ export const generateJoystickDoubleTapChecks = (Blockly) => {
     Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
   const lines = [];
   checks.forEach(({name, window, index}) => {
-    const justReleasedVar = `${resolveDevVar(joyButtonFlagsVarName(name))}{${JOY_BUTTON_JUST_RELEASED_BIT}}`;
+    const justReleasedVar = `${resolveDevVar(joyButtonLastPressFramesVarName(name))}{${JOY_BUTTON_JUST_RELEASED_BIT}}`;
     const resultVar = resolveDevVar(joyDoubleTapResultVarName(index));
     const timerVar = resolveDevVar(joyDoubleTapTimerVarName(index));
     const tag = `dt${index}`;
@@ -556,7 +545,7 @@ export default (Blockly) => {
     const frames = Math.max(1, Math.min(255, Math.round(Number(block.getFieldValue('FRAMES')) || 20)));
     if (mode === 'RELEASED') {
       const flagsVar = Blockly.BBasic.nameDB_.getName(
-          joyButtonFlagsVarName(name), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+          joyButtonLastPressFramesVarName(name), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
       // Bare, not "= 1" - a bit-indexed read ("VAR{n}") already evaluates
       // as a boolean on its  throughout the rest of this codebase (see
       // generateJoystickButtonChecks'  identical fix), comparing it
@@ -579,11 +568,12 @@ export default (Blockly) => {
     // TAP (also the fallback for a stale/unrecognized MODE value). Same
     // bare-bit-read fix as RELEASED above - "{n} && ..." not "{n} = 1 &&
     // ...".
-    const flagsVar = Blockly.BBasic.nameDB_.getName(
-        joyButtonFlagsVarName(name), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
     const lastPressFramesVar = Blockly.BBasic.nameDB_.getName(
         joyButtonLastPressFramesVarName(name), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
-    return [`${flagsVar}{${JOY_BUTTON_JUST_RELEASED_BIT}} && ${lastPressFramesVar} <= ${frames}`, Blockly.BBasic.ORDER_LOGICAL_AND];
+    // On the release frame the variable holds 128 + the press length (capped at
+    // 127), so "released and no longer than N frames" is one comparison.
+    return [`${lastPressFramesVar}{${JOY_BUTTON_JUST_RELEASED_BIT}} && ${lastPressFramesVar} <= ${128 + Math.min(frames, 127)}`,
+      Blockly.BBasic.ORDER_LOGICAL_AND];
   };
 
   // Both combined Keypad 0/1 blocks (see blocks/input.js) read their

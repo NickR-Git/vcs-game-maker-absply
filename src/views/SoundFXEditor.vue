@@ -334,6 +334,8 @@
                         v-model.number="soundEffect.duration"
                         type="number"
                         min="0"
+                        :disabled="!!soundEffect.envelope"
+                        :title="soundEffect.envelope ? 'Set by the envelope: always its full length (Attack + Decay + Sustain + Release).' : ''"
                         @change="handleChildChange"
                         class="soundfx-number"
                       />
@@ -602,34 +604,29 @@ export default defineComponent({
       },
     });
 
-    // Envelope-enabled Attack+Decay+Sustain+Release has to actually fit
-    // inside Duration - clampEnvelopeStages (utils/envelope.js) is what
-    // guards the ROM/preview against the opposite problem (stages that
-    // overflow Duration get scaled DOWN to fit at compile/preview time),
-    // but silently shrinking the shape the user just dialed in reads as the
-    // envelope "not working" rather than what it actually is (a sound that
-    // ends before its envelope finishes) - a real reported request:
-    // Duration should grow to fit the envelope instead, not the other way
-    // around. Checked here - inside the one function every single
-    // envelope-affecting mutation already funnels through (every dropdown's
-    // @change, EnvelopeGraph drags via handleEnvelopeGraphChange, Reset,
-    // Undo/Redo, AND Duration's field, all call this - see their
-    // call sites) - rather than duplicating the same check at each of those
-    // call sites individually. Iterates every sound effect (not just
-    // whichever one actually triggered this call) since this function
-    // itself has no way to know which one that was - cheap enough given how
-    // few sound effects a project realistically has.
-    const handleChildChange = () => {
+    // With the envelope on, Duration is always the envelope's full length
+    // (Attack + Decay + Sustain + Release): a shorter Duration would cut the
+    // envelope off, a longer one would leave dead silence on the end. Every
+    // envelope-affecting change (each dropdown, EnvelopeGraph drags via
+    // handleEnvelopeGraphChange, Reset, Undo/Redo, the Envelope switch) goes
+    // through handleChildChange, so the sync lives there; it also runs once
+    // when the editor opens, for projects saved before this applied. Iterates
+    // every sound effect since the caller can't say which one changed.
+    const syncEnvelopeDurations = () => {
       state.value.soundEffects.forEach((soundEffect) => {
         if (!soundEffect.envelope) return;
         const combinedFrames = (Number(soundEffect.envelopeAttack) || 0) + (Number(soundEffect.envelopeDecay) || 0) +
           (Number(soundEffect.envelopeSustainLength) || 0) + (Number(soundEffect.envelopeRelease) || 0);
-        if (combinedFrames > (Number(soundEffect.duration) || 0)) {
+        if (combinedFrames > 0 && Number(soundEffect.duration) !== combinedFrames) {
           soundEffect.duration = combinedFrames;
         }
       });
+    };
+    const handleChildChange = () => {
+      syncEnvelopeDurations();
       state.value = state.value;
     };
+    handleChildChange();
 
     // EnvelopeGraph.vue emits "update:<field>" events (dragging a handle,
     // snapped to the same option set the dropdowns use - see its

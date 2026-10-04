@@ -241,6 +241,14 @@ export const romNoiseOffsetVarName = (name) => `${name}RomNoiseOffset`;
 export const romNoiseHeightVarName = (name) => `${name}RomNoiseHeight`;
 export const rainbowColorActiveBit = (name) => name === 'player1' ? 3 : 2;
 export const rainbowColorOffsetVarName = (name) => `${name}RainbowColorOffset`;
+// The playfield twin of the player rainbow colors: the same shared flags byte
+// (bit 4) and a separate offset var.
+export const backgroundRainbowActiveBit = 4;
+export const backgroundRainbowOffsetVarName = () => 'backgroundRainbowColorOffset';
+// The loaded background's color table pointer, saved when it loads so "Stop
+// background rainbow colors" can put it back.
+export const backgroundColorTableLoVarName = () => 'backgroundColorTableLo';
+export const backgroundColorTableHiVarName = () => 'backgroundColorTableHi';
 
 // sprite_*_fire's  dev vars (see its  trigger generator and
 // generateMissileFireChecks below) - one shared flags byte (same "one byte
@@ -414,8 +422,6 @@ export const inertiaPosFracYVarName = (name) => `${name}PosFracY`;
 // event to hook a reset into (see generateMissileFireChecks'  comment on
 // why).
 export const missileBounceStageVarName = (name) => `${name}BounceStage`;
-export const missileBounceOrigDirVarName = (name) => `${name}BounceOrigDir`;
-export const missileBounceFrameVarName = (name) => `${name}BounceFrame`;
 // object_bounce's  velocity-reflection snapshot (see its  generator's
 // comment) - the same role as missileBounceOrigDirVarName above, just for
 // Inertia's velocity vector instead of Fire's angle. Only reserved for a
@@ -508,11 +514,20 @@ export const reserveRomNoiseDevVars = (reserveDevVar, usedFor) => {
 // since either block can be used without the other. Shares the SAME flags
 // byte (romNoiseFlagsVarName) rather than a byte - see that
 // function's "one shared flags byte" comment.
+export const reserveBackgroundRainbowDevVars = (reserveDevVar, used) => {
+  if (!used) return;
+  reserveDevVar(romNoiseFlagsVarName(), undefined, 'shared active-bit byte (ROM noise + rainbow colors)');
+  reserveDevVar(backgroundRainbowOffsetVarName(), undefined, 'playfield rainbow colors: cycle offset');
+  reserveDevVar(backgroundColorTableLoVarName(), undefined, 'loaded background row colors: table address, low byte');
+  reserveDevVar(backgroundColorTableHiVarName(), undefined, 'loaded background row colors: table address, high byte');
+};
+
 export const reserveRainbowColorDevVars = (reserveDevVar, usedFor) => {
   if (!usedFor || !usedFor.size) return;
   reserveDevVar(romNoiseFlagsVarName(), undefined, 'shared active-bit byte (ROM noise + rainbow colors)');
-  usedFor.forEach((name) =>
-    reserveDevVar(rainbowColorOffsetVarName(name), undefined, 'this player\'s rainbow-color cycle offset'));
+  usedFor.forEach((name) => {
+    reserveDevVar(rainbowColorOffsetVarName(name), undefined, 'rainbow colors: cycle offset');
+  });
 };
 
 // Same reasoning as reserveRomNoiseDevVars above, for sprite_*_fire - called
@@ -530,15 +545,17 @@ export const reserveRainbowColorDevVars = (reserveDevVar, usedFor) => {
 // automatically whenever Superchip is off, pfres is too high, or the r/w
 // pool is already full, so this is free real-var savings on Superchip
 // builds with no fallback risk.
-export const reserveMissileFireDevVars = (reserveDevVar, reserveDevVarRW, usedFor, used16, usedPfCheck) => {
+export const reserveMissileFireDevVars = (reserveDevVar, reserveDevVarRW, usedFor, used16, usedPfCheck, usedThrottle) => {
   if (!usedFor || !usedFor.size) return;
   reserveDevVar(missileFireFlagsVarName(), undefined, 'shared active-bit byte for fired missiles');
   usedFor.forEach((name) => {
     reserveDevVar(missileFireDirVarName(name), undefined, 'this missile\'s fired direction (0-7, or 255 for none)');
     reserveDevVar(missileFireSpeedVarName(name), undefined, 'this missile\'s fired speed (pixels/frame)');
-    reserveDevVarRW(missileFireThrottleVarName(name), 'this missile\'s "throttle movement" countdown');
-    reserveDevVarRW(missileFireThrottleResetVarName(name),
-        'this missile\'s "throttle movement" countdown reset value');
+    if (usedThrottle && usedThrottle.has(name)) {
+      reserveDevVarRW(missileFireThrottleVarName(name), 'this missile\'s "throttle movement" countdown');
+      reserveDevVarRW(missileFireThrottleResetVarName(name),
+          'this missile\'s "throttle movement" countdown reset value');
+    }
     if (used16 && used16.has(name)) {
       reserveDevVar(missileFireHalfSpeedVarName(name), undefined,
           'this missile\'s fired speed / 2, clamped to a minimum of 1, for 16-way\'s halfway directions');
@@ -577,17 +594,13 @@ export const reserveMissileFireDevVars = (reserveDevVar, reserveDevVarRW, usedFo
 export const reserveMissileBounceDevVars = (reserveDevVarRW, usedFor, inertiaUsedFor, fireUsedFor, fineUsedFor) => {
   if (!usedFor || !usedFor.size) return;
   const inertiaSet = inertiaUsedFor || new Set();
-  const fireSet = fireUsedFor || new Set();
   const fineSet = fineUsedFor || new Set();
   usedFor.forEach((name) => {
-    reserveDevVarRW(missileBounceStageVarName(name),
-        'this sprite\'s Combat-style bounce: consecutive stuck frames so far (0-3)');
-    reserveDevVarRW(missileBounceFrameVarName(name),
-        'this sprite\'s Combat-style bounce: framecounter value at the last bounce');
-    if (fireSet.has(name)) {
-      reserveDevVarRW(missileBounceOrigDirVarName(name),
-          'this sprite\'s Combat-style bounce: heading when the current collision started');
-    }
+    // One byte: bits 0-3 the heading when the current collision started, bits 4-5
+    // the consecutive stuck frames so far (0-3), bit 6 set when a Bounce block
+    // ran this frame (generateBounceStageChecks clears the stuck frames at the
+    // start of any frame that follows one without a Bounce call).
+    reserveDevVarRW(missileBounceStageVarName(name), 'bounce: stuck frames (bits 4-5), heading at the hit (bits 0-3)');
     if (inertiaSet.has(name)) {
       reserveDevVarRW(missileBounceOrigVelocityXVarName(name),
           'this sprite\'s Combat-style bounce: velocity X when the current collision started');
@@ -838,12 +851,18 @@ export const generateRainbowColorGraphics = (Blockly) => {
   const used = Blockly.BBasic.rainbowColorUsedFor;
   if (!used || !used.size) return '';
   const lines = [];
-  if (rainbowColorNeedsPlayerColors(used)) {
-    lines.push('  player0color:', '  $0E', 'end');
-  }
-  if (rainbowColorNeedsPlayer1Colors(used)) {
-    lines.push('  player1color:', '  $0E', 'end');
-  }
+  // A player whose sprite colors come from its animation frames sets the
+  // color table pointer every frame, so these stand-in tables are declared but
+  // jumped over for it: running them would replace that pointer with a plain
+  // white table every frame and rainbow colors could never give it back.
+  const declare = (name, label) => {
+    const skip = Blockly.BBasic.useSpriteColorsFor(name);
+    if (skip) lines.push(` goto _rainbowph_${name}_end`);
+    lines.push(`  ${label}:`, '  $0E', 'end');
+    if (skip) lines.push(`_rainbowph_${name}_end`);
+  };
+  if (rainbowColorNeedsPlayerColors(used)) declare('player0', 'player0color');
+  if (rainbowColorNeedsPlayer1Colors(used)) declare('player1', 'player1color');
   return lines.join('\n') + '\n';
 };
 
@@ -853,7 +872,29 @@ export const generateRainbowColorGraphics = (Blockly) => {
 // the noise one.
 export const generateRainbowColorChecks = (Blockly) => {
   const used = Blockly.BBasic.rainbowColorUsedFor;
-  if (!used || !used.size) return '';
+  const backgroundLines = [];
+  if (Blockly.BBasic.backgroundRainbowUsed && Blockly.BBasic.usePlayfieldRowColors()) {
+    const flags = Blockly.BBasic.nameDB_.getName(romNoiseFlagsVarName(), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+    const offset = Blockly.BBasic.nameDB_.getName(
+        backgroundRainbowOffsetVarName(), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+    const config = (useConfigurationStorage() && useConfigurationStorage().value) || {};
+    // The kernel reads each row's color through the pfcolortable pointer
+    // (low byte pfcolortable, high byte aux2): aim it at ROM bytes.
+    backgroundLines.push(
+        ` if !${flags}{${backgroundRainbowActiveBit}} then goto _rainbowcolor_background_done`,
+        ` pfcolortable = ${offset}`,
+        ` aux2 = ${romNoiseBaseHighByteHex(config)}`,
+        // The top row's color is not in that table: the background loader puts it
+        // in playfieldrealcolor (which becomes COLUPF), so it gets one of the same
+        // ROM bytes too.
+        ' asm',
+        '       ldy #0',
+        '       lda (pfcolortable),y',
+        '       sta playfieldrealcolor',
+        'end',
+        '_rainbowcolor_background_done');
+  }
+  if (!used || !used.size) return backgroundLines.length ? backgroundLines.join('\n') + '\n' : '';
   const resolveVar = (canonicalName) =>
     Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
   const flagsVar = resolveVar(romNoiseFlagsVarName());
@@ -873,7 +914,7 @@ export const generateRainbowColorChecks = (Blockly) => {
         `${doneLabel}`,
     );
   });
-  return lines.join('\n') + '\n';
+  return [...lines, ...backgroundLines].join('\n') + '\n';
 };
 
 // Spliced into commongamelogic right after generateRomNoiseChecks/
@@ -896,7 +937,7 @@ export const generateRainbowColorChecks = (Blockly) => {
 // research into how Combat's shells ricochet). Index matches ANGLE's 0-15,
 // clockwise from Up, same convention as the 8-way scale just with a step
 // inserted between each original point.
-const DIRECTION16_STEPS = [
+export const DIRECTION16_STEPS = [
   [0, -1], [1, -2], [1, -1], [2, -1],
   [1, 0], [2, 1], [1, 1], [1, 2],
   [0, 1], [-1, 2], [-1, 1], [-2, 1],
@@ -960,6 +1001,30 @@ const buildPlayfieldCheckedMovement = ({Blockly, name, is16, dirVar, speedVar, s
   return lines;
 };
 
+// Start of every frame: the stuck-frame count of a Bounce object survives only
+// if a Bounce block ran on it the frame before (bit 6, set by the block);
+// otherwise the collision is over and the count starts again. Replaces a
+// separate "frame of the last bounce" variable.
+export const generateBounceStageChecks = (Blockly) => {
+  const used = Blockly.BBasic.missileBounceUsedFor;
+  if (!used || !used.size) return '';
+  const lines = [];
+  used.forEach((name) => {
+    const pair = Blockly.BBasic.superchipRwPairs[missileBounceStageVarName(name)];
+    if (!pair) return;
+    const clearLabel = `_bouncestage_${name}_clear`;
+    const doneLabel = `_bouncestage_${name}_done`;
+    lines.push(
+        ` if !${pair.read}{6} then goto ${clearLabel}`,
+        ` ${pair.write} = ${pair.read} & 79`,
+        ` goto ${doneLabel}`,
+        clearLabel,
+        ` ${pair.write} = ${pair.read} & 15`,
+        doneLabel);
+  });
+  return lines.length ? lines.join('\n') + '\n' : '';
+};
+
 export const generateMissileFireChecks = (Blockly) => {
   const used = Blockly.BBasic.missileFireUsedFor;
   if (!used || !used.size) return '';
@@ -978,6 +1043,7 @@ export const generateMissileFireChecks = (Blockly) => {
     const activeBit = missileFireActiveBit(name);
     const throttlePair = resolveRW(missileFireThrottleVarName(name));
     const throttleResetPair = resolveRW(missileFireThrottleResetVarName(name));
+    const throttled = !!throttlePair;
     const is16 = used16 && used16.has(name);
     const pfChecked = usedPfCheck.has(name);
     const halfSpeedVar = is16 ? resolveVar(missileFireHalfSpeedVarName(name)) : null;
@@ -1034,16 +1100,21 @@ export const generateMissileFireChecks = (Blockly) => {
         // name DASM itself expects (see generators/bbasic/music.js's
         // extensive comment on this) - throttleContinueLabel is purely
         // local to this block, so it doesn't need one.
-        ' asm',
-        '       lda ' + throttlePair.read,
-        '       sec',
-        '       sbc #1',
-        '       sta ' + throttlePair.write,
-        '       beq ' + throttleContinueLabel,
-        '       jmp .' + doneLabel,
-        throttleContinueLabel,
-        'end',
-        ` ${throttlePair.write} = ${throttleResetPair.read}`,
+        ...(throttled ? [
+          ' asm',
+          '       lda ' + throttlePair.read,
+          '       sec',
+          '       sbc #1',
+          '       sta ' + throttlePair.write,
+          '       beq ' + throttleContinueLabel,
+          '       jmp .' + doneLabel,
+          throttleContinueLabel,
+          'end',
+          ` ${throttlePair.write} = ${throttleResetPair.read}`,
+        ] : []),
+        // Speed 0 means stand still: nothing below (the half-speed minimum of
+        // 1, or the pixel-step counter) may run for it.
+        ` if ${speedVar} = 0 then goto ${doneLabel}`,
         ...(is16 && !pfChecked ? [
           ` ${halfSpeedVar} = ${speedVar} / 2`,
           ` if ${halfSpeedVar} = 0 then ${halfSpeedVar} = 1`,
@@ -1814,6 +1885,9 @@ export default (Blockly) => {
     // can't undo. rainbowColorUsedFor's  pre-scan in bbasic.js's init()
     // treats this block the same as the trigger above, so the flag var is
     // always guaranteed to exist here.
+    // The player's color table pointer is set again every frame (by its
+    // animation frame, or by the stand-in table), so clearing the flag is all it
+    // takes for the next frame to show the player's real colors.
     Blockly.BBasic['sprite_player_rainbow_colors_stop'] = function(block) {
       const name = resolvePlayerName(block);
       const resolveVar = (canonicalName) =>
@@ -1899,7 +1973,7 @@ export default (Blockly) => {
       // fallback always points the same real direction either way.
       const is16 = block.getFieldValue('DIRECTIONS16') === 'TRUE';
       const defaultAngle = (parseInt(block.getFieldValue('DEFAULT_ANGLE'), 10) || 0) * (is16 ? 2 : 1);
-      const speed = block.getFieldValue('SPEED') || '1';
+      const speed = Blockly.BBasic.valueToCode(block, 'SPEED', Blockly.BBasic.ORDER_ASSIGNMENT) || '1';
       const activeBit = missileFireActiveBit(name);
       // "throttle movement" - see this block's  tooltip and
       // resolveEnclosingFrameInterval's  comment. Write-only here
@@ -1907,6 +1981,9 @@ export default (Blockly) => {
       // through the Superchip r/w pool), so only .write is ever needed.
       const throttlePair = Blockly.BBasic.superchipRwPairs[missileFireThrottleVarName(name)];
       const throttleResetPair = Blockly.BBasic.superchipRwPairs[missileFireThrottleResetVarName(name)];
+      // The countdown variables only exist when some Fire block on this object
+      // has throttle movement ticked.
+      const throttled = !!throttlePair;
       const interval = block.getFieldValue('THROTTLE') === 'TRUE' ?
         (resolveEnclosingFrameInterval(block) || 1) : 1;
       return `${dirVar} = ${angle}\n` +
@@ -1914,13 +1991,15 @@ export default (Blockly) => {
         `${name}x = ${x}\n` +
         `${name}y = ${y}\n` +
         `${speedVar} = ${speed}\n` +
-        `${throttleResetPair.write} = ${interval}\n` +
+        // The speed is held to 0-7 whatever was plugged in.
+        `if ${speedVar} > 7 then ${speedVar} = 7\n` +
+        (throttled ? `${throttleResetPair.write} = ${interval}\n` : '') +
         // Was "= 1", forcing the very FIRST step to fire after just 1
         // frame regardless of interval, before falling into the correct
         // every-${interval}-frames cadence from the second step onward -
         // seeded from the same interval instead, so the first step waits
         // the full interval too, same as every step after it.
-        `${throttlePair.write} = ${interval}\n` +
+        (throttled ? `${throttlePair.write} = ${interval}\n` : '') +
         `${flagsVar}{${activeBit}} = 1\n`;
     };
   };
@@ -1938,9 +2017,10 @@ export default (Blockly) => {
   // with - see createGeneratorForFireBall's  comment); Missile 0/1
   // share the combined 'missile' type, resolving which one a given block
   // instance means from its  MISSILE field.
-  createGeneratorForFireBall('ball', () => 'ball');
+
   createGeneratorForFireBall('missile',
-      (block) => `missile${block.getFieldValue('MISSILE') === '1' ? '1' : '0'}`);
+      (block) => block.getFieldValue('MISSILE') === 'ball' ? 'ball' :
+        `missile${block.getFieldValue('MISSILE') === '1' ? '1' : '0'}`);
 
   // Just captures the target/speed and sets the active bit for whichever
   // object OBJECT picks - the actual per-frame movement happens in
@@ -2178,6 +2258,17 @@ export default (Blockly) => {
   // goes off-screen - so generateMissileFireChecks stops stepping it. Nothing
   // to do (and no flag byte to write) for an object no Fire or Bounce block
   // uses, which includes both players.
+  // The stored direction of the object a Fire block launched (see
+  // sprite_fire_angle_get in blocks/sprites.js). The variable is reserved
+  // whenever this block is used, via the same pre-scan Fire uses.
+  Blockly.BBasic['sprite_fire_angle_get'] = function(block) {
+    const field = block.getFieldValue('MISSILE');
+    const name = field === 'ball' ? 'ball' : `missile${field === '1' ? '1' : '0'}`;
+    const dirVar = Blockly.BBasic.nameDB_.getName(
+        missileFireDirVarName(name), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+    return [dirVar, Blockly.BBasic.ORDER_ATOMIC];
+  };
+
   Blockly.BBasic['object_fire_stop'] = function(block) {
     const name = block.getFieldValue('OBJECT');
     const used = Blockly.BBasic.missileFireUsedFor;
@@ -2193,10 +2284,18 @@ export default (Blockly) => {
   // top/bottom mirror vertical movement - Fire's direction and/or Inertia's
   // velocity, whichever the object uses. x/y are unsigned bytes, so going
   // below 0 wraps to 240 or more. The edges are in sprite coordinates, measured
-  // on the emulator: X runs 0-159 across the picture, and Y 8-96 (two
-  // scanlines per step; y 8 is the top of the playfield and y 96 its bottom
-  // with the default 11 rows).
+  // on the emulator: X runs 0-159 across the picture, and Y starts at 8 (the
+  // top of the playfield) and ends where the playfield's visible rows end.
+  // Y moves in steps of two scanlines, so that is 8 plus the number of
+  // visible rows times the row height: 8 + 11 * 8 = 96 by default, and
+  // 8 + 23 * 4 = 100 for pfres 24 (with Superchip the last of pfres rows is
+  // not drawn). A fixed 96 bounced objects too early on Superchip builds with
+  // taller playfields, before they reached the bottom playfield pixels.
   const buildEdgeBounce = (block, name, resolveVar, hasFire, hasInertia) => {
+    const configurationStorage = useConfigurationStorage();
+    const config = (configurationStorage && configurationStorage.value) || {};
+    const visibleRows = effectiveBackgroundRows(config) - (config.enableSuperchip ? 1 : 0);
+    const bottomY = 8 + visibleRows * pfRowDivisorFor(config);
     const id = Blockly.BBasic.blockNumbers.next(`edgebounce_${name}`);
     const label = (part) => `_edgebounce_${name}_${id}_${part}`;
     const lines = [];
@@ -2246,18 +2345,161 @@ export default (Blockly) => {
         `@ ${label('xend')}`,
         ` if ${name}y >= 240 then goto ${label('top')}`,
         ` if ${name}y < 8 then goto ${label('top')}`,
-        ` if ${name}y > 96 then goto ${label('bottom')}`,
+        ` if ${name}y > ${bottomY} then goto ${label('bottom')}`,
         ` goto ${label('yend')}`,
         `@ ${label('top')}`,
         ` ${name}y = 8`,
         ` goto ${label('flipy')}`,
         `@ ${label('bottom')}`,
-        ` ${name}y = 96`,
+        ` ${name}y = ${bottomY}`,
         `@ ${label('flipy')}`,
         ...flipY,
         `@ ${label('yend')}`,
     );
     return lines.join('\n') + '\n';
+  };
+
+  // Bounce on a collision, first frame: work out which way to reflect from the
+  // playfield pixels around the object instead of guessing. The object's
+  // heading gives a horizontal and a vertical direction. Going straight along one
+  // axis simply flips that axis. On a diagonal, the pixel next to the object's
+  // cell along x and the pixel next to it along y say what was hit: a lit pixel
+  // along x is a vertical wall (flip x), a lit pixel along y is a horizontal wall
+  // (flip y), and both or neither is a corner (flip both). Calls on the
+  // following frames, while the object is still touching the wall, are ignored
+  // for a few frames so the reflected object can move away instead of being
+  // flipped back (see the stage code below).
+  // pfread overwrites temp1 and temp2, so everything kept across a pfread lives
+  // in temp3-temp6: temp3/temp4 the object's base cell (column/row), temp5 the
+  // heading (bit 0: moving along x, bit 1: that is leftwards, bit 2: moving
+  // along y, bit 3: that is upwards) and temp6 the neighboring column/row being
+  // checked. No variables.
+  const buildPixelReflect = ({Blockly, name, resolveVar, hasFire, hasInertia, uid}) => {
+    const configurationStorage = useConfigurationStorage();
+    const config = (configurationStorage && configurationStorage.value) || {};
+    const maxRow = effectiveBackgroundRows(config) - 1;
+    const rowDivisor = pfRowDivisorFor(config);
+    Blockly.BBasic.usesDivMul = true;
+    const label = (part) => `_bouncepix_${name}_${uid}_${part}`;
+    const lab = (part) => `@ ${label(part)}`;
+    const isFine = (Blockly.BBasic.inertiaFineUsedFor || new Set()).has(name);
+    const is16 = (Blockly.BBasic.missileFire16UsedFor || new Set()).has(name);
+    const steps = is16 ? 16 : 8;
+    const half = steps / 2;
+    const lines = [];
+    // --- heading -> temp5
+    lines.push(' temp5 = 0');
+    const fireDirVar = hasFire ? resolveVar(missileFireDirVarName(name)) : null;
+    const velocityXVar = hasInertia ? resolveVar(inertiaVelocityXVarName(name)) : null;
+    const velocityYVar = hasInertia ? resolveVar(inertiaVelocityYVarName(name)) : null;
+    if (hasFire) {
+      const table = is16 ? DIRECTION16_STEPS : [[0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1]];
+      table.forEach(([xStep, yStep], dir) => {
+        if (xStep) lines.push(` if ${fireDirVar} = ${dir} then temp5 = temp5 | ${xStep > 0 ? '$01' : '$03'}`);
+        if (yStep) lines.push(` if ${fireDirVar} = ${dir} then temp5 = temp5 | ${yStep > 0 ? '$04' : '$0C'}`);
+      });
+    } else if (hasInertia) {
+      lines.push(
+          ` if ${velocityXVar} > 0 then temp5 = temp5 | $01`,
+          ` if ${velocityXVar} > 127 then temp5 = temp5 | $03`,
+          ` if ${velocityYVar} > 0 then temp5 = temp5 | $04`,
+          ` if ${velocityYVar} > 127 then temp5 = temp5 | $0C`);
+    }
+    // --- decide which axes to flip
+    lines.push(
+        ` if !temp5{0} then goto ${label('nox')}`,
+        ` if !temp5{2} then goto ${label('flipx')}`,
+        ` goto ${label('diagonal')}`,
+        lab('nox'),
+        ` if !temp5{2} then goto ${label('flipboth')}`,
+        ` goto ${label('flipy')}`,
+        lab('diagonal'),
+        // the object's cell (clamped), stepping back out of it when it is
+        // already inside the wall
+        ` temp3 = (${name}x - 17) / 4`,
+        ` temp4 = (${name}y - 1) / ${rowDivisor}`,
+        ` if temp3 > 31 then temp3 = 31`,
+        ` if temp4 > ${maxRow} then temp4 = ${maxRow}`,
+        ` if pfread(temp3, temp4) then goto ${label('inside')}`,
+        ` goto ${label('base')}`,
+        lab('inside'),
+        ` if temp5{1} then goto ${label('bxplus')}`,
+        ` if temp3 > 0 then temp3 = temp3 - 1`,
+        ` goto ${label('bxdone')}`,
+        lab('bxplus'),
+        ` if temp3 < 31 then temp3 = temp3 + 1`,
+        lab('bxdone'),
+        ` if temp5{3} then goto ${label('byplus')}`,
+        ` if temp4 > 0 then temp4 = temp4 - 1`,
+        ` goto ${label('base')}`,
+        lab('byplus'),
+        ` if temp4 < ${maxRow} then temp4 = temp4 + 1`,
+        lab('base'),
+        // A: the pixel next to the base cell along x
+        ` temp6 = temp3`,
+        ` if temp5{1} then goto ${label('axminus')}`,
+        ` if temp6 < 31 then temp6 = temp6 + 1`,
+        ` goto ${label('axdone')}`,
+        lab('axminus'),
+        ` if temp6 > 0 then temp6 = temp6 - 1`,
+        lab('axdone'),
+        ` if pfread(temp6, temp4) then goto ${label('alit')}`,
+        // A is clear: B, the pixel next to the base cell along y, decides
+        ` temp6 = temp4`,
+        ` if temp5{3} then goto ${label('byminus')}`,
+        ` if temp6 < ${maxRow} then temp6 = temp6 + 1`,
+        ` goto ${label('bydone')}`,
+        lab('byminus'),
+        ` if temp6 > 0 then temp6 = temp6 - 1`,
+        lab('bydone'),
+        ` if pfread(temp3, temp6) then goto ${label('flipy')}`,
+        ` goto ${label('flipboth')}`,
+        // A is lit: a lit B too means a corner
+        lab('alit'),
+        ` temp6 = temp4`,
+        ` if temp5{3} then goto ${label('byminus2')}`,
+        ` if temp6 < ${maxRow} then temp6 = temp6 + 1`,
+        ` goto ${label('bydone2')}`,
+        lab('byminus2'),
+        ` if temp6 > 0 then temp6 = temp6 - 1`,
+        lab('bydone2'),
+        ` if pfread(temp3, temp6) then goto ${label('flipboth')}`,
+        ` goto ${label('flipx')}`);
+    // --- apply the flips
+    const fireFlipX = !hasFire ? [] : [
+      ` ${fireDirVar} = ${steps} - ${fireDirVar}`,
+      ` if ${fireDirVar} = ${steps} then ${fireDirVar} = 0`,
+    ];
+    const fireFlipY = !hasFire ? [] : [
+      ` if ${fireDirVar} > ${half} then goto ${label('dirhigh')}`,
+      ` ${fireDirVar} = ${half} - ${fireDirVar}`,
+      ` goto ${label('dirdone')}`,
+      lab('dirhigh'),
+      ` ${fireDirVar} = ${steps + half} - ${fireDirVar}`,
+      lab('dirdone'),
+    ];
+    const fireFlipBoth = !hasFire ? [] : [
+      ` ${fireDirVar} = ${fireDirVar} + ${half}`,
+      ` if ${fireDirVar} >= ${steps} then ${fireDirVar} = ${fireDirVar} - ${steps}`,
+    ];
+    // Inertia velocity is only reflected for an object with no Fire heading, so
+    // a sprite that uses both is reflected through Fire's heading alone.
+    const velocityFlip = (axis) => {
+      if (!hasInertia || hasFire) return [];
+      const intVar = axis === 'x' ? velocityXVar : velocityYVar;
+      if (isFine) {
+        const fracVar = resolveVar(axis === 'x' ? inertiaVelocityFracXVarName(name) :
+          inertiaVelocityFracYVarName(name));
+        return [' asm', ...build16BitNegateAsm(intVar, fracVar), '@end'];
+      }
+      return [` ${intVar} = 0 - ${intVar}`];
+    };
+    lines.push(
+        lab('flipx'), ...fireFlipX, ...velocityFlip('x'), ` goto ${label('done')}`,
+        lab('flipy'), ...fireFlipY, ...velocityFlip('y'), ` goto ${label('done')}`,
+        lab('flipboth'), ...fireFlipBoth, ...velocityFlip('x'), ...velocityFlip('y'),
+        lab('done'));
+    return lines;
   };
 
   Blockly.BBasic['object_bounce'] = function(block) {
@@ -2276,7 +2518,6 @@ export default (Blockly) => {
     // Superchip is off), so every access below has to pick whichever side
     // matches its position, same as any other reserveDevVarRW consumer.
     const stagePair = Blockly.BBasic.superchipRwPairs[missileBounceStageVarName(name)];
-    const framePair = Blockly.BBasic.superchipRwPairs[missileBounceFrameVarName(name)];
     const blockNumber = Blockly.BBasic.blockNumbers.next(`bounce_${name}`);
     const stage1Label = `_bounce_${name}_${blockNumber}_s1`;
     const stage2Label = `_bounce_${name}_${blockNumber}_s2`;
@@ -2287,7 +2528,6 @@ export default (Blockly) => {
     const fireLines = {stage1: [], stage2: [], stage4: []};
     if (hasFire) {
       const dirVar = resolveVar(missileFireDirVarName(name));
-      const origDirPair = Blockly.BBasic.superchipRwPairs[missileBounceOrigDirVarName(name)];
       const steps = (Blockly.BBasic.missileFire16UsedFor || new Set()).has(name) ? 16 : 8;
       const half = steps / 2;
       // "Exact compass point" (N/E/S/W) is a multiple of steps/4 on this
@@ -2298,22 +2538,15 @@ export default (Blockly) => {
       // one bB expression, and bit-index reads are already this codebase's
       // established way to test individual bits (see e.g. background.js's
       // fade-flag checks).
-      const quarterBits = Math.log2(steps / 4);
-      const offAxisTest = Array.from({length: quarterBits}, (_, i) => `!${dirVar}{${i}}`).join(' && ');
+      // Only the heading snapshot (for the give-up stage); the reflection itself
+      // is buildPixelReflect's.
       fireLines.stage1 = [
-        ` ${origDirPair.write} = ${dirVar}`,
-        ` ${dirVar} = ${steps} - ${dirVar}`,
-        ` if ${dirVar} = ${steps} then ${dirVar} = 0`,
-        // Nudge off any exact compass point (N/E/S/W), matching Combat's
-        // "AND #$03 / BNE / INC" jigger.
-        ` if ${offAxisTest} then ${dirVar} = ${dirVar} + 1`,
+        ` ${stagePair.write} = (${dirVar} & 15) | 64`,
       ];
-      fireLines.stage2 = [
-        ` ${dirVar} = ${dirVar} + ${half}`,
-        ` if ${dirVar} >= ${steps} then ${dirVar} = ${dirVar} - ${steps}`,
-      ];
+      fireLines.stage2 = [];
       fireLines.stage4 = [
-        ` ${dirVar} = ${origDirPair.read} + ${half}`,
+        ` ${dirVar} = ${stagePair.read} & 15`,
+        ` ${dirVar} = ${dirVar} + ${half}`,
         ` if ${dirVar} >= ${steps} then ${dirVar} = ${dirVar} - ${steps}`,
       ];
     }
@@ -2329,12 +2562,8 @@ export default (Blockly) => {
         inertiaLines.stage1 = [
           ` ${origVelocityXPair.write} = ${velocityXVar}`,
           ` ${origVelocityYPair.write} = ${velocityYVar}`,
-          ` ${velocityXVar} = 0 - ${velocityXVar}`,
         ];
-        inertiaLines.stage2 = [
-          ` ${velocityXVar} = ${origVelocityXPair.read}`,
-          ` ${velocityYVar} = 0 - ${origVelocityYPair.read}`,
-        ];
+        inertiaLines.stage2 = [];
         inertiaLines.stage4 = [
           ` ${velocityXVar} = 0 - ${origVelocityXPair.read}`,
           ` ${velocityYVar} = 0 - ${origVelocityYPair.read}`,
@@ -2385,19 +2614,8 @@ export default (Blockly) => {
           ` ${origVelocityFracXPair.write} = ${velocityFracXVar}`,
           ` ${origVelocityYPair.write} = ${velocityYVar}`,
           ` ${origVelocityFracYPair.write} = ${velocityFracYVar}`,
-          ' asm',
-          ...build16BitNegateAsm(velocityXVar, velocityFracXVar),
-          '@end',
         ];
-        inertiaLines.stage2 = [
-          ` ${velocityXVar} = ${origVelocityXPair.read}`,
-          ` ${velocityFracXVar} = ${origVelocityFracXPair.read}`,
-          ` ${velocityYVar} = ${origVelocityYPair.read}`,
-          ` ${velocityFracYVar} = ${origVelocityFracYPair.read}`,
-          ' asm',
-          ...build16BitNegateAsm(velocityYVar, velocityFracYVar),
-          '@end',
-        ];
+        inertiaLines.stage2 = [];
         inertiaLines.stage4 = [
           ` ${velocityXVar} = ${origVelocityXPair.read}`,
           ` ${velocityFracXVar} = ${origVelocityFracXPair.read}`,
@@ -2411,40 +2629,71 @@ export default (Blockly) => {
       }
     }
 
+    // The pixel-reflecting code is long, so it lives once per object in a
+    // shared subroutine (relocatable like any other) and each Bounce block
+    // just calls it - several Bounce blocks otherwise filled bank 1.
+    const reflectName = `_bouncepix_${name}`;
+    if (!Blockly.BBasic.subroutines[reflectName]) {
+      Blockly.BBasic.subroutines[reflectName] =
+        buildPixelReflect({Blockly, name, resolveVar, hasFire, hasInertia, uid: 'shared'})
+            .map((line) => line.replace(/^ /, '')).join('\n');
+    }
+    const reflectSuffix = Blockly.BBasic.bankJumpSuffix(
+        Blockly.BBasic.getCurrentBank(), Blockly.BBasic.getSubroutineBank(reflectName));
+    const reflectCall = [` gosub ${reflectName}${reflectSuffix}`];
+
+    // Optional "new angle": replaces the reflected heading of a fired object on
+    // the first frame of the bounce (clamped to the valid range).
+    const manualAngleLines = [];
+    const angleCode = block.getFieldValue('MANUAL') === 'TRUE' ?
+      Blockly.BBasic.valueToCode(block, 'ANGLE', Blockly.BBasic.ORDER_NONE) : '';
+    if (hasFire && angleCode) {
+      const dirVar = resolveVar(missileFireDirVarName(name));
+      const maxAngle = (Blockly.BBasic.missileFire16UsedFor || new Set()).has(name) ? 15 : 7;
+      manualAngleLines.push(
+          ` ${dirVar} = ${angleCode}`,
+          ` if ${dirVar} > ${maxAngle} then ${dirVar} = ${maxAngle}`);
+    }
+
     return [
       // "Still the same collision, one frame later" check - frameVar is
       // advanced to what it'd need to equal for a genuine one-frame gap
       // FIRST, compared, THEN overwritten with the real framecounter value
       // for next time - byte-wrapping (0/255 rollover) falls out of this
       // correctly for free, no special case needed.
-      ` ${framePair.write} = ${framePair.read} + 1`,
-      ` if ${framePair.read} <> framecounter then ${stagePair.write} = 0`,
-      ` ${framePair.write} = framecounter`,
-      ` if ${stagePair.read} = 0 then goto ${stage1Label}`,
-      ` if ${stagePair.read} = 1 then goto ${stage2Label}`,
-      ` if ${stagePair.read} = 2 then goto ${stage3Label}`,
+      ` temp6 = ${stagePair.read} & 48`,
+      // Mark this frame as a Bounce frame (see generateBounceStageChecks).
+      ` ${stagePair.write} = ${stagePair.read} | 64`,
+      ` if temp6 = 0 then goto ${stage1Label}`,
+      ` if temp6 = 16 then goto ${stage2Label}`,
+      ` if temp6 = 32 then goto ${stage3Label}`,
       ` goto ${stage4Label}`,
       `@ ${stage1Label}`,
       ...fireLines.stage1,
       ...inertiaLines.stage1,
-      ` ${stagePair.write} = 1`,
+      ...reflectCall,
+      ` ${stagePair.write} = (${stagePair.read} & 79) | 16`,
       ` goto ${doneLabel}`,
       `@ ${stage2Label}`,
       ...fireLines.stage2,
       ...inertiaLines.stage2,
-      ` ${stagePair.write} = 2`,
+      ` ${stagePair.write} = (${stagePair.read} & 79) | 32`,
       ` goto ${doneLabel}`,
       // Combat's deliberate "do nothing" grace frame (MxPFcount=$02) -
       // gives the object one more frame to clear the wall on stage 2's
       // heading before stage 4 gives up on it.
       `@ ${stage3Label}`,
-      ` ${stagePair.write} = 3`,
+      ` ${stagePair.write} = (${stagePair.read} & 79) | 48`,
       ` goto ${doneLabel}`,
       `@ ${stage4Label}`,
       ...fireLines.stage4,
       ...inertiaLines.stage4,
-      ` ${stagePair.write} = 3`,
+      ` ${stagePair.write} = (${stagePair.read} & 79) | 48`,
       `@ ${doneLabel}`,
+      // Set on every call, not just the first frame: while the object is still
+      // touching what it hit, the give-up stage above would otherwise turn it
+      // back around and replace this angle.
+      ...manualAngleLines,
     ].join('\n') + '\n';
   };
 

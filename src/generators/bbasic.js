@@ -20,8 +20,7 @@ import {getRelocationBanks} from '../hooks/relocation-banks';
 import {DEFAULT_ROW_COLOR, processBackgroundStorageDefaults,
   backgroundFadeTimerVarName, backgroundFadePaceVarName, backgroundFadeTargetVarName,
   fadeFlagsVarName, FADE_FLAGS_REGISTER_GROUPS, backgroundGetPixelXVarName, backgroundGetPixelYVarName,
-  collisionPixelColumnVarName, collisionPixelRowVarName, collisionPixelNudgedColumnVarName,
-  collisionPixelNudgedRowVarName,
+  collisionPixelColumnVarName, collisionPixelRowVarName,
   resolveBackgroundFadeFinishedWatches, hasBackgroundFadeActiveChecks,
   backgroundScrollEdgeFlagsVarName, backgroundScrollStartVarName,
   backgroundScrollRowVarName, backgroundScrollRowMaxVarName,
@@ -51,8 +50,9 @@ import {collisionMoveOldXVar, collisionMoveOldYVar} from './bbasic/collision';
 import {scoreBkColorVarName, generateScanlinesDebugScoreCode} from './bbasic/score';
 import {processPlayerAnimationsStorageDefaults, generateRomNoiseChecks, generateRainbowColorChecks,
   generateRainbowColorGraphics, rainbowColorNeedsPlayerColors, rainbowColorNeedsPlayer1Colors,
-  reserveRomNoiseDevVars, reserveRainbowColorDevVars,
-  generateMissileFireChecks, reserveMissileFireDevVars, reserveMissileBounceDevVars,
+  reserveRomNoiseDevVars, reserveRainbowColorDevVars, reserveBackgroundRainbowDevVars,
+  backgroundColorTableLoVarName, backgroundColorTableHiVarName,
+  generateMissileFireChecks, generateBounceStageChecks, reserveMissileFireDevVars, reserveMissileBounceDevVars,
   generateSeekChecks, reserveSeekDevVars, reserveSeekArrivedDevVars,
   reserveCtrlpfShadowDevVar, generateCtrlpfShadowSetup, resolveUsedPlayerAnimations,
   resolvePlayerAnimationFinishedWatches,
@@ -499,6 +499,9 @@ Blockly.BBasic.init = function(workspace) {
   // before any block generator runs) knows whether to include
   // "playercolors"/"player1colors".
   this.rainbowColorUsedFor = new Set();
+  this.backgroundRainbowUsed = workspace.getAllBlocks(false).some((block) =>
+    (block.type === 'background_rainbow_colors' || block.type === 'background_rainbow_colors_stop') &&
+    block.isEnabled());
   // isEnabled() (not just block.type) - a disabled block's  generator
   // never runs (Blockly's blockToCode skips disabled blocks, so the trigger
   // that would set the shared active bit never emits), but this pre-scan
@@ -529,8 +532,8 @@ Blockly.BBasic.init = function(workspace) {
   // Missile 0/1 share the combined sprite_missile_fire block type (see
   // MISSILE_OPTIONS' comment in blocks/sprites.js), so which object a
   // Fire block counts for comes from its  MISSILE field for those two
-  // names - Ball never had a twin to combine with, so sprite_ball_fire
-  // stays matched by type string alone. object_bounce (one block, OBJECT
+  // names, and for the Ball too (the Fire block's dropdown has a Ball entry).
+  // object_bounce (one block, OBJECT
   // dropdown covers all 5 names - see its  comment in blocks/sprites.js)
   // counts too for missile0/missile1/ball specifically, not just Fire - it
   // reads/writes the exact same dirVar (see its  generator's comment),
@@ -539,14 +542,16 @@ Blockly.BBasic.init = function(workspace) {
   // Players have no dirVar/Fire concept at all, regardless of whether they
   // have their  object_bounce block (that's gated by inertiaUsedFor
   // instead - see missileBounceUsedFor's  pre-scan below).
+  // The Fire block's dropdown value for each object it can fire.
+  const fireObjectFieldValue = (name) => (name === 'ball' ? 'ball' : name === 'missile1' ? '1' : '0');
   const fireOrBounceBlockMatchesName = (block, name) => {
     if (block.type === 'object_bounce') return block.getFieldValue('OBJECT') === name;
-    if (name === 'ball') return block.type === 'sprite_ball_fire';
-    return block.type === 'sprite_missile_fire' && block.getFieldValue('MISSILE') === (name === 'missile1' ? '1' : '0');
+    return (block.type === 'sprite_missile_fire' || block.type === 'sprite_fire_angle_get') &&
+      block.getFieldValue('MISSILE') === fireObjectFieldValue(name);
   };
 
   // Same early block-type pre-scan reasoning as romNoiseUsedFor above, for
-  // sprite_missile_fire/sprite_ball_fire (see reserveMissileFireDevVars'
+  // sprite_missile_fire (see reserveMissileFireDevVars'
   // comment in generators/bbasic/sprites.js) - has to be known before
   // reserveDevVar hands out user variable letters below. The matching
   // bounce block counts too, not just fire - it reads/writes the exact same
@@ -573,11 +578,21 @@ Blockly.BBasic.init = function(workspace) {
   // has no room to record which scale produced it.
   this.missileFire16UsedFor = new Set();
   ['missile0', 'missile1', 'ball'].forEach((name) => {
-    const fireType = name === 'ball' ? 'sprite_ball_fire' : 'sprite_missile_fire';
     if (workspace.getAllBlocks(false).some((block) =>
-      block.type === fireType && block.isEnabled() && block.getFieldValue('DIRECTIONS16') === 'TRUE' &&
-      (name === 'ball' || block.getFieldValue('MISSILE') === (name === 'missile1' ? '1' : '0')))) {
+      block.type === 'sprite_missile_fire' && block.isEnabled() && block.getFieldValue('DIRECTIONS16') === 'TRUE' &&
+      block.getFieldValue('MISSILE') === fireObjectFieldValue(name))) {
       this.missileFire16UsedFor.add(name);
+    }
+  });
+
+  // Which objects have a Fire block with "throttle movement" ticked: only those
+  // need the countdown variables.
+  this.missileFireThrottleUsedFor = new Set();
+  ['missile0', 'missile1', 'ball'].forEach((name) => {
+    if (workspace.getAllBlocks(false).some((block) =>
+      block.type === 'sprite_missile_fire' && block.isEnabled() && block.getFieldValue('THROTTLE') === 'TRUE' &&
+      block.getFieldValue('MISSILE') === fireObjectFieldValue(name))) {
+      this.missileFireThrottleUsedFor.add(name);
     }
   });
 
@@ -586,10 +601,9 @@ Blockly.BBasic.init = function(workspace) {
   // playfield check after each (see generateMissileFireChecks).
   this.missileFirePfCheckUsedFor = new Set();
   ['missile0', 'missile1', 'ball'].forEach((name) => {
-    const fireType = name === 'ball' ? 'sprite_ball_fire' : 'sprite_missile_fire';
     if (workspace.getAllBlocks(false).some((block) =>
-      block.type === fireType && block.isEnabled() && block.getFieldValue('PFCHECK') === 'TRUE' &&
-      (name === 'ball' || block.getFieldValue('MISSILE') === (name === 'missile1' ? '1' : '0')))) {
+      block.type === 'sprite_missile_fire' && block.isEnabled() && block.getFieldValue('PFCHECK') === 'TRUE' &&
+      block.getFieldValue('MISSILE') === fireObjectFieldValue(name))) {
       this.missileFirePfCheckUsedFor.add(name);
     }
   });
@@ -1447,8 +1461,6 @@ Blockly.BBasic.init = function(workspace) {
   if (this.collisionPixelUsed) {
     reserveDevVarRW(collisionPixelColumnVarName(), 'playfield collision column result');
     reserveDevVarRW(collisionPixelRowVarName(), 'playfield collision row result');
-    reserveDevVarRW(collisionPixelNudgedColumnVarName(), 'playfield collision: nudged column candidate');
-    reserveDevVarRW(collisionPixelNudgedRowVarName(), 'playfield collision: nudged row candidate');
   }
 
   // Same bucket again, for function_call_statement's  discarded-return-
@@ -1586,13 +1598,14 @@ Blockly.BBasic.init = function(workspace) {
   // player state - a no-op unless rainbowColorUsedFor's  early pre-scan
   // (above) found it used.
   reserveRainbowColorDevVars(reserveDevVar, this.rainbowColorUsedFor);
+  reserveBackgroundRainbowDevVars(reserveDevVar, this.backgroundRainbowUsed);
 
   // Same bucket again, for "Fire missile"'s  per-missile fired-direction/
   // speed state (see reserveMissileFireDevVars'  comment in generators/
   // bbasic/sprites.js) - a no-op unless missileFireUsedFor's  early
   // pre-scan (above) found it used.
   reserveMissileFireDevVars(reserveDevVar, reserveDevVarRW, this.missileFireUsedFor, this.missileFire16UsedFor,
-      this.missileFirePfCheckUsedFor);
+      this.missileFirePfCheckUsedFor, this.missileFireThrottleUsedFor);
 
   // Same bucket again, for "Bounce"'s Combat-style stage/original-
   // direction/last-frame state (see reserveMissileBounceDevVars' comment
@@ -2748,7 +2761,7 @@ Blockly.BBasic.finish = function(code) {
   const generatedTitleScreenAnimationChecks = Blockly.BBasic.titleScreenAnimationChecks || '';
   const generatedRainbowColorGraphics = generateRainbowColorGraphics(Blockly);
   const generatedRainbowColorChecks = generateRainbowColorChecks(Blockly);
-  const generatedMissileFireChecks = generateMissileFireChecks(Blockly);
+  const generatedMissileFireChecks = generateMissileFireChecks(Blockly) + generateBounceStageChecks(Blockly);
   const generatedSeekChecks = generateSeekChecks(Blockly);
   const generatedInertiaChecks = generateInertiaChecks(Blockly);
   const generatedShakeScreenChecks = generateShakeScreenChecks(Blockly);
@@ -4012,6 +4025,7 @@ Blockly.BBasic.generateBackgrounds = function() {
   // subroutines) instead of always being inline-spliced into bank 1.
   Blockly.BBasic.generateBackgroundScrollPatch(backgrounds, visibleRows);
 
+  const nameOf = (name) => Blockly.BBasic.nameDB_.getName(name, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
   return backgrounds.map(({id, pixels, rowColors}, index) => {
     const endLabel = `background${id}end`;
     // Capped to the live playfield RAM window's real size (visibleRows),
@@ -4085,9 +4099,15 @@ Blockly.BBasic.generateBackgrounds = function() {
     // Scroll-tracking reset lives here too, not inside the relocatable
     // graphics payload - it's two tiny assignments, not graphics data, so
     // there's no reason to pay for a bank jump just to run them.
+    // With background rainbow colors in use, remember where this background's
+    // row color table is so Stop can point the kernel back at it.
+    const colorTableSaveLines = (usePfColors && this.backgroundRainbowUsed) ?
+      ` ${nameOf(backgroundColorTableLoVarName())} = pfcolortable\n` +
+      ` ${nameOf(backgroundColorTableHiVarName())} = aux2\n` : '';
     return ` if newbackground <> ${id} then goto ${endLabel}` + '\n' +
       scrollTrackingLines +
       Blockly.BBasic.wrapRelocatableGraphics(`background${id}`, payload) + '\n' +
+      colorTableSaveLines +
       endLabel;
   }).join('\n\n');
 };

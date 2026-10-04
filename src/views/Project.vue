@@ -317,6 +317,7 @@ import {appendCompileLog, useBackgroundsStorage, useConfigurationStorage, useDat
 import {combineLegacyPlayerAnimations, remapPlayer1AnimationIndexesInWorkspaceXml} from '../hooks/migrate-player-animations';
 import {migrateLegacyPlayerBlocksInWorkspaceXml} from '../hooks/migrate-player-blocks';
 import {migrateLegacyBounceBlocksInWorkspaceXml} from '../hooks/migrate-bounce-blocks';
+import {migrateLegacyBallFireBlocksInWorkspaceXml} from '../hooks/migrate-ball-fire-blocks';
 import {migrateLegacyInertiaAccelerateBlocksInWorkspaceXml} from '../hooks/migrate-inertia-accelerate-blocks';
 import {migrateLegacyJoystickBlocksInWorkspaceXml} from '../hooks/migrate-joystick-blocks';
 import {migrateLegacyKeypadBlocksInWorkspaceXml} from '../hooks/migrate-keypad-blocks';
@@ -1006,6 +1007,9 @@ export default defineComponent({
       // block still has - see that function's  comment in
       // hooks/migrate-bounce-blocks.js.
       this.workspaceStorage = migrateLegacyBounceBlocksInWorkspaceXml(this.workspaceStorage);
+
+      // Rewrites any old sprite_ball_fire block into the combined Fire block.
+      this.workspaceStorage = migrateLegacyBallFireBlocksInWorkspaceXml(this.workspaceStorage);
 
       // Rewrites any old sprite_inertia_accelerate blocks missing their
       // ACTION field, and any old sprite_inertia_stop_accelerate blocks, a

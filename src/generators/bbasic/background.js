@@ -6,12 +6,15 @@ import {effectiveBackgroundRows, backgroundFadeTimerVarName, backgroundFadePaceV
   backgroundFadeFinishedBit, fadeActiveBit, backgroundFadeWatchKey,
   backgroundGetPixelXVarName, backgroundGetPixelYVarName,
   collisionPixelColumnVarName, collisionPixelRowVarName,
-  collisionPixelNudgedColumnVarName, collisionPixelNudgedRowVarName,
   backgroundScrollRowVarName, backgroundScrollRowMaxVarName, backgroundScrollSubRowVarName,
   backgroundScrollEdgeFlagsVarName, BACKGROUND_SCROLL_EDGE_BITS, backgroundScrollStartVarName,
   BACKGROUND_SCROLL_PATCH_SUBROUTINE_NAME} from '../../blocks/background';
 import {pfRowDivisorFor} from '../../utils/playfield-coords';
-import {ctrlpfShadowVarName, spriteScrollFlagsVarName, spriteScrollActiveBit} from './sprites';
+import {ctrlpfShadowVarName, spriteScrollFlagsVarName, spriteScrollActiveBit,
+  missileBounceStageVarName,
+  DIRECTION16_STEPS, backgroundRainbowActiveBit, backgroundRainbowOffsetVarName,
+  backgroundColorTableLoVarName, backgroundColorTableHiVarName,
+  romNoiseFlagsVarName} from './sprites';
 
 // FADE_STEPS (4) is fixed rather than user-choosable - see its  comment
 // in blocks/background.js. floor(14 / 4) = 3, rounded down to the nearest
@@ -421,8 +424,10 @@ export default (Blockly) => {
 
     const col = Blockly.BBasic.superchipRwPairs[collisionPixelColumnVarName()];
     const row = Blockly.BBasic.superchipRwPairs[collisionPixelRowVarName()];
-    const col2 = Blockly.BBasic.superchipRwPairs[collisionPixelNudgedColumnVarName()];
-    const row2 = Blockly.BBasic.superchipRwPairs[collisionPixelNudgedRowVarName()];
+    // Scratch for the neighbor checks: temp3/temp4 survive pfread (which only
+    // overwrites temp1/temp2), so no variables are needed for them.
+    const col2 = {read: 'temp3', write: 'temp3'};
+    const row2 = {read: 'temp4', write: 'temp4'};
 
     const id = Blockly.BBasic.blockNumbers.next('collisionPixel');
     const useCol2Label = `_collision_pixel_${id}_usecol2`;
@@ -492,16 +497,50 @@ export default (Blockly) => {
 
     const col = Blockly.BBasic.superchipRwPairs[collisionPixelColumnVarName()];
     const row = Blockly.BBasic.superchipRwPairs[collisionPixelRowVarName()];
-    const col2 = Blockly.BBasic.superchipRwPairs[collisionPixelNudgedColumnVarName()];
-    const row2 = Blockly.BBasic.superchipRwPairs[collisionPixelNudgedRowVarName()];
+    // Scratch for the neighbor checks: temp3/temp4 survive pfread (which only
+    // overwrites temp1/temp2), so no variables are needed for them.
+    const col2 = {read: 'temp3', write: 'temp3'};
+    const row2 = {read: 'temp4', write: 'temp4'};
 
     const id = Blockly.BBasic.blockNumbers.next('collisionPixel');
     const label = (name) => `_collision_pixel_${id}_${name}`;
     const gotoIf = (dirs, target) => dirs.map((d) => `if ${row2.read} = ${d} then goto ${label(target)}`);
 
+    // Bounce turns a fired object around the moment it hits, so a Fire angle
+    // read after it points away from what was hit. For that case, use the
+    // heading from before the bounce while the bounce is still settling.
+    const dirBlock = block.getInputTargetBlock('DIRECTION');
+    const bounceLines = [];
+    // A Fire angle from a Fire block set to 16 directions counts 0-15, not 0-7.
+    let is16 = false;
+    if (dirBlock && dirBlock.type === 'sprite_fire_angle_get') {
+      const field = dirBlock.getFieldValue('MISSILE');
+      const fired = field === 'ball' ? 'ball' : `missile${field === '1' ? '1' : '0'}`;
+      is16 = (Blockly.BBasic.missileFire16UsedFor || new Set()).has(fired);
+      const pairs = Blockly.BBasic.superchipRwPairs;
+      const stage = pairs[missileBounceStageVarName(fired)];
+      if (stage) {
+        bounceLines.push(
+            `temp5 = ${stage.read} & 48`,
+            `if temp5 = 0 then goto ${label('nobounce')}`,
+            `${row2.write} = ${stage.read} & 15`,
+            `@ ${label('nobounce')}`);
+      }
+    }
+
+    // 16-direction diagonals as [rightFlag + downFlag, directions].
+    const diag16Groups = {};
+    DIRECTION16_STEPS.forEach(([xStep, yStep], dir) => {
+      if (!xStep || !yStep) return;
+      const key = `${xStep > 0 ? 1 : 0}${yStep > 0 ? 1 : 0}`;
+      (diag16Groups[key] = diag16Groups[key] || []).push(dir);
+    });
+    const diag16 = is16 ? Object.entries(diag16Groups) : [];
+
     return [
       // The direction, kept in the row scratch var until it is classified.
       `${row2.write} = ${direction}`,
+      ...bounceLines,
       // Exact column/row, clamped before anything ever reads them.
       `${col.write} = (${coords.x} - 17) / 4`,
       `if ${coords.stretched} then ${col.write} = (${coords.x} - 16) / 4`,
@@ -511,11 +550,20 @@ export default (Blockly) => {
       // Exact cell.
       `if pfread(${col.read}, ${row.read}) then goto ${label('done')}`,
       // Classify the direction: straight, diagonal, or none (exact cell only).
-      ...gotoIf([2], 'right'),
-      ...gotoIf([6], 'left'),
-      ...gotoIf([0], 'up'),
-      ...gotoIf([4], 'down'),
-      ...gotoIf([1, 3, 5, 7], 'diagonal'),
+      ...(is16 ? [
+        ...gotoIf([4], 'right'),
+        ...gotoIf([12], 'left'),
+        ...gotoIf([0], 'up'),
+        ...gotoIf([8], 'down'),
+        // Every other direction, grouped by which way it leans on each axis.
+        ...diag16.flatMap(([key, dirs]) => gotoIf(dirs, `d16_${key}`)),
+      ] : [
+        ...gotoIf([2], 'right'),
+        ...gotoIf([6], 'left'),
+        ...gotoIf([0], 'up'),
+        ...gotoIf([4], 'down'),
+        ...gotoIf([1, 3, 5, 7], 'diagonal'),
+      ]),
       `goto ${label('done')}`,
       // Straight directions: the neighboring cell ahead of the sprite.
       `@ ${label('right')}`,
@@ -533,6 +581,12 @@ export default (Blockly) => {
       // Diagonals: the right flag goes in the column scratch var and the down
       // flag in the row scratch var (replacing the direction), then the same
       // column / row / both escalation as the two-input block.
+      ...diag16.flatMap(([key]) => [
+        `@ ${label(`d16_${key}`)}`,
+        `${col2.write} = ${key[0]}`,
+        `${row2.write} = ${key[1]}`,
+        `goto ${label('flagsdone')}`,
+      ]).slice(0, is16 ? undefined : 0),
       `@ ${label('diagonal')}`,
       `${col2.write} = 0`,
       `if ${row2.read} = 1 then ${col2.write} = 1`,
@@ -575,6 +629,27 @@ export default (Blockly) => {
       `${row.write} = ${row2.read}`,
       `@ ${label('done')}`,
     ].join('\n') + '\n';
+  };
+
+  Blockly.BBasic['background_rainbow_colors'] = function(block) {
+    const resolveVar = (canonicalName) =>
+      Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+    const offsetVar = resolveVar(backgroundRainbowOffsetVarName());
+    const flagsVar = resolveVar(romNoiseFlagsVarName());
+    const offset = Blockly.BBasic.valueToCode(block, 'OFFSET', Blockly.BBasic.ORDER_ASSIGNMENT) ||
+      'framecounter';
+    return `${offsetVar} = ${offset}\n${flagsVar}{${backgroundRainbowActiveBit}} = 1\n`;
+  };
+
+  Blockly.BBasic['background_rainbow_colors_stop'] = function(block) {
+    const flagsVar = Blockly.BBasic.nameDB_.getName(romNoiseFlagsVarName(), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+    const resolve = (name) => Blockly.BBasic.nameDB_.getName(name, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+    // Also points the kernel back at the loaded background's row colors.
+    return `${flagsVar}{${backgroundRainbowActiveBit}} = 0\n` +
+      `pfcolortable = ${resolve(backgroundColorTableLoVarName())}\n` +
+      `aux2 = ${resolve(backgroundColorTableHiVarName())}\n` +
+      // The top row's color is the first entry of that table: read it back.
+      'asm\nldy #0\nlda (pfcolortable),y\nsta playfieldrealcolor\n@end\n';
   };
 
   Blockly.BBasic['background_collision_pixel_column'] = function(block) {

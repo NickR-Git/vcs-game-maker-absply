@@ -72,6 +72,7 @@ const buildAnimationSetBlock = ({icon, colour, storageFactory}) => {
           .appendField(`${ANIMATION_ICON} set animation to`)
           .appendField(
               new Blockly.FieldDropdown(buildAnimationOptions(storageFactory)), 'VAR')
+          .appendField(' ')
           .appendField(new Blockly.FieldCheckbox('TRUE'), 'LOOP')
           .appendField('loop');
       this.setPreviousStatement(true);
@@ -108,6 +109,7 @@ const buildAnimationSetByIdBlock = ({icon, colour}) => {
           .appendField(new Blockly.FieldDropdown(PLAYER_OPTIONS), 'PLAYER')
           .appendField(`${ANIMATION_ICON} set animation to ID`);
       this.appendDummyInput()
+          .appendField(' ')
           .appendField(new Blockly.FieldCheckbox('TRUE'), 'LOOP')
           .appendField('loop');
       this.setInputsInline(true);
@@ -205,14 +207,6 @@ const MISSILE_SIZE_OPTIONS = [
   ['2', '$10'],
   ['4', '$20'],
   ['8', '$30'],
-];
-
-// Pixels moved per frame, each direction's  X and Y step (see
-// generators/bbasic/sprites.js's  generateMissileFireChecks) - a
-// bounded dropdown rather than a free-typed field, same "small fixed
-// choice" reasoning MISSILE_SIZE_OPTIONS above already uses.
-const MISSILE_FIRE_SPEED_OPTIONS = [
-  ['1', '1'], ['2', '2'], ['3', '3'], ['4', '4'], ['5', '5'], ['6', '6'], ['7', '7'],
 ];
 
 // Same 0-7 clockwise-from-Up encoding as input_joyN_direction8 (see
@@ -314,8 +308,8 @@ const setupFireDefaultAngleSync = (block) => {
 // block is a single combined type with this PLAYER dropdown instead of a
 // separate sprite_player0_*/sprite_player1_* pair - confirmed with the user
 // (this used to be two full sets of blocks; Ball is NOT part of this - it
-// never had a twin to combine with, so buildSpriteBlocks/buildFireBlock/
-// buildBounceBlock below stay per-name for it. Missile 0/1 get the exact
+// never had a twin to combine with, so buildSpriteBlocks below stays per-name
+// for it (its Fire block is the combined Missile/Ball one). Missile 0/1 get the exact
 // same "one combined type, MISSILE dropdown instead of PLAYER" treatment
 // - see MISSILE_OPTIONS just below).
 // Labels are bare "0"/"1", not "Player 0"/"Player 1" - every combined
@@ -335,6 +329,9 @@ const playerNameFromField = (block) => `player${block && block.getFieldValue('PL
 // above - every combined Missile block's  message0 already has a
 // static "Missile" word right before this dropdown.
 const MISSILE_OPTIONS = [['0', '0'], ['1', '1']];
+// The Fire block covers both missiles and the ball in one dropdown (the field is still called
+// MISSILE, as it was when the block only did missiles, so saved projects keep loading).
+const FIRE_OBJECT_OPTIONS = [['Missile 0', '0'], ['Missile 1', '1'], ['Ball', 'ball']];
 
 const missileNameFromField = (block) => `missile${block && block.getFieldValue('MISSILE') === '1' ? '1' : '0'}`;
 
@@ -584,8 +581,9 @@ const buildCombinedPlayerVarBlocks = ({icon, colour}) => {
       // was first built with the dummy declared first). Only actually
       // shown once VAR is "Animation" - see
       // sprite_player_set_loop_visibility_sync's comment below.
-      'message1': '%1 loop %2',
+      'message1': '%1 %2 loop %3',
       'args1': [
+        {'type': 'field_label', 'text': ' '},
         {
           'type': 'field_checkbox',
           'name': 'LOOP',
@@ -627,8 +625,9 @@ const buildCombinedPlayerVarBlocks = ({icon, colour}) => {
         },
       ],
       // Same shape as sprite_player_set's message1/args1 just above.
-      'message1': '%1 loop %2',
+      'message1': '%1 %2 loop %3',
       'args1': [
+        {'type': 'field_label', 'text': ' '},
         {
           'type': 'field_checkbox',
           'name': 'LOOP',
@@ -706,6 +705,44 @@ Blockly.Extensions.register('sprite_player_set_loop_visibility_sync', function()
   };
   applyVisibility(varField.getValue());
   varField.setValidator((newValue) => {
+    applyVisibility(newValue);
+    return newValue;
+  });
+});
+
+// Bounce's angle number is only shown while "set angle manually" is ticked.
+// Same deferred-render reasoning as the extension above.
+Blockly.Extensions.register('object_bounce_manual_angle_sync', function() {
+  // eslint-disable-next-line no-invalid-this
+  const block = this;
+  const manualField = block.getField('MANUAL');
+  if (!manualField) return;
+  const applyVisibility = (value) => {
+    if (typeof block.isInsertionMarker === 'function' && block.isInsertionMarker()) return;
+    if (!block.workspace || !block.workspace.rendered) return;
+    const shouldBeVisible = value === true || value === 'TRUE';
+    const input = block.getInput('ANGLE');
+    if (!input || input.isVisible() === shouldBeVisible) return;
+    input.setVisible(shouldBeVisible);
+    setTimeout(() => {
+      if (!block.workspace || (typeof block.isDeadOrDying === 'function' && block.isDeadOrDying())) return;
+      // Prefill the shown field with a number block (a shadow, so it can be
+      // replaced) when nothing is plugged in.
+      if (shouldBeVisible && !input.connection.targetBlock()) {
+        const shadow = block.workspace.newBlock('math_number');
+        shadow.setShadow(true);
+        shadow.setFieldValue(0, 'NUM');
+        shadow.initSvg();
+        input.connection.connect(shadow.outputConnection);
+        if (typeof shadow.render === 'function') shadow.render();
+      }
+      if (typeof block.queueRender === 'function') block.queueRender();
+      else if (typeof block.render === 'function') block.render();
+      if (block.workspace && block.workspace.resizeContents) block.workspace.resizeContents();
+    }, 0);
+  };
+  applyVisibility(manualField.getValue());
+  manualField.setValidator((newValue) => {
     applyVisibility(newValue);
     return newValue;
   });
@@ -1370,8 +1407,9 @@ Blockly.defineBlocksWithJsonArray([
     // wrapped in an ANONYMOUS auto-created dummy input Blockly.Block.
     // prototype.interpolate_ generates for any fields left unclaimed at
     // the end of a message row - impossible to look up and hide later.
-    'message1': '%1 16 directions %2',
+    'message1': '%1 %2 16 directions %3',
     'args1': [
+      {'type': 'field_label', 'text': ' '},
       {
         'type': 'field_checkbox',
         'name': 'DIRECTIONS16',
@@ -1379,8 +1417,9 @@ Blockly.defineBlocksWithJsonArray([
       },
       {'type': 'input_dummy', 'name': 'DIRECTIONS16_INPUT'},
     ],
-    'message2': '%1 Fine %2',
+    'message2': '%1 %2 Fine %3',
     'args2': [
+      {'type': 'field_label', 'text': ' '},
       {
         'type': 'field_checkbox',
         'name': 'FINE',
@@ -1431,8 +1470,9 @@ Blockly.defineBlocksWithJsonArray([
         'check': 'Number',
       },
     ],
-    'message1': '%1 Fine',
+    'message1': '%1 %2 Fine',
     'args1': [
+      {'type': 'field_label', 'text': ' '},
       {
         'type': 'field_checkbox',
         'name': 'FINE',
@@ -1470,7 +1510,7 @@ Blockly.defineBlocksWithJsonArray([
   // block's  generator for exactly how.
   {
     'type': 'object_bounce',
-    'message0': `${INERTIA_ICON} Bounce %1 %2 off screen edges`,
+    'message0': `${INERTIA_ICON} Bounce %1 %2 %3 off screen edges %4 %5 set angle manually %6 %7`,
     'args0': [
       {
         'type': 'field_dropdown',
@@ -1478,15 +1518,39 @@ Blockly.defineBlocksWithJsonArray([
         'options': SEEK_OBJECT_OPTIONS,
       },
       {
+        'type': 'field_label',
+        'text': ' ',
+      },
+      {
         'type': 'field_checkbox',
         'name': 'EDGES',
         'checked': false,
       },
+      // Extra gap between the two options.
+      {
+        'type': 'field_label',
+        'text': ' ',
+      },
+      {
+        'type': 'field_checkbox',
+        'name': 'MANUAL',
+        'checked': false,
+      },
+      // Holds the fields above, so hiding ANGLE does not hide them.
+      {
+        'type': 'input_dummy',
+      },
+      {
+        'type': 'input_value',
+        'name': 'ANGLE',
+        'check': 'Number',
+      },
     ],
+    'inputsInline': true,
     'previousStatement': null,
     'nextStatement': null,
     'colour': 'purple',
-    'extensions': ['object_seek_colour_sync'],
+    'extensions': ['object_seek_colour_sync', 'object_bounce_manual_angle_sync'],
     'tooltip': 'Reflects the chosen player/missile/ball off of whatever it just collided with, ' +
       'guessing which kind of surface was hit the same way Combat (1977) does: the first frame ' +
       'it\'s stuck, mirrors as if a vertical wall was hit; if still stuck the next frame, tries a ' +
@@ -1502,7 +1566,10 @@ Blockly.defineBlocksWithJsonArray([
       'the moment it goes past the left, right, top or bottom edge of the screen, flipping the ' +
       'matching direction (left/right edges flip horizontal movement, top/bottom flip vertical), ' +
       'putting it back on the edge, and keeping a fired missile or ball moving instead of letting ' +
-      'it stop off-screen.',
+      'it stop off-screen. With "set angle manually" unticked the ' +
+      'reflection is automatic. Ticked, a fired missile or ball leaves the surface at the angle ' +
+      'you give (0-7, or 0-15 when the Fire block uses 16 directions, clockwise from up) instead. It applies to ' +
+      'collision bounces only, not to "off screen edges".',
   },
   // Cancels what a Fire block started: the object stops moving where it is.
   // Same OBJECT dropdown and colour sync as object_bounce above.
@@ -1549,9 +1616,8 @@ export const resolveSeekArrivedWatches = (workspace) => {
 // generators/bbasic/sprites.js), so this is never called for it.
 // Missile 0/1 only (never had a Ball equivalent at all - Ball's width is
 // set through sprite_ball_set's "Width" option instead), so - unlike
-// buildFireBlock/buildBounceBlock just below, which stay per-name for
-// Ball's sake - this is fully repurposed into the combined type, called
-// once instead of once per name.
+// the per-name blocks for Ball - this is fully repurposed into the combined type,
+// called once instead of once per name.
 const buildMissileSizeBlock = ({icon, colour}) => {
   Blockly.defineBlocksWithJsonArray([
     // Block for changing a missile's width.
@@ -1578,90 +1644,7 @@ const buildMissileSizeBlock = ({icon, colour}) => {
   ]);
 };
 
-// Shared by missile0/missile1/ball - see createGeneratorForFireBall in
-// generators/bbasic/sprites.js for the fully name-generic trigger/per-frame
-// movement this drives; nothing here is missile-specific. Defined in JS
-// rather than the JSON array shape every other block in this file uses, so
-// DEFAULT_ANGLE's  dropdown can be backed by a function (see
-// buildMissileFireDefaultAngleOptions'  comment) - same reasoning
-// text_minikernel_show_named's  comment in blocks/text-minikernel.js
-// gives for the identical choice there.
-const buildFireBlock = ({name, description, icon, colour}) => {
-  // Fires this missile from the given starting X/Y, moving at the given
-  // angle/speed until it goes off-screen, where it just stops (see
-  // generateMissileFireChecks) - its  Height/visibility is left
-  // entirely to the existing "sprite_<name>_set" block, never touched
-  // here, so it doesn't change size or disappear by itself.
-  Blockly.Blocks[`sprite_${name}_fire`] = {
-    init: function() {
-      this.appendValueInput('X')
-          .setCheck('Number')
-          .appendField(`${icon} Fire ${description} from X`);
-      this.appendValueInput('Y')
-          .setCheck('Number')
-          .appendField('Y');
-      this.appendValueInput('ANGLE')
-          .setCheck('Number')
-          .appendField('at angle');
-      this.appendDummyInput()
-          .appendField('default')
-          .appendField(new Blockly.FieldDropdown(buildMissileFireDefaultAngleOptions), 'DEFAULT_ANGLE')
-          .appendField('speed')
-          .appendField(new Blockly.FieldDropdown(MISSILE_FIRE_SPEED_OPTIONS), 'SPEED');
-      this.appendDummyInput()
-          .appendField(new Blockly.FieldCheckbox('FALSE'), 'THROTTLE')
-          .appendField('throttle movement');
-      this.appendDummyInput()
-          .appendField(new Blockly.FieldCheckbox('FALSE'), 'DIRECTIONS16')
-          .appendField('16 directions');
-      const playfieldCheckField = new Blockly.FieldCheckbox('FALSE');
-      playfieldCheckField.setTooltip('Moves the object one pixel at a time and checks the playfield after ' +
-        'each one, stopping on the first lit playfield pixel it reaches. Without it a fast object can ' +
-        'jump over a thin playfield pixel without ever touching it, so no collision is detected. ' +
-        'Costs a little extra time every frame while the object is moving.');
-      this.appendDummyInput()
-          .appendField(playfieldCheckField, 'PFCHECK')
-          .appendField('check playfield while moving');
-      this.setInputsInline(true);
-      this.setPreviousStatement(true, null);
-      this.setNextStatement(true, null);
-      this.setColour(colour);
-      setupFireDefaultAngleSync(this);
-      this.setTooltip(`Launches ${description} from the given starting X/Y position (e.g. a paired ` +
-        'player\'s X/Y position blocks, for a traditional "fire from the player" missile), ' +
-        'moving it automatically (a few pixels every frame) until it goes off-screen, where it ' +
-        `simply stops moving - ${description}'s Height/visibility is never touched by this ` +
-        `block, so it never changes size or disappears automatically; use "${description}: set Height" ` +
-        'yourself if you want it hidden once it stops. Angle is 0-7 ' +
-        '(0=Up, 1=Up-Right, 2=Right, 3=Down-Right, 4=Down, 5=Down-Left, 6=Left, 7=Up-Left, clockwise ' +
-        'from Up) - or 0-15 on the same clockwise-from-Up scale, if "16 directions" below is checked. ' +
-        'Plug in a "Joystick direction (8-way)" block to fire toward wherever the ' +
-        'joystick is pushed, a plain number for a fixed direction, or a variable holding an angle ' +
-        'computed elsewhere. 255 (or any other value outside the valid range) means "no clear direction" (e.g. ' +
-        'a centered joystick) - "default" is used instead whenever that happens, so ' +
-        `${description} still fires (in whichever direction "default" picks) rather than doing ` +
-        `nothing. Every time this block actually runs, it (re)launches ${description} right away, ` +
-        'even if a previous shot is still in flight - resetting its position to whatever X/Y it\'s ' +
-        'given at that moment. Because of that, this should be placed behind a rate limiter ' +
-        '(e.g. an "every X frames" block) rather than something that stays true every single frame ' +
-        '(like "if Fire then ..." alone), or it\'ll keep resetting the shot every frame instead ' +
-        'of letting it fly. "throttle movement", when checked AND this block is placed directly ' +
-        'inside an "every X frames" block, slows the actual in-flight movement down to that same ' +
-        'rate (one step every X frames) instead of moving every frame regardless - unchecked (the ' +
-        'default), it always moves every frame once fired, no matter what wraps this block. ' +
-        '"16 directions", when checked, doubles the angle resolution to 0-15 (each of the original ' +
-        '8 compass points, plus one halfway between each pair) instead of 0-7 - the two extra ' +
-        'directions between each compass point move at full speed on their dominant axis and half ' +
-        'speed on the other, the same coarse approximation classic 2600 games (e.g. Combat\'s ' +
-        'ricocheting shells) used instead of real trigonometry. "default" above offers all 16 of ' +
-        'those directions once this is checked (just the original 8 otherwise) - already-picked ' +
-        'values are translated onto the new scale automatically when this is toggled, so it always ' +
-        'lines up with the angle scale currently in use.');
-    },
-  };
-};
-
-// Shared by missile0/missile1/ball, same as buildFireBlock above - reflects
+// Shared by missile0/missile1/ball - reflects
 // whichever direction this object was last fired at (see sprite_*_fire),
 // using the same adaptive multi-frame guessing Combat (1977) uses for its
 // tank shells: since this block has no idea which wall/edge of whatever
@@ -1682,17 +1665,22 @@ const buildFireBlock = ({name, description, icon, colour}) => {
 // the collision persists, not just once - unlike a plain one-shot flip, this
 // only makes its intended guess/guess/give-up progression if it keeps being
 // called each frame the object is still stuck.
-// Missile 0/1's  combined Fire block - same shape as buildFireBlock
-// above (which stays as-is, still used for Ball's  separate, never-
-// combined sprite_ball_fire), just with a MISSILE dropdown prepended and
-// missile-generic tooltip text instead of a fixed ${description}. Defined
-// in JS for the same reason buildFireBlock above is - see its  comment.
+// The Fire block for Missile 0, Missile 1 and the Ball: one block with a dropdown
+// (it used to be a separate block for the ball; hooks/migrate-ball-fire-blocks.js
+// converts those). Fires the object from the given starting X/Y, moving at the
+// given angle/speed until it goes off-screen, where it just stops (see
+// generateMissileFireChecks) - its Height/visibility is left entirely to the
+// existing "set" blocks, never touched here. Defined in JS rather than the JSON
+// array shape every other block in this file uses, so DEFAULT_ANGLE's dropdown
+// can be backed by a function (see buildMissileFireDefaultAngleOptions'
+// comment) - same reasoning text_minikernel_show_named's comment in
+// blocks/text-minikernel.js gives for the identical choice there.
 const buildCombinedMissileFireBlock = ({icon, colour}) => {
   Blockly.Blocks['sprite_missile_fire'] = {
     init: function() {
       this.appendDummyInput()
-          .appendField(`${icon} Fire Missile`)
-          .appendField(new Blockly.FieldDropdown(MISSILE_OPTIONS), 'MISSILE');
+          .appendField(`${icon} Fire`)
+          .appendField(new Blockly.FieldDropdown(FIRE_OBJECT_OPTIONS), 'MISSILE');
       this.appendValueInput('X')
           .setCheck('Number')
           .appendField('from X');
@@ -1704,13 +1692,19 @@ const buildCombinedMissileFireBlock = ({icon, colour}) => {
           .appendField('at angle');
       this.appendDummyInput()
           .appendField('default')
-          .appendField(new Blockly.FieldDropdown(buildMissileFireDefaultAngleOptions), 'DEFAULT_ANGLE')
-          .appendField('speed')
-          .appendField(new Blockly.FieldDropdown(MISSILE_FIRE_SPEED_OPTIONS), 'SPEED');
+          .appendField(new Blockly.FieldDropdown(buildMissileFireDefaultAngleOptions), 'DEFAULT_ANGLE');
+      // Pixels per frame, 0 (stands still) to 7: a number block, variable or any
+      // other number (anything above 7 is held at 7 in the generated code). Each
+      // block in the toolbox comes with a number block already plugged in.
+      this.appendValueInput('SPEED')
+          .setCheck('Number')
+          .appendField('speed');
       this.appendDummyInput()
+          .appendField(' ')
           .appendField(new Blockly.FieldCheckbox('FALSE'), 'THROTTLE')
           .appendField('throttle movement');
       this.appendDummyInput()
+          .appendField(' ')
           .appendField(new Blockly.FieldCheckbox('FALSE'), 'DIRECTIONS16')
           .appendField('16 directions');
       const playfieldCheckField = new Blockly.FieldCheckbox('FALSE');
@@ -1719,13 +1713,22 @@ const buildCombinedMissileFireBlock = ({icon, colour}) => {
         'jump over a thin playfield pixel without ever touching it, so no collision is detected. ' +
         'Costs a little extra time every frame while the object is moving.');
       this.appendDummyInput()
+          .appendField(' ')
           .appendField(playfieldCheckField, 'PFCHECK')
           .appendField('check playfield while moving');
       this.setInputsInline(true);
       this.setPreviousStatement(true, null);
       this.setNextStatement(true, null);
       this.setColour(colour);
-      Blockly.Extensions.apply('sprite_missile_field_sync', this, false);
+      // Red for Missile 0, blue for Missile 1 (like the other missile blocks)
+      // and orange for the Ball, following the dropdown.
+      const fireColourFor = (value) => (value === 'ball' ? '#ff8800' : value === '1' ? 'blue' : 'red');
+      const objectField = this.getField('MISSILE');
+      this.setColour(fireColourFor(objectField.getValue()));
+      objectField.setValidator((newValue) => {
+        this.setColour(fireColourFor(newValue));
+        return newValue;
+      });
       setupFireDefaultAngleSync(this);
       this.setTooltip('Launches the chosen missile from the given starting X/Y position (e.g. a ' +
         'paired player\'s X/Y position blocks, for a traditional "fire from the player" missile), ' +
@@ -1827,6 +1830,32 @@ buildCombinedMissileFireBlock({
   colour: 'red',
 });
 
+// Reads the direction a fired object (set by the Fire block) is travelling in: 0-7
+// clockwise from Up, or 0-15 when a Fire block for that object uses 16 directions
+// (the same numbers as the Fire block's angle and the joystick direction block).
+// Read it before a Bounce block runs, which changes it.
+Blockly.Blocks['sprite_fire_angle_get'] = {
+  init: function() {
+    this.appendDummyInput()
+        .appendField(`${MISSILE_ICON} Fire angle of`)
+        .appendField(new Blockly.FieldDropdown(FIRE_OBJECT_OPTIONS), 'MISSILE');
+    this.setOutput(true, 'Number');
+    const colourFor = (value) => (value === 'ball' ? '#ff8800' : value === '1' ? 'blue' : 'red');
+    const objectField = this.getField('MISSILE');
+    this.setColour(colourFor(objectField.getValue()));
+    objectField.setValidator((newValue) => {
+      this.setColour(colourFor(newValue));
+      return newValue;
+    });
+    this.setTooltip('The direction the chosen missile or ball was last fired in by a "Fire" block: ' +
+      '0 Up, 1 Up-Right, 2 Right, 3 Down-Right, 4 Down, 5 Down-Left, 6 Left, 7 Up-Left (or 0-15 on ' +
+      'the finer scale when a Fire block for it has "16 directions" ticked). Read it when a collision ' +
+      'happens to get the angle the object was travelling at - before a "Bounce" block runs, which ' +
+      'turns it around. It plugs straight into the "Find playfield pixel" block\'s direction and ' +
+      'into a Fire block\'s angle. Only meaningful for an object a Fire block launched.');
+  },
+};
+
 buildSpriteBlocks({
   name: 'ball',
   description: 'Ball',
@@ -1836,13 +1865,6 @@ buildSpriteBlocks({
   writeOnlyOptions: [
     [HEIGHT_ICON + ' Width', 'ballwidth'],
   ],
-});
-
-buildFireBlock({
-  name: 'ball',
-  description: 'Ball',
-  icon: BALL_ICON,
-  colour: '#ff8800',
 });
 
 // The Atari 2600 only has one priority switch for the whole screen: it can't

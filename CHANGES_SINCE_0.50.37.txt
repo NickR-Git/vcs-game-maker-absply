@@ -529,3 +529,77 @@ Fire "check playfield while moving" and Bounce "off screen edges" options, corre
   Y 8-96), flipping the matching direction of Fire and/or Inertia, putting the
   object back on the edge, and keeping a fired missile or ball moving instead
   of letting it stop off-screen. Unticked, the block works as before.
+
+=== 0.51.19 ===
+Bounce manual angle, Background rainbow colors, shared bounce routine, sound envelope duration, Find playfield pixel fixes
+
+- Bounce: new "set angle manually" checkbox. Unticked, the reflection is
+  automatic as before and the angle field is hidden. Ticked, a number field
+  appears and a fired missile or ball leaves the surface at that angle (0-7, or
+  0-15 with 16 directions). Collision bounces only.
+  The angle is applied on every call while the object is still touching what it
+  hit, so the give-up turn-around can no longer replace it.
+- Bounce: the playfield-reflection code is now shared by every Bounce block on the
+  same object (one subroutine, which can move to another bank) instead of being
+  copied into each block. A project with several Bounce blocks was overflowing
+  bank 1 and failing to build.
+- Sound tab: a sound effect with Envelope on now always has its Duration set to the
+  envelope's full length (Attack + Decay + Sustain + Release), shrinking as well
+  as growing, and the Duration field is locked while the envelope is on.
+- Player: "stop rainbow colors" now puts the player back to the sprite colors it had
+  before rainbow colors started. A player whose colors
+  come from its animation frames also no longer has them replaced by a plain
+  white table every frame while rainbow colors is used on that project.
+- Background: new "Background rainbow colors, offset" block (and "Stop background
+  rainbow colors"), the playfield twin of the player rainbow colors block. It
+  gives every playfield row a different color from ROM bytes, shimmering with the
+  frame counter unless an offset is plugged in. Needs Playfield row colors turned
+  on in Options.
+  Stop puts the rows back to the loaded background's row colors.
+- Find playfield pixel with a Fire angle from a Fire block set to 16 directions:
+  the block only understood 0-7, so angles 8-15 and the half-step angles found
+  nothing. It now reads the full 0-15 range when its direction is that Fire
+  angle.
+- Find playfield pixel with a Fire angle as its direction: after Bounce had
+  already turned the object around, the Fire angle pointed away from the pixel
+  that was hit, so no pixel was found on many collisions. While a bounce is
+  settling, the block now uses the heading from before the bounce.
+- Sprites: the Fire block for the ball is now the same block as the missile
+  one: a single "Fire [Missile 0 / Missile 1 / Ball]" block with a dropdown
+  (orange for Ball). Projects with the old ball Fire block are converted
+  automatically when they are opened.
+- Fire: the speed is now an input that takes a number block (or a variable or
+  any expression) instead of a 1-7 dropdown, with a 1 already plugged in. 0
+  stands still, and anything above 7 is held at 7. Saved projects keep their
+  speed. Tested on the ball: speeds 1, 3 and 7 moved it 1, 3 and 7 pixels
+  a frame, 0 did not move it, and 12 moved it as 7.
+- Bounce "off screen edges": the bottom edge now follows the playfield (Y 96
+  with the default 11 rows, 100 with Superchip and pfres 24) instead of a fixed
+  96, which bounced objects off early on Superchip builds before they reached
+  the bottom playfield pixels.
+- Bounce (collision mode): now works out which way to reflect from the playfield
+  pixels around the object instead of guessing. Straight up/down/left/right
+  movement flips just that axis; on a diagonal, the pixels next to the object
+  along x and along y say whether a vertical wall, a horizontal wall or a corner
+  was hit. The old guess turned a ball heading straight up or down sideways
+  (up became up-right), then flipped it again a frame later, so it wandered
+  off after a hit. Frames after the first one, while the object is still
+  touching the wall, are ignored for a short time so it can move away, and if it
+  is still stuck it reverses outright as before. Its state fits in one variable per object.
+- Fire angle block: new "Fire angle of [Missile 0 / Missile 1 / Ball]" block
+  that gives the direction an object a Fire block launched is travelling in.
+- Actions tab: copy and paste of blocks now also goes through the system
+  clipboard, so blocks copied in one browser window can be pasted into another
+  even when the two windows do not share storage (a different browser or
+  profile, or the desktop app next to the web app). Ctrl+C / Ctrl+X put the
+  blocks on the clipboard as a "VCSGM-BLOCKS:" line; Ctrl+V reads the clipboard
+  first (the browser may ask for permission the first time) and falls back to
+  the previous behaviour when it holds nothing from this app.
+- Fewer variables used by blocks: Fire only reserves its throttle countdown
+  variables when a Fire block on that object has throttle movement ticked; Bounce
+  keeps its whole state for an object in one variable (it was three); Find
+  playfield pixel no longer reserves two scratch variables; Background rainbow
+  colors no longer keeps a variable for the top row color; player Rainbow colors
+  no longer keeps two variables per player; the joystick Fire button blocks use
+  two variables per joystick instead of three. Superchip RAM for Breakanoid went
+  from 41 to 37 of 44 bytes and read/write variables from 11 to 4 of 44.

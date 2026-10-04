@@ -10,6 +10,7 @@ import {clearProjectStorage, useLoadLastProjectStorage, consumeSkipLoadLastProje
 import {migrateLegacyPlayerAnimationsInLocalStorage} from './hooks/migrate-player-animations';
 import {migrateLegacyPlayerBlocksInLocalStorage} from './hooks/migrate-player-blocks';
 import {migrateLegacyBounceBlocksInLocalStorage} from './hooks/migrate-bounce-blocks';
+import {migrateLegacyBallFireBlocksInLocalStorage} from './hooks/migrate-ball-fire-blocks';
 import {migrateLegacyInertiaAccelerateBlocksInLocalStorage} from './hooks/migrate-inertia-accelerate-blocks';
 import {migrateLegacyJoystickBlocksInLocalStorage} from './hooks/migrate-joystick-blocks';
 import {migrateLegacyKeypadBlocksInLocalStorage} from './hooks/migrate-keypad-blocks';
@@ -32,6 +33,9 @@ migrateLegacyPlayerBlocksInLocalStorage();
 // all 5 sprite names - see that function's  comment, same "run before
 // anything else reads the workspace" timing as the migrations above.
 migrateLegacyBounceBlocksInLocalStorage();
+
+// Rewrites any old sprite_ball_fire blocks into the combined Fire block.
+migrateLegacyBallFireBlocksInLocalStorage();
 
 // Rewrites any old sprite_inertia_accelerate blocks missing their ACTION
 // field, and any old sprite_inertia_stop_accelerate blocks, left over from
