@@ -644,3 +644,12 @@ Fewer variables (packed flag bytes, read/write pool), Find playfield pixel cover
   bottom edges, so a pixel beside or a little below a sprite moving at an angle is found
   and cleared. The cells are tried in this order: the ones the sprite touches, the ones
   above or below it, the ones beside it, then the diagonal one.
+
+=== 0.51.21 ===
+Fix for a build failure with a plain sound effect while another sound effect has an envelope
+
+- Sound effects: a build failed with "Unknown Mnemonic envelopeStage1" when a plain Play
+  sound effect (no envelope) was on a channel with nothing enveloped, while another
+  sound effect somewhere had an envelope, and Mute in-game audio was off. The plain sound
+  tried to reset a stage counter that was never declared for that channel. It now only
+  does that for a channel that has one.

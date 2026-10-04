@@ -237,7 +237,14 @@ export default (Blockly) => {
     // that stale envelope config once its  duration counts down far
     // enough to match it.
     let envelopeLines = '';
-    if (anySoundEffectHasEnvelope()) {
+    // The per-channel envelope state (the stage countdown, and the check that
+    // reads it every frame) only exists when generators/bbasic.js reserved it for
+    // this channel, which needs a sound or music note on that channel that has an
+    // envelope. A plain sound on a channel that has none, in a project where some
+    // other preset has an envelope, has nothing to reset and must not write the
+    // stage variable (it was never declared: "Unknown Mnemonic").
+    const stageReserved = !!Blockly.BBasic[`envelopeStage${channel}Used`];
+    if (anySoundEffectHasEnvelope() && stageReserved) {
       Blockly.BBasic.usesDivMul = true;
       // Blockly.BBasic.nameDB_, not this.nameDB_ - a block generator like
       // this one is invoked as "func.call(block, block)" by Blockly's
