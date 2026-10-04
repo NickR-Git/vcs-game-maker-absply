@@ -467,3 +467,10 @@ Both players start on the first sprite animation, Project and Generated toolbars
   the list). Player 0 used to start on the second animation when there was
   more than one, and Player 1 was never set, so the two started on different
   animations.
+
+=== 0.51.17 ===
+Fix the Create New Project popup colors with Subdued Palette or Dark Mode on
+
+- Project tab: the Create New Project popup's title bar is no longer a fixed
+  light grey, so the whole popup is one color with Subdued Palette or Dark
+  Mode on (the title bar used to stay lighter than the rest).
