@@ -5,7 +5,7 @@ import {effectiveBackgroundRows, backgroundFadeTimerVarName, backgroundFadePaceV
   backgroundFadeTargetVarName, fadeFlagsVarName, FADE_STEPS,
   backgroundFadeFinishedBit, fadeActiveBit, backgroundFadeWatchKey,
   backgroundGetPixelXVarName, backgroundGetPixelYVarName,
-  collisionPixelColumnVarName, collisionPixelRowVarName,
+  collisionPixelColumnVarName, collisionPixelRowVarName, areaClearLeftVarName,
   backgroundScrollRowVarName, backgroundScrollRowMaxVarName, backgroundScrollSubRowVarName,
   backgroundScrollEdgeFlagsVarName, BACKGROUND_SCROLL_EDGE_BITS, backgroundScrollStartVarName,
   BACKGROUND_SCROLL_PATCH_SUBROUTINE_NAME} from '../../blocks/background';
@@ -1206,6 +1206,73 @@ export default (Blockly) => {
     const rawVar = block.getFieldValue('VAR');
     const activeBit = `${resolveVar(fadeFlagsVarName(rawVar))}{${fadeActiveBit(rawVar)}}`;
     return [activeBit, Blockly.BBasic.ORDER_ATOMIC];
+  };
+
+  // "Background area from X Y to X Y is clear": the corners go into temp3-temp6
+  // (x1, y1, x2, y2), a shared subroutine scans the rectangle one pixel at a
+  // time, and the answer (1 = every pixel is off) comes back in temp3. temp3-temp6
+  // survive pfread, which only overwrites temp1/temp2; the left column the scan
+  // restarts from on each row is the one variable it needs. Corners may be in
+  // either order and are clamped to the playfield.
+  const AREA_CLEAR_SUBROUTINE = '_background_area_clear';
+  const buildAreaClearBody = (maxRow, left) => {
+    const lab = (part) => `@ _areaclear_${part}`;
+    const label = (part) => `_areaclear_${part}`;
+    return [
+      `if temp3 <= temp5 then goto ${label('xok')}`,
+      `temp1 = temp3`,
+      `temp3 = temp5`,
+      `temp5 = temp1`,
+      lab('xok'),
+      `if temp4 <= temp6 then goto ${label('yok')}`,
+      `temp1 = temp4`,
+      `temp4 = temp6`,
+      `temp6 = temp1`,
+      lab('yok'),
+      `if temp5 > 31 then temp5 = 31`,
+      `if temp6 > ${maxRow} then temp6 = ${maxRow}`,
+      `if temp3 > temp5 then goto ${label('clear')}`,
+      `if temp4 > temp6 then goto ${label('clear')}`,
+      `${left.write} = temp3`,
+      lab('row'),
+      `temp3 = ${left.read}`,
+      lab('col'),
+      `if pfread(temp3, temp4) then goto ${label('lit')}`,
+      `temp3 = temp3 + 1`,
+      `if temp3 <= temp5 then goto ${label('col')}`,
+      `temp4 = temp4 + 1`,
+      `if temp4 <= temp6 then goto ${label('row')}`,
+      lab('clear'),
+      `temp3 = 1`,
+      `goto ${label('end')}`,
+      lab('lit'),
+      `temp3 = 0`,
+      lab('end'),
+    ].join('\n');
+  };
+
+  Blockly.BBasic['background_area_clear'] = function(block) {
+    const configurationStorage = useConfigurationStorage();
+    const config = (configurationStorage && configurationStorage.value) || {};
+    const maxRow = effectiveBackgroundRows(config) - 1;
+    const left = Blockly.BBasic.superchipRwPairs[areaClearLeftVarName()];
+    if (!left) return ['0', Blockly.BBasic.ORDER_ATOMIC];
+    const arg = (name) => Blockly.BBasic.valueToCode(block, name, Blockly.BBasic.ORDER_ASSIGNMENT) || '0';
+    const x1 = arg('X1');
+    const y1 = arg('Y1');
+    const x2 = arg('X2');
+    const y2 = arg('Y2');
+    if (!Blockly.BBasic.subroutines[AREA_CLEAR_SUBROUTINE]) {
+      Blockly.BBasic.subroutines[AREA_CLEAR_SUBROUTINE] = buildAreaClearBody(maxRow, left);
+    }
+    const suffix = Blockly.BBasic.bankJumpSuffix(
+        Blockly.BBasic.getCurrentBank(), Blockly.BBasic.getSubroutineBank(AREA_CLEAR_SUBROUTINE));
+    // The lines before the last one are hoisted in front of whatever uses the
+    // value (see scrub_ in generators/bbasic.js).
+    return [
+      `temp3 = ${x1}\ntemp4 = ${y1}\ntemp5 = ${x2}\ntemp6 = ${y2}\ngosub ${AREA_CLEAR_SUBROUTINE}${suffix}\ntemp3`,
+      Blockly.BBasic.ORDER_ATOMIC,
+    ];
   };
 
   Blockly.BBasic[`background_get_pixel`] = function(block) {

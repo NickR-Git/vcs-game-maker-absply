@@ -152,6 +152,8 @@ export const backgroundGetPixelYVarName = () => 'bgGetPixelY';
 // as backgroundGetPixelXVarName/YVarName above, just always used (this
 // block never has a cheaper temp1-temp6 fallback path to begin with, so
 // there's no "only when nested in a function" condition to gate on).
+// The one variable "Background area ... is clear" needs: the left column its scan restarts from on every row.
+export const areaClearLeftVarName = () => 'areaClearLeft';
 export const collisionPixelColumnVarName = () => 'collisionPixelColumn';
 export const collisionPixelRowVarName = () => 'collisionPixelRow';
 // Pure internal scratch for the "nudged by one cell" candidates the
@@ -208,6 +210,34 @@ export const resolveBackgroundFadeFinishedWatches = (workspace) => {
     watched.add(backgroundFadeWatchKey(rawVarFor(block)));
   });
   return watched;
+};
+
+// Which backgrounds the project can ever switch to - read by generateBackgrounds
+// (generators/bbasic.js) to leave a background nothing selects out of the ROM.
+// A Set of background IDs, or null meaning "can't tell, keep every background":
+// the Background select blocks name a background directly, but a background set
+// from an arbitrary expression (a variable, a Data table lookup...) could be any
+// of them. ID 1 is always included: the game starts on it (see bbasic.bb.hbs).
+export const resolveUsedBackgroundIds = (workspace) => {
+  const used = new Set([1]);
+  let unsafe = false;
+  workspace.getAllBlocks(false).forEach((block) => {
+    // Blocks inside a disabled block (an event, an if...) are never generated either.
+    if (!block.isEnabled() || block.getInheritedDisabled()) return;
+    if (block.type === 'background_set_select') {
+      const id = Number(block.getFieldValue('VAR'));
+      if (Number.isInteger(id)) used.add(id);
+      else unsafe = true;
+    } else if (block.type === 'background_set') {
+      const value = block.getInputTargetBlock('VALUE');
+      let id = NaN;
+      if (value && value.type === 'background_select') id = Number(value.getFieldValue('VAR'));
+      else if (value && value.type === 'math_number') id = Number(value.getFieldValue('NUM'));
+      if (Number.isInteger(id)) used.add(id);
+      else unsafe = true;
+    }
+  });
+  return unsafe ? null : used;
 };
 
 // Every register some "is this fade active" block (background_fade_active
@@ -702,6 +732,25 @@ Blockly.defineBlocksWithJsonArray([
     'output': 'Boolean',
     'colour': BACKGROUND_COLOR,
     'tooltip': `Reads a pixel of the background; can only be used on "if" statements`,
+  },
+  // Block for checking a whole area of the playfield
+  {
+    'type': `background_area_clear`,
+    'message0': `${BACKGROUND_ICON} Background area from X %1 Y %2 to X %3 Y %4 is clear`,
+    'args0': [
+      {'type': 'input_value', 'name': 'X1', 'check': 'Number'},
+      {'type': 'input_value', 'name': 'Y1', 'check': 'Number'},
+      {'type': 'input_value', 'name': 'X2', 'check': 'Number'},
+      {'type': 'input_value', 'name': 'Y2', 'check': 'Number'},
+    ],
+    'inputsInline': true,
+    'output': 'Boolean',
+    'colour': BACKGROUND_COLOR,
+    'tooltip': `True when every playfield pixel in the rectangle between the two corners is off (columns ` +
+      `0-31 and rows from 0, the same numbers as "Background get pixel"). The corners can be given in ` +
+      `either order, and any part of the rectangle outside the playfield is ignored. It reads the pixels ` +
+      `one by one, so a big area takes a while: use it now and then (for example when a brick is cleared), ` +
+      `not on every frame. Can't be used inside a custom function.`,
   },
   // Block for setting a playfield pixel
   {

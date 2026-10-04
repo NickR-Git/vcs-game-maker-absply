@@ -313,7 +313,7 @@ import {defineComponent, reactive, computed, onMounted, onBeforeUnmount, ref, ge
 import {saveAs} from 'file-saver';
 import YAML from 'yaml';
 
-import {appendCompileLog, useBackgroundsStorage, useConfigurationStorage, useDataTablesStorage, usePlayerAnimationsStorage, useProjectAutoIncrementVersionStorage, useProjectIncludeDateInFilenameStorage, useProjectShowExamplesStorage, useScoreFontStorage, useSongsStorage, useSoundEffectsStorage, useSquishCustomScoreFontStorage, useTextFontStorage, useTextStringsStorage, useTitleScreenStorage, useWorkspaceStorage} from '../hooks/project';
+import {appendCompileLog, useBackgroundsStorage, useColorPaletteStorage, useConfigurationStorage, useDataTablesStorage, usePlayerAnimationsStorage, useProjectAutoIncrementVersionStorage, useProjectIncludeDateInFilenameStorage, useProjectShowExamplesStorage, useScoreFontStorage, useSongsStorage, useSoundEffectsStorage, useSquishCustomScoreFontStorage, useTextFontStorage, useTextStringsStorage, useTitleScreenStorage, useWorkspaceStorage} from '../hooks/project';
 import {combineLegacyPlayerAnimations, remapPlayer1AnimationIndexesInWorkspaceXml} from '../hooks/migrate-player-animations';
 import {migrateLegacyPlayerBlocksInWorkspaceXml} from '../hooks/migrate-player-blocks';
 import {migrateLegacyBounceBlocksInWorkspaceXml} from '../hooks/migrate-bounce-blocks';
@@ -427,6 +427,8 @@ export default defineComponent({
     const soundEffectsStorage = useSoundEffectsStorage();
     const songsStorage = useSongsStorage();
     const titleScreenStorage = useTitleScreenStorage();
+    // The Quick colors shortlist shared by the graphic editors - saved with the project.
+    const colorPaletteStorage = useColorPaletteStorage();
 
     // Kept directly on the same configuration bag every other project-wide
     // setting already lives in (scoreBkColor, textBkColor, etc. - see
@@ -508,7 +510,7 @@ export default defineComponent({
 
     return {data, router, showExamples, isToolbarScrolled, examples: examplesState, backgroundsStorage, playerAnimationsStorage,
       workspaceStorage, configurationStorage, scoreFontStorage, squishCustomScoreFontStorage, dataTablesStorage,
-      textStringsStorage, textFontStorage, soundEffectsStorage, songsStorage, titleScreenStorage, projectTitle,
+      textStringsStorage, textFontStorage, soundEffectsStorage, songsStorage, titleScreenStorage, colorPaletteStorage, projectTitle,
       projectDescription, projectDeveloper, projectVersion, projectAutoIncrementVersion, projectIncludeDateInFilename,
       projectWebsite, projectEmail};
   },
@@ -631,6 +633,8 @@ export default defineComponent({
         // editor itself (localStorage was never cleared), but loading that
         // saved file elsewhere, or after clearing storage, lost it all.
         'songs': this.songsStorage,
+        // The Quick colors shortlist (color bytes, in order) shown above the graphic editors.
+        'quick-colors': this.colorPaletteStorage || undefined,
       });
 
       return projectYaml;
@@ -1069,6 +1073,12 @@ export default defineComponent({
 
       if (project.configuration) {
         this.configurationStorage = project.configuration;
+      }
+
+      // A file saved before Quick colors went into the project has none: the
+      // current shortlist is left alone then.
+      if (Array.isArray(project['quick-colors'])) {
+        this.colorPaletteStorage = project['quick-colors'];
       }
 
       if (project['data-tables']) {

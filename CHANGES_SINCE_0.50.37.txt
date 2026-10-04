@@ -653,3 +653,18 @@ Fix for a build failure with a plain sound effect while another sound effect has
   sound effect somewhere had an envelope, and Mute in-game audio was off. The plain sound
   tried to reset a stage counter that was never declared for that channel. It now only
   does that for a channel that has one.
+- Backgrounds that no block ever switches to are no longer put in the ROM (before, every
+  background on the Background tab was). The first background always stays, since the game
+  starts on it, and every background stays when one is chosen from a variable or other
+  expression. Scrolling a background taller than the screen works from the same shortened
+  list, so the position of each background in its tables follows the ones that are left out.
+  Player animations nothing selects were already left out.
+  A Background select block inside a disabled event or block does not count as a use.
+- Quick colors are now saved in the project file and come back when it is opened, and a new
+  project starts with an empty shortlist. A project saved before this keeps the current
+  shortlist when opened.
+- Background: new "Background area from X Y to X Y is clear" block (true when every playfield
+  pixel in the rectangle is off). The corners can be in either order and anything outside
+  the playfield is ignored. It reads the pixels one at a time through a shared routine, so
+  use it now and then rather than every frame; it needs one variable and cannot be used
+  inside a custom function.

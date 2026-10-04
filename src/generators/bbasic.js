@@ -20,13 +20,13 @@ import {getRelocationBanks} from '../hooks/relocation-banks';
 import {DEFAULT_ROW_COLOR, processBackgroundStorageDefaults,
   backgroundFadeTimerVarName, backgroundFadePaceVarName, backgroundFadeTargetVarName,
   fadeFlagsVarName, FADE_FLAGS_REGISTER_GROUPS, backgroundGetPixelXVarName, backgroundGetPixelYVarName,
-  collisionPixelColumnVarName, collisionPixelRowVarName,
+  collisionPixelColumnVarName, collisionPixelRowVarName, areaClearLeftVarName,
   resolveBackgroundFadeFinishedWatches, hasBackgroundFadeActiveChecks,
   backgroundScrollEdgeFlagsVarName, backgroundScrollStartVarName,
   backgroundScrollRowVarName, backgroundScrollRowMaxVarName,
   backgroundScrollPacking, backgroundScrollActiveVarName, backgroundScrollSubRowVarName,
   backgroundsWithOverflowRows, effectiveBackgroundRows,
-  BACKGROUND_SCROLL_PATCH_SUBROUTINE_NAME} from '../blocks/background';
+  BACKGROUND_SCROLL_PATCH_SUBROUTINE_NAME, resolveUsedBackgroundIds} from '../blocks/background';
 import {functionCallDiscardVarName, functionCallArgVarName, functionParamVarName,
   MAX_FUNCTION_ARGS} from '../blocks/function';
 import {dataTableSymbolName, processDataTablesStorageDefaults} from '../blocks/data';
@@ -1106,6 +1106,10 @@ Blockly.BBasic.init = function(workspace) {
   // project ever selects.
   this.usedPlayerAnimations = resolveUsedPlayerAnimations(workspace);
 
+  // Which backgrounds anything can switch to (see resolveUsedBackgroundIds'
+  // comment), so generateBackgrounds can leave the others out of the ROM.
+  this.usedBackgroundIds = resolveUsedBackgroundIds(workspace);
+
   // Every player a sprite_player_animation_finished watch block actually
   // exists for, read by processAnimation (this file's generateAnimations
   // below) to decide whether a non-looping animation's "finished" bit is
@@ -1505,6 +1509,13 @@ Blockly.BBasic.init = function(workspace) {
   // result (column/row) and scratch (nudged-candidate) vars (see the
   // collisionPixelUsed pre-scan above and generators/bbasic/background.js's
   // background_collision_pixel).
+  // "Background area ... is clear" (see background_area_clear's generator): the
+  // one variable its scan needs.
+  if (workspace.getAllBlocks(false).some((block) =>
+    block.type === 'background_area_clear' && block.isEnabled() && !block.getInheritedDisabled())) {
+    reserveDevVarRW(areaClearLeftVarName(), 'area clear check: the left column each row restarts from');
+  }
+
   if (this.collisionPixelUsed) {
     reserveDevVarRW(collisionPixelColumnVarName(), 'playfield collision column result');
     reserveDevVarRW(collisionPixelRowVarName(), 'playfield collision row result');
@@ -1907,12 +1918,15 @@ Blockly.BBasic.init = function(workspace) {
   // backgroundsWithOverflowRows' comment) does scrolling need the
   // packed-row patching at all; a project using background_scroll only on
   // normal-height backgrounds keeps using plain pfscroll, unchanged.
-  const backgroundsData = this.getBackgroundsData();
+  // Only the backgrounds that are compiled count (see getIncludedBackgrounds):
+  // one that is left out neither makes scrolling use the packed-row patching
+  // nor takes a position in the index.
+  const includedBackgrounds = this.getIncludedBackgrounds();
   this.backgroundScrollOverflowBackgrounds = this.backgroundScrollUsed ?
-    backgroundsWithOverflowRows((backgroundsData && backgroundsData.backgrounds) || [], effectiveBackgroundRows(config)) :
+    backgroundsWithOverflowRows(includedBackgrounds, effectiveBackgroundRows(config)) :
     [];
   this.backgroundScrollPacking = this.backgroundScrollOverflowBackgrounds.length ?
-    backgroundScrollPacking((backgroundsData && backgroundsData.backgrounds) || []) : null;
+    backgroundScrollPacking(includedBackgrounds) : null;
   this.backgroundScrollTracking = this.backgroundScrollOverflowBackgrounds.length > 0 ||
     (this.backgroundScrollUsed && scrollTrackingFeatureUsed);
   if (this.backgroundScrollTracking) {
@@ -4012,9 +4026,24 @@ Blockly.BBasic.generateSuperchipVarDims = function() {
       .join('\n');
 };
 
-Blockly.BBasic.generateBackgrounds = function() {
+// The backgrounds that are compiled into the ROM, in the order of the Background
+// tab: every background something can switch to (see resolveUsedBackgroundIds),
+// all of them when that can't be told. Everything that works from the list of
+// backgrounds (the tall-background scrolling tables and their packed index
+// included) uses this one list, so a background left out does not leave a gap
+// in the positions.
+Blockly.BBasic.getIncludedBackgrounds = function() {
   const backgroundData = this.getBackgroundsData();
-  const backgrounds = backgroundData && backgroundData.backgrounds;
+  const all = (backgroundData && backgroundData.backgrounds) || [];
+  if (!this.usedBackgroundIds) return all;
+  return all.filter((background) => this.usedBackgroundIds.has(Number(background.id)));
+};
+
+Blockly.BBasic.generateBackgrounds = function() {
+  // The backgrounds that go in the ROM (see getIncludedBackgrounds). The
+  // scrolling code finds each background's data by its position in this same
+  // list, so the positions always match what is compiled.
+  const backgrounds = this.getIncludedBackgrounds();
 
   const convertPlayfield = (playField) =>
     playField.split('\n').map((line) => '  ' + line).join('\n');

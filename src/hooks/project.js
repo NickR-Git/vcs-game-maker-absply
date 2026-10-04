@@ -67,7 +67,7 @@ export const useTitleScreenStorage = () =>
 // from an older saved project - see hooks/migrate-player-animations.js.
 export const PROJECT_STORAGE_TYPES = [
   'workspace', 'backgrounds', 'player0', 'player1', 'playerAnimations', 'configuration',
-  'scoreFont', 'soundEffects', 'dataTables', 'textStrings', 'songs', 'titleScreen',
+  'scoreFont', 'soundEffects', 'dataTables', 'textStrings', 'songs', 'titleScreen', 'spriteColorPalette',
 ];
 
 /**
