@@ -16,6 +16,16 @@
       <slot name="before-tools" />
       <v-divider class="get-outer-divider" vertical />
       <div class="get-tools">
+        <template v-if="importExportFirst">
+          <v-btn icon small title="Export to image (Shift+E)" :disabled="!activeEditor" @click="() => activeEditor.handleExportImage()">
+            <v-icon>mdi-export</v-icon>
+          </v-btn>
+          <v-btn icon small title="Import from image (Shift+I)" :disabled="!activeEditor" @click="() => activeEditor.handleImportImage()">
+            <v-icon>mdi-import</v-icon>
+          </v-btn>
+          <slot name="extra-tools" />
+          <v-divider class="get-inner-divider" vertical />
+        </template>
         <v-btn icon small title="Undo" :disabled="!activeEditor && !hasPendingQuickColorUndo && !hasPendingCardUndo" @click="handleUndo">
           <v-icon>mdi-undo</v-icon>
         </v-btn>
@@ -155,14 +165,16 @@
         <v-btn icon small title="Flip vertically (Shift+V)" :disabled="!activeEditor" @click="() => activeEditor.flipVertical()">
           <v-icon>mdi-flip-vertical</v-icon>
         </v-btn>
-        <v-divider class="get-inner-divider" vertical />
-        <v-btn icon small title="Export to image (Shift+E)" :disabled="!activeEditor" @click="() => activeEditor.handleExportImage()">
-          <v-icon>mdi-export</v-icon>
-        </v-btn>
-        <v-btn icon small title="Import from image (Shift+I)" :disabled="!activeEditor" @click="() => activeEditor.handleImportImage()">
-          <v-icon>mdi-import</v-icon>
-        </v-btn>
-        <slot name="extra-tools" />
+        <template v-if="!importExportFirst">
+          <v-divider class="get-inner-divider" vertical />
+          <v-btn icon small title="Export to image (Shift+E)" :disabled="!activeEditor" @click="() => activeEditor.handleExportImage()">
+            <v-icon>mdi-export</v-icon>
+          </v-btn>
+          <v-btn icon small title="Import from image (Shift+I)" :disabled="!activeEditor" @click="() => activeEditor.handleImportImage()">
+            <v-icon>mdi-import</v-icon>
+          </v-btn>
+          <slot name="extra-tools" />
+        </template>
       </div>
       <template v-if="$slots['after-tools']">
         <v-divider class="get-after-tools-divider" vertical />
@@ -228,6 +240,9 @@ export default {
     // since its toolbar sits inside a SECOND nested v-card-text (the
     // "Text Minikernel Font" sub-card) on top of that.
     bleed: {type: Number, default: 16},
+    // Puts the export/import image buttons (and the "extra-tools" slot) at the
+    // left of the tool group, before undo/redo, instead of at its end.
+    importExportFirst: {type: Boolean, default: false},
   },
   data() {
     return {

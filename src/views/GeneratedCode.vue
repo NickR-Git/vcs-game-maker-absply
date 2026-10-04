@@ -11,23 +11,30 @@
           Save it to a file or copy it to the clipboard below.
         </p>
       </v-card-text>
-      <div class="generated-code-toolbar tight-under-intro">
-        <v-btn
-          icon
-          class="generated-code-flat-icon-btn"
-          title="Save Generated Code"
-          @click="handleSaveGeneratedCode"
-        >
-          <v-icon>mdi-content-save</v-icon>
-        </v-btn>
-        <v-btn
-          icon
-          class="generated-code-flat-icon-btn"
-          :title="copyButtonTitle"
-          @click="handleCopyGeneratedCode"
-        >
-          <v-icon>mdi-content-copy</v-icon>
-        </v-btn>
+      <div
+        class="generated-code-toolbar tight-under-intro"
+        :class="{'generated-code-toolbar-scrolled': isToolbarScrolled}"
+      >
+        <div class="generated-code-toolbar-row">
+          <v-btn
+            icon
+            small
+            class="generated-code-flat-icon-btn data-icon-btn-size"
+            title="Save Generated Code"
+            @click="handleSaveGeneratedCode"
+          >
+            <v-icon>mdi-content-save</v-icon>
+          </v-btn>
+          <v-btn
+            icon
+            small
+            class="generated-code-flat-icon-btn data-icon-btn-size"
+            :title="copyButtonTitle"
+            @click="handleCopyGeneratedCode"
+          >
+            <v-icon>mdi-content-copy</v-icon>
+          </v-btn>
+        </div>
       </div>
       <div class="code-scroll-wrapper">
         <div class="code-scroll">
@@ -86,7 +93,7 @@
   </div>
 </template>
 <script>
-import {defineComponent, computed, ref, watch, nextTick} from '@vue/composition-api';
+import {defineComponent, computed, ref, watch, nextTick, onMounted, onBeforeUnmount, getCurrentInstance} from '@vue/composition-api';
 import {saveAs} from 'file-saver';
 import {component as VueCodeHighlight} from 'vue-code-highlight';
 import 'vue-code-highlight/themes/duotone-sea.css';
@@ -105,6 +112,22 @@ export default defineComponent({
     const lineNumbersText = computed(() => {
       const lineCount = ((generatedBasic.value || '').match(/\n/g) || []).length + 1;
       return Array.from({length: lineCount}, (_, i) => i + 1).join('\n');
+    });
+    // Same "growing padding + a bottom border once actually scrolled"
+    // treatment as the graphic editor toolbar: here the code area below the
+    // toolbar is what scrolls.
+    const instance = getCurrentInstance();
+    const isToolbarScrolled = ref(false);
+    let toolbarScrollContainer = null;
+    const handleToolbarScroll = (event) => {
+      isToolbarScrolled.value = event.target.scrollTop > 0;
+    };
+    onMounted(() => {
+      toolbarScrollContainer = instance.proxy.$el.querySelector('.code-scroll-wrapper');
+      if (toolbarScrollContainer) toolbarScrollContainer.addEventListener('scroll', handleToolbarScroll);
+    });
+    onBeforeUnmount(() => {
+      if (toolbarScrollContainer) toolbarScrollContainer.removeEventListener('scroll', handleToolbarScroll);
     });
     // Reverts on its  after a couple seconds - see handleCopyGeneratedCode.
     // Shown as this icon-only button's  title tooltip now (there's no
@@ -372,6 +395,7 @@ export default defineComponent({
     watch(searchQuery, () => runSearch(true));
 
     return {
+      isToolbarScrolled,
       generatedBasic, lineNumbersText, copyButtonTitle, handleSaveGeneratedCode, handleCopyGeneratedCode,
       searchQuery, matchCount, currentMatchIndex, searchCountText, goToMatch,
       handleSearchEnter,
@@ -412,14 +436,51 @@ export default defineComponent({
    reported bug). Now wrapped in a v-card-text with the shared
    .tab-intro-section class (see App.vue) like every other tab. */
 
-/* Flush left, separate row below the title, above the code itself. Same "gap"
-   spacing method as Project.vue's .project-actions. */
+/* Same toolbar treatment as the graphic editor toolbar: icon buttons in a
+   row, with a bottom border and extra padding once the code has scrolled
+   under it. The code area scrolls on its own, so the toolbar stays at the top
+   of the tab. */
 .generated-code-toolbar {
+  flex: 0 0 auto;
+  background-color: #fff;
+  padding: 4px 16px;
+  transition: padding 0.15s ease;
+}
+
+.generated-code-toolbar-scrolled {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.24);
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.desaturate-app-colors .generated-code-toolbar {
+  background-color: #e1e1e1;
+}
+
+.generated-code-toolbar-row {
   display: flex;
   align-items: center;
-  gap: 0;
-  padding: 0 16px 2px 8px;
-  flex: 0 0 auto;
+  gap: 4px;
+  min-height: 28px;
+}
+
+.generated-code-toolbar-row >>> .data-icon-btn-size {
+  margin: 0;
+}
+
+/* Icon states copied from the graphic editor toolbar: faint at rest, darker
+   on hover, shrinking slightly while pressed. */
+.generated-code-toolbar-row >>> .v-btn .v-icon {
+  color: var(--editor-icon-rest-color, rgba(0, 0, 0, 0.38)) !important;
+  transition: color 0.15s ease, transform 0.08s ease;
+}
+
+.generated-code-toolbar-row >>> .v-btn:not(.v-btn--disabled):hover .v-icon {
+  color: rgba(0, 0, 0, 0.87) !important;
+}
+
+.generated-code-toolbar-row >>> .v-btn:not(.v-btn--disabled):active .v-icon {
+  transform: scale(0.82);
 }
 
 /* The actual scrolling element now (see .editor-container's  comment) -

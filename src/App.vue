@@ -2021,6 +2021,12 @@ export default {
   box-shadow: none !important;
 }
 
+/* Menus that hold a bare list instead of a card (e.g. the Data tab's cell
+   mode menu) get the same border. */
+.data-format-menu {
+  border: 1px solid rgba(0, 0, 0, 0.24);
+}
+
 .v-menu__content > .v-card,
 .v-dialog > .v-card {
   border: 1px solid rgba(0, 0, 0, 0.24);

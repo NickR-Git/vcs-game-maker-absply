@@ -94,9 +94,19 @@
           icon
           small
           class="project-flat-icon-btn data-icon-btn-size"
-          :class="{'project-flat-icon-btn-active': data.showExamples}"
+          :class="{'project-flat-icon-btn-active': !showExamples}"
+          title="Project Settings"
+          @click="showExamples = false"
+        >
+          <v-icon>mdi-cog-outline</v-icon>
+        </v-btn>
+        <v-btn
+          icon
+          small
+          class="project-flat-icon-btn data-icon-btn-size"
+          :class="{'project-flat-icon-btn-active': showExamples}"
           :title="examples.status === 'loading' ? 'Example Projects (checking for updates...)' : 'Example Projects'"
-          @click="data.showExamples = !data.showExamples"
+          @click="showExamples = true"
         >
           <v-progress-circular
             v-if="examples.status === 'loading'"
@@ -116,7 +126,7 @@
       </div>
     </div>
 
-    <v-card-text v-if="!data.showExamples" class="project-settings-text">
+    <v-card-text v-if="!showExamples" class="project-settings-text">
       <span class="text-subtitle-1 project-settings-label">Project Settings</span>
       <div class="project-title-row">
         <v-text-field
@@ -219,7 +229,7 @@
           <div class="example-card-text">
             <div class="example-card-title">{{ exampleTitle(example) }}</div>
             <div v-if="example.version" class="example-card-line">Version {{ example.version }}</div>
-            <div v-if="example.developer" class="example-card-line">{{ example.developer }}</div>
+            <div v-if="example.developer" class="example-card-line">by {{ example.developer }}</div>
           </div>
         </v-card>
       </div>
@@ -303,7 +313,7 @@ import {defineComponent, reactive, computed, onMounted, onBeforeUnmount, ref, ge
 import {saveAs} from 'file-saver';
 import YAML from 'yaml';
 
-import {appendCompileLog, useBackgroundsStorage, useConfigurationStorage, useDataTablesStorage, usePlayerAnimationsStorage, useProjectAutoIncrementVersionStorage, useProjectIncludeDateInFilenameStorage, useScoreFontStorage, useSongsStorage, useSoundEffectsStorage, useSquishCustomScoreFontStorage, useTextFontStorage, useTextStringsStorage, useTitleScreenStorage, useWorkspaceStorage} from '../hooks/project';
+import {appendCompileLog, useBackgroundsStorage, useConfigurationStorage, useDataTablesStorage, usePlayerAnimationsStorage, useProjectAutoIncrementVersionStorage, useProjectIncludeDateInFilenameStorage, useProjectShowExamplesStorage, useScoreFontStorage, useSongsStorage, useSoundEffectsStorage, useSquishCustomScoreFontStorage, useTextFontStorage, useTextStringsStorage, useTitleScreenStorage, useWorkspaceStorage} from '../hooks/project';
 import {combineLegacyPlayerAnimations, remapPlayer1AnimationIndexesInWorkspaceXml} from '../hooks/migrate-player-animations';
 import {migrateLegacyPlayerBlocksInWorkspaceXml} from '../hooks/migrate-player-blocks';
 import {migrateLegacyBounceBlocksInWorkspaceXml} from '../hooks/migrate-bounce-blocks';
@@ -365,9 +375,7 @@ export default defineComponent({
   setup(props, context) {
     const data = reactive({
       newProjectDialog: false,
-      // Whether the Examples section replaces the Project Settings section,
-      // and the example card whose popup is open (see hooks/examples.js).
-      showExamples: false,
+      // The example card whose popup is open (see hooks/examples.js).
       selectedExample: null,
       exampleDialog: false,
       exampleError: '',
@@ -391,6 +399,9 @@ export default defineComponent({
       activeFilePath: null,
     });
     const router = context.root.$router;
+    // Whether the Example Projects section replaces the Project Settings
+    // section; remembered across page refreshes.
+    const showExamples = useProjectShowExamplesStorage();
 
     // Same "growing padding + a bottom border once actually scrolled"
     // treatment as the graphic editor toolbar. This component's root is the
@@ -494,7 +505,7 @@ export default defineComponent({
       });
     }
 
-    return {data, router, isToolbarScrolled, examples: examplesState, backgroundsStorage, playerAnimationsStorage,
+    return {data, router, showExamples, isToolbarScrolled, examples: examplesState, backgroundsStorage, playerAnimationsStorage,
       workspaceStorage, configurationStorage, scoreFontStorage, squishCustomScoreFontStorage, dataTablesStorage,
       textStringsStorage, textFontStorage, soundEffectsStorage, songsStorage, titleScreenStorage, projectTitle,
       projectDescription, projectDeveloper, projectVersion, projectAutoIncrementVersion, projectIncludeDateInFilename,
@@ -1126,7 +1137,7 @@ export default defineComponent({
       persistActiveFilePath(null);
       this.data.exampleError = '';
       this.data.exampleDialog = false;
-      this.data.showExamples = false;
+      this.showExamples = false;
     },
 
     handleNewProject() {

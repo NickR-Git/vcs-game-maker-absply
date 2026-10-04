@@ -232,6 +232,10 @@ export const useDesaturateBlocklyColorsStorage = () =>
 // App.vue's comment on .dark-mode for the full reasoning.
 export const useDarkModeStorage = () =>
   useBooleanAppSetting('vcs-game-maker.darkMode');
+// Which view the Project tab shows: the Example Projects section (true) or the
+// Project Settings (false), so a page refresh stays on the same one.
+export const useProjectShowExamplesStorage = () =>
+  useBooleanAppSetting('vcs-game-maker.projectShowExamples');
 export const useHideDescriptionTextStorage = () =>
   useBooleanAppSetting('vcs-game-maker.hideDescriptionText');
 export const useMuteBlocklySoundsStorage = () =>

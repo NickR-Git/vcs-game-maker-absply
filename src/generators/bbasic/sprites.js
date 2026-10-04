@@ -70,11 +70,10 @@ export const processPlayerAnimationsStorageDefaults = (playerAnimationsStorage) 
 // return ''" - no explicit check is ever emitted for it, so it's reachable
 // the instant player0animation/player1animation holds anything unmatched,
 // not just a literal 0), not something a project's  blocks need to
-// reference by name to reach. Player 0's index 1 is always included too -
-// bbasic.bb.hbs's  boot-time "player0animation = 1" runs unconditionally,
-// regardless of what the project's  blocks do afterward.
+// reference by name to reach. It is also what both players start on:
+// bbasic.bb.hbs sets player0animation and player1animation to 0 at boot.
 export const resolveUsedPlayerAnimations = (workspace) => {
-  const used = {player0: new Set([0, 1]), player1: new Set([0])};
+  const used = {player0: new Set([0]), player1: new Set([0])};
   const unsafe = {player0: false, player1: false};
   const animationVarName = (block) => block.getFieldValue('VAR');
   workspace.getAllBlocks(false).forEach((block) => {

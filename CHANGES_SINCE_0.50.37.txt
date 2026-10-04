@@ -446,3 +446,24 @@ Example Projects on the Project tab (downloaded from GitHub), a screenshot saved
   size and hover/pressed/disabled states, and it stays pinned to the top of
   the window while the tab scrolls, with a bottom border once content has
   scrolled under it.
+
+=== 0.51.16 ===
+Both players start on the first sprite animation, Project and Generated toolbars match the graphic editor toolbar, and Data/Sprites tab toolbar and menu tweaks
+
+- Data tab: the menu that changes a cell's mode has a thin border, the same
+  color as other popup borders.
+- Data tab: the import/export icons moved to the right of undo/redo, ahead of
+  duplicate/copy/paste.
+- Project tab: a Project Settings (gear) button now sits next to the Example
+  Projects button in the toolbar; the two switch between the views, and the
+  one currently showing is highlighted.
+- Generated tab: the toolbar now matches the graphic editor toolbar - same
+  icon size and hover/pressed states, and a bottom border once the code has
+  scrolled under it. The Project tab remembers whether it was showing Project
+  Settings or Example Projects across page refreshes.
+- Sprites tab: the import/export/Aseprite icons moved to the left of the
+  undo/redo icons.
+- Sprite animations: both players now start on animation 0 (the first one in
+  the list). Player 0 used to start on the second animation when there was
+  more than one, and Player 1 was never set, so the two started on different
+  animations.

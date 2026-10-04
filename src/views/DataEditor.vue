@@ -56,6 +56,27 @@
             <v-btn
               icon
               small
+              title="Export to .CSV"
+              class="data-flat-icon-btn data-icon-btn-size"
+              :disabled="!selectedTable"
+              @click="() => handleExportCsv(selectedTable)"
+            >
+              <v-icon>mdi-export</v-icon>
+            </v-btn>
+            <v-btn
+              icon
+              small
+              title="Import from .CSV"
+              class="data-flat-icon-btn data-icon-btn-size"
+              :disabled="!selectedTable"
+              @click="() => handleImportCsv(selectedTable)"
+            >
+              <v-icon>mdi-import</v-icon>
+            </v-btn>
+            <v-divider class="data-toolbar-divider" vertical />
+            <v-btn
+              icon
+              small
               title="Duplicate this table"
               class="data-flat-icon-btn data-icon-btn-size"
               :disabled="!selectedTable"
@@ -82,27 +103,6 @@
               @click="() => handlePasteTable(selectedTable)"
             >
               <v-icon>mdi-content-paste</v-icon>
-            </v-btn>
-            <v-divider class="data-toolbar-divider" vertical />
-            <v-btn
-              icon
-              small
-              title="Export to .CSV"
-              class="data-flat-icon-btn data-icon-btn-size"
-              :disabled="!selectedTable"
-              @click="() => handleExportCsv(selectedTable)"
-            >
-              <v-icon>mdi-export</v-icon>
-            </v-btn>
-            <v-btn
-              icon
-              small
-              title="Import from .CSV"
-              class="data-flat-icon-btn data-icon-btn-size"
-              :disabled="!selectedTable"
-              @click="() => handleImportCsv(selectedTable)"
-            >
-              <v-icon>mdi-import</v-icon>
             </v-btn>
             <v-divider class="data-toolbar-divider" vertical />
             <v-switch
@@ -256,7 +256,7 @@
                         class="data-value-field"
                         :class="{'data-value-field-binary': valueFormat(table, index) !== 'dec'}"
                       />
-                      <v-menu offset-y>
+                      <v-menu offset-y content-class="data-format-menu">
                         <template v-slot:activator="{on, attrs}">
                           <v-btn
                             icon
