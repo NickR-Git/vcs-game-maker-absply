@@ -1470,12 +1470,17 @@ Blockly.defineBlocksWithJsonArray([
   // block's  generator for exactly how.
   {
     'type': 'object_bounce',
-    'message0': `${INERTIA_ICON} Bounce %1`,
+    'message0': `${INERTIA_ICON} Bounce %1 %2 off screen edges`,
     'args0': [
       {
         'type': 'field_dropdown',
         'name': 'OBJECT',
         'options': SEEK_OBJECT_OPTIONS,
+      },
+      {
+        'type': 'field_checkbox',
+        'name': 'EDGES',
+        'checked': false,
       },
     ],
     'previousStatement': null,
@@ -1491,7 +1496,13 @@ Blockly.defineBlocksWithJsonArray([
       'object actually has in use - has no effect at all on an object using neither. Call this ' +
       'EVERY frame the collision persists (place it behind whatever check decides it should bounce ' +
       '- a collision block, a screen-edge X/Y comparison, etc. - it doesn\'t detect anything by ' +
-      'itself) so it can tell consecutive stuck frames apart from a brand new hit.',
+      'itself) so it can tell consecutive stuck frames apart from a brand new hit. With "off screen ' +
+      'edges" ticked it works differently: no collision is needed and nothing is guessed. Place it ' +
+      'where it runs every frame (for example in a Gameplay update event) and it bounces the object ' +
+      'the moment it goes past the left, right, top or bottom edge of the screen, flipping the ' +
+      'matching direction (left/right edges flip horizontal movement, top/bottom flip vertical), ' +
+      'putting it back on the edge, and keeping a fired missile or ball moving instead of letting ' +
+      'it stop off-screen.',
   },
   // Cancels what a Fire block started: the object stops moving where it is.
   // Same OBJECT dropdown and colour sync as object_bounce above.
@@ -1603,6 +1614,14 @@ const buildFireBlock = ({name, description, icon, colour}) => {
       this.appendDummyInput()
           .appendField(new Blockly.FieldCheckbox('FALSE'), 'DIRECTIONS16')
           .appendField('16 directions');
+      const playfieldCheckField = new Blockly.FieldCheckbox('FALSE');
+      playfieldCheckField.setTooltip('Moves the object one pixel at a time and checks the playfield after ' +
+        'each one, stopping on the first lit playfield pixel it reaches. Without it a fast object can ' +
+        'jump over a thin playfield pixel without ever touching it, so no collision is detected. ' +
+        'Costs a little extra time every frame while the object is moving.');
+      this.appendDummyInput()
+          .appendField(playfieldCheckField, 'PFCHECK')
+          .appendField('check playfield while moving');
       this.setInputsInline(true);
       this.setPreviousStatement(true, null);
       this.setNextStatement(true, null);
@@ -1694,6 +1713,14 @@ const buildCombinedMissileFireBlock = ({icon, colour}) => {
       this.appendDummyInput()
           .appendField(new Blockly.FieldCheckbox('FALSE'), 'DIRECTIONS16')
           .appendField('16 directions');
+      const playfieldCheckField = new Blockly.FieldCheckbox('FALSE');
+      playfieldCheckField.setTooltip('Moves the object one pixel at a time and checks the playfield after ' +
+        'each one, stopping on the first lit playfield pixel it reaches. Without it a fast object can ' +
+        'jump over a thin playfield pixel without ever touching it, so no collision is detected. ' +
+        'Costs a little extra time every frame while the object is moving.');
+      this.appendDummyInput()
+          .appendField(playfieldCheckField, 'PFCHECK')
+          .appendField('check playfield while moving');
       this.setInputsInline(true);
       this.setPreviousStatement(true, null);
       this.setNextStatement(true, null);

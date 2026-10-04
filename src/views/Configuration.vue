@@ -534,7 +534,7 @@ export default defineComponent({
     // Unlike pfres above, this doesn't change how many rows the playfield
     // has (no reflow needed) - it only overrides the row HEIGHT the kernel
     // draws each one at (see pfRowDivisorFor in utils/playfield-coords.js,
-    // which prefers this value over its  round(96/pfres) calculation
+    // which prefers this value over its  floor(96/pfres) calculation
     // whenever the "Override playfield row height" switch above is on), so
     // background pixel data stays exactly as-is. Whether the override is
     // APPLIED is entirely the switch's  job (enablePfRowHeight) - this

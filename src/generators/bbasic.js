@@ -581,6 +581,19 @@ Blockly.BBasic.init = function(workspace) {
     }
   });
 
+  // Which objects have a Fire block with "check playfield while moving" on:
+  // that object's per-frame movement is built as one-pixel sub-steps with a
+  // playfield check after each (see generateMissileFireChecks).
+  this.missileFirePfCheckUsedFor = new Set();
+  ['missile0', 'missile1', 'ball'].forEach((name) => {
+    const fireType = name === 'ball' ? 'sprite_ball_fire' : 'sprite_missile_fire';
+    if (workspace.getAllBlocks(false).some((block) =>
+      block.type === fireType && block.isEnabled() && block.getFieldValue('PFCHECK') === 'TRUE' &&
+      (name === 'ball' || block.getFieldValue('MISSILE') === (name === 'missile1' ? '1' : '0')))) {
+      this.missileFirePfCheckUsedFor.add(name);
+    }
+  });
+
   // Same early block-type pre-scan reasoning as missileFireUsedFor above,
   // for object_bounce's  Combat-style stage/frame state (see
   // missileBounceStageVarName's  comment in generators/bbasic/sprites.js)
@@ -590,10 +603,18 @@ Blockly.BBasic.init = function(workspace) {
   // 5 names (object_bounce works for Player 0/1 too, via Inertia's
   // velocity - see its  generator).
   this.missileBounceUsedFor = new Set();
+  // Bounce blocks ticked "off screen edges" need none of that stage state and
+  // are tracked separately: a fired missile/ball that has one keeps moving
+  // off-screen so the block can bounce it (see generateMissileFireChecks).
+  this.missileEdgeBounceUsedFor = new Set();
   ['player0', 'player1', 'missile0', 'missile1', 'ball'].forEach((name) => {
-    if (workspace.getAllBlocks(false).some((block) =>
-      block.type === 'object_bounce' && block.isEnabled() && block.getFieldValue('OBJECT') === name)) {
+    const bounceBlocks = workspace.getAllBlocks(false).filter((block) =>
+      block.type === 'object_bounce' && block.isEnabled() && block.getFieldValue('OBJECT') === name);
+    if (bounceBlocks.some((block) => block.getFieldValue('EDGES') !== 'TRUE')) {
       this.missileBounceUsedFor.add(name);
+    }
+    if (bounceBlocks.some((block) => block.getFieldValue('EDGES') === 'TRUE')) {
+      this.missileEdgeBounceUsedFor.add(name);
     }
   });
 
@@ -1570,7 +1591,8 @@ Blockly.BBasic.init = function(workspace) {
   // speed state (see reserveMissileFireDevVars'  comment in generators/
   // bbasic/sprites.js) - a no-op unless missileFireUsedFor's  early
   // pre-scan (above) found it used.
-  reserveMissileFireDevVars(reserveDevVar, reserveDevVarRW, this.missileFireUsedFor, this.missileFire16UsedFor);
+  reserveMissileFireDevVars(reserveDevVar, reserveDevVarRW, this.missileFireUsedFor, this.missileFire16UsedFor,
+      this.missileFirePfCheckUsedFor);
 
   // Same bucket again, for "Bounce"'s Combat-style stage/original-
   // direction/last-frame state (see reserveMissileBounceDevVars' comment

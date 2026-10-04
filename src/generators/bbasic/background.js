@@ -311,8 +311,8 @@ export default (Blockly) => {
   // - Y scales by pfRowDivisorFor(config) - 8 for the standard (non-
   //   Superchip) kernel's  implicit pfres=12 (96/12, matching the docs'
   //   "8 scanlines tall" and player0y's documented 1-88 range: 11
-  //   VISIBLE rows * 8 = 88), and round(96/pfres) once Superchip's  pfres
-  //   is active - round(96/32) = 3 for the pfres=32 Superchip example above,
+  //   VISIBLE rows * 8 = 88), and floor(96/pfres) once Superchip's  pfres
+  //   is active - floor(96/32) = 3 for the pfres=32 Superchip example above,
   //   an exact match for that program's  divisor. See pfRowDivisorFor's
   //   comment in utils/playfield-coords.js for why this can't just
   //   divide by effectiveBackgroundRows(config) directly (that's the

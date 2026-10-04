@@ -197,7 +197,8 @@
                 <v-list-item-subtitle v-if="!isCollapsed(background)">
                   <!-- aspectRatio is (32 * PF_COLUMN_WIDTH_PX) / (background.pixels.length *
                        pfRowDivisorFor(config)) - real screen width (32 columns *
-                       PF_COLUMN_WIDTH_PX = 160px, always, regardless of pfres/Superchip - see
+                       PF_COLUMN_WIDTH_PX = 128px (the playfield is 128 of the screen's 160
+                       pixels wide), always, regardless of pfres/Superchip - see
                        that constant's comment in utils/playfield-coords.js) over THIS
                        background's real total height (its row count * that row
                        count's real scanline height - pfRowDivisorFor's comment explains
@@ -344,7 +345,7 @@ export default defineComponent({
     const zoom = useEditorZoom('background');
     const editorWidth = computed(() => `${Math.round(EDITOR_BASE_WIDTH * zoom.value)}px`);
     // See the template's comment on where this background pixel editor's
-    // aspectRatio comes from - real screen width (always 160px) over THIS
+    // aspectRatio comes from - real playfield width (always 128px) over THIS
     // background's real total height (its row count, not
     // necessarily pfres's - see customHeight - times that row count's real
     // scanline height).

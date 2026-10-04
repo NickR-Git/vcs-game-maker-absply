@@ -2,7 +2,8 @@
 
 import {playfieldToMatrix} from '../../utils/pixels';
 import {useConfigurationStorage} from '../../hooks/project';
-import {fadeFlagsVarName, fadeActiveBit} from '../../blocks/background';
+import {pfRowDivisorFor} from '../../utils/playfield-coords';
+import {fadeFlagsVarName, fadeActiveBit, effectiveBackgroundRows} from '../../blocks/background';
 
 
 export const DEFAULT_SPRITES={
@@ -265,6 +266,7 @@ export const missileFireSpeedVarName = (name) => `${name}FireSpeed`;
 // speedVar/2 clamped to a minimum of 1, computed once per frame instead of
 // per dispatch line.
 export const missileFireHalfSpeedVarName = (name) => `${name}FireHalfSpeed`;
+export const missileFireStepsVarName = (name) => `${name}FireSteps`;
 
 // sprite_*_seek_to's  dev vars (see its  trigger generator and
 // generateSeekChecks below) - same shape as sprite_*_fire's  above: one
@@ -528,7 +530,7 @@ export const reserveRainbowColorDevVars = (reserveDevVar, usedFor) => {
 // automatically whenever Superchip is off, pfres is too high, or the r/w
 // pool is already full, so this is free real-var savings on Superchip
 // builds with no fallback risk.
-export const reserveMissileFireDevVars = (reserveDevVar, reserveDevVarRW, usedFor, used16) => {
+export const reserveMissileFireDevVars = (reserveDevVar, reserveDevVarRW, usedFor, used16, usedPfCheck) => {
   if (!usedFor || !usedFor.size) return;
   reserveDevVar(missileFireFlagsVarName(), undefined, 'shared active-bit byte for fired missiles');
   usedFor.forEach((name) => {
@@ -540,6 +542,10 @@ export const reserveMissileFireDevVars = (reserveDevVar, reserveDevVarRW, usedFo
     if (used16 && used16.has(name)) {
       reserveDevVar(missileFireHalfSpeedVarName(name), undefined,
           'this missile\'s fired speed / 2, clamped to a minimum of 1, for 16-way\'s halfway directions');
+    }
+    if (usedPfCheck && usedPfCheck.has(name)) {
+      reserveDevVar(missileFireStepsVarName(name), undefined,
+          'this missile\'s one-pixel sub-steps left this frame, for "check playfield while moving"');
     }
   });
 };
@@ -905,9 +911,59 @@ const DIRECTION16_STEPS = [
 // wrong axis (the 16-way angles came out in the wrong order).
 const isHalfStep = (step, otherStep) => Math.abs(step) === 1 && Math.abs(otherStep) === 2;
 
+// "Check playfield while moving": the object moves one pixel at a time (the
+// minor axis of a halfway direction every other pixel) and, after each pixel,
+// looks at the playfield cell it is in; the first lit cell ends the frame's
+// movement there. The object then overlaps that playfield pixel when the
+// frame is drawn, so the hardware collision flag the project's own collision
+// blocks read is set, however fast the object moves.
+const buildPlayfieldCheckedMovement = ({Blockly, name, is16, dirVar, speedVar, stepsVar}) => {
+  const configurationStorage = useConfigurationStorage();
+  const config = (configurationStorage && configurationStorage.value) || {};
+  const maxRow = effectiveBackgroundRows(config) - 1;
+  const rowDivisor = pfRowDivisorFor(config);
+  Blockly.BBasic.usesDivMul = true;
+  const id = Blockly.BBasic.blockNumbers.next('fireStep');
+  const label = (part) => `_missilefire_${name}_${id}_${part}`;
+  const step = (axis, sign) => ` ${name}${axis} = ${name}${axis} ${sign} 1`;
+  const lines = [` ${stepsVar} = ${speedVar}`, label('sub')];
+  if (is16) {
+    // Full-speed axis of every direction first, then (on every other pixel)
+    // the half-speed axis of the halfway directions.
+    const half = [];
+    DIRECTION16_STEPS.forEach(([xStep, yStep], dir) => {
+      [['x', xStep, yStep], ['y', yStep, xStep]].forEach(([axis, mine, other]) => {
+        if (!mine) return;
+        const line = ` if ${dirVar} = ${dir} then ${step(axis, mine > 0 ? '+' : '-').trim()}`;
+        (isHalfStep(mine, other) ? half : lines).push(line);
+      });
+    });
+    lines.push(` if ${stepsVar}{0} then goto ${label('nohalf')}`, ...half, label('nohalf'));
+  } else {
+    [[1, 'x', '+'], [2, 'x', '+'], [3, 'x', '+'], [5, 'x', '-'], [6, 'x', '-'], [7, 'x', '-'],
+      [3, 'y', '+'], [4, 'y', '+'], [5, 'y', '+'], [7, 'y', '-'], [0, 'y', '-'], [1, 'y', '-']]
+        .forEach(([dir, axis, sign]) => lines.push(` if ${dirVar} = ${dir} then ${step(axis, sign).trim()}`));
+  }
+  lines.push(
+      // The cell the object is in now. x/y are unsigned bytes, so a value
+      // that wrapped below 0 shows up as too large here and is skipped.
+      ` temp1 = (${name}x - 17) / 4`,
+      ` temp2 = (${name}y - 1) / ${rowDivisor}`,
+      ` if temp1 > 31 then goto ${label('next')}`,
+      ` if temp2 > ${maxRow} then goto ${label('next')}`,
+      ` if pfread(temp1, temp2) then goto ${label('end')}`,
+      label('next'),
+      ` ${stepsVar} = ${stepsVar} - 1`,
+      ` if ${stepsVar} > 0 then goto ${label('sub')}`,
+      label('end'),
+  );
+  return lines;
+};
+
 export const generateMissileFireChecks = (Blockly) => {
   const used = Blockly.BBasic.missileFireUsedFor;
   if (!used || !used.size) return '';
+  const usedPfCheck = Blockly.BBasic.missileFirePfCheckUsedFor || new Set();
   const used16 = Blockly.BBasic.missileFire16UsedFor;
   const resolveVar = (canonicalName) =>
     Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
@@ -923,6 +979,7 @@ export const generateMissileFireChecks = (Blockly) => {
     const throttlePair = resolveRW(missileFireThrottleVarName(name));
     const throttleResetPair = resolveRW(missileFireThrottleResetVarName(name));
     const is16 = used16 && used16.has(name);
+    const pfChecked = usedPfCheck.has(name);
     const halfSpeedVar = is16 ? resolveVar(missileFireHalfSpeedVarName(name)) : null;
     // Every "if dirVar = N then ..." line only ever conditions the ONE
     // statement right after "then" (see this function's long-standing
@@ -987,11 +1044,15 @@ export const generateMissileFireChecks = (Blockly) => {
         throttleContinueLabel,
         'end',
         ` ${throttlePair.write} = ${throttleResetPair.read}`,
-        ...(is16 ? [
+        ...(is16 && !pfChecked ? [
           ` ${halfSpeedVar} = ${speedVar} / 2`,
           ` if ${halfSpeedVar} = 0 then ${halfSpeedVar} = 1`,
         ] : []),
-        ...dispatch,
+        ...(pfChecked ?
+          buildPlayfieldCheckedMovement({
+            Blockly, name, is16, dirVar, speedVar, stepsVar: resolveVar(missileFireStepsVarName(name)),
+          }) :
+          dispatch),
         // Off-screen (standard NTSC playfield bounds) stops the movement -
         // clears the active bit so this missile's  dispatch above is
         // skipped every frame from here on - WITHOUT touching its
@@ -1003,7 +1064,8 @@ export const generateMissileFireChecks = (Blockly) => {
         // positive value rather than going negative, so there's no separate
         // "< 0" case to check: an out-of-range value from EITHER direction
         // always lands as "> 159"/"> 191" here.
-        ` if ${name}x > 159 || ${name}y > 191 then ${flagsVar}{${activeBit}} = 0`,
+        ...((Blockly.BBasic.missileEdgeBounceUsedFor || new Set()).has(name) ? [] :
+          [` if ${name}x > 159 || ${name}y > 191 then ${flagsVar}{${activeBit}} = 0`]),
         `${doneLabel}`,
     );
   });
@@ -2125,12 +2187,88 @@ export default (Blockly) => {
     return `${flagsVar}{${missileFireActiveBit(name)}} = 0\n`;
   };
 
+  // "Bounce [object] off screen edges": no collision and no guessing. A
+  // position past an edge puts the object back on that edge and flips the
+  // matching direction: left/right edges mirror horizontal movement,
+  // top/bottom mirror vertical movement - Fire's direction and/or Inertia's
+  // velocity, whichever the object uses. x/y are unsigned bytes, so going
+  // below 0 wraps to 240 or more. The edges are in sprite coordinates, measured
+  // on the emulator: X runs 0-159 across the picture, and Y 8-96 (two
+  // scanlines per step; y 8 is the top of the playfield and y 96 its bottom
+  // with the default 11 rows).
+  const buildEdgeBounce = (block, name, resolveVar, hasFire, hasInertia) => {
+    const id = Blockly.BBasic.blockNumbers.next(`edgebounce_${name}`);
+    const label = (part) => `_edgebounce_${name}_${id}_${part}`;
+    const lines = [];
+    const flipX = [];
+    const flipY = [];
+    if (hasFire) {
+      const dirVar = resolveVar(missileFireDirVarName(name));
+      const steps = (Blockly.BBasic.missileFire16UsedFor || new Set()).has(name) ? 16 : 8;
+      const half = steps / 2;
+      flipX.push(
+          ` ${dirVar} = ${steps} - ${dirVar}`,
+          ` if ${dirVar} = ${steps} then ${dirVar} = 0`);
+      flipY.push(
+          ` if ${dirVar} > ${half} then goto ${label('dirhigh')}`,
+          ` ${dirVar} = ${half} - ${dirVar}`,
+          ` goto ${label('dirdone')}`,
+          `@ ${label('dirhigh')}`,
+          ` ${dirVar} = ${steps + half} - ${dirVar}`,
+          `@ ${label('dirdone')}`);
+    }
+    if (hasInertia) {
+      const velocityXVar = resolveVar(inertiaVelocityXVarName(name));
+      const velocityYVar = resolveVar(inertiaVelocityYVarName(name));
+      if ((Blockly.BBasic.inertiaFineUsedFor || new Set()).has(name)) {
+        // 16-bit fixed-point velocity: negate the whole pair (see the stage
+        // code in object_bounce below for why "@end" closes the asm block).
+        const velocityFracXVar = resolveVar(inertiaVelocityFracXVarName(name));
+        const velocityFracYVar = resolveVar(inertiaVelocityFracYVarName(name));
+        flipX.push(' asm', ...build16BitNegateAsm(velocityXVar, velocityFracXVar), '@end');
+        flipY.push(' asm', ...build16BitNegateAsm(velocityYVar, velocityFracYVar), '@end');
+      } else {
+        flipX.push(` ${velocityXVar} = 0 - ${velocityXVar}`);
+        flipY.push(` ${velocityYVar} = 0 - ${velocityYVar}`);
+      }
+    }
+    lines.push(
+        ` if ${name}x >= 240 then goto ${label('left')}`,
+        ` if ${name}x > 159 then goto ${label('right')}`,
+        ` goto ${label('xend')}`,
+        `@ ${label('left')}`,
+        ` ${name}x = 0`,
+        ` goto ${label('flipx')}`,
+        `@ ${label('right')}`,
+        ` ${name}x = 159`,
+        `@ ${label('flipx')}`,
+        ...flipX,
+        `@ ${label('xend')}`,
+        ` if ${name}y >= 240 then goto ${label('top')}`,
+        ` if ${name}y < 8 then goto ${label('top')}`,
+        ` if ${name}y > 96 then goto ${label('bottom')}`,
+        ` goto ${label('yend')}`,
+        `@ ${label('top')}`,
+        ` ${name}y = 8`,
+        ` goto ${label('flipy')}`,
+        `@ ${label('bottom')}`,
+        ` ${name}y = 96`,
+        `@ ${label('flipy')}`,
+        ...flipY,
+        `@ ${label('yend')}`,
+    );
+    return lines.join('\n') + '\n';
+  };
+
   Blockly.BBasic['object_bounce'] = function(block) {
     const name = block.getFieldValue('OBJECT');
     const resolveVar = (canonicalName) =>
       Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
     const hasFire = (Blockly.BBasic.missileFireUsedFor || new Set()).has(name);
     const hasInertia = (Blockly.BBasic.inertiaUsedFor || new Set()).has(name);
+    if (block.getFieldValue('EDGES') === 'TRUE') {
+      return buildEdgeBounce(block, name, resolveVar, hasFire, hasInertia);
+    }
     // stageVar/frameVar (and, when used, origDirVar/origVelocityX/Y below)
     // are routed through the Superchip r/w pool now - see
     // reserveMissileBounceDevVars' comment. {read, write} pair either way

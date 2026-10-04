@@ -8,9 +8,13 @@ import {effectiveBackgroundRows} from '../blocks/background';
 // prior attempt at the same feature - see that file's  top-of-file
 // comment for the account of what broke.
 
-// The playfield is always 32 columns across a 160px-wide screen, regardless
-// of pfres/Superchip - exact, no project config needed.
-export const PF_COLUMN_WIDTH_PX = 5;
+// batari Basic's playfield is 32 columns, each 4 pixels wide, so it spans 128 of
+// the screen's 160 pixels (it starts at sprite X 17, which is why the sprite to
+// playfield column conversions use (x - 17) / 4), regardless of pfres/Superchip
+// - exact, no project config needed. Measured on the emulator: a full-width
+// background is 128 pixels wide. This used to be 5 (160 / 32), which made the
+// Background editor's canvas too wide for its height.
+export const PF_COLUMN_WIDTH_PX = 4;
 
 // Row height in scanlines - matches std_kernel.asm/startup.asm's
 // default row height calculation ("lda #(96/pfres)"), confirmed against
@@ -30,7 +34,7 @@ export const pfRowDivisorFor = (config) => {
   const cfg = config || {};
   // A manual "pfrowheight" override (see Configuration.vue's "Override
   // playfield row height" switch + field for it) takes priority over the
-  // automatic round(96/pfres) calculation below - matches the kernel's
+  // automatic floor(96/pfres) calculation below - matches the kernel's
   // precedence exactly (std_kernel.asm/std_kernel_vertical_reflect.asm both
   // check "ifconst pfrowheight" before ever falling back to computing it
   // from pfres - see generateConfiguration's  comment on
@@ -41,7 +45,13 @@ export const pfRowDivisorFor = (config) => {
   // disagree with what the kernel itself is really doing.
   if (cfg.enablePfRowHeight && cfg.pfrowheight) return Math.round(Number(cfg.pfrowheight));
   const pfres = cfg.enableSuperchip ? effectiveBackgroundRows(config) : 12;
-  return Math.round(96 / pfres);
+  // The kernel computes "lda #(96/pfres)" in DASM, which is integer division
+  // (the fraction is dropped), so this has to round down too: with pfres 11 a
+  // row is 8 two-scanline steps tall (96 / 11 = 8.7), not 9. Measured on the
+  // emulator for pfres 2-14 with Superchip on - the wall heights only fit
+  // floor(96 / pfres), never round(96 / pfres), for the values that do not
+  // divide 96 evenly (5, 7, 9, 10, 11, 13, 14...).
+  return Math.floor(96 / pfres);
 };
 
 // How many bytes of Superchip RAM's  read/write pool (r000-r127/w000-

@@ -501,3 +501,31 @@ Fix the Create New Project popup colors with Subdued Palette or Dark Mode on
 - Joystick [0/1] Up/Down/Left/Right block: all eight directions are now in the
   dropdown (the four diagonals are true while both of their directions are
   pushed), listed clockwise from Up. Existing blocks are unchanged.
+
+=== 0.51.18 ===
+Fire "check playfield while moving" and Bounce "off screen edges" options, correct Background canvas shape for every pfres, and a Find playfield pixel default
+
+- Fire (missile and ball): new "check playfield while moving" checkbox. A fast
+  missile could jump over a thin playfield pixel without ever touching it, so
+  no collision was detected. With the box ticked the object moves one pixel at
+  a time, checks the playfield after each one, and stops on the first lit pixel
+  it reaches, so the usual "Collided ... and Playfield" check still fires. It
+  costs a little extra time each frame while the object is moving.
+- Find playfield pixel: a newly placed block now starts on Missile 0.
+- Background tab: the canvas was too wide for its height. The playfield is 32
+  columns of 4 pixels, 128 of the screen's 160 pixels wide, but the aspect
+  ratio used 5 pixels per column (160). With the default 11 rows the canvas is
+  now 1.455 wide to tall (it was 1.818), matching what the emulator shows.
+- Playfield row height with Superchip on: the kernel divides 96 by pfres and
+  drops the fraction (pfres 11 gives 8, not 9), but the app rounded to the
+  nearest whole number, so for every pfres that does not divide 96 evenly
+  (5, 7, 9, 10, 11, 13, 14, 17, 20, 21, 25...) the Background tab canvas was
+  the wrong shape and the sprite/playfield row conversions were off. Both now
+  round down, like the kernel. Checked against the emulator for pfres 2-14,
+  16, 17, 20, 21, 24, 25, 27, 31 and 32.
+- Bounce: new "off screen edges" checkbox. Ticked, the block needs no
+  collision: run every frame (for example in Gameplay update) it bounces the
+  object off the left, right, top and bottom edges of the screen (X 0-159,
+  Y 8-96), flipping the matching direction of Fire and/or Inertia, putting the
+  object back on the edge, and keeping a fired missile or ball moving instead
+  of letting it stop off-screen. Unticked, the block works as before.
