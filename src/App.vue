@@ -2750,14 +2750,46 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
 }
 /* The Music tab's piano roll and the sound envelope graph: faint dark lines
    and shading on white become faint light ones on dark. */
-.dark-mode.v-application .piano-roll-row:nth-child(odd),
-.dark-mode.v-application .piano-roll-cell:nth-child(even),
+/* Step cells: a cell a note can go in is a lighter grey (alternate steps a
+   touch lighter again), a cell it can't (a row the active track can't play, or
+   a step another channel's note covers) is solid black. The
+   cells holding a note keep the instrument color they are painted with. */
+.dark-mode.v-application .piano-roll-cell:not(.piano-roll-cell-active),
+.dark-mode.v-application .piano-roll-volume-cell {
+  background-color: rgba(255, 255, 255, 0.16);
+}
+
+.dark-mode.v-application .piano-roll-cell:not(.piano-roll-cell-active):nth-child(even),
 .dark-mode.v-application .piano-roll-volume-cell:nth-child(even) {
+  background-color: rgba(255, 255, 255, 0.21);
+}
+
+.dark-mode.v-application .piano-roll-row:nth-child(odd) {
   background-color: rgba(255, 255, 255, 0.03) !important;
 }
 
+/* The note names down the left of the piano roll read like a keyboard: light
+   keys with dark text for natural notes, darker keys with white text for sharps
+   and flats, and the same two shades, dimmed, for a row the active track can't play. */
 .dark-mode.v-application .piano-roll-label {
-  background-color: rgba(255, 255, 255, 0.06) !important;
+  background-color: #cfcfcf !important;
+  color: #111 !important;
+  opacity: 1;
+}
+
+.dark-mode.v-application .piano-roll-label.piano-roll-label-black-key {
+  background-color: #5c5c5c !important;
+  color: #fff !important;
+}
+
+.dark-mode.v-application .piano-roll-label.piano-roll-label-row-unavailable {
+  background-color: #707070 !important;
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+
+.dark-mode.v-application .piano-roll-label.piano-roll-label-black-key.piano-roll-label-row-unavailable {
+  background-color: #383838 !important;
+  color: rgba(255, 255, 255, 0.7) !important;
 }
 
 .dark-mode.v-application .piano-roll-cell,
@@ -2787,12 +2819,11 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
 }
 
 .dark-mode.v-application .piano-roll-cell-row-unavailable,
-.dark-mode.v-application .piano-roll-label-row-unavailable,
 .dark-mode.v-application .piano-roll-cell-disabled,
 .dark-mode.v-application .piano-roll-cell-disabled:hover,
 .dark-mode.v-application .piano-roll-cell-length-disabled,
 .dark-mode.v-application .piano-roll-cell-length-disabled:hover {
-  background-color: rgba(0, 0, 0, 0.4) !important;
+  background-color: #000 !important;
 }
 
 .dark-mode.v-application .piano-roll-scroll,
@@ -2846,12 +2877,31 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
 .dark-mode:not(.desaturate-app-colors).v-application .theme--dark.v-card:not(.editor-container) {
   background-color: #000 !important;
 }
-/* A list inside a popup (the delete confirmations, Set height...) takes the
-   popup card's color instead of Vuetify's list color, which left it a
+/* A list inside a popup card (the delete confirmations, Set height...) takes the
+   card's color instead of Vuetify's list color, which left it a
    different shade from the rest of the popup. */
-.dark-mode.v-application .v-menu__content .theme--dark.v-list,
-.dark-mode.v-application .v-dialog__content .theme--dark.v-list {
+.dark-mode.v-application .v-menu__content > .v-card .theme--dark.v-list,
+.dark-mode.v-application .v-dialog > .v-card .theme--dark.v-list {
   background-color: transparent !important;
+}
+/* The build/error console: error text stays red (Vuetify's dark footer would
+   make it white), on the same black as the sidebar. */
+.dark-mode.v-application .theme--dark.v-footer.error-message {
+  background-color: #000 !important;
+  color: rgb(244, 67, 54);
+}
+
+.dark-mode.v-application .compile-log-error {
+  color: rgb(244, 67, 54) !important;
+}
+
+.dark-mode.desaturate-app-colors.v-application .theme--dark.v-footer.error-message {
+  background-color: #1e1e1e !important;
+  color: #e05555;
+}
+
+.dark-mode.desaturate-app-colors.v-application .compile-log-error {
+  color: #e05555 !important;
 }
 </style>
 <style scoped>

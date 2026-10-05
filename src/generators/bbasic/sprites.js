@@ -1094,31 +1094,27 @@ export const generateMissileFireChecks = (Blockly) => {
     // speed 1 would make every halfway direction's slower axis vanish,
     // making 16-way look identical to 8-way (see missileFireHalfSpeedVarName's
     // comment).
-    const dispatch = is16 ?
-      DIRECTION16_STEPS.flatMap(([xStep, yStep], dir) => [
-        ...(xStep ? [` if ${dirVar} = ${dir} then ${name}x = ${name}x ${xStep > 0 ? '+' : '-'} ` +
-          `${isHalfStep(xStep, yStep) ? halfSpeedVar : speedVar}`] : []),
-        ...(yStep ? [` if ${dirVar} = ${dir} then ${name}y = ${name}y ${yStep > 0 ? '+' : '-'} ` +
-          `${isHalfStep(yStep, xStep) ? halfSpeedVar : speedVar}`] : []),
-      ]) :
-      [
-        // X dispatch: Up-Right/Right/Down-Right (1,2,3) step +speed,
-        // Down-Left/Left/Up-Left (5,6,7) step -speed, Up/Down (0,4) untouched.
-        ` if ${dirVar} = 1 then ${name}x = ${name}x + ${speedVar}`,
-        ` if ${dirVar} = 2 then ${name}x = ${name}x + ${speedVar}`,
-        ` if ${dirVar} = 3 then ${name}x = ${name}x + ${speedVar}`,
-        ` if ${dirVar} = 5 then ${name}x = ${name}x - ${speedVar}`,
-        ` if ${dirVar} = 6 then ${name}x = ${name}x - ${speedVar}`,
-        ` if ${dirVar} = 7 then ${name}x = ${name}x - ${speedVar}`,
-        // Y dispatch: Down-Right/Down/Down-Left (3,4,5) step +speed,
-        // Up-Left/Up/Up-Right (7,0,1) step -speed, Left/Right (6,2) untouched.
-        ` if ${dirVar} = 3 then ${name}y = ${name}y + ${speedVar}`,
-        ` if ${dirVar} = 4 then ${name}y = ${name}y + ${speedVar}`,
-        ` if ${dirVar} = 5 then ${name}y = ${name}y + ${speedVar}`,
-        ` if ${dirVar} = 7 then ${name}y = ${name}y - ${speedVar}`,
-        ` if ${dirVar} = 0 then ${name}y = ${name}y - ${speedVar}`,
-        ` if ${dirVar} = 1 then ${name}y = ${name}y - ${speedVar}`,
-      ];
+    // One computed jump on the heading (the "on ... goto" statement) to a
+    // handler that makes that heading's steps, instead of a chain of 12 (8
+    // directions) or 20 (16) "if heading = n" lines run on every frame the object
+    // moves. A heading outside 0..steps-1 moves nothing, as before.
+    const dispatchSteps = is16 ? DIRECTION16_STEPS :
+      [[0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1]];
+    const dispatchEnd = `_missilefire_${name}_dispatchend`;
+    const dispatchLabel = (dir) => `_mfd${dir}_${name}`;
+    const dispatch = [
+      ` if ${dirVar} >= ${dispatchSteps.length} then goto ${dispatchEnd}`,
+      ` on ${dirVar} goto ${dispatchSteps.map((_, dir) => dispatchLabel(dir)).join(' ')}`,
+      ...dispatchSteps.flatMap(([xStep, yStep], dir) => [
+        dispatchLabel(dir),
+        ...(xStep ? [` ${name}x = ${name}x ${xStep > 0 ? '+' : '-'} ` +
+          `${is16 && isHalfStep(xStep, yStep) ? halfSpeedVar : speedVar}`] : []),
+        ...(yStep ? [` ${name}y = ${name}y ${yStep > 0 ? '+' : '-'} ` +
+          `${is16 && isHalfStep(yStep, xStep) ? halfSpeedVar : speedVar}`] : []),
+        ` goto ${dispatchEnd}`,
+      ]),
+      dispatchEnd,
+    ];
     const throttleContinueLabel = `_missilefire_${name}_throttlecontinue`;
     lines.push(
         ` if !${flagsVar}{${activeBit}} then goto ${doneLabel}`,
@@ -2430,84 +2426,101 @@ export default (Blockly) => {
     const steps = is16 ? 16 : 8;
     const half = steps / 2;
     const lines = [];
-    // --- heading -> temp5
-    lines.push(' temp5 = 0');
+    // --- heading, and which axes to flip
     const fireDirVar = hasFire ? resolveVar(missileFireDirVarName(name)) : null;
     const velocityXVar = hasInertia ? resolveVar(inertiaVelocityXVarName(name)) : null;
     const velocityYVar = hasInertia ? resolveVar(inertiaVelocityYVarName(name)) : null;
+    const diagonalLines = [
+      lab('diagonal'),
+      // the object's cell (clamped), stepping back out of it when it is
+      // already inside the wall
+      ` temp3 = (${name}x - 17) / 4`,
+      ` temp4 = (${name}y - 1) / ${rowDivisor}`,
+      ` if temp3 > 31 then temp3 = 31`,
+      ` if temp4 > ${maxRow} then temp4 = ${maxRow}`,
+      ` if pfread(temp3, temp4) then goto ${label('inside')}`,
+      ` goto ${label('base')}`,
+      lab('inside'),
+      ` if temp5{1} then goto ${label('bxplus')}`,
+      ` if temp3 > 0 then temp3 = temp3 - 1`,
+      ` goto ${label('bxdone')}`,
+      lab('bxplus'),
+      ` if temp3 < 31 then temp3 = temp3 + 1`,
+      lab('bxdone'),
+      ` if temp5{3} then goto ${label('byplus')}`,
+      ` if temp4 > 0 then temp4 = temp4 - 1`,
+      ` goto ${label('base')}`,
+      lab('byplus'),
+      ` if temp4 < ${maxRow} then temp4 = temp4 + 1`,
+      lab('base'),
+      // A: the pixel next to the base cell along x
+      ` temp6 = temp3`,
+      ` if temp5{1} then goto ${label('axminus')}`,
+      ` if temp6 < 31 then temp6 = temp6 + 1`,
+      ` goto ${label('axdone')}`,
+      lab('axminus'),
+      ` if temp6 > 0 then temp6 = temp6 - 1`,
+      lab('axdone'),
+      ` if pfread(temp6, temp4) then goto ${label('alit')}`,
+      // A is clear: B, the pixel next to the base cell along y, decides
+      ` temp6 = temp4`,
+      ` if temp5{3} then goto ${label('byminus')}`,
+      ` if temp6 < ${maxRow} then temp6 = temp6 + 1`,
+      ` goto ${label('bydone')}`,
+      lab('byminus'),
+      ` if temp6 > 0 then temp6 = temp6 - 1`,
+      lab('bydone'),
+      ` if pfread(temp3, temp6) then goto ${label('flipy')}`,
+      ` goto ${label('flipboth')}`,
+      // A is lit: a lit B too means a corner
+      lab('alit'),
+      ` temp6 = temp4`,
+      ` if temp5{3} then goto ${label('byminus2')}`,
+      ` if temp6 < ${maxRow} then temp6 = temp6 + 1`,
+      ` goto ${label('bydone2')}`,
+      lab('byminus2'),
+      ` if temp6 > 0 then temp6 = temp6 - 1`,
+      lab('bydone2'),
+      ` if pfread(temp3, temp6) then goto ${label('flipboth')}`,
+      ` goto ${label('flipx')}`,
+    ];
     if (hasFire) {
+      // One computed jump on the heading (the "on ... goto" statement, a few
+      // instructions) instead of a chain of 12 (8 directions) or 20 (16) compare
+      // lines: a straight heading goes straight to the flip it needs, a
+      // diagonal one sets its heading bits and goes on to look at the wall.
+      // A heading outside 0..steps-1 (no heading) flips both axes, as before.
       const table = is16 ? DIRECTION16_STEPS : [[0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1]];
-      table.forEach(([xStep, yStep], dir) => {
-        if (xStep) lines.push(` if ${fireDirVar} = ${dir} then temp5 = temp5 | ${xStep > 0 ? '$01' : '$03'}`);
-        if (yStep) lines.push(` if ${fireDirVar} = ${dir} then temp5 = temp5 | ${yStep > 0 ? '$04' : '$0C'}`);
-      });
-    } else if (hasInertia) {
+      const handler = (dir) => `_bph${dir}_${name}_${uid}`;
       lines.push(
-          ` if ${velocityXVar} > 0 then temp5 = temp5 | $01`,
-          ` if ${velocityXVar} > 127 then temp5 = temp5 | $03`,
-          ` if ${velocityYVar} > 0 then temp5 = temp5 | $04`,
-          ` if ${velocityYVar} > 127 then temp5 = temp5 | $0C`);
+          ` if ${fireDirVar} >= ${steps} then goto ${label('flipboth')}`,
+          ` on ${fireDirVar} goto ${table.map((_, dir) => handler(dir)).join(' ')}`);
+      table.forEach(([xStep, yStep], dir) => {
+        lines.push(`@ ${handler(dir)}`);
+        if (xStep && yStep) {
+          lines.push(` temp5 = ${(xStep > 0 ? 1 : 3) | (yStep > 0 ? 4 : 12)}`, ` goto ${label('diagonal')}`);
+        } else {
+          lines.push(` goto ${label(xStep ? 'flipx' : 'flipy')}`);
+        }
+      });
+    } else {
+      lines.push(' temp5 = 0');
+      if (hasInertia) {
+        lines.push(
+            ` if ${velocityXVar} > 0 then temp5 = temp5 | $01`,
+            ` if ${velocityXVar} > 127 then temp5 = temp5 | $03`,
+            ` if ${velocityYVar} > 0 then temp5 = temp5 | $04`,
+            ` if ${velocityYVar} > 127 then temp5 = temp5 | $0C`);
+      }
+      lines.push(
+          ` if !temp5{0} then goto ${label('nox')}`,
+          ` if !temp5{2} then goto ${label('flipx')}`,
+          ` goto ${label('diagonal')}`,
+          lab('nox'),
+          ` if !temp5{2} then goto ${label('flipboth')}`,
+          ` goto ${label('flipy')}`);
     }
-    // --- decide which axes to flip
-    lines.push(
-        ` if !temp5{0} then goto ${label('nox')}`,
-        ` if !temp5{2} then goto ${label('flipx')}`,
-        ` goto ${label('diagonal')}`,
-        lab('nox'),
-        ` if !temp5{2} then goto ${label('flipboth')}`,
-        ` goto ${label('flipy')}`,
-        lab('diagonal'),
-        // the object's cell (clamped), stepping back out of it when it is
-        // already inside the wall
-        ` temp3 = (${name}x - 17) / 4`,
-        ` temp4 = (${name}y - 1) / ${rowDivisor}`,
-        ` if temp3 > 31 then temp3 = 31`,
-        ` if temp4 > ${maxRow} then temp4 = ${maxRow}`,
-        ` if pfread(temp3, temp4) then goto ${label('inside')}`,
-        ` goto ${label('base')}`,
-        lab('inside'),
-        ` if temp5{1} then goto ${label('bxplus')}`,
-        ` if temp3 > 0 then temp3 = temp3 - 1`,
-        ` goto ${label('bxdone')}`,
-        lab('bxplus'),
-        ` if temp3 < 31 then temp3 = temp3 + 1`,
-        lab('bxdone'),
-        ` if temp5{3} then goto ${label('byplus')}`,
-        ` if temp4 > 0 then temp4 = temp4 - 1`,
-        ` goto ${label('base')}`,
-        lab('byplus'),
-        ` if temp4 < ${maxRow} then temp4 = temp4 + 1`,
-        lab('base'),
-        // A: the pixel next to the base cell along x
-        ` temp6 = temp3`,
-        ` if temp5{1} then goto ${label('axminus')}`,
-        ` if temp6 < 31 then temp6 = temp6 + 1`,
-        ` goto ${label('axdone')}`,
-        lab('axminus'),
-        ` if temp6 > 0 then temp6 = temp6 - 1`,
-        lab('axdone'),
-        ` if pfread(temp6, temp4) then goto ${label('alit')}`,
-        // A is clear: B, the pixel next to the base cell along y, decides
-        ` temp6 = temp4`,
-        ` if temp5{3} then goto ${label('byminus')}`,
-        ` if temp6 < ${maxRow} then temp6 = temp6 + 1`,
-        ` goto ${label('bydone')}`,
-        lab('byminus'),
-        ` if temp6 > 0 then temp6 = temp6 - 1`,
-        lab('bydone'),
-        ` if pfread(temp3, temp6) then goto ${label('flipy')}`,
-        ` goto ${label('flipboth')}`,
-        // A is lit: a lit B too means a corner
-        lab('alit'),
-        ` temp6 = temp4`,
-        ` if temp5{3} then goto ${label('byminus2')}`,
-        ` if temp6 < ${maxRow} then temp6 = temp6 + 1`,
-        ` goto ${label('bydone2')}`,
-        lab('byminus2'),
-        ` if temp6 > 0 then temp6 = temp6 - 1`,
-        lab('bydone2'),
-        ` if pfread(temp3, temp6) then goto ${label('flipboth')}`,
-        ` goto ${label('flipx')}`);
+    lines.push(...diagonalLines);
     // --- apply the flips
     const fireFlipX = !hasFire ? [] : [
       ` ${fireDirVar} = ${steps} - ${fireDirVar}`,

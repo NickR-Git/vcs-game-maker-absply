@@ -653,6 +653,10 @@ Fix for a build failure with a plain sound effect while another sound effect has
   sound effect somewhere had an envelope, and Mute in-game audio was off. The plain sound
   tried to reset a stage counter that was never declared for that channel. It now only
   does that for a channel that has one.
+
+=== 0.51.22 ===
+Play previews for backgrounds and sprites, mirror drawing, filter-free Dark Mode and fewer cycles for Bounce and Fire
+
 - Backgrounds that no block ever switches to are no longer put in the ROM (before, every
   background on the Background tab was). The first background always stays, since the game
   starts on it, and every background stays when one is chosen from a variable or other
@@ -688,3 +692,15 @@ Fix for a build failure with a plain sound effect while another sound effect has
   black (cards the same), with Subdued Palette on it is dark grey with lighter cards.
   Popup lists match their popup, and the sidebar icons take their tab's color.
 - Fix: Ctrl+Z on a tab other than Actions no longer throws "Workspace is null".
+- Bounce and Fire use fewer cycles: a fired object's heading is now handled with one computed
+  jump instead of a chain of 12 (8 directions) or 20 (16 directions) compare lines, both when
+  it moves each frame and when Bounce works out how to reflect it. A heading outside the valid
+  range behaves as before.
+- Sprites: the Play preview centers the sprite vertically by its height (a player's y is the
+  bottom of the sprite), and the height cap is now 128 rows (it was 64).
+- Graphic editors: switching to a drawing tool from the marquee select tools or Move clears
+  the selection (moving between the selection tools and Move keeps it).
+- Dark Mode: the build console keeps red error text, dropdown menus are opaque and on top,
+  and the Music tab's piano roll is readable: light and dark keys in the note column, lighter
+  valid steps and black invalid ones. In light mode the part of a step another instrument on
+  the same channel uses is a lighter shade, and the alternating step and row shading is softer.

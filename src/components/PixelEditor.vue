@@ -203,8 +203,14 @@ export default {
     // setTool()'d with, so clicking Eraser on frame A then clicking INTO
     // frame B still drew with frame B's stale Pencil until Eraser was
     // clicked again there too - exactly the bug being fixed here.
-    toggledTool(toolName) {
+    toggledTool(toolName, previousToolName) {
       if (this.editor) this.editor.tool = this.toolFor(toolName);
+      // Leaving the selection tools and Move for a drawing tool drops the
+      // selection (and a half-made polygon). Moving between the selection tools
+      // and Move keeps it, since Move works on the selection. Every editor sees
+      // the shared tool change, so a selection left in another frame goes too.
+      const selectionTools = ['rect-select', 'circle-select', 'polygon-select', 'move'];
+      if (selectionTools.includes(previousToolName) && !selectionTools.includes(toolName)) this.deselect();
     },
     // Recolor the existing pixels when the row colors change (e.g. the user
     // picks a new color in the strip) without disturbing the drawn shape.

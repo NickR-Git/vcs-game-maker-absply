@@ -13,7 +13,8 @@ import {getExtendedScoreGraphics, getTextMinikernelSiblingFiles} from '../genera
 import {getTitleScreenSiblingFiles} from '../generators/bbasic/titlescreen-files';
 import {TITLE_SCREEN_SUBROUTINE_NAME, estimateTitleScreenGraphicsBytes} from '../generators/bbasic/titlescreen';
 import {titleScreenAnyPageOverRowBudget} from '../blocks/titlescreen';
-import {processBackgroundStorageDefaults} from '../blocks/background';
+import {effectiveBackgroundRows, processBackgroundStorageDefaults} from '../blocks/background';
+import {pfRowDivisorFor} from '../utils/playfield-coords';
 import {findSongById} from '../blocks/music';
 import {buildScoreFontOverride, SQUISH_SCORE_FONT} from '../utils/score-font';
 import {buildTextFontOverride, buildTextScrollCursorOverride, buildTextRow2ColorOverride,
@@ -1738,21 +1739,27 @@ export const buildBackgroundPreviewRom = (backgroundId, name) => {
 // Same for one Player tab animation: only Player 0 shows, playing that
 // animation (looping) roughly centered on a black screen with no playfield.
 // animationIndex is its position in the list (the value the "set animation"
-// block's dropdown holds). centerX/centerY are the middle of the lit pixels
-// (in sprite pixels from the left and rows from the top, over every frame)
-// and widthScale is 1/2/4, so the drawing itself ends up centered.
-export const buildPlayerAnimationPreviewRom = (animationIndex, centerX, centerY, widthScale, spriteColors, name) => {
+// block's dropdown holds). centerX is the middle of the lit pixels (in sprite
+// pixels from the left, over every frame), height the sprite's height in rows
+// and widthScale 1/2/4, so the sprite ends up centered.
+export const buildPlayerAnimationPreviewRom = (animationIndex, centerX, height, widthScale, spriteColors, name) => {
   const num = (value) => `<value name="VALUE"><shadow type="math_number">` +
     `<field name="NUM">${value}</field></shadow></value>`;
   const setPlayer = (player, variable, value) =>
     `<block type="sprite_player_set"><field name="PLAYER">${player}</field>` +
     `<field name="VAR">player${player}${variable}</field>${num(value)}`;
   // A player's x is one more than the screen pixel its left edge sits on, so
-  // the middle of the 160-pixel screen is x 81 for a sprite's middle; y 59 is
-  // the middle of the sprite area (measured in the emulator, the score takes
-  // the bottom of the screen).
+  // the middle of the 160-pixel screen is x 81 for a sprite's middle. A player's
+  // y is the BOTTOM of the sprite (it is drawn upwards from there, one row per
+  // 2 scanlines, and the first scanline of the picture is about y 1). The
+  // sprite area runs from y 1 down through the playfield's rows (each as many y
+  // units tall as the playfield's row divisor), the score below it, so its
+  // middle is half way along that and the sprite's bottom goes half its height
+  // below it.
+  const config = useConfigurationStorage().value || {};
+  const middle = effectiveBackgroundRows(config) * pfRowDivisorFor(config) / 2 - 1;
   const x = Math.round(81 - centerX * (widthScale || 1));
-  const y = Math.max(1, Math.round(59 - centerY));
+  const y = Math.min(191, Math.max(1, Math.round(middle + (height || 8) / 2)));
   const steps = [
     `<block type="background_set_color"><field name="VAR">COLUBK</field>${num(0)}`,
     // 0 = no background: the game loop would otherwise load background 1 on its first pass.

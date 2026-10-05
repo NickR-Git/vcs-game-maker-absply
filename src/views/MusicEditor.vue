@@ -3101,10 +3101,13 @@ export default defineComponent({
       remove: 'rgba(156, 39, 176, 0.4)',
       blocked: 'rgba(200, 30, 30, 0.35)',
     };
-    // Same dark tone as .piano-roll-cell-disabled/.piano-roll-cell-length-disabled
-    // - "unusable" reads consistently whether that's because the whole row
-    // is wrong for this instrument or just this slice's channel is busy.
-    const BLOCKED_RANGE_COLOR = 'rgba(0, 0, 0, 0.18)';
+    // A slice of a step another track on the same channel is already using
+    // (see blockedRangesInStep). A lighter tone than
+    // .piano-roll-cell-disabled/.piano-roll-cell-length-disabled (a whole row
+    // this instrument can't play, 0.18): it is only one slice, often every
+    // other step, and at the full tone those bands read as heavy vertical
+    // stripes through the grid.
+    const BLOCKED_RANGE_COLOR = 'rgba(0, 0, 0, 0.08)';
     // Translucent rather than solid, so a note/other layer underneath the
     // currently-playing slice still shows through it. Vuetify's  default
     // theme "primary" blue (#1976D2 - see plugins/vuetify.js, no custom
@@ -5275,7 +5278,7 @@ export default defineComponent({
 }
 
 .piano-roll-row:nth-child(odd) {
-  background-color: rgba(0, 0, 0, 0.02);
+  background-color: rgba(0, 0, 0, 0.035);
 }
 
 .piano-roll-label {
@@ -5363,7 +5366,14 @@ export default defineComponent({
    (backgroundImage, set inline) always paint over this since it's a
    separate property, not competing for the same layer. */
 .piano-roll-cell:nth-child(even) {
-  background-color: rgba(0, 0, 0, 0.025);
+  background-color: rgba(0, 0, 0, 0.012);
+}
+
+/* A cell's tint replaces its row's (they are separate background-color
+   declarations, not layers), so the alternate columns on a shaded row carry the
+   row's tint plus the column's, and the row bands stay unbroken. */
+.piano-roll-row:nth-child(odd) .piano-roll-cell:nth-child(even) {
+  background-color: rgba(0, 0, 0, 0.047);
 }
 
 /* Precise hover feedback (matching exactly where/how long a click would
@@ -5484,7 +5494,7 @@ export default defineComponent({
 }
 
 .piano-roll-volume-cell:nth-child(even) {
-  background-color: rgba(0, 0, 0, 0.025);
+  background-color: rgba(0, 0, 0, 0.012);
 }
 
 /* Drag this to resize the volume row (see startVolumeRowResize) - a plain
@@ -5552,7 +5562,7 @@ export default defineComponent({
    treatment of a foreign note up in the grid) since it isn't editable
    from here. */
 .piano-roll-volume-bar-ghost {
-  opacity: 0.35;
+  opacity: 0.15;
   pointer-events: none;
 }
 

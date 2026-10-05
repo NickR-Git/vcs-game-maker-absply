@@ -54,7 +54,7 @@
                         <v-slider
                           v-model="heightMenuValue"
                           :min="1"
-                          :max="64"
+                          :max="128"
                           label="Height"
                           class="align-center"
                           style="width: 400px"
@@ -633,7 +633,7 @@ export default defineComponent({
     const handleUnifiedSetHeight = () => {
       const animation = selectedAnimation.value;
       if (!animation) return;
-      heightMenuValue.value = Math.max(1, Math.min(64, heightMenuValue.value || 0));
+      heightMenuValue.value = Math.max(1, Math.min(128, heightMenuValue.value || 0));
       animation.frames.forEach((frame) => {
         // Scaling the contents scales each row's color along with its pixels.
         if (heightMenuScaleContents.value && frame.rowColors) {
@@ -859,7 +859,7 @@ export default defineComponent({
     };
 
     const imageToFramePixels = (img) => {
-      const targetHeight = Math.min(64, Math.max(1, Math.round(img.height)));
+      const targetHeight = Math.min(128, Math.max(1, Math.round(img.height)));
       const canvas = createResizedCanvas(img, 8, targetHeight);
       return canvasToFramePixels(canvas);
     };
@@ -952,7 +952,7 @@ export default defineComponent({
               let nextFrameId = 1;
               const frames = tag.frameIndexes.map((frameIndex) => {
                 const sourceFrame = sheet.frames[frameIndex];
-                const targetHeight = Math.min(64, Math.max(1, Math.round(sourceFrame.h)));
+                const targetHeight = Math.min(128, Math.max(1, Math.round(sourceFrame.h)));
                 const canvas = createCroppedResizedCanvas(
                     img, sourceFrame.x, sourceFrame.y, sourceFrame.w, sourceFrame.h, 8, targetHeight);
                 return {id: nextFrameId++, duration: sourceFrame.durationFrames, pixels: canvasToFramePixels(canvas)};
@@ -1041,16 +1041,18 @@ export default defineComponent({
       if (buildInProgress.value) return;
       testingId.value = animation.id;
       try {
-        // Middle of the lit pixels over all frames, so the drawing (not the 8x? box) is centered.
-        let minX = 8; let maxX = -1; let minY = Infinity; let maxY = -1;
-        animation.frames.forEach((frame) => (frame.pixels || []).forEach((row, y) => row.forEach((on, x) => {
+        // Horizontally the middle of the lit pixels over all frames, so the
+        // drawing (not the 8 pixel wide box) is centered; vertically the middle
+        // of the sprite's height (its tallest frame), so empty rows at the top
+        // or bottom count and the sprite doesn't jump between frames.
+        let minX = 8; let maxX = -1;
+        animation.frames.forEach((frame) => (frame.pixels || []).forEach((row) => row.forEach((on, x) => {
           if (!on) return;
           minX = Math.min(minX, x); maxX = Math.max(maxX, x);
-          minY = Math.min(minY, y); maxY = Math.max(maxY, y);
         })));
         const rows = Math.max(...animation.frames.map((frame) => (frame.pixels || []).length), 1);
         await buildPlayerAnimationPreviewRom(state.value.animations.indexOf(animation),
-            maxX < 0 ? 4 : (minX + maxX + 1) / 2, maxY < 0 ? rows / 2 : (minY + maxY + 1) / 2,
+            maxX < 0 ? 4 : (minX + maxX + 1) / 2, rows,
             animation.previewWidthScale || 1,
             // The animation's row colors show even when the Options tab's per-row sprite colors are off.
             animation.frames.some((f) => f.rowColors && f.rowColors.some((c) => c != null && c !== DEFAULT_ROW_COLOR)),
