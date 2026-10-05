@@ -322,6 +322,7 @@ import {migrateLegacyInertiaAccelerateBlocksInWorkspaceXml} from '../hooks/migra
 import {migrateLegacyJoystickBlocksInWorkspaceXml} from '../hooks/migrate-joystick-blocks';
 import {migrateLegacyKeypadBlocksInWorkspaceXml} from '../hooks/migrate-keypad-blocks';
 import {getDateInfix} from '../utils/date';
+import {sanitizeForFilename} from '../utils/file';
 import {resetMusicEditorActiveState} from '../hooks/music-editor-state';
 import {clearEmulatorRom} from '../hooks/emulator';
 import {useLastLoadedRomBytes} from '../hooks/rom-status';
@@ -364,13 +365,6 @@ const FILE_PICKER_TYPES = [{
   description: 'VCS Game Maker Project',
   accept: {'application/x-yaml': ['.vcsgm']},
 }];
-
-// Strips characters Windows/macOS/Linux all disallow (or treat specially)
-// in a filename, and collapses whitespace to single underscores - a title
-// like "My Cool Game!" becomes "My_Cool_Game", safe to drop straight into
-// the saved .vcsgm's  filename with no further escaping needed.
-const sanitizeForFilename = (text) =>
-  String(text).trim().replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, '_');
 
 export default defineComponent({
   setup(props, context) {

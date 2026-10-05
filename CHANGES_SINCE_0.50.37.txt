@@ -719,3 +719,11 @@ Play previews for backgrounds and sprites, mirror drawing, filter-free Dark Mode
   "how long the last press lasted" variable, a project with one Title Screen page no longer
   reserves the page number variable, and only the sound channels in use get a duration variable.
 - Sprites: frames can be dragged from almost anywhere on the frame, not only a thin strip.
+
+=== 0.51.23 ===
+Save ROM as .bin or .a26, named after the project
+
+- Save ROM: the save window's "Save as type" list has separate Atari 2600 ROM (.bin) and
+  (.a26) entries in browsers with a save-file picker (Chrome, Edge); in others the button
+  opens a small menu to pick .bin or .a26. The file is named after the Project tab's Title
+  and Version (My_Game_1-0-0), or compiled-rom when there is no Title.

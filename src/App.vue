@@ -361,9 +361,28 @@
           >
             Test in Stella
           </v-btn>
-          <v-btn color="primary" :disabled="!hasCompiledRom" @click="handleRomDownload">
-            Save ROM
-          </v-btn>
+          <v-menu v-model="romSaveMenuOpen" top offset-y>
+            <template v-slot:activator="{ attrs }">
+              <!-- Where the browser has a save dialog with a "Save as type" list, the button
+                   opens that; otherwise it opens this small menu to pick .bin or .a26. -->
+              <v-btn
+                color="primary"
+                :disabled="!hasCompiledRom"
+                v-bind="attrs"
+                @click="handleSaveRomClick"
+              >
+                Save ROM
+              </v-btn>
+            </template>
+            <v-list dense>
+              <v-list-item @click="handleRomDownload('bin')">
+                <v-list-item-title>Save as .bin</v-list-item-title>
+              </v-list-item>
+              <v-list-item @click="handleRomDownload('a26')">
+                <v-list-item-title>Save as .a26</v-list-item-title>
+              </v-list-item>
+            </v-list>
+          </v-menu>
         </div>
         <div
           v-if="romCapacityText"
@@ -482,7 +501,7 @@
 </template>
 
 <script>
-import {useCompileLog, useDarkModeStorage, useDesaturateBlocklyColorsStorage, useErrorBannerHighlight, useErrorStorage,
+import {useCompileLog, useConfigurationStorage, useDarkModeStorage, useDesaturateBlocklyColorsStorage, useErrorBannerHighlight, useErrorStorage,
   useHideDescriptionTextStorage, useHideSidebarStorage, useStellaPathStorage,
   markSkipLoadLastProjectCheckOnce} from './hooks/project';
 import {buildRom, useRomCapacity, useRomOutdated, useHasCompiledRom, useCompiledRomBytes,
@@ -490,6 +509,7 @@ import {buildRom, useRomCapacity, useRomOutdated, useHasCompiledRom, useCompiled
 import {safeWithGopher2600} from './hooks/emulator';
 import {escapeHtml} from './utils/build-error';
 import {captureEmulatorScreenshot} from './utils/emulator-screenshot';
+import {sanitizeForFilename} from './utils/file';
 import {syncExamples} from './hooks/examples';
 import KeyMappingDialog from './components/KeyMappingDialog.vue';
 import pkg from '../package.json';
@@ -592,6 +612,8 @@ export default {
       hideSidebarStorage: useHideSidebarStorage(),
       desaturateAppColorsStorage: useDesaturateBlocklyColorsStorage(),
       darkModeStorage: useDarkModeStorage(),
+      configurationStorage: useConfigurationStorage(),
+      romSaveMenuOpen: false,
       stellaPathStorage: useStellaPathStorage(),
     };
   },
@@ -1146,16 +1168,59 @@ export default {
         URL.revokeObjectURL(link.href);
       }, 'image/png');
     },
-    handleRomDownload() {
+    // Opens the save dialog with a "Save as type" list (.bin or .a26 - the same raw
+    // ROM image either way; a26 is the usual name for an Atari 2600 ROM) where the
+    // browser has one (Chrome and Edge). Others download compiled-rom.bin or
+    // compiled-rom.a26, picked from the menu on the button.
+    // The ROM's file name (without the extension): the Project tab's Title followed
+    // by its Version (0.0.0 when none is set), dots as dashes like the saved
+    // project's name, e.g. My_Game_1-0-0. With no Title it is just compiled-rom.
+    romBaseName() {
+      const config = this.configurationStorage || {};
+      const title = config.projectTitle && sanitizeForFilename(config.projectTitle);
+      if (!title) return 'compiled-rom';
+      const version = sanitizeForFilename(config.projectVersion || '0.0.0').replace(/\./g, '-');
+      return `${title}_${version}`;
+    },
+    handleSaveRomClick() {
+      if (window.showSaveFilePicker) this.handleRomDownload();
+      else this.romSaveMenuOpen = !this.romSaveMenuOpen;
+    },
+    // extension: which one to download as when there is no save dialog with a type
+    // list (see handleSaveRomClick); ignored when there is one.
+    async handleRomDownload(extension = 'bin') {
       if (!this.compiledRomBytes) {
         this.errorStorage.value =
           'There is no compiled ROM yet; use "Update ROM" first.';
         return;
       }
       const blob = new Blob([this.compiledRomBytes.output], {type: 'application/octet-stream'});
+      if (window.showSaveFilePicker) {
+        try {
+          const handle = await window.showSaveFilePicker({
+            suggestedName: `${this.romBaseName()}.bin`,
+            // Each type has its own made-up MIME type. A shared one is merged into a
+            // single entry, and a real one such as application/octet-stream is
+            // expanded by the browser into every extension it knows for it (the
+            // dialog then showed .bin on its own, or both extensions on each entry).
+            types: [
+              {description: 'Atari 2600 ROM (.bin)', accept: {'application/x-atari-2600-rom-bin': ['.bin']}},
+              {description: 'Atari 2600 ROM (.a26)', accept: {'application/x-atari-2600-rom-a26': ['.a26']}},
+            ],
+            excludeAcceptAllOption: true,
+          });
+          const writable = await handle.createWritable();
+          await writable.write(blob);
+          await writable.close();
+        } catch (e) {
+          // Cancelling the dialog is not an error.
+          if (e && e.name !== 'AbortError') this.errorStorage.value = `Could not save the ROM: ${e.message}`;
+        }
+        return;
+      }
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
-      link.download = 'compiled-rom.bin';
+      link.download = `${this.romBaseName()}.${extension === 'a26' ? 'a26' : 'bin'}`;
       link.click();
     },
     // "Test in Stella" - launches the user's  local Stella install

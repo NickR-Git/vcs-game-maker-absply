@@ -66,3 +66,9 @@ export const loadImageFromFile = (file) => new Promise((resolve, reject) => {
   // this is to read the file
   reader.readAsDataURL(file);
 });
+
+// Strips characters Windows/macOS/Linux all disallow (or treat specially) in a
+// filename, and collapses whitespace to single underscores - a title like
+// "My Cool Game!" becomes "My_Cool_Game", safe to use as a filename as it is.
+export const sanitizeForFilename = (text) =>
+  String(text).trim().replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, '_');
