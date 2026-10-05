@@ -2717,20 +2717,6 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
   background-color: rgba(255, 255, 255, 0.5);
 }
 
-.dark-mode .emulator-resize-handle:hover,
-.dark-mode .error-resize-handle:hover {
-  background-color: rgba(255, 255, 255, 0.15);
-}
-
-.dark-mode .emulator-resize-handle::after,
-.dark-mode .error-resize-handle::after {
-  background-color: rgba(255, 255, 255, 0.3);
-}
-
-.dark-mode .emulator-resize-handle:hover::after,
-.dark-mode .error-resize-handle:hover::after {
-  background-color: rgba(255, 255, 255, 0.5);
-}
 /* Help text: several templates put .theme--light on a .v-messages paragraph. */
 .dark-mode.v-application .v-messages.theme--light,
 .dark-mode.v-application .theme--light.v-messages {
@@ -3950,19 +3936,27 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
    as invisible once that surface is dark/black itself. Flipped to the same
    rest/hover/grip values the black-based version uses, just inverted to
    white, so this handle reads exactly as visibly as .emulator-resize-handle's
-   does, regardless of which of the two is actually on. */
+   does, regardless of which of the two is actually on. The emulator pane's
+   handle takes the very same values (rest, hover and grip), so the two match
+   in Dark Mode and Subdued Palette. */
 .dark-mode .error-resize-handle:hover,
-.desaturate-app-colors .error-resize-handle:hover {
+.desaturate-app-colors .error-resize-handle:hover,
+.dark-mode .emulator-resize-handle:hover,
+.desaturate-app-colors .emulator-resize-handle:hover {
   background-color: rgba(255, 255, 255, 0.15);
 }
 
 .dark-mode .error-resize-handle::after,
-.desaturate-app-colors .error-resize-handle::after {
+.desaturate-app-colors .error-resize-handle::after,
+.dark-mode .emulator-resize-handle::after,
+.desaturate-app-colors .emulator-resize-handle::after {
   background-color: rgba(255, 255, 255, 0.25);
 }
 
 .dark-mode .error-resize-handle:hover::after,
-.desaturate-app-colors .error-resize-handle:hover::after {
+.desaturate-app-colors .error-resize-handle:hover::after,
+.dark-mode .emulator-resize-handle:hover::after,
+.desaturate-app-colors .emulator-resize-handle:hover::after {
   background-color: rgba(255, 255, 255, 0.4);
 }
 </style>

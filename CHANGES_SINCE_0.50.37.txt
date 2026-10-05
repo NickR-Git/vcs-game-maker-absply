@@ -734,3 +734,5 @@ Save ROM as .bin or .a26, named after the project
   Subdued Palette they are only desaturated, not darkened as well), About is a softer grey
   with Subdued Palette, the Blockly grid snap icon is white when off and stays blue when on,
   and the Examples arrow in the Actions toolbox is white.
+- The emulator pane's resize handle uses exactly the same colors as the console log's (rest,
+  hover and grip), in light mode, Dark Mode and Subdued Palette.
