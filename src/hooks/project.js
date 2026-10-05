@@ -225,11 +225,8 @@ export const useHideSidebarStorage = () =>
 // theme/category colours are actually in play.
 export const useDesaturateBlocklyColorsStorage = () =>
   useBooleanAppSetting('vcs-game-maker.desaturateBlocklyColors');
-// App.vue's .dark-mode class - a blanket filter: invert(1) hue-rotate(180deg)
-// on the whole app, Dark Reader's "filter" dark-theme technique, with a
-// handful of elements (the emulator screen, pixel editor canvases, color
-// swatches, the logo) counter-inverted back to their true colors - see
-// App.vue's comment on .dark-mode for the full reasoning.
+// App.vue's .dark-mode class and Vuetify's dark theme - see App.vue's comment on
+// .dark-mode.
 export const useDarkModeStorage = () =>
   useBooleanAppSetting('vcs-game-maker.darkMode');
 // Which view the Project tab shows: the Example Projects section (true) or the

@@ -19,6 +19,16 @@ export const scalePixelMatrixHeight = (pixels, newHeight, width) => {
   });
 };
 
+// The per-row colors that go with a scaled pixel matrix: the same
+// nearest-neighbor mapping as scalePixelMatrixHeight, so every scaled row
+// keeps the color of the row it was copied from. oldHeight is the row count
+// of the pixels before scaling (rowColors can be shorter or missing).
+export const scaleRowColors = (rowColors, oldHeight, newHeight) => {
+  if (!rowColors || !oldHeight) return rowColors;
+  return new Array(newHeight).fill(0).map((_, newY) =>
+    rowColors[Math.min(oldHeight - 1, Math.floor((newY + 0.5) * oldHeight / newHeight))]);
+};
+
 // Shared by every "resize this pixel matrix to a new height" call site
 // (PixelEditor.vue's  single-frame resize, and PlayerEditor.vue's
 // "apply to every frame in this animation" option) so the two never drift

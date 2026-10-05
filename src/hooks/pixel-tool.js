@@ -1,4 +1,4 @@
-import {ref} from '@vue/composition-api';
+import {reactive, ref} from '@vue/composition-api';
 
 // Which tool (pencil/eraser) is currently selected - shared across EVERY
 // PixelEditor.vue instance in the whole app, not per-frame/per-card local
@@ -17,3 +17,11 @@ import {ref} from '@vue/composition-api';
 const toggledTool = ref('pencil');
 
 export const usePixelTool = () => toggledTool;
+
+// Mirror drawing: with horizontal and/or vertical on, whatever is drawn on one
+// side of a graphic is drawn flipped on the other side too (both on: all four
+// corners). Shared by every PixelEditor.vue instance like toggledTool above, and
+// switched by the two buttons in GraphicEditorToolbar.vue.
+const mirrorDraw = reactive({horizontal: false, vertical: false});
+
+export const useMirrorDraw = () => mirrorDraw;

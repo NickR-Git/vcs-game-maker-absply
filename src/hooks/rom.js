@@ -25,11 +25,13 @@ import {emulatorTvSpec} from '../utils/tv-standard';
 import {computeRomCapacity} from '../utils/rom-capacity';
 import {useGeneratedBasic} from './generated';
 import {appendCompileLog, clearCompileLog, useBackgroundsStorage, useConfigurationStorage, useErrorStorage,
-  usePlayerAnimationsStorage, useTextFontStorage, useTitleScreenStorage, useWorkspaceStorage} from './project';
+  usePlayerAnimationsStorage, useTextFontStorage, useTextStringsStorage, useTitleScreenStorage,
+  useWorkspaceStorage} from './project';
 import {getRelocationBanks, resetRelocationBanks, setRelocationBank,
   recordSuccessfulRelocationBanks, seedRelocationBanksFromLastSuccess} from './relocation-banks';
 import {markRomUpToDate, markRomOutdated, useRomOutdated, useHasCompiledRom,
   useCompiledRomBytes, setCompiledRomBytes, recordLoadedRomForRecovery} from './rom-status';
+import {CHAR_TO_GLYPH, TEXT_MESSAGE_LENGTH} from '../blocks/text-strings';
 import {withGopher2600} from './emulator';
 import {setRomCapacity, useRomCapacity} from './rom-capacity';
 
@@ -1677,7 +1679,108 @@ const buildTitleScreenPreviewXml = (screenId) =>
  *   (screen.id, same value titlescreen_draw's SCREEN field expects).
  * @return {!Promise<boolean>} Whether the preview ROM was built and loaded.
  */
-export const buildTitleScreenPreviewRom = async (screenId) => {
+export const buildTitleScreenPreviewRom = (screenId) => buildPreviewRom({
+  name: `Title Screen ${screenId}`,
+  xml: buildTitleScreenPreviewXml(screenId),
+  titleScreen: true,
+});
+
+// Same throwaway-ROM preview for one Background tab card: "System start:
+// Background [id]", then the normal game loop draws it. The ROM only
+// contains what that block uses (unused backgrounds are left out).
+// The block that shows a preview's name on the Text Minikernel's first line:
+// centered when it fits the 12 characters of the row, scrolled when longer.
+const previewNameBlockXml = (name) => {
+  const text = String(name || '').toUpperCase().split('').map((char) => CHAR_TO_GLYPH[char] ? char : ' ').join('').trim();
+  const escape = (value) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  if (text.length > TEXT_MESSAGE_LENGTH) {
+    const number = (value) => `<shadow type="math_number"><field name="NUM">${value}</field></shadow>`;
+    return `<block type="text_minikernel_show_scroll"><field name="TEXT">${escape(text)}</field>` +
+      `<field name="START_AT_END">FALSE</field>` +
+      `<value name="SCROLL_SPEED">${number(8)}</value><value name="SCROLL_PAUSE">${number(30)}</value>`;
+  }
+  const centered = ' '.repeat(Math.floor((TEXT_MESSAGE_LENGTH - text.length) / 2)) + text;
+  return `<block type="text_minikernel_show"><field name="TEXT">${escape(centered)}</field>`;
+};
+
+// Setting every preview needs: the 12-character row, and the score (which
+// the text replaces) left on.
+const PREVIEW_TEXT_CONFIG = {
+  textMaxDisplayWidth: TEXT_MESSAGE_LENGTH,
+  showScore: true,
+  scoreBkColor: 0,
+  // The debug displays that write numbers into the score.
+  enableCycleScore: false,
+  enableScanlinesDebug: false,
+};
+
+export const buildBackgroundPreviewRom = (backgroundId, name) => {
+  // Both players hidden, so only the background shows.
+  const hide = (player) => `<block type="sprite_player_set"><field name="PLAYER">${player}</field>` +
+    `<field name="VAR">player${player}visibility</field><value name="VALUE"><shadow type="math_number">` +
+    `<field name="NUM">0</field></shadow></value>`;
+  const steps = [
+    `<block type="background_set_select"><field name="VAR">${backgroundId}</field>`,
+    previewNameBlockXml(name),
+    hide(0),
+    hide(1),
+  ];
+  const chain = steps.map((step) => step + '<next>').join('') + steps.map(() => '</next></block>').join('');
+  return buildPreviewRom({
+    name: `Background ${backgroundId}`,
+    configOverride: PREVIEW_TEXT_CONFIG,
+    xml: `<xml xmlns="https://developers.google.com/blockly/xml">` +
+      `<block type="event_block"><field name="EVENT">system_start</field>` +
+      `<statement name="DO">${chain}</statement></block></xml>`,
+  });
+};
+
+// Same for one Player tab animation: only Player 0 shows, playing that
+// animation (looping) roughly centered on a black screen with no playfield.
+// animationIndex is its position in the list (the value the "set animation"
+// block's dropdown holds). centerX/centerY are the middle of the lit pixels
+// (in sprite pixels from the left and rows from the top, over every frame)
+// and widthScale is 1/2/4, so the drawing itself ends up centered.
+export const buildPlayerAnimationPreviewRom = (animationIndex, centerX, centerY, widthScale, spriteColors, name) => {
+  const num = (value) => `<value name="VALUE"><shadow type="math_number">` +
+    `<field name="NUM">${value}</field></shadow></value>`;
+  const setPlayer = (player, variable, value) =>
+    `<block type="sprite_player_set"><field name="PLAYER">${player}</field>` +
+    `<field name="VAR">player${player}${variable}</field>${num(value)}`;
+  // A player's x is one more than the screen pixel its left edge sits on, so
+  // the middle of the 160-pixel screen is x 81 for a sprite's middle; y 59 is
+  // the middle of the sprite area (measured in the emulator, the score takes
+  // the bottom of the screen).
+  const x = Math.round(81 - centerX * (widthScale || 1));
+  const y = Math.max(1, Math.round(59 - centerY));
+  const steps = [
+    `<block type="background_set_color"><field name="VAR">COLUBK</field>${num(0)}`,
+    // 0 = no background: the game loop would otherwise load background 1 on its first pass.
+    `<block type="background_set">${num(0)}`,
+    previewNameBlockXml(name),
+    setPlayer(1, 'visibility', 0),
+    // White unless the animation has row colors.
+    ...(spriteColors ? [] : [setPlayer(0, 'realcolor', 0x0E)]),
+    setPlayer(0, 'x', x),
+    setPlayer(0, 'y', y),
+    `<block type="sprite_player_set_animation"><field name="PLAYER">0</field>` +
+      `<field name="VAR">${animationIndex}</field><field name="LOOP">TRUE</field>`,
+  ];
+  // Each block nests inside the previous one's <next>.
+  const chain = steps.map((step) => step + '<next>').join('') + steps.map(() => '</next></block>').join('');
+  return buildPreviewRom({
+    name: `Player animation ${animationIndex}`,
+    configOverride: {...PREVIEW_TEXT_CONFIG, ...(spriteColors ? {enablePlayer0SpriteColors: true, enablePlayer1SpriteColors: true} : {})},
+    xml: `<xml xmlns="https://developers.google.com/blockly/xml">` +
+      `<block type="event_block"><field name="EVENT">system_start</field>` +
+      `<statement name="DO">${chain}</statement></block>` +
+      // Also clears every frame, in case anything has drawn pixels.
+      `<block type="event_block"><field name="EVENT">title_update</field>` +
+      `<statement name="DO"><block type="background_clear"></block></statement></block></xml>`,
+  });
+};
+
+const buildPreviewRom = async ({name, xml, titleScreen = false, configOverride = null}) => {
   // See buildInProgress's comment near the top of this file - running
   // this concurrently with a real buildRom() (or another preview) corrupted
   // BOTH builds' output before this guard existed, since they share
@@ -1692,7 +1795,7 @@ export const buildTitleScreenPreviewRom = async (screenId) => {
   const configurationStorage = useConfigurationStorage();
   try {
     clearCompileLog();
-    appendCompileLog(`Building a preview of Title Screen ${screenId}...`, 'stage');
+    appendCompileLog(`Building a preview of ${name}...`, 'stage');
     // Starts every preview from a clean slate rather than whatever
     // relocation state the last REAL build (or a previous preview) happened
     // to leave behind - resetRelocationBanks()'s effect is purely an
@@ -1723,15 +1826,49 @@ export const buildTitleScreenPreviewRom = async (screenId) => {
     // in bank 3 instead of bank 2. gameover_start's exit already cross-
     // bank-jumps to wherever gameover_update ends up (still bank 1), the
     // same mechanism every other relocated event already relies on.
-    setRelocationBank('subroutineBanks', TITLE_SCREEN_SUBROUTINE_NAME, 2);
-    setRelocationBank('eventBanks', 'gameover_start', 3);
+    if (titleScreen) {
+      setRelocationBank('subroutineBanks', TITLE_SCREEN_SUBROUTINE_NAME, 2);
+      setRelocationBank('eventBanks', 'gameover_start', 3);
+    }
     let code;
     // The TV standard this code was generated for, read now - the compile
     // below is async, and the standard can be changed meanwhile, which would
     // pair a ROM built for one standard with the emulator spec of the other.
     let buildTvSpec;
     try {
-      code = regenerateCode(buildTitleScreenPreviewXml(screenId));
+      if (configOverride) {
+        // The generator reads the project's options, so the override is in
+        // place only for this synchronous generation and put straight back
+        // (nothing is saved).
+        const original = configurationStorage.value;
+        configurationStorage.value = {...(original || {}), ...configOverride};
+        // The project's Text tab messages are left out too: the name must sit
+        // within the first 256 bytes of the text table (the Text Minikernel
+        // indexes it with one byte), and a project with many messages pushed
+        // the name past that, so only its first characters showed.
+        const textStrings = useTextStringsStorage();
+        const originalTextStrings = textStrings.value;
+        // Writing either setting flags the real ROM as out of date; this is
+        // temporary, so put that flag back as it was.
+        const romOutdated = useRomOutdated();
+        const wasOutdated = romOutdated.value;
+        textStrings.value = {textStrings: []};
+        try {
+          code = regenerateCode(xml);
+        } finally {
+          configurationStorage.value = original;
+          textStrings.value = originalTextStrings;
+          romOutdated.value = wasOutdated;
+        }
+      } else {
+        code = regenerateCode(xml);
+      }
+      // The score digits stay (the text sits beneath them) but are drawn in
+      // black on the black score strip (scoreBkColor below), so they can't be seen. Plain string search,
+      // a no-op if the template ever changes.
+      if (!titleScreen) {
+        code = code.replace(' pfscorecolor = scorecolor', ' scorecolor = 0' + String.fromCharCode(10) + ' pfscorecolor = scorecolor');
+      }
       buildTvSpec = emulatorTvSpec(useConfigurationStorage().value || {});
       // Left as the project's configured ROM size (Configuration.vue)
       // whenever it already has room for banks 1/2/3 above (bankswitched,
@@ -1755,13 +1892,13 @@ export const buildTitleScreenPreviewRom = async (screenId) => {
       // all (confirmed directly against a plain "\n" test string, which
       // matched fine, vs the real "\r\n" content, which didn't).
       const config = configurationStorage.value || {};
-      if ((BANK_COUNT_BY_ROMSIZE[config.romSize] || 0) < 3) {
+      if (titleScreen && (BANK_COUNT_BY_ROMSIZE[config.romSize] || 0) < 3) {
         code = code.replace(/^(\s*set romsize )(\S+)(\r?)$/m,
             (full, prefix, value, cr) => `${prefix}16k${/SC$/i.test(value) ? 'SC' : ''}${cr}`);
       }
     } catch (e) {
       appendCompileLog('Failed to generate the preview bBasic code.', 'error');
-      showError(errorStorage, 'Error while generating title screen preview code', code, e);
+      showError(errorStorage, `Error while generating ${name} preview code`, code, e);
       return false;
     }
     try {
@@ -1781,7 +1918,15 @@ export const buildTitleScreenPreviewRom = async (screenId) => {
       // ALWAYS-compiled symbol tables (hex/dollar/pound/etc.) regardless of
       // which font is selected, not just the chosen font's digits - real
       // extra ROM bytes that made bank 3's overflow worse, not better.
-      const siblingFiles = {};
+      // The name shown on the Text Minikernel (background and sprite
+      // previews) needs its asm files next to the source; a copy, since the
+      // cached object is shared (see buildRomInner).
+      const siblingFiles = BlocklyBB.isTextMinikernelActive() ? {...await getTextMinikernelSiblingFiles()} : {};
+      Object.assign(siblingFiles, BlocklyBB.playerAnimAsmFiles || {});
+      if (BlocklyBB.isTextMinikernelActive()) {
+        const textFontOverride = await buildTextFontOverride();
+        if (textFontOverride) siblingFiles['text12b.asm'] = textFontOverride;
+      }
       if (BlocklyBB.titleScreenUsedKernelKeys) {
         Object.assign(siblingFiles, await getTitleScreenSiblingFiles(BlocklyBB.titleScreenUsedKernelKeys));
         Object.assign(siblingFiles, BlocklyBB.titleScreenAsmFiles || {});
@@ -1801,7 +1946,7 @@ export const buildTitleScreenPreviewRom = async (screenId) => {
         });
         recordLoadedRomForRecovery(compiledResult.output, buildTvSpec);
       } catch (previewError) {
-        console.error('gopher2600-wasm: failed to load the title screen preview ROM into the emulator ' +
+        console.error('gopher2600-wasm: failed to load the preview ROM into the emulator ' +
           '(the ROM itself compiled successfully) - try "Refresh emulator":', previewError);
       }
       appendCompileLog('Preview build succeeded.', 'stage');
@@ -1816,7 +1961,7 @@ export const buildTitleScreenPreviewRom = async (screenId) => {
       // certainty - see titleScreenOverflowHint's comment.
       const titleScreenHint = isOverflowError(e) ? titleScreenOverflowHint(e) : {text: '', highlight: ''};
       const annotatedError = isOverflowError(e) ? new Error(`${e.message}${titleScreenHint.text}`) : e;
-      showError(errorStorage, 'Error while compiling title screen preview code', code, annotatedError,
+      showError(errorStorage, `Error while compiling ${name} preview code`, code, annotatedError,
           titleScreenHint.highlight);
       return false;
     }

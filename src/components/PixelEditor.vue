@@ -82,7 +82,7 @@ import {isMatrixEqual} from '../utils/array';
 import {getDateInfix} from '../utils/date';
 import {loadImageFromFile, openFileDialog} from '../utils/file';
 import {createResizedCanvas} from '../utils/image';
-import {usePixelTool} from '../hooks/pixel-tool';
+import {usePixelTool, useMirrorDraw} from '../hooks/pixel-tool';
 import {resizePixelMatrixHeight} from '../utils/pixels';
 
 export default {
@@ -681,23 +681,26 @@ export default {
       if (!isMatrixEqual(this.value, pixels)) {
         // eslint-disable-next-line no-invalid-this
         this.$emit('input', pixels);
-        // Pixels are drawn in the pencil's fixed color; recolor them so newly
-        // drawn cells adopt their row color instead of staying the draw color.
-        // logToHistory: false - this recolor pass doesn't represent a new
-        // edit (see setPixels' comment); left true here, it silently
-        // pushed an extra history entry on every single stroke, which
-        // undo()-then-redraw preview tools (Rectangle/Line/Oval) rely on
-        // undo() popping exactly the ONE entry their last move pushed -
-        // the extra entry meant their undo() popped this no-op recolor
-        // instead, leaving the previous preview position's pixels never
-        // actually erased - confirmed as the real cause of a reported
-        // "drawing a rectangle leaves a trail behind" bug on any canvas
-        // with row colors (e.g. Background).
+      }
+      // Pixels are drawn in the pencil's fixed color; recolor them so newly
+      // drawn cells adopt their row color instead of staying the draw color.
+      // logToHistory: false - this recolor pass doesn't represent a new
+      // edit (see setPixels' comment); left true here, it silently
+      // pushed an extra history entry on every single stroke, which
+      // undo()-then-redraw preview tools (Rectangle/Line/Oval) rely on
+      // undo() popping exactly the ONE entry their last move pushed -
+      // the extra entry meant their undo() popped this no-op recolor
+      // instead, leaving the previous preview position's pixels never
+      // actually erased - confirmed as the real cause of a reported
+      // "drawing a rectangle leaves a trail behind" bug on any canvas
+      // with row colors (e.g. Background).
+      // Done even when no pixel turned on or off: drawing over a pixel that
+      // is already on (a stroke crossing a mirrored one) redraws it in the
+      // draw color, which has to be put back to its row color too.
+      // eslint-disable-next-line no-invalid-this
+      if (this.rowColors) {
         // eslint-disable-next-line no-invalid-this
-        if (this.rowColors) {
-          // eslint-disable-next-line no-invalid-this
-          this.setPixels(pixels, false);
-        }
+        this.setPixels(pixels, false);
       }
     }, 10),
 
@@ -793,6 +796,10 @@ export default {
       // toolbar, until setTool() was called again to actually apply it.
       const initialTool = this.toolFor(this.toggledTool);
       this.editor = new PixelEditor(canvas, this.width, rowCount, initialTool, history);
+      // Every tool draws through editor.set(), so mirror drawing hooks in here
+      // (see mirrorPixels).
+      const set = this.editor.set.bind(this.editor);
+      this.editor.set = (pixels, logToHistory = true) => set(this.mirrorPixels(pixels, logToHistory), logToHistory);
       this.setPixels(pixelMatrix);
       this.handleMouse();
       // Row count (this.editor.height) is what the grid overlay actually
@@ -815,6 +822,33 @@ export default {
         this.$emit('input', resized);
         this.initEditor(newHeight, resized);
       }
+    },
+
+    // Mirror drawing (see hooks/pixel-tool.js): adds the flipped copy of each
+    // pixel a tool draws, in the same history entry so one Undo takes both
+    // away. Only strokes are mirrored: not an undo/redo or recolor
+    // (logToHistory false), not the Move tool (it would move the mirror image
+    // too), and not a write of the whole grid (an import, flip or resize).
+    mirrorPixels(pixels, logToHistory) {
+      const mirror = useMirrorDraw();
+      if (!logToHistory || (!mirror.horizontal && !mirror.vertical) || this.toggledTool === 'move') return pixels;
+      const {width, height} = this.editor;
+      if (pixels.length >= width * height) return pixels;
+      // One entry per cell: a cell on the mirror line is its mirror image,
+      // and a duplicate would record the wrong "previous" color for Undo.
+      const cells = new Map();
+      const add = (pixel) => {
+        const key = pixel.y * width + pixel.x;
+        if (!cells.has(key)) cells.set(key, pixel);
+      };
+      pixels.forEach(add);
+      pixels.forEach((pixel) => {
+        if (pixel.x < 0 || pixel.y < 0 || pixel.x >= width || pixel.y >= height) return;
+        if (mirror.horizontal) add({...pixel, x: width - 1 - pixel.x});
+        if (mirror.vertical) add({...pixel, y: height - 1 - pixel.y});
+        if (mirror.horizontal && mirror.vertical) add({...pixel, x: width - 1 - pixel.x, y: height - 1 - pixel.y});
+      });
+      return [...cells.values()];
     },
 
     createEmptyPixelMatrix() {

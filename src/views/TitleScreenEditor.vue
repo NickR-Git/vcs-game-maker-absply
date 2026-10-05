@@ -592,7 +592,7 @@ import {computed, defineComponent, getCurrentInstance, ref} from '@vue/compositi
 import {chunk, max} from 'lodash';
 
 import {colorByteToCss} from '../utils/palette';
-import {resizePixelMatrixHeight} from '../utils/pixels';
+import {resizePixelMatrixHeight, scaleRowColors} from '../utils/pixels';
 import {loadImageFromFile, openFileDialogMultiple, sortImportedAnimationFrameFiles} from '../utils/file';
 import {createCroppedResizedCanvas, createResizedCanvas} from '../utils/image';
 import {parseAsepriteSheet} from '../utils/aseprite';
@@ -1314,6 +1314,10 @@ export default defineComponent({
       if (!card) return;
       heightMenuValue.value = Math.max(1, Math.min(64, heightMenuValue.value || 0));
       card.frames.forEach((frame) => {
+        // Scaling the contents scales each row's color along with its pixels.
+        if (heightMenuScaleContents.value && frame.rowColors) {
+          frame.rowColors = scaleRowColors(frame.rowColors, frame.pixels.length, heightMenuValue.value);
+        }
         frame.pixels = resizePixelMatrixHeight(frame.pixels, heightMenuValue.value, cardWidth(card), heightMenuScaleContents.value);
         ensureRowColors(card, frame);
       });

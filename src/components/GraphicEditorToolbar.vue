@@ -159,6 +159,27 @@
           </v-btn>
         </v-btn-toggle>
         <v-divider class="get-inner-divider" vertical />
+        <!-- Two independent on/off buttons (both on mirrors across both axes). -->
+        <v-btn-toggle :value="mirrorModes" multiple borderless @change="setMirrorModes">
+          <v-btn
+            icon
+            small
+            title="Mirror draw horizontally: what you draw appears flipped on the other side (left/right)"
+            value="horizontal"
+            :disabled="!activeEditor"
+          >
+            <v-icon>mdi-reflect-horizontal</v-icon>
+          </v-btn>
+          <v-btn
+            icon
+            small
+            title="Mirror draw vertically: what you draw appears flipped on the other side (top/bottom)"
+            value="vertical"
+            :disabled="!activeEditor"
+          >
+            <v-icon>mdi-reflect-vertical</v-icon>
+          </v-btn>
+        </v-btn-toggle>
         <v-btn icon small title="Flip horizontally (Shift+H)" :disabled="!activeEditor" @click="() => activeEditor.flipHorizontal()">
           <v-icon>mdi-flip-horizontal</v-icon>
         </v-btn>
@@ -188,6 +209,7 @@
 import {tryUndoQuickColorDeletion, usePendingQuickColorDeletion} from '../hooks/quick-color-undo';
 import {tryUndoCardDeletion, usePendingCardDeletion} from '../hooks/card-delete-undo';
 import {usePixelGridOverlayStorage, usePixelGridLabelsStorage} from '../hooks/project';
+import {useMirrorDraw} from '../hooks/pixel-tool';
 
 // The standard Photoshop/Aseprite-style single-letter tool shortcuts -
 // see handleToolHotkey's comment for why these specific letters.
@@ -259,6 +281,11 @@ export default {
     activeTool() {
       return this.activeEditor ? this.activeEditor.toggledTool : null;
     },
+    // Which of the two mirror-draw buttons are on (see hooks/pixel-tool.js).
+    mirrorModes() {
+      const mirror = useMirrorDraw();
+      return [...(mirror.horizontal ? ['horizontal'] : []), ...(mirror.vertical ? ['vertical'] : [])];
+    },
     bleedStyle() {
       return {
         marginLeft: `-${this.bleed}px`,
@@ -303,6 +330,11 @@ export default {
     document.removeEventListener('mousedown', this.handleOutsideMouseDown, true);
   },
   methods: {
+    setMirrorModes(modes) {
+      const mirror = useMirrorDraw();
+      mirror.horizontal = (modes || []).includes('horizontal');
+      mirror.vertical = (modes || []).includes('vertical');
+    },
     // Every marquee/selection tool (Rectangle, Circle, Polygon, and the
     // selection Move acts on) deactivates when the user clicks anywhere
     // outside the active graphic's canvas - clearing the selection and

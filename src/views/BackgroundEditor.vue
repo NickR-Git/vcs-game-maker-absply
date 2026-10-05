@@ -185,6 +185,19 @@
                       <v-icon>mdi-content-paste</v-icon>
                       <span class="copy-paste-color-badge">C</span>
                     </v-btn>
+                    <v-btn
+                      :title="testingId === background.id ? 'Building...' :
+                        buildInProgress ? 'Another build is already running - try again once it finishes' :
+                        'Test this background in the emulator'"
+                      icon
+                      small
+                      :disabled="buildInProgress && testingId !== background.id"
+                      :loading="testingId === background.id"
+                      class="titlescreen-play-btn player-icon-btn-size"
+                      @click.stop="() => handleTestBackground(background)"
+                    >
+                      <v-icon>mdi-play</v-icon>
+                    </v-btn>
                     <confirm-delete-menu
                       v-if="state.backgrounds.length > 1"
                       title="Delete this background?"
@@ -308,10 +321,11 @@ import PlayfieldColorStrip from '../components/PlayfieldColorStrip.vue';
 import QuickColorPalette from '../components/QuickColorPalette.vue';
 import {useBackgroundsStorage, useColorPaletteStorage, useConfigurationStorage,
   usePixelGridOverlayStorage, usePixelGridLabelsStorage} from '../hooks/project';
+import {buildBackgroundPreviewRom, useBuildInProgress} from '../hooks/rom';
 import {useEditorZoom} from '../hooks/zoom';
 import {colorByteToCss} from '../utils/palette';
 import {PF_COLUMN_WIDTH_PX, pfRowDivisorFor} from '../utils/playfield-coords';
-import {resizePixelMatrixHeight} from '../utils/pixels';
+import {resizePixelMatrixHeight, scaleRowColors} from '../utils/pixels';
 import {DEFAULT_BACKGROUNDS, DEFAULT_ROW_COLOR, clearRowColors, effectiveBackgroundRows,
   processBackgroundStorageDefaults} from '../blocks/background';
 
@@ -513,6 +527,11 @@ export default defineComponent({
         // pfres-driven row count, so a later Superchip pfres change doesn't
         // silently undo this resize.
         background.customHeight = true;
+        // Scaling the contents scales each row's color along with its pixels.
+        if (heightMenuScaleContents.value && background.rowColors) {
+          background.rowColors = scaleRowColors(
+              background.rowColors, background.pixels.length, heightMenuValue.value);
+        }
         background.pixels = resizePixelMatrixHeight(
             background.pixels, heightMenuValue.value, 32, heightMenuScaleContents.value);
       }
@@ -698,6 +717,20 @@ export default defineComponent({
       instance.proxy.$forceUpdate();
     };
 
+    // Builds and loads a throwaway ROM showing just this background (see
+    // buildBackgroundPreviewRom); same busy handling as the title screen Play button.
+    const testingId = ref(null);
+    const buildInProgress = useBuildInProgress();
+    const handleTestBackground = async (background) => {
+      if (buildInProgress.value) return;
+      testingId.value = background.id;
+      try {
+        await buildBackgroundPreviewRom(background.id, background.name);
+      } finally {
+        testingId.value = null;
+      }
+    };
+
     const handleDeleteBackground = (background) => {
       state.value.backgrounds = state.value.backgrounds.filter(({id}) => id != background.id);
       console.info('Deleted ', background);
@@ -707,6 +740,7 @@ export default defineComponent({
 
     return {selectedCardId, selectCard, deselectCard, backgroundAspectRatio,
       state, handleChildChange, handleBackgroundPixelsInput, handleAddBackground, handleDeleteBackground,
+      testingId, buildInProgress, handleTestBackground,
       selectedQuickColor, quickColorPalette,
       handleRowColorsInput, handleClearRowColors, editorRowColors, isCollapsed, toggleCollapsed,
       zoom, showPixelGrid, showPixelGridLabels, editorWidth, backgroundRows, pfColorsEnabled,
@@ -1024,5 +1058,9 @@ export default defineComponent({
 /* No drop shadow on floating (absolute-positioned) buttons - delete, add, etc. */
 .v-btn--absolute {
   box-shadow: none !important;
+}
+.titlescreen-play-btn:active >>> .v-icon,
+.titlescreen-play-btn.v-btn--loading >>> .v-icon {
+  color: var(--v-primary-base, #1976d2) !important;
 }
 </style>

@@ -599,6 +599,7 @@ export default {
     // Once per page load: fetch new/changed example projects (see hooks/examples.js).
     syncExamples();
     this.attachEmulator();
+    this.$vuetify.theme.dark = this.darkMode;
     window.addEventListener('resize', this.handleWindowResize);
     window.addEventListener('gopher2600-ready', this.handleGopher2600Ready);
     this.emulatorWatchdogTimer = window.setInterval(this.checkEmulatorCanvas, EMULATOR_WATCHDOG_INTERVAL);
@@ -797,6 +798,10 @@ export default {
     },
   },
   watch: {
+    // Vuetify's dark theme (see the .dark-mode CSS comment).
+    darkMode(value) {
+      this.$vuetify.theme.dark = value;
+    },
     emulatorWidth() {
       // Wait for the drawer's new width to reach the DOM before measuring.
       this.$nextTick(this.updateEmulatorScale);
@@ -1261,114 +1266,12 @@ export default {
   color: var(--v-primary-base, #1976d2) !important;
 }
 
-/* Dark Mode (see Configuration.vue's switch, bound to darkMode below) -
-   one blanket CSS filter on the whole app, Dark Reader's (github.com/
-   darkreader/darkreader) "filter" dark-theme technique: invert every
-   rendered pixel's lightness, then rotate hue 180deg to bring an inverted
-   blue back to looking roughly blue again (a plain invert() alone turns
-   blue into orange, every warm color cold and vice versa). This recolors
-   literally everything inside #inspire for free - every Vuetify component,
-   every hardcoded color below, the whole Blockly canvas - with no per-color
-   authoring needed, since it transforms final rendered pixels rather than
-   any particular color declaration. Composes automatically with Subdued
-   Palette below: none of ITS filter rules target this same top-level
-   .v-application element (they're all on nested descendants), so both
-   apply correctly together regardless of which is toggled on first - CSS
-   filters compose hierarchically down the DOM tree, not by merging two
-   rules that target the same element. */
-/* Scoped to .v-application--wrap's direct children, excluding
-   .emulator-drawer, rather than one blanket rule on .v-application itself -
-   a real reported bug ("the default red and blue of player0 and player1
-   are still changing"), confirmed by eye (screenshots showing a visibly
-   darker/desaturated navy and maroon instead of true blue/red) even though
-   the emulator's game-screen canvas was already "excluded" via the
-   standard double-invert cancellation trick used everywhere else on this
-   page (filter: invert(1) hue-rotate(180deg) applied a second time to
-   #gopher2600-target-container, which should cancel the ancestor's
-   identical filter out exactly). That trick is mathematically exact for
-   ordinary content, but this canvas is painted continuously by a WASM/Go
-   program via requestAnimationFrame, entirely outside this page's paint
-   cycle - confirmed as a real case where the two nested filter passes
-   don't round-trip with full precision for that kind of GPU-composited,
-   continuously-repainted content (color banding/rounding loss across two
-   separate filter compositing passes, not a logical inversion bug -
-   getImageData() on the canvas's pixel buffer reads back byte-identical
-   either way, since that reads the raw bitmap before any CSS filter is
-   ever applied, completely bypassing the very thing actually in question
-   here). The only way to guarantee a real console's true output is to make
-   sure NO filter - cancelling or not - ever applies to that canvas or any
-   of its ancestors, not to rely on two filters exactly undoing each
-   other. */
-.dark-mode.v-application > .v-application--wrap > *:not(.emulator-drawer):not(.error-message):not(.nav-drawer):not(.top-toolbar) {
-  filter: invert(1) hue-rotate(180deg);
-}
-
-/* Vuetify portals v-dialog/v-menu content (.v-dialog__content/
-   .v-menu__content) OUT of .v-application--wrap entirely - confirmed live,
-   they render as siblings of .v-application--wrap, direct children of
-   .v-application itself - so the blanket rule above, scoped to
-   .v-application--wrap's children, never reaches them at all. A real
-   reported gap ("app popup windows should also be affected by dark mode"):
-   every dialog/menu rendered as its stock, un-inverted light theme
-   regardless of Dark Mode. .v-overlay (the dark scrim behind them, also a
-   direct .v-application child - see its z-index comment further below)
-   is deliberately left alone here - it's already a dark, semi-transparent
-   backdrop (theme="dark" by default) appropriate behind either a light or
-   dark dialog, and inverting it would turn it a jarring white instead. */
-.dark-mode.v-application > .v-dialog__content,
-.dark-mode.v-application > .v-menu__content {
-  filter: invert(1) hue-rotate(180deg);
-}
-
-/* .nav-drawer and .top-toolbar are excluded from the
-   blanket rule above too, for the same reason as .emulator-drawer and
-   .error-message: each one sets a semi-transparent border/background
-   directly on itself (not on a separately-excluded descendant), and filter
-   composites an element's content against the element as ONE flattened
-   image BEFORE inverting - so a literal rgba(255, 255, 255, 0.24) authored
-   on a still-filtered element doesn't survive as that exact value, it gets
-   composited against that element's (still light-mode) background first,
-   then the whole thing inverts together, landing on whatever THAT composite
-   inverts to rather than the literal value authored - confirmed as the real
-   cause of repeated border-color mismatches no amount of reworking the
-   authored value alone could fix, since the value was never the thing being
-   rendered unmodified. Excluding these three the same way guarantees every
-   color declared on them from here down renders as the exact literal value
-   written, with zero filter reprocessing - the only technique proven
-   reliable for this throughout Dark Mode so far (the console log's
-   .error-message background, .emulator-drawer's whole subtree). Content
-   inside them that should still follow Dark Mode gets an explicit filter
-   below instead of inheriting this blanket one. */
-.dark-mode .nav-drawer-inner,
-.dark-mode .top-toolbar .v-toolbar__content {
-  filter: invert(1) hue-rotate(180deg);
-}
-
-/* .v-application itself (Vuetify's white background on the outermost
-   #inspire element) is no longer covered by any filter either, now that
-   the blanket rule above moved down to .v-application--wrap's children
-   instead of sitting on .v-application directly - a real reported bug
-   ("the color behind the logo [top-left corner] is wrong"): any gap a
-   filtered child doesn't fully cover (e.g. around .app-logo, which has a
-   transparent background, sitting right over this element in that corner)
-   let this stock white show through unfiltered.
-   These two values are deliberately NOT an arbitrary dark pick - a real
-   reported follow-up ("match the bg color to the same colors used in
-   other bg areas of the top toolbar") - they're what .top-toolbar's
-   background (a real .v-app-bar, still covered by the blanket invert,
-   unlike .v-application itself now) actually computes to in each state:
-   plain white inverted (dark mode alone) is exactly #000 (invert(1) maps
-   #fff -> #000; hue-rotate has no effect on a saturation-less grayscale
-   value), and Subdued Palette's #e1e1e1 app-bar override (see
-   .desaturate-app-colors.v-application's rule further below) inverted the
-   same way is exactly #1e1e1e - not an approximation, the literal
-   invert(#e1e1e1) result.
-   Both need !important - .desaturate-app-colors.v-application's plain
-   #e1e1e1 rule further below already carries it, so without matching
-   !important here, THAT rule (same specificity, 2 classes) kept winning
-   the dark+Subdued combination by source order, a real reported case of
-   this not actually taking effect ("the bg color is wrong... with both
-   dark mode and dark mode + subdued"). */
+/* Dark Mode (see Configuration.vue's switch, bound to darkMode below) uses
+   Vuetify's built-in dark theme (see the darkMode watcher: $vuetify.theme.dark),
+   which switches every Vuetify component to its .theme--dark colors, plus the
+   overrides below for this app's hardcoded colors. There is no filter on
+   the app, so canvases, color swatches and the emulator screen are never
+   recolored: they keep their true colors with no special handling. */
 .dark-mode.v-application {
   background-color: #000 !important;
 }
@@ -1377,102 +1280,23 @@ export default {
   background-color: #1e1e1e !important;
 }
 
-/* .emulator-drawer is deliberately left OUT of the blanket rule above
-   (excluded by the :not() there), so none of its CSS properties -
-   including this background - come from inheriting an ancestor's filter
-   anymore; Vuetify's stock .theme--light.v-navigation-drawer white
-   background needs an explicit dark replacement instead, the same
-   direct-property technique (not filter-based) already used for Blockly's
-   workspace background above.
-   Same two derived values as .v-application just above (a real reported
-   follow-up - "the bg color is wrong in the emulator pane as well", the
-   same hardcoded-flat-#1e1e1e-regardless-of-Subdued mismatch) and for the
-   identical reason: .emulator-drawer is ALSO a plain .theme--light.
-   v-navigation-drawer, so Subdued Palette's #e1e1e1 drawer override
-   (the exact same rule .v-application's comment already points at) applies
-   to it too whenever Subdued is active - #000 when only Dark Mode is on
-   (invert(#fff)), #1e1e1e when both are (invert(#e1e1e1)). */
-.dark-mode .emulator-drawer.theme--light.v-navigation-drawer {
+.dark-mode .emulator-drawer.theme--dark.v-navigation-drawer,
+.dark-mode .nav-drawer.theme--dark.v-navigation-drawer,
+.dark-mode .top-toolbar.theme--dark.v-app-bar.v-toolbar.v-sheet {
   background-color: #000 !important;
 }
 
-.dark-mode.desaturate-app-colors .emulator-drawer.theme--light.v-navigation-drawer {
+.dark-mode.desaturate-app-colors .emulator-drawer.theme--dark.v-navigation-drawer,
+.dark-mode.desaturate-app-colors .nav-drawer.theme--dark.v-navigation-drawer,
+.dark-mode.desaturate-app-colors .top-toolbar.theme--dark.v-app-bar.v-toolbar.v-sheet {
   background-color: #1e1e1e !important;
 }
 
-/* The drawer's chrome - toolbar row (Refresh Emulator button, key mapping
-   dialog), front-panel switches (power/color/difficulty/select/reset), ROM
-   build buttons, the "X bytes free" line and its progress bar
-   (.rom-capacity/.rom-capacity-bar), and the ROM capacity/variable-usage
-   log - still needs to follow Dark Mode like every other control on the
-   page. Each is a direct child of .emulator-drawer-inner, a SIBLING of
-   #gopher2600-target-container (confirmed directly against the live
-   rendered DOM, every single one of that element's children individually,
-   after a real reported gap here already missed .rom-capacity/
-   .rom-capacity-bar on the first pass), never an ancestor of it - so
-   filtering them individually here can't touch the canvas's rendering at
-   all, not even through the two-cancelling-filters mechanism the comment
-   above diagnosed as imprecise. This is what actually keeps the drawer's
-   UI chrome following Dark Mode now that the blanket rule above no longer
-   reaches it. */
-.dark-mode .emulator-toolbar-row,
-.dark-mode .panel-switches-row,
-.dark-mode .rom-buttons-row,
-.dark-mode .rom-capacity,
-.dark-mode .rom-capacity-bar,
-.dark-mode .rom-capacity-log {
-  filter: invert(1) hue-rotate(180deg);
-}
-
-/* .v-navigation-drawer__border (Vuetify's internal divider line, see its
-   rule further below) is shared by BOTH .nav-drawer (still covered by the
-   blanket invert above, so its copy already lands on white-based
-   naturally) and .emulator-drawer (excluded from that same blanket invert
-   now, so its copy would otherwise stay stuck at the plain rgba(0, 0, 0,
-   0.24) that rule sets - a real reported case of the same "black-based
-   rgba invisible against a now-dark surface" issue already fixed for the
-   console log's border/handle, just for this drawer's left edge instead).
-   Scoped to .emulator-drawer specifically so .nav-drawer's
-   (already-correct) border is untouched. */
-.dark-mode .emulator-drawer .v-navigation-drawer__border {
-  background-color: rgba(255, 255, 255, 0.24) !important;
-}
-
-/* .nav-drawer is now excluded from the blanket rule too (see above), so its
-   copy of this same border - like .emulator-drawer's - needs this same
-   explicit, filter-independent override instead of relying on inheriting
-   any ancestor's invert. Literally the same CSS value as .emulator-drawer's
-   copy just above and as .top-toolbar's border-bottom below - all three are
-   meant to read as one continuous line/color around the same chrome, so
-   all three use this exact literal rgba(), not three separately-derived
-   approximations of it. */
+.dark-mode .emulator-drawer .v-navigation-drawer__border,
 .dark-mode .nav-drawer .v-navigation-drawer__border {
   background-color: rgba(255, 255, 255, 0.24) !important;
 }
 
-/* .nav-drawer's border-top and .top-toolbar's border-bottom - same
-   literal value again, now safe to set directly since both are excluded
-   from the blanket rule above (no filter left anywhere in their rendering
-   to reprocess it). A real reported case of this NOT working
-   while still under the blanket filter ("the top border is still the wrong
-   color", "left toolbar top border/logo bottom border color is still
-   wrong") - setting it directly on a still-filtered element doesn't survive
-   as the literal value authored (see the long comment on the blanket rule's
-   :not() list above for why), so the two had to be structurally excluded
-   first, not just given a more insistent override.
-   ".dark-mode.v-application", not just ".dark-mode", on both - a real
-   follow-up report of this STILL not working even once excluded ("it gets
-   darker instead of lighter") traced to a genuine specificity tie: Vue's
-   scoped-style compiler turns .nav-drawer/.top-toolbar's rules into
-   ".nav-drawer[data-v-xxxxx]"/".top-toolbar[data-v-xxxxx]" behind the
-   scenes, an attribute selector that counts the same as a class for
-   specificity - exactly two selectors, tying ".dark-mode .nav-drawer"/
-   ".dark-mode .top-toolbar" (also two), with the scoped original winning
-   the tie by appearing later in the compiled stylesheet. Confirmed directly
-   via document.styleSheets, not assumed. Adding ".v-application" (always
-   true here, .dark-mode only ever applies alongside it on the same root
-   element) makes it three selectors, breaking the tie outright rather than
-   hoping source order favors this rule. */
 .dark-mode.v-application .nav-drawer {
   border-top-color: rgba(255, 255, 255, 0.24) !important;
 }
@@ -1481,250 +1305,22 @@ export default {
   border-bottom-color: rgba(255, 255, 255, 0.24) !important;
 }
 
-/* .nav-drawer's and .top-toolbar's backgrounds - same derived two-value
-   pattern as .v-application/.emulator-drawer above, for the identical
-   reason: now excluded from the blanket invert, Vuetify's stock white (or
-   Subdued Palette's #e1e1e1 .theme--light.v-navigation-drawer/.v-app-bar
-   override) needs an explicit dark replacement instead of inheriting one. */
-.dark-mode .nav-drawer.theme--light.v-navigation-drawer,
-.dark-mode .top-toolbar.theme--light.v-app-bar.v-toolbar.v-sheet {
-  background-color: #000 !important;
-}
-
-.dark-mode.desaturate-app-colors .nav-drawer.theme--light.v-navigation-drawer,
-.dark-mode.desaturate-app-colors .top-toolbar.theme--light.v-app-bar.v-toolbar.v-sheet {
-  background-color: #1e1e1e !important;
-}
-
-/* Counter-inverted (the identical filter, applied a second time, cancels
-   the ancestor's filter out) - every element here shows a REAL, meaningful
-   color that Dark Mode must leave untouched rather than recolor. The
-   emulator's game-screen canvas no longer needs an entry here at all (see
-   the .emulator-drawer exclusion above - it's structurally outside the
-   filtered subtree now, not relying on a cancellation that turned out
-   imprecise for it specifically) - every pixel/graphics editor's canvas
-   and real-palette color swatch/picker dot app-wide still use the plain
-   cancellation approach, since none of them are continuously-repainted
-   WASM content the way the emulator is, and each is a single element with
-   no similar nesting risk either way. */
-.dark-mode .editor-canvas,
-.dark-mode .grid-overlay-canvas,
-.dark-mode .palette-swatch,
-.dark-mode .quick-color-swatch,
-.dark-mode .row-swatch,
-.dark-mode .example-screenshot-frame,
-.dark-mode .color-swatch-picker-dot,
-.dark-mode .sequence-chip,
-.dark-mode .instrument-summary-chip {
-  filter: invert(1) hue-rotate(180deg);
-}
-
-/* Same cancellation technique, for a different reason: GeneratedCode.vue's
-   code pane (.code-scroll-wrapper, covering the line-number gutter and the
-   syntax-highlighted code itself) already has a fixed dark theme
-   (duotone-sea.css) completely independent of this app's Dark Mode -
-   a real reported requirement ("the generated code background and text
-   colors shouldn't change when dark mode is on... the text area that shows
-   the generated code"). Inverting an already-dark, already-colour-coded
-   syntax theme doesn't produce a lighter version of it the way inverting
-   this app's light-mode UI does - it just scrambles syntax-highlighting
-   colours that were never meant to invert in the first place, so this
-   cancels Dark Mode out entirely for that one pane rather than trying to
-   pick individual colours to leave alone within it. */
-.dark-mode .code-scroll-wrapper {
-  filter: invert(1) hue-rotate(180deg);
-}
-
-/* The top app toolbar's per-tab icon/text colors - a real reported
-   requirement ("don't invert app toolbar icon and text colors"). Scoped to
-   .top-toolbar specifically (not the left sidebar's identically-named
-   classes, see the .nav-drawer rule elsewhere) and to just these per-item
-   classes (not the whole toolbar), so the bar's background still darkens
-   normally with everything else - only each tab's brand color stays true.
-   Same class list Subdued Palette's tab-color rules already use further
-   below. */
-.dark-mode .top-toolbar .actions-item,
-.dark-mode .top-toolbar .titlescreen-item,
-.dark-mode .top-toolbar .player-item,
-.dark-mode .top-toolbar .background-item,
-.dark-mode .top-toolbar .sound-item,
-.dark-mode .top-toolbar .music-item,
-.dark-mode .top-toolbar .text-tab-item,
-.dark-mode .top-toolbar .data-item,
-.dark-mode .top-toolbar .scorefont-item,
-.dark-mode .top-toolbar .configuration-item,
-.dark-mode .top-toolbar .generated-item,
-.dark-mode .top-toolbar .project-item {
-  filter: invert(1) hue-rotate(180deg);
-}
-
-/* The ENTIRE Blockly component (workspace, blocks, toolbox sidebar, flyout
-   drawer) is excluded from the blanket invert as ONE rule on its outermost
-   element - not as several separate rules on its individual pieces, which
-   is what this used to do (.blocklyBlockCanvas/.blocklyFlyout separately)
-   until a real reported bug ("blocks in the toolbox drawer are still
-   inverted") traced back to exactly that: .blocklyFlyout wraps a nested
-   .blocklyBlockCanvas (the flyout is really just a lightweight second
-   workspace, with the same block-canvas structure as the main one - confirmed
-   directly against the installed Blockly bundle), so giving BOTH of them
-   their identical cancel-filter stacked TWO deep inside the ancestor's
-   invert (3 inversions total: ancestor + flyout + nested block canvas) is
-   net INVERTED again, the same parity bug already hit once for the
-   emulator above. One rule on the single outermost ancestor (.blocklyDiv)
-   has no such nesting to get wrong. Blocks already have their
-   dedicated, more precise JS-based color handling anyway
-   (desaturateHex/getBlockStyleForColour in BlocklyComponent.vue) - RGB
-   channel inversion only approximates an HSL lightness flip, and a block's
-   color sits at a roughly 50% HSL lightness by construction, too close to
-   that transform's fixed point to actually read as darker, confirmed as a
-   real reported "blocks are too bright" once Subdued Palette's
-   desaturation made that flat midtone impossible to miss. See
-   BlocklyComponent.vue's darkenHex for how block colors handle Dark Mode
-   instead - and the .blocklyMainBackground rule right below for how the
-   plain workspace grid still gets a dark background despite the whole
-   component otherwise sitting outside the blanket invert. */
-.dark-mode .blocklyDiv {
-  filter: invert(1) hue-rotate(180deg);
-}
-
-/* Not filter-based (unlike every exclusion above) - .blocklyDiv's blanket
-   exclusion just above means nothing inside it inverts anymore at all, so
-   the plain workspace grid needs an explicit dark background instead to
-   still read as "this tab is in Dark Mode too" the way every other tab's
-   background does.
-   Targets .blocklySvg, confirmed directly against the installed Blockly
-   bundle to be the element actually carrying this background in Blockly's
-   stock CSS (`.blocklySvg { background-color: #fff; ... }`, a real class
-   rule, not an inline style) - a real reported regression chain: a first
-   attempt set `fill: #1e1e1e !important` directly on .blocklyMainBackground,
-   which replaced that element's inline `style.fill = "url(#blocklyGrid
-   Pattern...)"` (confirmed via WorkspaceSvg.prototype.createDom - the grid
-   pattern IS that rect's entire fill, not a separate solid color sitting
-   behind the grid, and the
-   pattern's tile has no solid base either, only the <line> elements below),
-   hiding the grid dots behind a flat fill instead of coexisting with them.
-   Switching the background to .blocklyDiv (this component's outer wrapper)
-   instead fixed the grid, but left the canvas showing light-mode white
-   regardless (confirmed live via getComputedStyle: .blocklySvg's
-   opaque white background paints directly over .blocklyDiv's, since the
-   SVG covers 100% of it) - this is the actual fix, on the actual element
-   responsible. */
+/* Blockly keeps its light-theme colors for everything but the workspace
+   background (blocks are darkened by BlocklyComponent.vue's darkenHex). */
 .dark-mode .blocklySvg {
   background-color: #1e1e1e !important;
 }
 
-/* The grid dots/lines Blockly draws across that background are a <line>
-   inside a <pattern id="blocklyGridPattern...">, with their colour set as a
-   plain SVG "stroke" attribute (confirmed directly against the installed
-   Blockly bundle, Grid.createDom) rather than through a CSS class - a real
-   reported bug ("can't see the grid dots in dark mode") once the
-   background above went dark while these kept their original light-mode
-   stroke colour. CSS always wins over a presentation attribute regardless
-   of selector specificity, so a plain attribute-prefix selector is enough
-   to override it (the "Pattern" suffix is a random per-injection string,
-   hence the ^= prefix match instead of a plain ID selector). Lighter than
-   the dark background, not darker - a dot has to stand out AGAINST that
-   background, the same reason light-mode's default stroke colour is a
-   light grey sitting on white, just inverted here (dark background, light
-   dots) instead. */
 .dark-mode .blocklyDiv [id^="blocklyGridPattern"] line {
   stroke: #595959 !important;
 }
 
-/* Same reasoning as .blocklyMainBackground/the grid lines above, not the
-   filter re-invert trick the rule just below this one uses - a real
-   reported requirement ("the background behind the blocks in drawers
-   needs to be updated as well"): the flyout/drawer's background shape
-   (.blocklyFlyoutBackground, "fill: #ddd" by default) is a SIBLING of its
-   block canvas, not an ancestor of it, so a plain direct fill override
-   here has no effect at all on whether the blocks sitting on top of it
-   stay excluded from the blanket invert - those two are independent. */
 .dark-mode .blocklyFlyoutBackground {
   fill: #1e1e1e !important;
 }
 
-/* Re-included (a THIRD invert, nested two deep inside the already-excluded
-   .blocklyDiv, nets back to inverted - see .blocklyDiv's comment above for
-   the parity math) - these pieces DO still need to follow Dark Mode
-   despite living inside the otherwise-excluded Blockly component: the
-   toolbox sidebar's background (a real reported requirement - blocks/
-   flyout stay excluded, but .blocklyToolboxDiv itself isn't a block), and
-   the zoom/grid-snap/multiselect control icons (.blocklyZoom/
-   .blocklyMultiselect/.grid-snap-icon-group - plain <image>/hand-drawn
-   <rect> icons, not block-colored SVG paths, so inverting them is exactly
-   the same safe, icon-appropriate treatment every other tab's icons
-   already get - .grid-snap-icon-group specifically needs a dedicated class
-   for this to even reach it, confirmed live that it does NOT end up a
-   descendant of .blocklyMultiselect despite ActionEditor.vue's comment
-   there suggesting otherwise - see that class's comment for the live DOM
-   check that found this). */
-.dark-mode .blocklyToolboxDiv,
-.dark-mode .blocklyZoom,
-.dark-mode .blocklyMultiselect,
-.dark-mode .grid-snap-icon-group,
-.dark-mode .blockly-ws-search {
-  filter: invert(1) hue-rotate(180deg);
-}
-
-/* @blockly/toolbox-search's result label - the "Type to search for
-   blocks"/"No matching blocks found" text it shows in the flyout (see
-   node_modules/@blockly/toolbox-search/dist/index.js's matchBlocks(),
-   which pushes a plain {kind: "label", text: ...} flyout item) - stayed
-   plain black even with the filter re-include every OTHER flyout label
-   relied on (.blocklyFlyoutLabelText, e.g. the Variables category's
-   "Create variable..." button, which DOES invert correctly), confirmed as
-   a real reported gap specific to this plugin's label. Direct,
-   filter-independent fill instead, same reasoning as the native-<input>
-   overrides just below (that plugin's search box's typed/placeholder
-   text). */
 .dark-mode .blocklyFlyoutLabelText {
   fill: #fff !important;
-}
-
-/* .blockly-ws-search is @blockly/plugin-workspace-search's search-bar
-   panel (BlocklyComponent.vue's ">>> .blockly-ws-search { box-shadow: none
-   }" comment has its full background/border details) - a plain white box
-   with plain black text, same as the toolbox's search field, and a
-   real reported gap the same way ("the colors of the search drawer text
-   need to be inverted when dark mode is on... the search drawer text on
-   the Actions tab"). Included above rather than left excluded, since
-   unlike the generated-code pane just above, this one has no fixed theme
-   worth preserving - it's ordinary UI chrome the same as every other
-   panel Dark Mode already recolors. */
-
-/* @blockly/toolbox-search's native <input type="search"> (see
-   node_modules/@blockly/toolbox-search/dist/index.js's createDom_) sits
-   inside .blocklyToolboxDiv, which already carries dark mode's
-   filter: invert(1) hue-rotate(180deg) (see that rule above) - so both
-   its typed text and its placeholder get composited through THAT filter
-   same as everything else in the toolbox, same "counter-invert" math
-   .blocklyDiv's comment documents for every other re-included piece of
-   this component. Authoring light colors here (the first real attempt at
-   this fix) gets inverted a SECOND time by that ancestor filter, landing
-   back on dark text - the exact "still dark" bug reported, twice. The fix
-   is authoring the PRE-invert color instead: dark gray/white-as-black
-   here becomes light once the ancestor's filter inverts it. */
-.dark-mode .blocklyTreeRowContentContainer input {
-  color: #000 !important;
-  -webkit-text-fill-color: #000 !important;
-}
-
-.dark-mode .blocklyTreeRowContentContainer input::placeholder {
-  color: rgba(0, 0, 0, 0.6) !important;
-}
-
-/* Same native-<input>-doesn't-composite-through-filter quirk, same direct
-   fix, now for @blockly/plugin-workspace-search's search box
-   (.blockly-ws-search-input input - see node_modules/@blockly/
-   plugin-workspace-search/src/css.js) - it sits inside .blockly-ws-search,
-   which gets this exact filter declared directly on itself just above,
-   the same situation .blocklyToolboxDiv's search input was in. */
-.dark-mode .blockly-ws-search-input input {
-  color: #fff !important;
-}
-
-.dark-mode .blockly-ws-search-input input::placeholder {
-  color: rgba(255, 255, 255, 0.6) !important;
 }
 
 /* All gated behind "Soft Colors" (see Configuration.vue's switch,
@@ -2886,6 +2482,377 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
 .titlescreen-play-btn:hover .v-icon {
   color: rgba(0, 0, 0, 0.87) !important;
 }
+/* Dark Mode overrides for this app's hardcoded light-theme colors (every
+   rule is prefixed with .dark-mode.v-application and uses !important so it
+   outranks the component's scoped rule it replaces). Grouped by what they
+   are: icon button colors, dividers/borders, and the light surfaces
+   (toolbars, cards inside editors, rows). */
+.dark-mode {
+  --editor-icon-rest-color: rgba(255, 255, 255, 0.5);
+}
+
+/* Icon buttons: dim at rest, bright on hover, dimmer still when disabled. */
+.dark-mode.v-application .emulator-toolbar-row .emulator-flat-icon-btn.v-btn .v-icon,
+.dark-mode.v-application .get-tools .v-btn .v-icon,
+.dark-mode.v-application .pixel-editor-tools .v-btn .v-icon,
+.dark-mode.v-application .pixel-grid-toggle-btn .v-icon,
+.dark-mode.v-application .pixel-grid-toggle-label,
+.dark-mode.v-application .unified-toolbar-height-btn,
+.dark-mode.v-application .reset-to-defaults-btn.v-btn,
+.dark-mode.v-application .data-toolbar-row .v-btn .v-icon,
+.dark-mode.v-application .data-flat-icon-btn .v-icon,
+.dark-mode.v-application .generated-code-toolbar-row .v-btn .v-icon,
+.dark-mode.v-application .generated-code-flat-icon-btn .v-icon,
+.dark-mode.v-application .project-toolbar-row .v-btn .v-icon,
+.dark-mode.v-application .soundfx-bank-btn .v-icon,
+.dark-mode.v-application .soundfx-instrument-btn .v-icon,
+.dark-mode.v-application .soundfx-stop-btn .v-icon,
+.dark-mode.v-application .soundfx-play-btn .v-icon,
+.dark-mode.v-application .music-flat-icon-btn .v-icon,
+.dark-mode.v-application .titlescreen-play-btn .v-icon {
+  color: rgba(255, 255, 255, 0.5) !important;
+}
+
+.dark-mode.v-application .emulator-toolbar-row .emulator-flat-icon-btn.v-btn:hover .v-icon,
+.dark-mode.v-application .get-tools .v-btn:not(.v-btn--disabled):hover .v-icon,
+.dark-mode.v-application .pixel-editor-tools .v-btn:hover .v-icon,
+.dark-mode.v-application .pixel-grid-toggle-btn:not(.v-btn--disabled):hover .v-icon,
+.dark-mode.v-application .pixel-grid-toggle-btn:not(.v-btn--disabled):hover .pixel-grid-toggle-label,
+.dark-mode.v-application .unified-toolbar-height-btn:not(.v-btn--disabled):hover,
+.dark-mode.v-application .reset-to-defaults-btn.v-btn:hover,
+.dark-mode.v-application .data-toolbar-row .v-btn:not(.v-btn--disabled):hover .v-icon,
+.dark-mode.v-application .data-flat-icon-btn:hover .v-icon,
+.dark-mode.v-application .generated-code-toolbar-row .v-btn:not(.v-btn--disabled):hover .v-icon,
+.dark-mode.v-application .generated-code-flat-icon-btn:hover .v-icon,
+.dark-mode.v-application .project-toolbar-row .v-btn:not(.v-btn--disabled):hover .v-icon,
+.dark-mode.v-application .soundfx-bank-btn:hover .v-icon,
+.dark-mode.v-application .soundfx-instrument-btn:hover .v-icon,
+.dark-mode.v-application .soundfx-stop-btn:hover .v-icon,
+.dark-mode.v-application .soundfx-play-btn:hover .v-icon,
+.dark-mode.v-application .music-flat-icon-btn:hover .v-icon,
+.dark-mode.v-application .titlescreen-play-btn:hover .v-icon,
+.dark-mode.v-application .import-icon-btn:hover {
+  color: #fff !important;
+}
+
+.dark-mode.v-application .get-tools .v-btn--disabled .v-icon,
+.dark-mode.v-application .data-toolbar-row .v-btn--disabled .v-icon,
+.dark-mode.v-application .project-toolbar-row .v-btn--disabled .v-icon,
+.dark-mode.v-application .music-flat-icon-btn.v-btn--disabled .v-icon {
+  color: rgba(255, 255, 255, 0.2) !important;
+}
+
+.dark-mode.v-application .emulator-toolbar-row .emulator-flat-icon-btn.v-btn:active .v-icon,
+.dark-mode.v-application .titlescreen-play-btn:active .v-icon,
+.dark-mode.v-application .titlescreen-play-btn.v-btn--loading .v-icon {
+  color: var(--v-primary-base, #1976d2) !important;
+}
+
+.dark-mode.v-application .pixel-grid-toggle-btn-active .pixel-grid-toggle-label {
+  color: #fff !important;
+}
+
+/* The tab area and the sticky toolbars above each editor: black like the
+   sidebar (cards inside the tab stay #1e1e1e so they stand out). */
+.dark-mode.v-application .graphic-editor-toolbar,
+.dark-mode.v-application .data-toolbar,
+.dark-mode.v-application .generated-code-toolbar,
+.dark-mode.v-application .generated-code-search-dock,
+.dark-mode.v-application .music-toolbar,
+.dark-mode.v-application .piano-roll-zoom-row,
+.dark-mode.v-application .piano-roll-step-header,
+.dark-mode.v-application .piano-roll-label-spacer,
+.dark-mode.v-application .project-toolbar,
+.dark-mode.v-application .soundfx-toolbar,
+.dark-mode.v-application .editor-container.theme--dark.v-card {
+  background-color: #000 !important;
+}
+
+.dark-mode.v-application .data-value-row {
+  background-color: #1e1e1e !important;
+}
+
+/* With Subdued Palette the tab area is the same softer #1e1e1e as the rest. */
+.dark-mode.desaturate-app-colors.v-application .graphic-editor-toolbar,
+.dark-mode.desaturate-app-colors.v-application .data-toolbar,
+.dark-mode.desaturate-app-colors.v-application .generated-code-toolbar,
+.dark-mode.desaturate-app-colors.v-application .generated-code-search-dock,
+.dark-mode.desaturate-app-colors.v-application .music-toolbar,
+.dark-mode.desaturate-app-colors.v-application .piano-roll-zoom-row,
+.dark-mode.desaturate-app-colors.v-application .piano-roll-step-header,
+.dark-mode.desaturate-app-colors.v-application .piano-roll-label-spacer,
+.dark-mode.desaturate-app-colors.v-application .project-toolbar,
+.dark-mode.desaturate-app-colors.v-application .soundfx-toolbar,
+.dark-mode.desaturate-app-colors.v-application .editor-container.theme--dark.v-card {
+  background-color: #1e1e1e !important;
+}
+
+/* Dividers and outlines that were a dark line on white. */
+.dark-mode.v-application .graphic-editor-toolbar-scrolled,
+.dark-mode.v-application .data-toolbar-scrolled,
+.dark-mode.v-application .generated-code-toolbar-scrolled,
+.dark-mode.v-application .music-toolbar-scrolled,
+.dark-mode.v-application .project-toolbar-scrolled,
+.dark-mode.v-application .soundfx-toolbar-scrolled {
+  border-bottom-color: rgba(255, 255, 255, 0.24) !important;
+}
+
+.dark-mode.v-application .soundfx-envelope-graph-toolbar,
+.dark-mode.v-application .generated-code-search-dock {
+  border-top-color: rgba(255, 255, 255, 0.24) !important;
+}
+
+.dark-mode.v-application .animation-card,
+.dark-mode.v-application .background-card,
+.dark-mode.v-application .data-card,
+.dark-mode.v-application .soundfx-card,
+.dark-mode.v-application .text-card,
+.dark-mode.v-application .song-card,
+.dark-mode.v-application .titlescreen-card,
+.dark-mode.v-application .titlescreen-screen-card,
+.dark-mode.v-application .data-format-menu,
+.dark-mode.v-application .v-menu__content > .v-card,
+.dark-mode.v-application .v-dialog > .v-card,
+.dark-mode.v-application .error-message {
+  border-color: rgba(255, 255, 255, 0.24) !important;
+}
+
+.dark-mode.v-application .data-values {
+  background-color: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+/* Text that was dark grey. */
+.dark-mode.v-application .about-version,
+.dark-mode.v-application .app-logo-version,
+.dark-mode.v-application .key-mapping-hint,
+.dark-mode.v-application .quick-color-section-label,
+.dark-mode.v-application .music-section-label,
+.dark-mode.v-application .generated-code-search-count,
+.dark-mode.v-application .titlescreen-add-limit-note,
+.dark-mode.v-application .compile-log-info {
+  color: rgba(255, 255, 255, 0.7) !important;
+}
+
+.dark-mode.v-application .copy-paste-color-badge {
+  background: #1e1e1e;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* The thin scrollbars and resize handles. */
+.dark-mode * {
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+}
+
+.dark-mode ::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.3);
+}
+
+.dark-mode ::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.5);
+}
+
+.dark-mode .emulator-resize-handle:hover,
+.dark-mode .error-resize-handle:hover {
+  background-color: rgba(255, 255, 255, 0.15);
+}
+
+.dark-mode .emulator-resize-handle::after,
+.dark-mode .error-resize-handle::after {
+  background-color: rgba(255, 255, 255, 0.3);
+}
+
+.dark-mode .emulator-resize-handle:hover::after,
+.dark-mode .error-resize-handle:hover::after {
+  background-color: rgba(255, 255, 255, 0.5);
+}
+/* Help text: several templates put .theme--light on a .v-messages paragraph. */
+.dark-mode.v-application .v-messages.theme--light,
+.dark-mode.v-application .theme--light.v-messages {
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+
+/* The per-tab colors of the nav drawer and top toolbar, lightened so the
+   darker ones (Sound, Text, Data...) stay readable. These are only text and
+   icons; nothing in them is a canvas or a color swatch. */
+.dark-mode.v-application .nav-drawer .actions-item,
+.dark-mode.v-application .nav-drawer .titlescreen-item,
+.dark-mode.v-application .nav-drawer .player-item,
+.dark-mode.v-application .nav-drawer .background-item,
+.dark-mode.v-application .nav-drawer .sound-item,
+.dark-mode.v-application .nav-drawer .music-item,
+.dark-mode.v-application .nav-drawer .text-tab-item,
+.dark-mode.v-application .nav-drawer .data-item,
+.dark-mode.v-application .nav-drawer .scorefont-item,
+.dark-mode.v-application .nav-drawer .configuration-item,
+.dark-mode.v-application .nav-drawer .generated-item,
+.dark-mode.v-application .nav-drawer .project-item,
+.dark-mode.v-application .top-toolbar .actions-item,
+.dark-mode.v-application .top-toolbar .titlescreen-item,
+.dark-mode.v-application .top-toolbar .player-item,
+.dark-mode.v-application .top-toolbar .background-item,
+.dark-mode.v-application .top-toolbar .sound-item,
+.dark-mode.v-application .top-toolbar .music-item,
+.dark-mode.v-application .top-toolbar .text-tab-item,
+.dark-mode.v-application .top-toolbar .data-item,
+.dark-mode.v-application .top-toolbar .scorefont-item,
+.dark-mode.v-application .top-toolbar .configuration-item,
+.dark-mode.v-application .top-toolbar .generated-item,
+.dark-mode.v-application .top-toolbar .project-item {
+  filter: brightness(1.5);
+}
+
+.dark-mode.desaturate-app-colors.v-application .nav-drawer .actions-item,
+.dark-mode.desaturate-app-colors.v-application .nav-drawer .titlescreen-item,
+.dark-mode.desaturate-app-colors.v-application .nav-drawer .player-item,
+.dark-mode.desaturate-app-colors.v-application .nav-drawer .background-item,
+.dark-mode.desaturate-app-colors.v-application .nav-drawer .sound-item,
+.dark-mode.desaturate-app-colors.v-application .nav-drawer .music-item,
+.dark-mode.desaturate-app-colors.v-application .nav-drawer .text-tab-item,
+.dark-mode.desaturate-app-colors.v-application .nav-drawer .data-item,
+.dark-mode.desaturate-app-colors.v-application .nav-drawer .scorefont-item,
+.dark-mode.desaturate-app-colors.v-application .nav-drawer .configuration-item,
+.dark-mode.desaturate-app-colors.v-application .nav-drawer .generated-item,
+.dark-mode.desaturate-app-colors.v-application .nav-drawer .project-item,
+.dark-mode.desaturate-app-colors.v-application .top-toolbar .actions-item,
+.dark-mode.desaturate-app-colors.v-application .top-toolbar .titlescreen-item,
+.dark-mode.desaturate-app-colors.v-application .top-toolbar .player-item,
+.dark-mode.desaturate-app-colors.v-application .top-toolbar .background-item,
+.dark-mode.desaturate-app-colors.v-application .top-toolbar .sound-item,
+.dark-mode.desaturate-app-colors.v-application .top-toolbar .music-item,
+.dark-mode.desaturate-app-colors.v-application .top-toolbar .text-tab-item,
+.dark-mode.desaturate-app-colors.v-application .top-toolbar .data-item,
+.dark-mode.desaturate-app-colors.v-application .top-toolbar .scorefont-item,
+.dark-mode.desaturate-app-colors.v-application .top-toolbar .configuration-item,
+.dark-mode.desaturate-app-colors.v-application .top-toolbar .generated-item,
+.dark-mode.desaturate-app-colors.v-application .top-toolbar .project-item {
+  filter: saturate(50%) brightness(1.5);
+}
+/* Blockly's toolbox and its small control icons (which are dark images). */
+.dark-mode .blocklyToolboxDiv {
+  background-color: #1e1e1e !important;
+}
+
+.dark-mode .blocklyTreeRow:hover,
+.dark-mode .blocklyTreeSelected {
+  background-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+.dark-mode.v-application .blocklyZoom > image,
+.dark-mode.v-application .blocklyZoom > svg > image {
+  filter: brightness(0) invert(1) !important;
+}
+
+.dark-mode.v-application .blocklyMultiselect:not(.blockly-multiselect-active) > image,
+.dark-mode.v-application .blocklyMultiselect:not(.blockly-multiselect-active) > svg > image,
+.dark-mode.v-application .grid-snap-icon-group {
+  filter: invert(1);
+}
+/* The Music tab's piano roll and the sound envelope graph: faint dark lines
+   and shading on white become faint light ones on dark. */
+.dark-mode.v-application .piano-roll-row:nth-child(odd),
+.dark-mode.v-application .piano-roll-cell:nth-child(even),
+.dark-mode.v-application .piano-roll-volume-cell:nth-child(even) {
+  background-color: rgba(255, 255, 255, 0.03) !important;
+}
+
+.dark-mode.v-application .piano-roll-label {
+  background-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+.dark-mode.v-application .piano-roll-cell,
+.dark-mode.v-application .piano-roll-volume-cell {
+  border-left-color: rgba(255, 255, 255, 0.22) !important;
+  border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.dark-mode.v-application .piano-roll-volume-row {
+  border-top-color: rgba(255, 255, 255, 0.22) !important;
+}
+
+.dark-mode.v-application .piano-roll-step-number {
+  border-left-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+.dark-mode.v-application .piano-roll-volume-resize-handle,
+.dark-mode.v-application .piano-roll-height-resize-handle {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  border-top-color: rgba(255, 255, 255, 0.12) !important;
+  border-bottom-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+.dark-mode.v-application .piano-roll-volume-resize-handle:hover,
+.dark-mode.v-application .piano-roll-height-resize-handle:hover {
+  background-color: rgba(255, 255, 255, 0.16) !important;
+}
+
+.dark-mode.v-application .piano-roll-cell-row-unavailable,
+.dark-mode.v-application .piano-roll-label-row-unavailable,
+.dark-mode.v-application .piano-roll-cell-disabled,
+.dark-mode.v-application .piano-roll-cell-disabled:hover,
+.dark-mode.v-application .piano-roll-cell-length-disabled,
+.dark-mode.v-application .piano-roll-cell-length-disabled:hover {
+  background-color: rgba(0, 0, 0, 0.4) !important;
+}
+
+.dark-mode.v-application .piano-roll-scroll,
+.dark-mode.v-application .piano-roll-volume-scroll,
+.dark-mode.v-application .instrument-color-dot,
+.dark-mode.v-application .envelope-graph {
+  border-color: rgba(255, 255, 255, 0.24) !important;
+}
+
+.dark-mode.v-application .envelope-graph-scale-tick,
+.dark-mode.v-application .envelope-graph-stage-label,
+.dark-mode.v-application .envelope-graph-frame-label {
+  color: rgba(255, 255, 255, 0.6) !important;
+  -webkit-text-stroke-color: #1e1e1e !important;
+}
+
+.dark-mode.v-application .envelope-graph-snap-line-vertical {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark-mode.v-application .instrument-summary-chip-active,
+.dark-mode.v-application .sequence-chip-wrap-playing {
+  box-shadow: 0 0 0 2px #1e1e1e, 0 0 0 4px var(--v-primary-base, #1976d2) !important;
+}
+/* The sidebar's icons take the tab's text color (Vuetify's dark theme makes
+   them white). */
+.dark-mode.v-application .nav-drawer .v-list-item__icon .v-icon {
+  color: inherit !important;
+}
+/* The list behind each tab's cards shows the tab's black (Vuetify's dark
+   theme paints every v-list #1e1e1e). */
+.dark-mode.v-application .titlescreen-list,
+.dark-mode.v-application .titlescreen-card-list,
+.dark-mode.v-application .text-list,
+.dark-mode.v-application .soundfx-list,
+.dark-mode.v-application .background-list,
+.dark-mode.v-application .song-list,
+.dark-mode.v-application .data-list,
+.dark-mode.v-application .animation-list,
+.dark-mode.v-application .animation-frame-list,
+.dark-mode.v-application .about-list {
+  background-color: transparent !important;
+}
+/* With Subdued Palette the tab area is #1e1e1e, so its cards (and popup cards)
+   are a step lighter to stand out from it. */
+.dark-mode.desaturate-app-colors.v-application .theme--dark.v-card:not(.editor-container) {
+  background-color: #2a2a2a !important;
+}
+/* Without Subdued Palette the tab area is black and its cards are black too
+   (their borders set them apart). */
+.dark-mode:not(.desaturate-app-colors).v-application .theme--dark.v-card:not(.editor-container) {
+  background-color: #000 !important;
+}
+/* A list inside a popup (the delete confirmations, Set height...) takes the
+   popup card's color instead of Vuetify's list color, which left it a
+   different shade from the rest of the popup. */
+.dark-mode.v-application .v-menu__content .theme--dark.v-list,
+.dark-mode.v-application .v-dialog__content .theme--dark.v-list {
+  background-color: transparent !important;
+}
 </style>
 <style scoped>
 /* Vuetify animates the drawer's width over 200ms, but the emulator's scale is
@@ -2994,13 +2961,11 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
   height: auto;
 }
 
-/* Dims the logo a bit under Dark Mode - at full brightness it read as too
-   stark/glaring against the rest of the now-dark UI (a real reported
-   case). This logo isn't excluded from the blanket invert filter (see
-   .dark-mode.v-application's rule) - it already inverts along with
-   everything else; this just layers a plain opacity reduction on top of
-   that inverted result. */
+/* The logo is inverted under Dark Mode (invert + hue-rotate keeps its hues,
+   the same look the old whole-app filter gave it), and dimmed a bit: at full
+   brightness it read as too stark against the dark UI. */
 .dark-mode .app-logo-img {
+  filter: invert(1) hue-rotate(180deg);
   opacity: 0.8;
 }
 

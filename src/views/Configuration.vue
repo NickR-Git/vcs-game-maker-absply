@@ -227,7 +227,7 @@
         <v-switch
           v-model="darkMode"
           label="Dark Mode"
-          hint="Inverts the app's colors for a dark theme. Combines with Subdued Palette below."
+          hint="Switches the app to a dark theme. Combines with Subdued Palette below."
           persistent-hint
           class="option-switch"
         />

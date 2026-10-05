@@ -39,6 +39,10 @@ import {ref} from '@vue/composition-api';
 // actual CSS rules to copy from.
 export const CSS_CLASS_DRAGGING = 'drag-reorder-dragging';
 export const CSS_CLASS_DRAG_OVER = 'drag-reorder-over';
+// Also set (with the one above) when the dragged item came from an earlier
+// position, so it will land AFTER the one dragged over - for lists laid out
+// side by side, where the drop mark goes on the near edge.
+export const CSS_CLASS_DRAG_OVER_AFTER = 'drag-reorder-over-after';
 
 export const useDragReorder = (getItems, setItems) => {
   const draggedIndex = ref(null);
@@ -56,6 +60,8 @@ export const useDragReorder = (getItems, setItems) => {
   const dragCardClass = (index) => ({
     [CSS_CLASS_DRAGGING]: draggedIndex.value === index,
     [CSS_CLASS_DRAG_OVER]: dragOverIndex.value === index && draggedIndex.value !== index,
+    [CSS_CLASS_DRAG_OVER_AFTER]: dragOverIndex.value === index && draggedIndex.value != null &&
+      draggedIndex.value < index,
   });
 
   const dragHandleListeners = (index) => ({

@@ -249,6 +249,19 @@
                       </v-card>
                     </v-menu>
 
+                    <v-btn
+                      :title="testingId === animation.id ? 'Building...' :
+                        buildInProgress ? 'Another build is already running - try again once it finishes' :
+                        'Test this animation (played by Player 0) in the emulator'"
+                      icon
+                      small
+                      :disabled="buildInProgress && testingId !== animation.id"
+                      :loading="testingId === animation.id"
+                      class="titlescreen-play-btn player-icon-btn-size"
+                      @click.stop="() => handleTestAnimation(animation)"
+                    >
+                      <v-icon>mdi-play</v-icon>
+                    </v-btn>
                     <confirm-delete-menu
                       v-if="state.animations.length > 1"
                       title="Delete this animation?"
@@ -264,6 +277,8 @@
                     v-for="(frame, frameIndex) in animation.frames"
                     v-bind:key="frame.id"
                     class="pixel-editor-parent-container"
+                    :class="frameDrag(animation).dragCardClass(frameIndex)"
+                    v-on="frameDrag(animation).dragTargetListeners(frameIndex)"
                   >
                     <div
                       class="pixel-editor-container"
@@ -274,6 +289,12 @@
                       }"
                       :style="{width: frameEditorWidth(animation)}"
                     >
+                      <div
+                        class="frame-drag-handle"
+                        title="Drag to reorder this frame"
+                        v-bind="frameDrag(animation).dragAttrs(frameIndex)"
+                        v-on="frameDrag(animation).dragHandleListeners(frameIndex)"
+                      ></div>
                       <v-text-field
                         label="Duration"
                         v-model.number="frame.duration"
@@ -415,9 +436,10 @@ import {useDragReorder} from '../hooks/drag-reorder';
 import {DEFAULT_ROW_COLOR, clearRowColors} from '../blocks/background';
 import {DEFAULT_SPRITES, processPlayerAnimationsStorageDefaults} from '../generators/bbasic/sprites';
 import {useColorPaletteStorage, useConfigurationStorage, useErrorStorage, usePixelGridOverlayStorage} from '../hooks/project';
+import {buildPlayerAnimationPreviewRom, useBuildInProgress} from '../hooks/rom';
 import {useEditorZoom} from '../hooks/zoom';
 import {colorByteToCss} from '../utils/palette';
-import {playfieldToMatrix, resizePixelMatrixHeight} from '../utils/pixels';
+import {playfieldToMatrix, resizePixelMatrixHeight, scaleRowColors} from '../utils/pixels';
 import {loadImageFromFile, openFileDialogMultiple, sortImportedAnimationFrameFiles} from '../utils/file';
 import {createCroppedResizedCanvas, createResizedCanvas} from '../utils/image';
 import {parseAsepriteSheet} from '../utils/aseprite';
@@ -613,6 +635,10 @@ export default defineComponent({
       if (!animation) return;
       heightMenuValue.value = Math.max(1, Math.min(64, heightMenuValue.value || 0));
       animation.frames.forEach((frame) => {
+        // Scaling the contents scales each row's color along with its pixels.
+        if (heightMenuScaleContents.value && frame.rowColors) {
+          frame.rowColors = scaleRowColors(frame.rowColors, frame.pixels.length, heightMenuValue.value);
+        }
         frame.pixels = resizePixelMatrixHeight(frame.pixels, heightMenuValue.value, 8, heightMenuScaleContents.value);
       });
       handleChildChange();
@@ -727,13 +753,37 @@ export default defineComponent({
         },
     );
 
+    // Frame reordering: one drag-reorder instance per animation, made on
+    // first use (the hook is per list), dropping a frame onto another moves
+    // it to that position. Frame ids don't change, so the selected frame
+    // stays selected.
+    const frameDragByAnimationId = new Map();
+    const frameDrag = (animation) => {
+      // Looked up again on every drop: the stored state can be rebuilt between renders.
+      const currentAnimation = () => state.value.animations.find(({id}) => id === animation.id) || animation;
+      if (!frameDragByAnimationId.has(animation.id)) {
+        frameDragByAnimationId.set(animation.id, useDragReorder(
+            () => currentAnimation().frames,
+            (items) => {
+              currentAnimation().frames = items;
+              handleChildChange();
+            },
+        ));
+      }
+      return frameDragByAnimationId.get(animation.id);
+    };
+
     const handleAddFrame = (animation) => {
       const frames = animation.frames;
       const maxId = getMaxId(frames);
-      // Prefill the new frame with the previous frame's graphic (a copy, so
-      // editing it does not change the frame it came from), falling back to an
-      // empty grid when the animation has no frames yet.
-      const previousFrame = frames[frames.length - 1];
+      // With a frame selected in this animation, the new frame is a copy of
+      // that one, placed right after it; otherwise it copies the last frame
+      // (a copy, so editing it does not change the frame it came from) and
+      // goes at the end, falling back to an empty grid when there are no
+      // frames yet.
+      const selectedIndex = activeAnimationId.value === animation.id ?
+        frames.findIndex((frame) => frame.id === activeFrameId.value) : -1;
+      const previousFrame = selectedIndex >= 0 ? frames[selectedIndex] : frames[frames.length - 1];
       const pixels = previousFrame ?
         structuredClone(previousFrame.pixels) :
         playfieldToMatrix(
@@ -747,7 +797,7 @@ export default defineComponent({
             '........');
       const newFrame = {
         id: maxId+1,
-        duration: 10,
+        duration: selectedIndex >= 0 ? previousFrame.duration : 10,
         pixels,
         // Copied the same "previous frame, or nothing" way as pixels just
         // above - a brand new frame with no previous one to copy from just
@@ -757,7 +807,8 @@ export default defineComponent({
           {rowColors: structuredClone(previousFrame.rowColors)} : {}),
       };
 
-      animation.frames.push(newFrame);
+      if (selectedIndex >= 0) frames.splice(selectedIndex + 1, 0, newFrame);
+      else frames.push(newFrame);
 
       handleChildChange();
       instance.proxy.$forceUpdate();
@@ -982,6 +1033,33 @@ export default defineComponent({
       instance.proxy.$forceUpdate();
     };
 
+    // Builds and loads a throwaway ROM where Player 0 plays just this
+    // animation (see buildPlayerAnimationPreviewRom).
+    const testingId = ref(null);
+    const buildInProgress = useBuildInProgress();
+    const handleTestAnimation = async (animation) => {
+      if (buildInProgress.value) return;
+      testingId.value = animation.id;
+      try {
+        // Middle of the lit pixels over all frames, so the drawing (not the 8x? box) is centered.
+        let minX = 8; let maxX = -1; let minY = Infinity; let maxY = -1;
+        animation.frames.forEach((frame) => (frame.pixels || []).forEach((row, y) => row.forEach((on, x) => {
+          if (!on) return;
+          minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+          minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+        })));
+        const rows = Math.max(...animation.frames.map((frame) => (frame.pixels || []).length), 1);
+        await buildPlayerAnimationPreviewRom(state.value.animations.indexOf(animation),
+            maxX < 0 ? 4 : (minX + maxX + 1) / 2, maxY < 0 ? rows / 2 : (minY + maxY + 1) / 2,
+            animation.previewWidthScale || 1,
+            // The animation's row colors show even when the Options tab's per-row sprite colors are off.
+            animation.frames.some((f) => f.rowColors && f.rowColors.some((c) => c != null && c !== DEFAULT_ROW_COLOR)),
+            animation.name);
+      } finally {
+        testingId.value = null;
+      }
+    };
+
     const handleDeleteAnimation = (animation) => {
       state.value.animations = state.value.animations.filter(({id}) => id != animation.id);
       console.info('Deleted ', animation);
@@ -1078,12 +1156,13 @@ export default defineComponent({
       handleImportAnimationFrames, replaceFramesOnImport, importMenuOpenAnimationId,
       handleImportAsepriteSheet, asepriteReplaceAnimations, asepriteImportMenuOpen,
       handleAddAnimation, handleDeleteAnimation, handleSetPreviewScale,
+      testingId, buildInProgress, handleTestAnimation,
       handleRowColorsInput, handleClearRowColors, editorRowColors, spriteColorsEnabled,
       copiedFrameRowColors, handleCopyRowColors, handlePasteRowColors,
       copiedFrameData, handleCopyFrame, handlePasteFrame,
       spriteColorPalette, selectedQuickColor,
       isCollapsed, toggleCollapsed,
-      dragAttrs, dragCardClass, dragHandleListeners, dragTargetListeners,
+      dragAttrs, dragCardClass, dragHandleListeners, dragTargetListeners, frameDrag,
       zoom, showPixelGrid, editorWidth, frameEditorWidth,
       activeFrameEditor, setActiveFrame, isFrameActive, frameHighlightState, selectedAnimation,
       effectiveFrameEditor, pixelEditorRefKey,
@@ -1142,6 +1221,53 @@ export default defineComponent({
    the same card's edges elsewhere (confirmed as a real reported bug). */
 .animation-frame-list {
   padding: 0;
+}
+
+.pixel-editor-container {
+  position: relative;
+  /* Room above the Duration field for the drag handle below. */
+  padding-top: 16px;
+}
+
+/* Frames sit side by side, so the drop mark is a bar on the near side (left
+   of the frame dragged over, or right of it when the dragged frame comes from
+   before it and so lands after it) instead of the cards' bar on top. */
+.pixel-editor-parent-container.drag-reorder-over {
+  border-top: none !important;
+  border-left: 3px solid var(--v-primary-base, #1976d2) !important;
+}
+
+.pixel-editor-parent-container.drag-reorder-over.drag-reorder-over-after {
+  border-left: none !important;
+  border-right: 3px solid var(--v-primary-base, #1976d2) !important;
+}
+
+/* A strip across the top of a frame to grab for reordering, with a small
+   grip mark so it can be found. */
+.frame-drag-handle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 22px;
+  z-index: 1;
+  cursor: grab;
+}
+
+.frame-drag-handle::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  width: 28px;
+  height: 4px;
+  margin-left: -14px;
+  border-top: 1px solid rgba(128, 128, 128, 0.6);
+  border-bottom: 1px solid rgba(128, 128, 128, 0.6);
+}
+
+.frame-drag-handle:hover::after {
+  border-color: rgba(128, 128, 128, 1);
 }
 
 /* overflow: visible added alongside the padding reset (see MusicEditor.vue's
@@ -1556,5 +1682,9 @@ export default defineComponent({
 /* No drop shadow on floating (absolute-positioned) buttons - delete, add, etc. */
 .v-btn--absolute {
   box-shadow: none !important;
+}
+.titlescreen-play-btn:active >>> .v-icon,
+.titlescreen-play-btn.v-btn--loading >>> .v-icon {
+  color: var(--v-primary-base, #1976d2) !important;
 }
 </style>

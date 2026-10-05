@@ -668,3 +668,23 @@ Fix for a build failure with a plain sound effect while another sound effect has
   the playfield is ignored. It reads the pixels one at a time through a shared routine, so
   use it now and then rather than every frame; it needs one variable and cannot be used
   inside a custom function.
+- Backgrounds, Sprites: every card has a Play button (left of the delete button, like Title
+  screen cards) that builds a throwaway ROM and plays it in the emulator, without touching
+  the real ROM or its up-to-date status. A background preview shows just that background
+  (players hidden). A sprite preview shows that animation on Player 0, centered on a black
+  screen with no playfield, white unless the animation has row colors (they show even if
+  per-row sprite colors is off). Both show the name on the first line of the Text
+  Minikernel: centered up to 12 characters, scrolling when longer. The score, the score
+  debug displays and the project's Text tab messages are left out of the preview.
+- Sprites: Add frame copies the selected frame (placed after it) instead of the last one,
+  and frames can be dragged to rearrange, from a strip at the top of each frame.
+- Graphic editors: two on/off buttons (left of Flip) mirror what you draw horizontally,
+  vertically, or both. Drawing over a pixel that is already on now gets its row color.
+- Scaling a graphic's height with "Scale existing contents" also scales its row colors
+  (Sprites, Backgrounds, Title screen).
+- Colors: every swatch, picker and pixel editor now shows the palette the emulator draws.
+- Dark Mode no longer filters the whole app: it uses the Vuetify dark theme, so pixel
+  editors, color swatches and the emulator screen keep their true colors. The tab area is
+  black (cards the same), with Subdued Palette on it is dark grey with lighter cards.
+  Popup lists match their popup, and the sidebar icons take their tab's color.
+- Fix: Ctrl+Z on a tab other than Actions no longer throws "Workspace is null".

@@ -785,6 +785,12 @@ export default {
       // diagnosed once this upgrade for a different inject()-time crash
       // (see the FieldDropdown.getOptions alt-text guard above).
       this.workspace.dispose();
+      // Blockly's Ctrl+Z / Ctrl+Y (a keydown listener on the whole document,
+      // installed once) act on whatever it thinks the main workspace is. After
+      // this one is disposed it still pointed at it, so pressing Ctrl+Z on any
+      // other tab (Sprites, Backgrounds...) ran an undo on the dead workspace
+      // and threw "Workspace is null". With no main workspace it does nothing.
+      if (Blockly.common.getMainWorkspace() === this.workspace) Blockly.common.setMainWorkspace(null);
       // Marks this component as torn down so the delayed re-render calls
       // (the font-load promise and the drag-retry poll in
       // rerenderForFontLoad) don't run against the disposed workspace: its

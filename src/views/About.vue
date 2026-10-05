@@ -163,9 +163,10 @@ export default {
   margin-bottom: 0;
 }
 
-/* Same Dark Mode dimming as App.vue's .app-logo-img rule, for this
-   page's second copy of the same logo. */
+/* Same Dark Mode inversion and dimming as App.vue's .app-logo-img rule, for
+   this page's second copy of the same logo. */
 .dark-mode .about-logo {
+  filter: invert(1) hue-rotate(180deg);
   opacity: 0.8;
 }
 
