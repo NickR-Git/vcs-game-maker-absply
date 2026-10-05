@@ -356,13 +356,17 @@ export const JOY_BUTTON_JUST_RELEASED_BIT = 7;
 // double-tap block used anywhere in the project (has to be known before
 // reserveDevVar hands out user variable letters, well before this feature's
 // generator would otherwise run).
-export const reserveJoystickButtonDevVars = (reserveDevVar, usedFor) => {
+export const reserveJoystickButtonDevVars = (reserveDevVar, usedFor, needsReleaseFor) => {
   if (!usedFor || !usedFor.size) return;
   usedFor.forEach((name) => {
     reserveDevVar(joyButtonHeldVarName(name), undefined,
         'this joystick\'s Fire button: frames continuously held (saturates at 255)');
-    reserveDevVar(joyButtonLastPressFramesVarName(name), undefined,
-        'this joystick Fire button: how long the press that just ended lasted (low bits), released this frame (bit 7)');
+    // Only for tapped/released/double-tapped (see joyButtonNeedsReleaseFor in
+    // bbasic.js): a joystick only checked with "held" skips this variable.
+    if (needsReleaseFor && needsReleaseFor.has(name)) {
+      reserveDevVar(joyButtonLastPressFramesVarName(name), undefined,
+          'this joystick Fire button: how long the press that just ended lasted (low bits), released this frame (bit 7)');
+    }
   });
 };
 
@@ -389,6 +393,18 @@ export const generateJoystickButtonChecks = (Blockly) => {
     if (!used.has(name)) return;
     const fireVar = resolveSystemVar(`${name}fire`);
     const heldVar = resolveDevVar(joyButtonHeldVarName(name));
+    if (!(Blockly.BBasic.joyButtonNeedsReleaseFor && Blockly.BBasic.joyButtonNeedsReleaseFor.has(name))) {
+      // Only "held" is checked: count the frames Fire has been down, nothing more.
+      lines.push(
+          ` if ${fireVar} then goto _${name}btn_down`,
+          ` ${heldVar} = 0`,
+          ` goto _${name}btn_done`,
+          `_${name}btn_down`,
+          ` if ${heldVar} <> 255 then ${heldVar} = ${heldVar} + 1`,
+          `_${name}btn_done`,
+      );
+      return;
+    }
     const lastPressFramesVar = resolveDevVar(joyButtonLastPressFramesVarName(name));
     const justReleasedVar = `${lastPressFramesVar}{${JOY_BUTTON_JUST_RELEASED_BIT}}`;
     lines.push(

@@ -827,10 +827,14 @@ export default (Blockly) => {
     // can't happen for a block that's actually being generated right now,
     // but guards against a stray leftover reference during, e.g., a
     // mid-refactor state.
-    if (!selectedIdVarName || !screenId) return 'rem No title screen selected\n';
+    if ((!selectedIdVarName && !Blockly.BBasic.titleScreenDrawUsed) || !screenId) {
+      return 'rem No title screen selected\n';
+    }
     const suffix = Blockly.BBasic.bankJumpSuffix(
         Blockly.BBasic.getCurrentBank(), Blockly.BBasic.getSubroutineBank(TITLE_SCREEN_SUBROUTINE_NAME));
-    return `${selectedIdVarName} = ${screenId}\n gosub ${TITLE_SCREEN_SUBROUTINE_NAME}${suffix}\n`;
+    // With a single page there is no page number variable to set (see bbasic.js).
+    const selectPage = selectedIdVarName ? `${selectedIdVarName} = ${screenId}\n` : '';
+    return `${selectPage} gosub ${TITLE_SCREEN_SUBROUTINE_NAME}${suffix}\n`;
   };
 
   Blockly.BBasic['titlescreen_scroll_set'] = function(block) {

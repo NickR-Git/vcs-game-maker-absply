@@ -323,6 +323,7 @@ import {useBackgroundsStorage, useColorPaletteStorage, useConfigurationStorage,
   usePixelGridOverlayStorage, usePixelGridLabelsStorage} from '../hooks/project';
 import {buildBackgroundPreviewRom, useBuildInProgress} from '../hooks/rom';
 import {useEditorZoom} from '../hooks/zoom';
+import {remapBackgroundReferences} from '../utils/background-refs';
 import {colorByteToCss} from '../utils/palette';
 import {PF_COLUMN_WIDTH_PX, pfRowDivisorFor} from '../utils/playfield-coords';
 import {resizePixelMatrixHeight, scaleRowColors} from '../utils/pixels';
@@ -600,6 +601,28 @@ export default defineComponent({
         dragOverEntry.value = null;
       },
     });
+    // After a reorder the backgrounds are numbered 1, 2, 3... by their new
+    // position, so the ID shown on a card and the number the game switches
+    // backgrounds with follow the order of the list. Everything that referred to
+    // a background by its old id is pointed at its new one (see
+    // utils/background-refs.js), and each card keeps its collapsed state and
+    // selection.
+    const renumberBackgrounds = () => {
+      const backgrounds = state.value.backgrounds;
+      const idMap = new Map(backgrounds.map((background, index) => [background.id, index + 1]));
+      if (backgrounds.every((background) => idMap.get(background.id) === background.id)) return;
+      const collapsed = backgrounds.map((background) => isCollapsed(background));
+      const selected = backgrounds.find((background) => background.id === selectedCardId.value);
+      remapBackgroundReferences(idMap);
+      backgrounds.forEach((background, index) => {
+        background.id = index + 1;
+      });
+      backgrounds.forEach((background, index) => {
+        if (isCollapsed(background) !== collapsed[index]) toggleCollapsed(background);
+      });
+      if (selected) selectedCardId.value = selected.id;
+    };
+
     const dragTargetListeners = (index) => ({
       dragover: (event) => {
         event.preventDefault();
@@ -628,6 +651,7 @@ export default defineComponent({
         const [moved] = items.splice(from, 1);
         items.splice(insertAt, 0, moved);
         state.value.backgrounds = items;
+        renumberBackgrounds();
         handleChildChange();
       },
     });

@@ -704,3 +704,18 @@ Play previews for backgrounds and sprites, mirror drawing, filter-free Dark Mode
   and the Music tab's piano roll is readable: light and dark keys in the note column, lighter
   valid steps and black invalid ones. In light mode the part of a step another instrument on
   the same channel uses is a lighter shade, and the alternating step and row shading is softer.
+- Fix: the ball (and missiles) are one pixel further left than a player for the same x, but
+  the playfield column was worked out as if they weren't, so about a quarter of the time Find
+  playfield pixel, Bounce and the collision check while firing looked one column too far
+  right: the ball bounced but the brick pixel wasn't found. They now use (x - 18) / 4 for a
+  ball or missile (players stay (x - 17) / 4).
+- Fix: Undo in a graphic editor no longer wipes the graphic (loading it was recorded as an
+  edit), and a pixel left outside the grid by a tool no longer throws an error.
+- Backgrounds: dragging a background to a new position renumbers them 1, 2, 3... and points
+  everything that referred to one by id at its new id: Background select blocks, the
+  Background value block, a plain number plugged into "Background set to", and Data table
+  cells set to the Background format.
+- Fewer variables: a joystick checked only with "Fire held" no longer reserves the
+  "how long the last press lasted" variable, a project with one Title Screen page no longer
+  reserves the page number variable, and only the sound channels in use get a duration variable.
+- Sprites: frames can be dragged from almost anywhere on the frame, not only a thin strip.

@@ -9,7 +9,7 @@ import {effectiveBackgroundRows, backgroundFadeTimerVarName, backgroundFadePaceV
   backgroundScrollRowVarName, backgroundScrollRowMaxVarName, backgroundScrollSubRowVarName,
   backgroundScrollEdgeFlagsVarName, BACKGROUND_SCROLL_EDGE_BITS, backgroundScrollStartVarName,
   BACKGROUND_SCROLL_PATCH_SUBROUTINE_NAME} from '../../blocks/background';
-import {pfRowDivisorFor} from '../../utils/playfield-coords';
+import {pfRowDivisorFor, PLAYER_PF_X_OFFSET, MISSILE_BALL_PF_X_OFFSET} from '../../utils/playfield-coords';
 import {ctrlpfShadowVarName, spriteScrollFlagsVarName, spriteScrollActiveBit,
   missileBounceStageVarName,
   DIRECTION16_STEPS, backgroundRainbowActiveBit, backgroundRainbowOffsetVarName,
@@ -376,13 +376,16 @@ export default (Blockly) => {
     if (sprite === 'ball') {
       const shadowVar = Blockly.BBasic.nameDB_.getName(
           ctrlpfShadowVarName(), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
-      return {x: 'ballx', y: 'bally', stretched: `${shadowVar} & $30 <> 0`, sizeBits: shadowVar, heightVar: 'ballheight'};
+      return {x: 'ballx', y: 'bally', stretched: `${shadowVar} & $30 <> 0`, sizeBits: shadowVar, heightVar: 'ballheight',
+        pfXOffset: MISSILE_BALL_PF_X_OFFSET};
     }
     const byName = {
-      player0: {x: 'player0x', y: 'player0y', stretched: 'player0size & $05 = $05'},
-      player1: {x: 'player1x', y: 'player1y', stretched: 'player1size & $05 = $05'},
-      missile0: {x: 'missile0x', y: 'missile0y', stretched: 'player0size & $30 <> 0', sizeBits: 'player0size', heightVar: 'missile0height'},
-      missile1: {x: 'missile1x', y: 'missile1y', stretched: 'player1size & $30 <> 0', sizeBits: 'player1size', heightVar: 'missile1height'},
+      player0: {x: 'player0x', y: 'player0y', stretched: 'player0size & $05 = $05', pfXOffset: PLAYER_PF_X_OFFSET},
+      player1: {x: 'player1x', y: 'player1y', stretched: 'player1size & $05 = $05', pfXOffset: PLAYER_PF_X_OFFSET},
+      missile0: {x: 'missile0x', y: 'missile0y', stretched: 'player0size & $30 <> 0', sizeBits: 'player0size',
+        heightVar: 'missile0height', pfXOffset: MISSILE_BALL_PF_X_OFFSET},
+      missile1: {x: 'missile1x', y: 'missile1y', stretched: 'player1size & $30 <> 0', sizeBits: 'player1size',
+        heightVar: 'missile1height', pfXOffset: MISSILE_BALL_PF_X_OFFSET},
     };
     return byName[sprite];
   };
@@ -440,8 +443,8 @@ export default (Blockly) => {
 
     return [
       // Exact column/row, clamped before anything ever reads them.
-      `${col.write} = (${coords.x} - 17) / 4`,
-      `if ${coords.stretched} then ${col.write} = (${coords.x} - 16) / 4`,
+      `${col.write} = (${coords.x} - ${coords.pfXOffset}) / 4`,
+      `if ${coords.stretched} then ${col.write} = (${coords.x} - ${coords.pfXOffset - 1}) / 4`,
       `if ${col.read} > 31 then ${col.write} = 31`,
       `${row.write} = (${coords.y} - 1) / ${rowDivisor}`,
       `if ${row.read} > ${maxRow} then ${row.write} = ${maxRow}`,
@@ -511,17 +514,15 @@ export default (Blockly) => {
       if (yStep) lines.push(`if temp5 = ${dir} then temp6 = ${yStep > 0 ? 1 : 2}`);
     });
     lines.push(
-        `${col.write} = (${coords.x} - 17) / 4`,
-        ...(widthBits ? [] : [`if ${coords.stretched} then ${col.write} = (${coords.x} - 16) / 4`]),
+        `${col.write} = (${coords.x} - ${coords.pfXOffset}) / 4`,
+        ...(widthBits ? [] : [`if ${coords.stretched} then ${col.write} = (${coords.x} - ${coords.pfXOffset - 1}) / 4`]),
         `if ${col.read} > 31 then ${col.write} = 31`,
         `temp4 = ${col.read}`);
     if (widthBits) {
       // The right-hand column: the sprite is 1, 2, 4 or 8 pixels wide.
       lines.push(
           `temp5 = ${widthBits} & 48`,
-          // One pixel wider than the size says, in case the sprite is drawn a pixel
-          // further right than its position suggests.
-          `temp4 = ${coords.x} - 16`,
+          `temp4 = ${coords.x} - ${coords.pfXOffset}`,
           `if temp5 = 16 then temp4 = temp4 + 1`,
           `if temp5 = 32 then temp4 = temp4 + 3`,
           `if temp5 = 48 then temp4 = temp4 + 7`,

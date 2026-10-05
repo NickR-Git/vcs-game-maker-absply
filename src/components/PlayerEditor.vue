@@ -288,13 +288,17 @@
                         'pixel-editor-container-active-grey': frameHighlightState(animation, frame) === 'grey',
                       }"
                       :style="{width: frameEditorWidth(animation)}"
+                      :draggable="armedFrameKey === frameKey(animation, frame)"
+                      v-on="frameHandleListeners(animation, frameIndex)"
+                      @mousedown="(event) => armFrameDrag(event, animation, frame)"
+                      @mouseup="armedFrameKey = null"
                     >
                       <div
                         class="frame-drag-handle"
-                        title="Drag to reorder this frame"
-                        v-bind="frameDrag(animation).dragAttrs(frameIndex)"
-                        v-on="frameDrag(animation).dragHandleListeners(frameIndex)"
-                      ></div>
+                        title="Drag anywhere on the frame except the drawing, fields and buttons to reorder it"
+                      >
+                        <v-icon small>mdi-drag-horizontal-variant</v-icon>
+                      </div>
                       <v-text-field
                         label="Duration"
                         v-model.number="frame.duration"
@@ -773,6 +777,40 @@ export default defineComponent({
       return frameDragByAnimationId.get(animation.id);
     };
 
+    // The frame's drag handle: the hook's listeners, plus showing the whole frame
+    // as the thing being dragged (the browser would otherwise drag only the thin
+    // handle strip).
+    // Any part of a frame that isn't the drawing, a field, a button or the row
+    // color strip starts a drag: the frame only becomes draggable while the
+    // mouse is pressed on such a part (a draggable frame all the time would turn
+    // dragging over its labels into dragging the frame instead of selecting text).
+    const FRAME_DRAG_BLOCKED = 'canvas, input, textarea, select, button, a, .v-input, .v-btn, .playfield-color-strip';
+    const armedFrameKey = ref(null);
+    const frameKey = (animation, frame) => `${animation.id}:${frame.id}`;
+    const armFrameDrag = (event, animation, frame) => {
+      armedFrameKey.value = event.button === 0 && !event.target.closest(FRAME_DRAG_BLOCKED) ?
+        frameKey(animation, frame) : null;
+    };
+    const frameHandleListeners = (animation, frameIndex) => {
+      const listeners = frameDrag(animation).dragHandleListeners(frameIndex);
+      return {
+        dragend: (event) => {
+          armedFrameKey.value = null;
+          listeners.dragend(event);
+        },
+        dragstart: (event) => {
+          // Not a drag that started from a frame's drag area (say, dragged text).
+          if (!armedFrameKey.value) return;
+          listeners.dragstart(event);
+          const frameBox = event.currentTarget.closest('.pixel-editor-container');
+          if (frameBox && event.dataTransfer.setDragImage) {
+            const box = frameBox.getBoundingClientRect();
+            event.dataTransfer.setDragImage(frameBox, event.clientX - box.left, event.clientY - box.top);
+          }
+        },
+      };
+    };
+
     const handleAddFrame = (animation) => {
       const frames = animation.frames;
       const maxId = getMaxId(frames);
@@ -1164,7 +1202,8 @@ export default defineComponent({
       copiedFrameData, handleCopyFrame, handlePasteFrame,
       spriteColorPalette, selectedQuickColor,
       isCollapsed, toggleCollapsed,
-      dragAttrs, dragCardClass, dragHandleListeners, dragTargetListeners, frameDrag,
+      dragAttrs, dragCardClass, dragHandleListeners, dragTargetListeners, frameDrag, frameHandleListeners,
+      armedFrameKey, frameKey, armFrameDrag,
       zoom, showPixelGrid, editorWidth, frameEditorWidth,
       activeFrameEditor, setActiveFrame, isFrameActive, frameHighlightState, selectedAnimation,
       effectiveFrameEditor, pixelEditorRefKey,
@@ -1228,7 +1267,7 @@ export default defineComponent({
 .pixel-editor-container {
   position: relative;
   /* Room above the Duration field for the drag handle below. */
-  padding-top: 16px;
+  padding-top: 28px;
 }
 
 /* Frames sit side by side, so the drop mark is a bar on the near side (left
@@ -1244,32 +1283,36 @@ export default defineComponent({
   border-right: 3px solid var(--v-primary-base, #1976d2) !important;
 }
 
-/* A strip across the top of a frame to grab for reordering, with a small
-   grip mark so it can be found. */
+/* A wide strip across the top of a frame to grab for reordering, with a grip
+   icon so it can be found; it tints on hover. */
+.pixel-editor-container {
+  cursor: grab;
+}
+
 .frame-drag-handle {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  height: 22px;
+  height: 32px;
   z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px 4px 0 0;
   cursor: grab;
 }
 
-.frame-drag-handle::after {
-  content: '';
-  position: absolute;
-  top: 6px;
-  left: 50%;
-  width: 28px;
-  height: 4px;
-  margin-left: -14px;
-  border-top: 1px solid rgba(128, 128, 128, 0.6);
-  border-bottom: 1px solid rgba(128, 128, 128, 0.6);
+.frame-drag-handle .v-icon {
+  color: rgba(128, 128, 128, 0.8);
 }
 
-.frame-drag-handle:hover::after {
-  border-color: rgba(128, 128, 128, 1);
+.frame-drag-handle:hover {
+  background-color: rgba(128, 128, 128, 0.18);
+}
+
+.frame-drag-handle:active {
+  cursor: grabbing;
 }
 
 /* overflow: visible added alongside the padding reset (see MusicEditor.vue's

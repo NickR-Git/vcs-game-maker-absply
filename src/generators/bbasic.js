@@ -15,7 +15,8 @@ import templateText from 'raw-loader!./bbasic.bb.hbs';
 import Handlebars from 'handlebars';
 import {sumBy, chunk} from 'lodash';
 
-import {useBackgroundsStorage, useConfigurationStorage, useDataTablesStorage, usePlayerAnimationsStorage} from '../hooks/project';
+import {useBackgroundsStorage, useConfigurationStorage, useDataTablesStorage, usePlayerAnimationsStorage,
+  useTitleScreenStorage} from '../hooks/project';
 import {getRelocationBanks} from '../hooks/relocation-banks';
 import {DEFAULT_ROW_COLOR, processBackgroundStorageDefaults,
   backgroundFadeTimerVarName, backgroundFadePaceVarName, backgroundFadeTargetVarName,
@@ -39,7 +40,7 @@ import {superchipRwFreeCount, pfRowDivisorFor} from '../utils/playfield-coords';
 import {bbTvSetting} from '../utils/tv-standard';
 import {keypadKeyVarName} from '../utils/keypad';
 import {registerTitleScreenSubroutine} from './bbasic/titlescreen';
-import {resolveAnimatedTitleScreenCardRefs, titleCardFrameCounterVarName,
+import {resolveAnimatedTitleScreenCardRefs, titleCardFrameCounterVarName, processTitleScreenStorageDefaults,
   titleCardScrollOffsetVarName, resolveTitleScreenCardsNeedingIndexRefs,
   titleCardIndexVarName} from '../blocks/titlescreen';
 import {registerKeypadPollSubroutine, generateJoystickDirection8Table,
@@ -941,9 +942,16 @@ Blockly.BBasic.init = function(workspace) {
   // dead weight combined with the rest of a real project's  variable/bank
   // budget.
   this.joyButtonUsedFor = new Set();
+  // Which of those need the "how long the press that just ended lasted" variable
+  // as well: everything but "held" (tapped, released and double-tapped all read
+  // the release it records). A joystick only checked with "held" needs just the
+  // frames-held count.
+  this.joyButtonNeedsReleaseFor = new Set();
   workspace.getAllBlocks(false).forEach((block) => {
     if (block.type !== 'input_joystick_fire_pattern' || !block.isEnabled()) return;
-    this.joyButtonUsedFor.add(`joy${block.getFieldValue('JOYSTICK') === '1' ? '1' : '0'}`);
+    const joystick = `joy${block.getFieldValue('JOYSTICK') === '1' ? '1' : '0'}`;
+    this.joyButtonUsedFor.add(joystick);
+    if (block.getFieldValue('MODE') !== 'HOLD') this.joyButtonNeedsReleaseFor.add(joystick);
   });
 
   // Same idea as distancePointChecks below, for MODE="DOUBLE_TAP" instances
@@ -1166,8 +1174,17 @@ Blockly.BBasic.init = function(workspace) {
   // exist. A project using none of them pays nothing - see
   // generateChannelDurationChecks below, which reuses this same flag to
   // skip the per-frame decrement entirely, not just the dev vars.
-  this.channelDurationUsed = !!this.projectMusic || workspace.getAllBlocks(false).some((block) =>
-    (block.type === 'soundfx_play' || block.type === 'simple_sound_set') && block.isEnabled());
+  // Only the channels something actually uses get a duration variable: a
+  // sound block names its channel (a fixed Ch0/Ch1 dropdown), and music
+  // lists the channels its tracks play on.
+  this.channelDurationChannels = new Set();
+  workspace.getAllBlocks(false).forEach((block) => {
+    if ((block.type === 'soundfx_play' || block.type === 'simple_sound_set') && block.isEnabled()) {
+      this.channelDurationChannels.add(`${block.getFieldValue('CHANNEL')}`);
+    }
+  });
+  if (this.projectMusic) this.projectMusic.channels.forEach((channel) => this.channelDurationChannels.add(`${channel}`));
+  this.channelDurationUsed = this.channelDurationChannels.size > 0;
 
   // Every one-shot music event watch - "sequence chip finished"
   // (music_sequence_chip_finished/_by_id) AND "note played by instrument"
@@ -1455,8 +1472,13 @@ Blockly.BBasic.init = function(workspace) {
   // keypadRightVarName are: registerTitleScreenSubroutine needs it, but has
   // to run AFTER "this.subroutines = {}" resets below.
   if (this.titleScreenDrawUsed) {
-    this.titleScreenSelectedIdVarName = reserveDevVar(
-        'titleScreenSelectedId', undefined, 'Which Title Screen page to draw next');
+    // The page number only matters with more than one page: the shared routine
+    // draws the only page there is without reading it (see buildDriverAsm in
+    // generators/bbasic/titlescreen.js), so a project with one page skips the variable.
+    if (processTitleScreenStorageDefaults(useTitleScreenStorage()).screens.length > 1) {
+      this.titleScreenSelectedIdVarName = reserveDevVar(
+          'titleScreenSelectedId', undefined, 'Which Title Screen page to draw next');
+    }
 
     // Every animated Title Screen card (more than one frame - see
     // isCardAnimated's comment in blocks/titlescreen.js) needs a
@@ -1740,7 +1762,7 @@ Blockly.BBasic.init = function(workspace) {
   // shared per-joystick state (see reserveJoystickButtonDevVars'
   // comment in generators/bbasic/input.js) - a no-op unless joyButtonUsedFor's
   // early pre-scan (above) found any of them used.
-  reserveJoystickButtonDevVars(reserveDevVar, this.joyButtonUsedFor);
+  reserveJoystickButtonDevVars(reserveDevVar, this.joyButtonUsedFor, this.joyButtonNeedsReleaseFor);
 
   // Same bucket again, for each "Fire double-tapped" block's  per-
   // instance result+timer pair (see reserveJoystickDoubleTapDevVars'
@@ -1776,8 +1798,11 @@ Blockly.BBasic.init = function(workspace) {
   // pre-scan above) - a no-op unless a "Play sound" block or music is
   // actually present anywhere in the project.
   if (this.channelDurationUsed) {
-    reserveDevVar('channnel0duration', undefined, 'frames left before AUDV0 auto-silences');
-    reserveDevVar('channnel1duration', undefined, 'frames left before AUDV1 auto-silences');
+    ['0', '1'].forEach((channel) => {
+      if (this.channelDurationChannels.has(channel)) {
+        reserveDevVar(`channnel${channel}duration`, undefined, `frames left before AUDV${channel} auto-silences`);
+      }
+    });
   }
 
   // Each channel's  attack+decay frame countdown (see
@@ -3554,30 +3579,24 @@ Blockly.BBasic.generateMuteAudio = function() {
 // load/subtract/store expression evaluation.
 Blockly.BBasic.generateChannelDurationChecks = function() {
   if (!this.channelDurationUsed) return '';
-  const channel0 = this.nameDB_.getName('channnel0duration', Blockly.Names.DEVELOPER_VARIABLE_TYPE);
-  const channel1 = this.nameDB_.getName('channnel1duration', Blockly.Names.DEVELOPER_VARIABLE_TYPE);
-  return [
-    ' asm',
-    '       lda ' + channel0,
-    '       beq _channeldurationasm0_skip',
-    '       cmp #1',
-    '       bne _channeldurationasm0_mute_skip',
-    '       lda #0',
-    '       sta AUDV0',
-    '_channeldurationasm0_mute_skip',
-    '       dec ' + channel0,
-    '_channeldurationasm0_skip',
-    '       lda ' + channel1,
-    '       beq _channeldurationasm1_skip',
-    '       cmp #1',
-    '       bne _channeldurationasm1_mute_skip',
-    '       lda #0',
-    '       sta AUDV1',
-    '_channeldurationasm1_mute_skip',
-    '       dec ' + channel1,
-    '_channeldurationasm1_skip',
-    'end',
-  ].join('\n');
+  const lines = [' asm'];
+  ['0', '1'].forEach((channel) => {
+    if (!this.channelDurationChannels.has(channel)) return;
+    const duration = this.nameDB_.getName(`channnel${channel}duration`, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+    lines.push(
+        '       lda ' + duration,
+        `       beq _channeldurationasm${channel}_skip`,
+        '       cmp #1',
+        `       bne _channeldurationasm${channel}_mute_skip`,
+        '       lda #0',
+        `       sta AUDV${channel}`,
+        `_channeldurationasm${channel}_mute_skip`,
+        '       dec ' + duration,
+        `_channeldurationasm${channel}_skip`,
+    );
+  });
+  lines.push('end');
+  return lines.join('\n');
 };
 
 // ROM sizes the standard kernel actually bankswitches (see

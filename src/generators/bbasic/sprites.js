@@ -2,7 +2,7 @@
 
 import {playfieldToMatrix} from '../../utils/pixels';
 import {useConfigurationStorage} from '../../hooks/project';
-import {pfRowDivisorFor} from '../../utils/playfield-coords';
+import {pfRowDivisorFor, MISSILE_BALL_PF_X_OFFSET} from '../../utils/playfield-coords';
 import {flagPoolVar, flagPoolBit} from './flag-pool';
 import {fadeFlagsVarName, fadeActiveBit, effectiveBackgroundRows} from '../../blocks/background';
 
@@ -1020,7 +1020,7 @@ const buildPlayfieldCheckedMovement = ({Blockly, name, is16, dirVar, speedVar, s
   lines.push(
       // The cell the object is in now. x/y are unsigned bytes, so a value
       // that wrapped below 0 shows up as too large here and is skipped.
-      ` temp1 = (${name}x - 17) / 4`,
+      ` temp1 = (${name}x - ${MISSILE_BALL_PF_X_OFFSET}) / 4`,
       ` temp2 = (${name}y - 1) / ${rowDivisor}`,
       ` if temp1 > 31 then goto ${label('next')}`,
       ` if temp2 > ${maxRow} then goto ${label('next')}`,
@@ -2434,7 +2434,7 @@ export default (Blockly) => {
       lab('diagonal'),
       // the object's cell (clamped), stepping back out of it when it is
       // already inside the wall
-      ` temp3 = (${name}x - 17) / 4`,
+      ` temp3 = (${name}x - ${MISSILE_BALL_PF_X_OFFSET}) / 4`,
       ` temp4 = (${name}y - 1) / ${rowDivisor}`,
       ` if temp3 > 31 then temp3 = 31`,
       ` if temp4 > ${maxRow} then temp4 = ${maxRow}`,

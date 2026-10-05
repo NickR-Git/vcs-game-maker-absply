@@ -806,7 +806,10 @@ export default {
       // (see mirrorPixels).
       const set = this.editor.set.bind(this.editor);
       this.editor.set = (pixels, logToHistory = true) => set(this.mirrorPixels(pixels, logToHistory), logToHistory);
-      this.setPixels(pixelMatrix);
+      // Not logged to the history: this is loading the image, not an edit, and as
+      // an entry it made Undo (once the strokes were undone, or on its own)
+      // wipe the whole graphic back to empty.
+      this.setPixels(pixelMatrix, false);
       this.handleMouse();
       // Row count (this.editor.height) is what the grid overlay actually
       // draws against, not the "height" PROP (only ever a construction-time
@@ -864,7 +867,9 @@ export default {
     getPixels() {
       const pixelMatrix = this.createEmptyPixelMatrix();
       this.editor.pixels.forEach((px) => {
-        if (px.y >= pixelMatrix.length) return;
+        // A tool can leave a pixel outside the grid (a selection moved past the
+        // top or left edge, a shape dragged off it); those aren't part of the image.
+        if (px.y < 0 || px.y >= pixelMatrix.length || px.x < 0 || px.x >= pixelMatrix[px.y].length) return;
         // An "on" pixel is any that isn't the background color. Comparing
         // against fgColor would misread per-row colored pixels as empty.
         pixelMatrix[px.y][px.x] = px.color !== this.bgColor ? 1 : 0;

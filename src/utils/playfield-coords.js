@@ -16,6 +16,15 @@ import {effectiveBackgroundRows} from '../blocks/background';
 // Background editor's canvas too wide for its height.
 export const PF_COLUMN_WIDTH_PX = 4;
 
+// A player's x is one more than the screen pixel its left edge sits on (the
+// playfield's first column starts at x 17), but a missile or the ball sits one
+// pixel further left for the same x - the TIA starts drawing a missile or the
+// ball one color clock earlier than a player - so its left edge is at pixel x - 2
+// and its playfield column is (x - 18) / 4. Measured on the emulator: a 1 pixel
+// wide ball at ballx 100 is drawn in screen column 98.
+export const PLAYER_PF_X_OFFSET = 17;
+export const MISSILE_BALL_PF_X_OFFSET = 18;
+
 // Row height in scanlines - matches std_kernel.asm/startup.asm's
 // default row height calculation ("lda #(96/pfres)"), confirmed against
 // that same 96-scanline-tall half-screen constant. Divides by the TRUE
