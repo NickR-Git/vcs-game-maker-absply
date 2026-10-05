@@ -2737,65 +2737,15 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
   color: rgba(255, 255, 255, 0.6) !important;
 }
 
-/* The per-tab colors of the nav drawer and top toolbar, lightened so the
-   darker ones (Sound, Text, Data...) stay readable. These are only text and
-   icons; nothing in them is a canvas or a color swatch. */
-.dark-mode.v-application .nav-drawer .actions-item,
-.dark-mode.v-application .nav-drawer .titlescreen-item,
-.dark-mode.v-application .nav-drawer .player-item,
-.dark-mode.v-application .nav-drawer .background-item,
-.dark-mode.v-application .nav-drawer .sound-item,
-.dark-mode.v-application .nav-drawer .music-item,
-.dark-mode.v-application .nav-drawer .text-tab-item,
-.dark-mode.v-application .nav-drawer .data-item,
-.dark-mode.v-application .nav-drawer .scorefont-item,
-.dark-mode.v-application .nav-drawer .configuration-item,
-.dark-mode.v-application .nav-drawer .generated-item,
-.dark-mode.v-application .nav-drawer .project-item,
-.dark-mode.v-application .top-toolbar .actions-item,
-.dark-mode.v-application .top-toolbar .titlescreen-item,
-.dark-mode.v-application .top-toolbar .player-item,
-.dark-mode.v-application .top-toolbar .background-item,
-.dark-mode.v-application .top-toolbar .sound-item,
-.dark-mode.v-application .top-toolbar .music-item,
-.dark-mode.v-application .top-toolbar .text-tab-item,
-.dark-mode.v-application .top-toolbar .data-item,
-.dark-mode.v-application .top-toolbar .scorefont-item,
-.dark-mode.v-application .top-toolbar .configuration-item,
-.dark-mode.v-application .top-toolbar .generated-item,
-.dark-mode.v-application .top-toolbar .project-item {
-  filter: brightness(1.5);
-}
-
-.dark-mode.desaturate-app-colors.v-application .nav-drawer .actions-item,
-.dark-mode.desaturate-app-colors.v-application .nav-drawer .titlescreen-item,
-.dark-mode.desaturate-app-colors.v-application .nav-drawer .player-item,
-.dark-mode.desaturate-app-colors.v-application .nav-drawer .background-item,
-.dark-mode.desaturate-app-colors.v-application .nav-drawer .sound-item,
-.dark-mode.desaturate-app-colors.v-application .nav-drawer .music-item,
-.dark-mode.desaturate-app-colors.v-application .nav-drawer .text-tab-item,
-.dark-mode.desaturate-app-colors.v-application .nav-drawer .data-item,
-.dark-mode.desaturate-app-colors.v-application .nav-drawer .scorefont-item,
-.dark-mode.desaturate-app-colors.v-application .nav-drawer .configuration-item,
-.dark-mode.desaturate-app-colors.v-application .nav-drawer .generated-item,
-.dark-mode.desaturate-app-colors.v-application .nav-drawer .project-item,
-.dark-mode.desaturate-app-colors.v-application .top-toolbar .actions-item,
-.dark-mode.desaturate-app-colors.v-application .top-toolbar .titlescreen-item,
-.dark-mode.desaturate-app-colors.v-application .top-toolbar .player-item,
-.dark-mode.desaturate-app-colors.v-application .top-toolbar .background-item,
-.dark-mode.desaturate-app-colors.v-application .top-toolbar .sound-item,
-.dark-mode.desaturate-app-colors.v-application .top-toolbar .music-item,
-.dark-mode.desaturate-app-colors.v-application .top-toolbar .text-tab-item,
-.dark-mode.desaturate-app-colors.v-application .top-toolbar .data-item,
-.dark-mode.desaturate-app-colors.v-application .top-toolbar .scorefont-item,
-.dark-mode.desaturate-app-colors.v-application .top-toolbar .configuration-item,
-.dark-mode.desaturate-app-colors.v-application .top-toolbar .generated-item,
-.dark-mode.desaturate-app-colors.v-application .top-toolbar .project-item {
-  filter: saturate(50%) brightness(1.5);
-}
 /* Blockly's toolbox and its small control icons (which are dark images). */
 .dark-mode .blocklyToolboxDiv {
   background-color: #1e1e1e !important;
+}
+
+/* The expand/collapse arrow beside a toolbox category with sub-categories
+   (Examples) is a dark image, so it is inverted to white. */
+.dark-mode .blocklyTreeIcon {
+  filter: invert(1);
 }
 
 .dark-mode .blocklyTreeRow:hover,
@@ -2809,8 +2759,7 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
 }
 
 .dark-mode.v-application .blocklyMultiselect:not(.blockly-multiselect-active) > image,
-.dark-mode.v-application .blocklyMultiselect:not(.blockly-multiselect-active) > svg > image,
-.dark-mode.v-application .grid-snap-icon-group {
+.dark-mode.v-application .blocklyMultiselect:not(.blockly-multiselect-active) > svg > image {
   filter: invert(1);
 }
 /* The Music tab's piano roll and the sound envelope graph: faint dark lines
@@ -2913,6 +2862,40 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
 .dark-mode.v-application .sequence-chip-wrap-playing {
   box-shadow: 0 0 0 2px #1e1e1e, 0 0 0 4px var(--v-primary-base, #1976d2) !important;
 }
+/* Dark Mode keeps the tab colors of the top toolbar and sidebar as they are in light
+   mode. With Subdued Palette they are muted (saturation halved) but not also
+   darkened, which light mode does (brightness .7) and which read as too dull on the
+   dark background. Top toolbar and sidebar get the same single filter. */
+.dark-mode.desaturate-app-colors.v-application .top-toolbar .actions-item,
+.dark-mode.desaturate-app-colors.v-application .top-toolbar .titlescreen-item,
+.dark-mode.desaturate-app-colors.v-application .top-toolbar .player-item,
+.dark-mode.desaturate-app-colors.v-application .top-toolbar .background-item,
+.dark-mode.desaturate-app-colors.v-application .top-toolbar .sound-item,
+.dark-mode.desaturate-app-colors.v-application .top-toolbar .music-item,
+.dark-mode.desaturate-app-colors.v-application .top-toolbar .text-tab-item,
+.dark-mode.desaturate-app-colors.v-application .top-toolbar .data-item,
+.dark-mode.desaturate-app-colors.v-application .top-toolbar .scorefont-item,
+.dark-mode.desaturate-app-colors.v-application .top-toolbar .configuration-item,
+.dark-mode.desaturate-app-colors.v-application .top-toolbar .generated-item,
+.dark-mode.desaturate-app-colors.v-application .top-toolbar .project-item {
+  filter: saturate(50%);
+}
+
+.dark-mode.desaturate-app-colors.v-application .nav-drawer .v-list-item__content,
+.dark-mode.desaturate-app-colors.v-application .nav-drawer .v-list-item__icon {
+  filter: none;
+}
+
+/* The About tab has no color of its own, so Dark Mode shows it in plain white, which
+   next to the muted tab colors of Subdued Palette is too bright: a softer grey
+   for its label, icon and left edge, in both the sidebar and the top toolbar. */
+.dark-mode.desaturate-app-colors.v-application .about-item,
+.dark-mode.desaturate-app-colors.v-application .about-item .v-icon,
+.dark-mode.desaturate-app-colors.v-application .about-item .v-list-item__title {
+  color: #b0b0b0 !important;
+  border-left-color: #b0b0b0 !important;
+}
+
 /* The sidebar's icons take the tab's text color (Vuetify's dark theme makes
    them white). */
 .dark-mode.v-application .nav-drawer .v-list-item__icon .v-icon {

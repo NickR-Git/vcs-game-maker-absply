@@ -48,7 +48,7 @@ import blocklyToolboxExampleEvent from 'raw-loader!./blockly-toolbox-example-eve
 import BlocklyBB from '../generators/bbasic';
 import {showError} from '../utils/build-error';
 import {useWorkspaceStorage, useErrorStorage, useConfigurationStorage, useMuteBlocklySoundsStorage,
-  useGridSnapStorage, useDesaturateBlocklyColorsStorage} from '../hooks/project';
+  useGridSnapStorage, useDesaturateBlocklyColorsStorage, useDarkModeStorage} from '../hooks/project';
 import {useGeneratedBasic} from '../hooks/generated';
 import {markRomOutdated} from '../hooks/rom';
 
@@ -219,6 +219,7 @@ export default {
       // so the toggle icon and the actual live grid stay in sync with
       // whatever the user last left it as, across navigating away and back.
       gridSnapEnabled: gridSnapStorage.value,
+      darkModeStorage: useDarkModeStorage(),
     };
   },
   methods: {
@@ -324,12 +325,15 @@ export default {
       // visibly lighter/washed-out next to them).
       const render = () => {
         const active = this.gridSnapEnabled;
-        icon.setAttribute('fill', active ? '#1976d2' : '#000000');
+        // Off: the near-black glyph, or white in Dark Mode (a filter can't be used:
+        // it would turn the active blue into another color). On: always the blue.
+        icon.setAttribute('fill', active ? '#1976d2' : (this.darkModeStorage ? '#ffffff' : '#000000'));
         icon.style.opacity = active ? '1' : '.25';
         title.textContent = active ?
           'Turn off block grid snap' : 'Turn on block grid snap';
       };
       render();
+      this.renderGridSnapIcon_ = render;
 
       group.addEventListener('mouseenter', () => {
         if (!this.gridSnapEnabled) icon.style.opacity = '.5';
@@ -409,6 +413,11 @@ export default {
     },
   },
   watch: {
+    // Redraws the grid snap icon in the colors for the new theme (see render in
+    // setupGridSnapZoomButton).
+    darkModeStorage() {
+      if (this.renderGridSnapIcon_) this.renderGridSnapIcon_();
+    },
     blocklySoundsEnabled(newVal) {
       this.options.sounds = newVal;
     },

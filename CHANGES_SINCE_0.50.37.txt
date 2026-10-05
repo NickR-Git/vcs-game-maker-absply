@@ -727,3 +727,10 @@ Save ROM as .bin or .a26, named after the project
   (.a26) entries in browsers with a save-file picker (Chrome, Edge); in others the button
   opens a small menu to pick .bin or .a26. The file is named after the Project tab's Title
   and Version (My_Game_1-0-0), or compiled-rom when there is no Title.
+- Project tab: the Example Projects button is first in the toolbar with a joystick icon,
+  dividers separate it and the Settings button from the rest, and the icon size and spacing
+  match the graphic editor toolbar. The example projects were removed from the repository.
+- Dark Mode: the top toolbar and sidebar tab colors are the same as in light mode (with
+  Subdued Palette they are only desaturated, not darkened as well), About is a softer grey
+  with Subdued Palette, the Blockly grid snap icon is white when off and stays blue when on,
+  and the Examples arrow in the Actions toolbox is white.

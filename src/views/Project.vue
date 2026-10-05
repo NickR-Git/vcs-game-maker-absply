@@ -15,6 +15,31 @@
           icon
           small
           class="project-flat-icon-btn data-icon-btn-size"
+          :class="{'project-flat-icon-btn-active': showExamples}"
+          :title="examples.status === 'loading' ? 'Example Projects (checking for updates...)' : 'Example Projects'"
+          @click="showExamples = true"
+        >
+          <v-progress-circular
+            v-if="examples.status === 'loading'"
+            indeterminate
+            :size="18"
+            :width="2"
+          />
+          <!-- An Atari 2600 joystick (ball top, stick, base with its fire button), drawn on
+               the same 24 unit grid and weight as the icon font's glyphs: the font has none. -->
+          <svg v-else class="v-icon example-joystick-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              fill="currentColor"
+              fill-rule="evenodd"
+              d="M12 2.3a3.2 3.2 0 1 0 0 6.4a3.2 3.2 0 1 0 0-6.4zM11 8.5h2V13h-2zM5 13h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2zM7 15.2a1.8 1.8 0 1 0 0 3.6a1.8 1.8 0 1 0 0-3.6z"
+            />
+          </svg>
+        </v-btn>
+        <v-divider class="project-toolbar-divider" vertical />
+        <v-btn
+          icon
+          small
+          class="project-flat-icon-btn data-icon-btn-size"
           title="Save"
           @click="handleSaveProject"
         >
@@ -90,6 +115,7 @@
             </v-card>
           </v-dialog>
         </template>
+        <v-divider class="project-toolbar-divider" vertical />
         <v-btn
           icon
           small
@@ -99,22 +125,6 @@
           @click="showExamples = false"
         >
           <v-icon>mdi-cog-outline</v-icon>
-        </v-btn>
-        <v-btn
-          icon
-          small
-          class="project-flat-icon-btn data-icon-btn-size"
-          :class="{'project-flat-icon-btn-active': showExamples}"
-          :title="examples.status === 'loading' ? 'Example Projects (checking for updates...)' : 'Example Projects'"
-          @click="showExamples = true"
-        >
-          <v-progress-circular
-            v-if="examples.status === 'loading'"
-            indeterminate
-            :size="18"
-            :width="2"
-          />
-          <v-icon v-else>mdi-folder-star-outline</v-icon>
         </v-btn>
         <input
           ref="importFileInput"
@@ -1227,7 +1237,7 @@ export default defineComponent({
   display: flex;
   align-items: center;
   gap: 4px;
-  min-height: 28px;
+  min-height: 26px;
 }
 
 .project-toolbar-row >>> .data-icon-btn-size {
@@ -1451,5 +1461,16 @@ export default defineComponent({
   margin-top: 8px;
   font-size: 0.85em;
   opacity: 0.7;
+}
+
+.example-joystick-icon {
+  width: 19px !important;
+  height: 19px !important;
+}
+
+/* Same as the graphic editor toolbar's dividers (.get-inner-divider): no
+   margin, so the 4px gap each side is all the spacing, and full height. */
+.project-toolbar-divider {
+  margin: 0;
 }
 </style>
