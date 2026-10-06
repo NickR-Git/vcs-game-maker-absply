@@ -31,7 +31,8 @@ import {appendCompileLog, clearCompileLog, useBackgroundsStorage, useConfigurati
 import {getRelocationBanks, resetRelocationBanks, setRelocationBank,
   recordSuccessfulRelocationBanks, seedRelocationBanksFromLastSuccess} from './relocation-banks';
 import {markRomUpToDate, markRomOutdated, useRomOutdated, useHasCompiledRom,
-  useCompiledRomBytes, setCompiledRomBytes, recordLoadedRomForRecovery} from './rom-status';
+  useCompiledRomBytes, setCompiledRomBytes, recordLoadedRomForRecovery, useLastBuildScreenshot} from './rom-status';
+import {captureEmulatorScreenshot} from '../utils/emulator-screenshot';
 import {CHAR_TO_GLYPH, TEXT_MESSAGE_LENGTH} from '../blocks/text-strings';
 import {withGopher2600} from './emulator';
 import {setRomCapacity, useRomCapacity} from './rom-capacity';
@@ -984,6 +985,8 @@ const MAX_RELOCATION_ATTEMPTS = 64;
  * provides is in use.
  * @return {!Promise<boolean>} Whether the ROM was built.
  */
+const SCREENSHOT_DELAY_MS = 1500;
+
 export const buildRom = async () => {
   // See buildInProgress's comment above - a title screen preview build
   // running concurrently with this one corrupted a real build's output
@@ -993,8 +996,19 @@ export const buildRom = async () => {
     return false;
   }
   buildInProgress.value = true;
+  const screenshotRef = useLastBuildScreenshot();
+  screenshotRef.value = null;
   try {
-    return await buildRomInner();
+    const built = await buildRomInner();
+    // Grabbed once the game has been running a moment, so the picture shows
+    // the game rather than a blank first frame.
+    if (built) {
+      window.setTimeout(() => {
+        const shot = captureEmulatorScreenshot();
+        if (shot) screenshotRef.value = shot.toDataURL('image/png');
+      }, SCREENSHOT_DELAY_MS);
+    }
+    return built;
   } finally {
     buildInProgress.value = false;
   }

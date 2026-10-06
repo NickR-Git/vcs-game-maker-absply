@@ -166,39 +166,11 @@
           </div>
         </div>
 
-        <v-dialog v-model="soundBankImportOpen" width="480">
-          <v-card>
-            <v-card-title>Import Sound Bank</v-card-title>
-            <v-card-text>
-              <p class="v-messages theme--light v-messages__message">
-                Choose which sounds to import. A name that matches an existing sound effect
-                replaces its parameters; anything else is added as a new card.
-              </p>
-              <v-btn small @click="handleSelectAllBankEntries(true)">Select all</v-btn>
-              <v-btn small class="ml-2" @click="handleSelectAllBankEntries(false)">Select none</v-btn>
-              <v-checkbox
-                v-for="(entry, index) in soundBankImportEntries"
-                :key="index"
-                v-model="entry.selected"
-                :label="entry.isExisting ? `${entry.name} (replaces existing)` : entry.name"
-                hide-details
-                dense
-              />
-            </v-card-text>
-            <v-card-actions>
-              <v-btn small @click="soundBankImportOpen = false">Cancel</v-btn>
-              <v-spacer></v-spacer>
-              <v-btn
-                color="primary"
-                text
-                :disabled="!soundBankImportEntries.some((entry) => entry.selected)"
-                @click="handleConfirmSoundBankImport"
-              >
-                Import selected
-              </v-btn>
-            </v-card-actions>
-          </v-card>
-        </v-dialog>
+        <SoundBankImportDialog
+          v-model="soundBankImportOpen"
+          :entries="soundBankImportEntries"
+          @confirm="handleConfirmSoundBankImport"
+        />
         <v-list class="soundfx-list" :class="{'soundfx-list--single-column': !soundFxColumns}">
           <v-list-item
             v-for="(soundEffect, index) in state.soundEffects"
@@ -541,12 +513,14 @@ import {openFileDialog} from '../utils/file';
 import {previewSoundEffect, stopSoundEffectPreview} from '../utils/sound-preview';
 import {autoInstrumentColor} from '../utils/instrument-colors';
 import {audcHasTunableNotes, notesForAudc} from '../utils/music-notes';
+import {buildSoundBankImportEntries, importSoundBankEntries} from '../utils/sound-bank';
 import ColorSwatchPicker from '../components/ColorSwatchPicker.vue';
+import SoundBankImportDialog from '../components/SoundBankImportDialog.vue';
 import ConfirmDeleteMenu from '../components/ConfirmDeleteMenu.vue';
 import EnvelopeGraph from '../components/EnvelopeGraph.vue';
 
 export default defineComponent({
-  components: {ColorSwatchPicker, ConfirmDeleteMenu, EnvelopeGraph},
+  components: {ColorSwatchPicker, ConfirmDeleteMenu, EnvelopeGraph, SoundBankImportDialog},
   setup() {
     const soundEffectsStorage = useSoundEffectsStorage();
     // App-wide preference, not part of this project's  saved
@@ -940,62 +914,17 @@ export default defineComponent({
       openFileDialog('.vcsbnk,.json')
           .then((file) => file.text())
           .then((text) => {
-            const bankData = JSON.parse(text);
-            if (!bankData || !Array.isArray(bankData.soundEffects)) {
-              throw new Error('File does not contain valid sound bank data');
-            }
-            const soundEffects = state.value.soundEffects;
-            soundBankImportEntries.value = bankData.soundEffects.map((imported) => ({
-              data: imported,
-              name: imported.name || 'Unnamed sound effect',
-              selected: true,
-              isExisting: !!(imported.name && soundEffects.find((o) => o.name === imported.name)),
-            }));
+            soundBankImportEntries.value = buildSoundBankImportEntries(JSON.parse(text), state.value.soundEffects);
             soundBankImportOpen.value = true;
           })
           .catch((e) => console.error('Failed to import sound bank', e));
     };
 
-    const handleSelectAllBankEntries = (selected) => {
-      soundBankImportEntries.value.forEach((entry) => {
-        entry.selected = selected;
-      });
-    };
-
-    // Imports only the entries checked in the dialog above - unlike a
-    // single sound effect's  import (handleImportSoundEffect, which
-    // always overwrites ONE already-selected card), this has no single
-    // target card to overwrite, so it matches by NAME instead: a checked
-    // entry whose name matches an existing card here replaces that card's
-    // parameters (keeping its id, same reasoning as
-    // handleImportSoundEffect - every soundfx_play block/Music tab track
-    // already pointing at that id keeps working), and a checked entry with
-    // no name match becomes a brand new card instead. Matches
-    // MusicEditor.vue's  importSoundEffects in shape (name-keyed, id
-    // remapped), but that function keeps the EXISTING card untouched on a
-    // name match (it's importing songs, which reference sound effects by id
-    // and just need SOME matching id to point at) - this imports the sound
-    // effects themselves, so a name match has to actually overwrite the
-    // existing card's parameters instead.
+    // Imports only the entries checked in the dialog - matches by NAME (see
+    // importSoundBankEntries in utils/sound-bank.js).
     const handleConfirmSoundBankImport = () => {
-      const soundEffects = state.value.soundEffects;
-      let maxId = max(soundEffects.map((o) => o.id)) || 0;
-      soundBankImportEntries.value.forEach((entry) => {
-        if (!entry.selected) return;
-        const imported = entry.data;
-        // eslint-disable-next-line no-unused-vars
-        const {id, ...importedData} = imported;
-        const existing = imported.name && soundEffects.find((o) => o.name === imported.name);
-        if (existing) {
-          Object.assign(existing, importedData, {id: existing.id});
-          handleAudcChange(existing);
-        } else {
-          maxId += 1;
-          const newSoundEffect = {...importedData, id: maxId, name: imported.name || `Sound effect ${maxId}`};
-          soundEffects.push(newSoundEffect);
-          handleAudcChange(newSoundEffect);
-        }
-      });
+      importSoundBankEntries(state.value.soundEffects, soundBankImportEntries.value);
+      handleChildChange();
       instance.proxy.$forceUpdate();
       soundBankImportOpen.value = false;
     };
@@ -1060,7 +989,7 @@ export default defineComponent({
       state, handleChildChange, handleAddSoundEffect, handleDeleteSoundEffect, handlePlaySoundEffect,
       handleExportSoundEffect, handleImportSoundEffect,
       handleExportSoundBank, handleImportSoundBank,
-      soundBankImportOpen, soundBankImportEntries, handleSelectAllBankEntries, handleConfirmSoundBankImport,
+      soundBankImportOpen, soundBankImportEntries, handleConfirmSoundBankImport,
       canUndoEnvelope, canRedoEnvelope, handleUndoEnvelope, handleRedoEnvelope, handleResetEnvelope,
       handleStopPreview, handleSetSoundEffectColor, handleToggleInstrument, autoInstrumentColor,
       isCollapsed, toggleCollapsed,

@@ -73,6 +73,9 @@ const buildAnimationSetBlock = ({icon, colour, storageFactory}) => {
           .appendField(
               new Blockly.FieldDropdown(buildAnimationOptions(storageFactory)), 'VAR')
           .appendField(' ')
+          .appendField(new Blockly.FieldCheckbox('TRUE'), 'RESTART')
+          .appendField('restart')
+          .appendField(' ')
           .appendField(new Blockly.FieldCheckbox('TRUE'), 'LOOP')
           .appendField('loop');
       this.setPreviousStatement(true);
@@ -82,7 +85,9 @@ const buildAnimationSetBlock = ({icon, colour, storageFactory}) => {
       // sprite_player_animation_select's comment just above - VAR here is
       // an animation-list index too, never a "player0..."-prefixed name.
       Blockly.Extensions.apply('sprite_player_field_sync', this, false);
-      this.setTooltip('Sets the chosen player\'s active animation by name, in one step. "loop" ' +
+      this.setTooltip('Sets the chosen player\'s active animation by name, in one step. "restart" ' +
+        'on (the default) plays the new animation from its first frame; off carries on from the ' +
+        'current position in the animation that was playing. "loop" ' +
         'on (the default) replays it from the start every time it ends; off plays it once and ' +
         'leaves it on its last frame (see "Player animation has finished" to react to that ' +
         'moment).');
@@ -110,6 +115,9 @@ const buildAnimationSetByIdBlock = ({icon, colour}) => {
           .appendField(`${ANIMATION_ICON} set animation to ID`);
       this.appendDummyInput()
           .appendField(' ')
+          .appendField(new Blockly.FieldCheckbox('TRUE'), 'RESTART')
+          .appendField('restart')
+          .appendField(' ')
           .appendField(new Blockly.FieldCheckbox('TRUE'), 'LOOP')
           .appendField('loop');
       this.setInputsInline(true);
@@ -119,7 +127,9 @@ const buildAnimationSetByIdBlock = ({icon, colour}) => {
       Blockly.Extensions.apply('sprite_player_field_sync', this, false);
       this.setTooltip('Sets the chosen player\'s active animation directly by its numeric list ' +
         'position (0-based, top to bottom) - for a fixed animation picked by name instead, see ' +
-        '"set animation to" above. "loop" on (the default) replays it from the start every time ' +
+        '"set animation to" above. "restart" on (the default) plays the new animation from its first frame; off ' +
+        'carries on from the current position in the animation that was playing. ' +
+        '"loop" on (the default) replays it from the start every time ' +
         'it ends; off plays it once and leaves it on its last frame (see "Player animation has ' +
         'finished" to react to that moment).');
     },

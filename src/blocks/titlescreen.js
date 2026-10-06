@@ -113,6 +113,11 @@ export const titleCardScrollOffsetVarName = (ref) => `titleCardScroll_${sanitize
 // animated (cycles frames) OR merely scrolling (windowHeight < height, see
 // buildCardDataAsm) with just one frame.
 export const titleCardIndexVarName = (ref) => `titleCardIndex_${sanitizeCardRef(ref)}`;
+// One byte per scrolling card watched by a "When title screen scroll reaches"
+// block: bit 0 = the top was just reached, bit 1 = the bottom was. Set by
+// "Scroll title screen graphic" when it stops at an edge, cleared by the watch.
+export const titleCardScrollEdgeFlagsVarName = (ref) => `titleCardScrollEdge_${sanitizeCardRef(ref)}`;
+export const TITLE_SCROLL_EDGE_BITS = {top: 0, bottom: 1};
 
 // The Title tab's help text ("~85 rows of 48x2/96x2, ~170 rows of
 // 48x1") is a PER-PAGE, on-screen draw-time budget - how many TV scanlines
@@ -343,6 +348,46 @@ Blockly.Blocks['titlescreen_scroll_set'] = {
       'keep playing back automatically by themselves schedule while this scrolls within whichever ' +
       'frame is currently showing. Only graphics with scrolling enabled (Title Screen tab) appear ' +
       'in the dropdown.');
+  },
+};
+
+Blockly.Blocks['titlescreen_scroll_by'] = {
+  init: function() {
+    this.appendValueInput('VALUE')
+        .setCheck('Number')
+        .appendField(`${TITLE_ICON} Scroll title screen graphic`)
+        .appendField(new Blockly.FieldDropdown(buildScrollableCardOptions), 'CARD')
+        .appendField(new Blockly.FieldDropdown([['Up', 'up'], ['Down', 'down']]), 'DIRECTION')
+        .appendField('by');
+    this.appendDummyInput()
+        .appendField('stop at edge')
+        .appendField(new Blockly.FieldCheckbox('TRUE'), 'STOP');
+    this.setInputsInline(true);
+    this.setPreviousStatement(true, null);
+    this.setNextStatement(true, null);
+    this.setColour(TITLESCREEN_COLOR);
+    this.setTooltip('Moves a scrolling Title Screen graphic up or down by the given number of rows from ' +
+      'its current position (use "Set title screen scroll position" to start anywhere). With "stop at ' +
+      'edge" on, scrolling halts when the top of the graphic reaches the top of its window, or the ' +
+      'bottom of the graphic reaches the bottom of its window. With more than one animation frame, ' +
+      'the edge is that of the frame currently showing.');
+  },
+};
+
+Blockly.Blocks['titlescreen_scroll_edge_reached'] = {
+  init: function() {
+    this.appendDummyInput()
+        .appendField(`${TITLE_ICON} When title screen scroll of`)
+        .appendField(new Blockly.FieldDropdown(buildScrollableCardOptions), 'CARD')
+        .appendField('reaches the')
+        .appendField(new Blockly.FieldDropdown([['Top', 'top'], ['Bottom', 'bottom']]), 'EDGE');
+    this.appendStatementInput('DO');
+    this.setPreviousStatement(true);
+    this.setNextStatement(true);
+    this.setColour(TITLESCREEN_COLOR);
+    this.setTooltip('Runs the connected blocks once, each time a "Scroll title screen graphic" block with ' +
+      '"stop at edge" on lands on the top or bottom edge of that graphic. Setting the position directly ' +
+      'does not count.');
   },
 };
 

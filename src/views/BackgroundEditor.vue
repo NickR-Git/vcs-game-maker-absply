@@ -327,7 +327,8 @@ import {remapBackgroundReferences} from '../utils/background-refs';
 import {colorByteToCss} from '../utils/palette';
 import {PF_COLUMN_WIDTH_PX, pfRowDivisorFor} from '../utils/playfield-coords';
 import {resizePixelMatrixHeight, scaleRowColors} from '../utils/pixels';
-import {DEFAULT_BACKGROUNDS, DEFAULT_ROW_COLOR, clearRowColors, effectiveBackgroundRows,
+import {DEFAULT_BACKGROUNDS, DEFAULT_ROW_COLOR, clearRowColors, backgroundDataRows,
+  reflowBackgroundsToHeight,
   processBackgroundStorageDefaults} from '../blocks/background';
 
 // Width of one background editor at 100% zoom.
@@ -389,7 +390,16 @@ export default defineComponent({
     // the Options tab's Superchip/pfres controls), not something each
     // background can override individually.
     const backgroundRows = computed(() =>
-      effectiveBackgroundRows(configurationStorage && configurationStorage.value));
+      backgroundDataRows(configurationStorage && configurationStorage.value));
+
+    // Backgrounds saved before the extra hidden row existed (see
+    // backgroundDataRows) get it added; ones with a custom height are left
+    // alone.
+    const savedBackgrounds = (backgroundsStorage.value && backgroundsStorage.value.backgrounds) || [];
+    if (savedBackgrounds.some((background) =>
+      !background.customHeight && background.pixels.length !== backgroundRows.value)) {
+      reflowBackgroundsToHeight(backgroundsStorage, backgroundRows.value);
+    }
 
     // Per-row playfield colors (batari Basic pfcolors) are an all-or-nothing,
     // project-wide setting (see the Options tab) - once it's on, every

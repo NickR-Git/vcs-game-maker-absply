@@ -1,8 +1,8 @@
 'use strict';
 
 import {useConfigurationStorage} from '../../hooks/project';
-import {effectiveBackgroundRows, backgroundFadeTimerVarName, backgroundFadePaceVarName,
-  backgroundFadeTargetVarName, fadeFlagsVarName, FADE_STEPS,
+import {effectiveBackgroundRows, backgroundDataRows, backgroundFadeTimerVarName, backgroundFadePaceVarName,
+  backgroundFadeTargetVarName, fadeFlagsVarName, FADE_STEPS, backgroundRowFadeVarName, rowFadeStartColor,
   backgroundFadeFinishedBit, fadeActiveBit, backgroundFadeWatchKey,
   backgroundGetPixelXVarName, backgroundGetPixelYVarName,
   collisionPixelColumnVarName, collisionPixelRowVarName, areaClearLeftVarName,
@@ -873,6 +873,28 @@ export default (Blockly) => {
     return Blockly.BBasic.emitColorFadeTrigger(rawVar, color, frames);
   };
 
+  // Trigger for "Fade playfield rows from color to playfield colors" - only
+  // starts the fade (the per-frame steps are in generateRowFadeChecks in
+  // generators/bbasic.js). Does nothing without per-row playfield colors.
+  Blockly.BBasic[`background_fade_rows_from`] = function(block) {
+    const startColors = Blockly.BBasic.rowFadeStartColors || [];
+    const startIndex = startColors.indexOf(rowFadeStartColor(block));
+    if (startIndex < 0) return 'rem Playfield row fade needs per-row playfield colors enabled (Options tab)\n';
+    const frames = Blockly.BBasic.valueToCode(block, 'FRAMES', Blockly.BBasic.ORDER_NONE) || '1';
+    const paceVar = resolveVar(backgroundRowFadeVarName('Pace'));
+    const paceReadyLabel = `_rowfade_${Blockly.BBasic.blockNumbers.next()}_paceready`;
+    Blockly.BBasic.usesDivMul = true;
+    return [
+      `${paceVar} = (${frames}) / ${FADE_STEPS}`,
+      `if ${paceVar} <> 0 then goto ${paceReadyLabel}`,
+      ` ${paceVar} = 1`,
+      `@ ${paceReadyLabel}`,
+      `${resolveVar(backgroundRowFadeVarName('Start'))} = ${startIndex}`,
+      `${resolveVar(backgroundRowFadeVarName('Timer'))} = ${paceVar}`,
+      `${resolveVar(backgroundRowFadeVarName('Step'))} = 0`,
+    ].join('\n') + '\n';
+  };
+
   // Spliced into commongamelogic (see bbasic.bb.hbs), right after the
   // Sound FX fade checks and before the Music tab's  per-frame checks -
   // same reasoning as generateEnvelopeChecks in generators/bbasic/
@@ -1538,7 +1560,7 @@ export default (Blockly) => {
       // keeping the on-screen motion each direction label already had.
       const mechDirection = {up: 'down', down: 'up', upup: 'downdown', downdown: 'upup'}[direction];
       const step = Math.abs(delta);
-      const visibleRows = effectiveBackgroundRows(config);
+      const visibleRows = backgroundDataRows(config);
       const forward = delta > 0;
       const {rowMask, indexMask} = Blockly.BBasic.backgroundScrollPacking;
       const gosubPatch = ` gosub ${BACKGROUND_SCROLL_PATCH_SUBROUTINE_NAME}${Blockly.BBasic.bankJumpSuffix(

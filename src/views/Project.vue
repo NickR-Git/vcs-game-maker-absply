@@ -15,9 +15,9 @@
           icon
           small
           class="project-flat-icon-btn data-icon-btn-size"
-          :class="{'project-flat-icon-btn-active': showExamples}"
+          :class="{'project-flat-icon-btn-active': showExamples && !showSoundBanks}"
           :title="examples.status === 'loading' ? 'Example Projects (checking for updates...)' : 'Example Projects'"
-          @click="showExamples = true"
+          @click="showSoundBanks = false; showExamples = true"
         >
           <v-progress-circular
             v-if="examples.status === 'loading'"
@@ -35,34 +35,23 @@
             />
           </svg>
         </v-btn>
+        <v-btn
+          icon
+          small
+          class="project-flat-icon-btn data-icon-btn-size"
+          :class="{'project-flat-icon-btn-active': showSoundBanks}"
+          :title="soundBanks.status === 'loading' ? 'Sound Banks (checking for updates...)' : 'Sound Banks'"
+          @click="showSoundBanks = true"
+        >
+          <v-progress-circular
+            v-if="soundBanks.status === 'loading'"
+            indeterminate
+            :size="18"
+            :width="2"
+          />
+          <v-icon v-else>mdi-piano</v-icon>
+        </v-btn>
         <v-divider class="project-toolbar-divider" vertical />
-        <v-btn
-          icon
-          small
-          class="project-flat-icon-btn data-icon-btn-size"
-          title="Save"
-          @click="handleSaveProject"
-        >
-          <v-icon>mdi-content-save</v-icon>
-        </v-btn>
-        <v-btn
-          icon
-          small
-          class="project-flat-icon-btn data-icon-btn-size"
-          title="Save As..."
-          @click="handleSaveProjectAs"
-        >
-          <v-icon>mdi-content-save-edit</v-icon>
-        </v-btn>
-        <v-btn
-          icon
-          small
-          class="project-flat-icon-btn data-icon-btn-size"
-          title="Open Project"
-          @click="handleOpenProjectClick"
-        >
-          <v-icon>mdi-folder-open</v-icon>
-        </v-btn>
         <template>
             <v-dialog
               v-model="data.newProjectDialog"
@@ -115,14 +104,41 @@
             </v-card>
           </v-dialog>
         </template>
+        <v-btn
+          icon
+          small
+          class="project-flat-icon-btn data-icon-btn-size"
+          title="Open Project"
+          @click="handleOpenProjectClick"
+        >
+          <v-icon>mdi-folder-open</v-icon>
+        </v-btn>
+        <v-btn
+          icon
+          small
+          class="project-flat-icon-btn data-icon-btn-size"
+          title="Save"
+          @click="handleSaveProject"
+        >
+          <v-icon>mdi-content-save</v-icon>
+        </v-btn>
+        <v-btn
+          icon
+          small
+          class="project-flat-icon-btn data-icon-btn-size"
+          title="Save As..."
+          @click="handleSaveProjectAs"
+        >
+          <v-icon>mdi-content-save-edit</v-icon>
+        </v-btn>
         <v-divider class="project-toolbar-divider" vertical />
         <v-btn
           icon
           small
           class="project-flat-icon-btn data-icon-btn-size"
-          :class="{'project-flat-icon-btn-active': !showExamples}"
+          :class="{'project-flat-icon-btn-active': !showExamples && !showSoundBanks}"
           title="Project Settings"
-          @click="showExamples = false"
+          @click="showSoundBanks = false; showExamples = false"
         >
           <v-icon>mdi-cog-outline</v-icon>
         </v-btn>
@@ -136,7 +152,7 @@
       </div>
     </div>
 
-    <v-card-text v-if="!showExamples" class="project-settings-text">
+    <v-card-text v-if="!showExamples && !showSoundBanks" class="project-settings-text">
       <span class="text-subtitle-1 project-settings-label">Project Settings</span>
       <div class="project-title-row">
         <v-text-field
@@ -202,6 +218,54 @@
       />
     </v-card-text>
 
+    <v-card-text v-else-if="showSoundBanks" class="project-settings-text">
+      <span class="text-subtitle-1 project-settings-label">Sound Banks</span>
+      <p class="v-messages theme--light v-messages__message example-status">
+        Sounds and sound banks from GitHub. Click one to choose which sounds to import into the
+        open project.
+      </p>
+      <div v-if="soundBanks.status === 'loading'" class="example-progress">
+        <v-progress-circular indeterminate :size="16" :width="2" />
+        <span v-if="soundBanks.total">
+          Downloading sound banks ({{ soundBanks.done }} of {{ soundBanks.total }})...
+        </span>
+        <span v-else>Checking for sound banks...</span>
+      </div>
+      <p v-if="!soundBanks.entries.length && soundBanks.status !== 'loading'" class="v-messages theme--light v-messages__message example-status">
+        <template v-if="soundBanks.status === 'error'">
+          Could not get the sound banks ({{ soundBanks.message }}). They will be available once the
+          app can reach GitHub.
+        </template>
+        <template v-else>There are no sound banks yet.</template>
+      </p>
+      <p v-if="data.soundBankError" class="example-error">{{ data.soundBankError }}</p>
+      <div class="example-list">
+        <v-card
+          v-for="bank in soundBanks.entries"
+          :key="bank.name"
+          outlined
+          :ripple="false"
+          class="example-card"
+          @click="handleSelectSoundBank(bank)"
+        >
+          <div class="example-card-text">
+            <div class="example-card-title">{{ soundBankTitle(bank) }}</div>
+            <div class="example-card-line">
+              {{ bank.sounds.length === 1 ? '1 sound' : `${bank.sounds.length} sounds` }}
+            </div>
+            <div v-if="bank.sounds.length" class="example-card-line sound-bank-names">
+              {{ bank.sounds.join(', ') }}
+            </div>
+          </div>
+        </v-card>
+      </div>
+      <SoundBankImportDialog
+        v-model="data.soundBankDialog"
+        :entries="data.soundBankEntries"
+        @confirm="handleConfirmSoundBankImport"
+      />
+    </v-card-text>
+
     <v-card-text v-else class="project-settings-text">
       <span class="text-subtitle-1 project-settings-label">Example Projects</span>
       <div v-if="examples.status === 'loading'" class="example-progress">
@@ -245,10 +309,10 @@
       </div>
     </v-card-text>
 
-    <v-dialog v-model="data.exampleDialog" width="640">
-      <v-card v-if="data.selectedExample">
+    <v-dialog v-model="data.exampleDialog" width="640" content-class="example-dialog">
+      <v-card v-if="data.selectedExample" class="example-card">
         <v-card-title>{{ exampleTitle(data.selectedExample) }}</v-card-title>
-        <v-card-text>
+        <v-card-text class="example-info-fields">
           <div v-if="data.selectedExample.screenshot" class="example-screenshot-frame example-dialog-screenshot">
             <img
               :src="data.selectedExample.screenshot"
@@ -283,11 +347,21 @@
           <v-row class="project-tight-row">
             <v-col cols="6">
               <v-text-field
+                v-if="!exampleWebsiteUrl(data.selectedExample)"
                 :value="data.selectedExample.website"
                 label="Website"
                 persistent-placeholder
                 readonly
               />
+              <div v-else class="example-website">
+                <div class="example-website-label">Website</div>
+                <a
+                  :href="exampleWebsiteUrl(data.selectedExample)"
+                  :title="data.selectedExample.website"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >{{ data.selectedExample.website }}</a>
+              </div>
             </v-col>
             <v-col cols="6">
               <v-text-field
@@ -301,8 +375,9 @@
           <v-textarea
             :value="data.selectedExample.description"
             label="Project Description"
+            class="example-description"
             persistent-placeholder
-            outlined
+            no-resize
             readonly
             rows="6"
             hide-details
@@ -335,11 +410,16 @@ import {getDateInfix} from '../utils/date';
 import {sanitizeForFilename} from '../utils/file';
 import {resetMusicEditorActiveState} from '../hooks/music-editor-state';
 import {clearEmulatorRom} from '../hooks/emulator';
-import {useLastLoadedRomBytes} from '../hooks/rom-status';
+import {useLastLoadedRomBytes, useLastBuildScreenshot} from '../hooks/rom-status';
+import {buildRom} from '../hooks/rom';
 import {captureEmulatorScreenshot} from '../utils/emulator-screenshot';
 import {matrixToPlayfield, playfieldToMatrix} from '../utils/pixels';
 import {persistActiveFileHandle, loadPersistedFileHandle, ensureWritePermission, persistActiveFilePath, loadPersistedFilePath} from '../utils/file-handle-storage';
 import {examplesState} from '../hooks/examples';
+import {soundBanksState} from '../hooks/soundbanks';
+import {processSoundEffectsStorageDefaults} from '../blocks/soundfx';
+import {buildSoundBankImportEntries, importSoundBankEntries} from '../utils/sound-bank';
+import SoundBankImportDialog from '../components/SoundBankImportDialog.vue';
 import pkg from '../../package.json';
 const appVersion = pkg.version;
 
@@ -377,6 +457,7 @@ const FILE_PICKER_TYPES = [{
 }];
 
 export default defineComponent({
+  components: {SoundBankImportDialog},
   setup(props, context) {
     const data = reactive({
       newProjectDialog: false,
@@ -384,6 +465,11 @@ export default defineComponent({
       selectedExample: null,
       exampleDialog: false,
       exampleError: '',
+      // The sound bank being imported (see hooks/soundbanks.js): its popup rows
+      // and open state, and a message if its file can't be read.
+      soundBankDialog: false,
+      soundBankEntries: [],
+      soundBankError: '',
       // The handle "Save" writes back to, from the last "Save As..." or
       // "Open Project" that went through the File System Access API (see
       // SUPPORTS_FILE_SYSTEM_ACCESS above) - null whenever there's nothing
@@ -407,6 +493,8 @@ export default defineComponent({
     // Whether the Example Projects section replaces the Project Settings
     // section; remembered across page refreshes.
     const showExamples = useProjectShowExamplesStorage();
+    // The Sound Banks screen (only while this tab is open, unlike showExamples).
+    const showSoundBanks = ref(false);
 
     // Same "growing padding + a bottom border once actually scrolled"
     // treatment as the graphic editor toolbar. This component's root is the
@@ -512,7 +600,7 @@ export default defineComponent({
       });
     }
 
-    return {data, router, showExamples, isToolbarScrolled, examples: examplesState, backgroundsStorage, playerAnimationsStorage,
+    return {data, router, showExamples, showSoundBanks, isToolbarScrolled, examples: examplesState, soundBanks: soundBanksState, backgroundsStorage, playerAnimationsStorage,
       workspaceStorage, configurationStorage, scoreFontStorage, squishCustomScoreFontStorage, dataTablesStorage,
       textStringsStorage, textFontStorage, soundEffectsStorage, songsStorage, titleScreenStorage, colorPaletteStorage, projectTitle,
       projectDescription, projectDeveloper, projectVersion, projectAutoIncrementVersion, projectIncludeDateInFilename,
@@ -529,6 +617,22 @@ export default defineComponent({
       const lastNum = parseInt(parts[lastIndex], 10);
       parts[lastIndex] = String(Number.isFinite(lastNum) ? lastNum + 1 : 0);
       return parts.join('.');
+    },
+
+    // A saved project always carries a screenshot. With no ROM showing in the
+    // emulator there is no picture to take, so the project is built and given
+    // a moment to run first. A failed build just means no screenshot: saving
+    // is never blocked by it.
+    async ensureEmulatorScreenshot() {
+      if (useLastBuildScreenshot().value) return;
+      if (useLastLoadedRomBytes().value && captureEmulatorScreenshot()) return;
+      try {
+        await buildRom();
+      } catch (e) {
+        console.error('Could not build a ROM for the project screenshot', e);
+        return;
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 1500));
     },
 
     // Shared by handleSaveProjectAs and handleSaveProject - builds the same
@@ -603,7 +707,9 @@ export default defineComponent({
       // saved project can be recognised at a glance. Only taken while a ROM
       // is running (otherwise it would just be a black screen), and nothing
       // reads it back on load.
-      const screenshot = useLastLoadedRomBytes().value ? captureEmulatorScreenshot() : null;
+      const liveScreenshot = useLastLoadedRomBytes().value ? captureEmulatorScreenshot() : null;
+      const screenshot = useLastBuildScreenshot().value ||
+        (liveScreenshot ? liveScreenshot.toDataURL('image/png') : null);
 
       const projectYaml = YAML.stringify({
         'type': FORMAT_TYPE,
@@ -617,7 +723,7 @@ export default defineComponent({
         // already does for when.
         'app-version': appVersion,
         'generation-time': new Date(),
-        'screenshot': screenshot ? screenshot.toDataURL('image/png') : undefined,
+        'screenshot': screenshot || undefined,
         configuration,
         'blockly-workspace': this.workspaceStorage,
         'player-animations': playerAnimations,
@@ -683,10 +789,18 @@ export default defineComponent({
       if (this.projectAutoIncrementVersion) {
         this.projectVersion = this.incrementVersion(this.projectVersion);
       }
-      const projectYaml = this.buildProjectYaml();
       const filename = this.buildSaveFilename();
+      // Built after the save dialog closes, not before: taking the screenshot
+      // can mean a build, and a dialog opened after that long a wait is no
+      // longer allowed (the click's permission to open one has expired).
+      let projectYaml = null;
+      const prepareProjectYaml = async () => {
+        await this.ensureEmulatorScreenshot();
+        projectYaml = this.buildProjectYaml();
+      };
 
       if (IS_ELECTRON) {
+        await prepareProjectYaml();
         const result = await window.electronAPI.saveProjectAs(projectYaml, filename);
         if (!result) return; // The user cancelled the native dialog.
         this.data.activeFilePath = result.path;
@@ -720,6 +834,7 @@ export default defineComponent({
             return;
           }
         }
+        await prepareProjectYaml();
         if (handle) {
           try {
             const writable = await handle.createWritable();
@@ -749,6 +864,7 @@ export default defineComponent({
         }
       }
 
+      if (projectYaml === null) await prepareProjectYaml();
       const projectBlob = new Blob([projectYaml], {type: 'text/yaml'});
       saveAs(projectBlob, filename);
       appendCompileLog(`Game saved to ${filename}`, 'stage');
@@ -771,6 +887,7 @@ export default defineComponent({
         if (this.projectAutoIncrementVersion) {
           this.projectVersion = this.incrementVersion(this.projectVersion);
         }
+        await this.ensureEmulatorScreenshot();
         const projectYaml = this.buildProjectYaml();
         const ok = await window.electronAPI.saveProject(this.data.activeFilePath, projectYaml);
         if (!ok) {
@@ -830,6 +947,7 @@ export default defineComponent({
           }
         }
       }
+      await this.ensureEmulatorScreenshot();
       const projectYaml = this.buildProjectYaml();
       const writable = await this.data.activeFileHandle.createWritable();
       await writable.write(projectYaml);
@@ -1133,6 +1251,43 @@ export default defineComponent({
 
     exampleTitle(example) {
       return example.title || example.name.replace(/\.vcsgm$/i, '');
+    },
+
+    soundBankTitle(bank) {
+      return bank.name.replace(/\.(vcsbnk|json)$/i, '');
+    },
+
+    // Opens the import popup for a bank's sounds against the open project's
+    // sound effects (the same popup the Sound tab uses).
+    handleSelectSoundBank(bank) {
+      this.data.soundBankError = '';
+      try {
+        const state = processSoundEffectsStorageDefaults(useSoundEffectsStorage());
+        this.data.soundBankEntries = buildSoundBankImportEntries(JSON.parse(bank.text), state.soundEffects);
+        this.data.soundBankDialog = true;
+      } catch (e) {
+        console.error('Could not read the sound bank', e);
+        this.data.soundBankError = `Could not read ${bank.name}: ${e.message}`;
+      }
+    },
+
+    handleConfirmSoundBankImport() {
+      const storage = useSoundEffectsStorage();
+      const state = processSoundEffectsStorageDefaults(storage);
+      importSoundBankEntries(state.soundEffects, this.data.soundBankEntries);
+      storage.value = state;
+      this.data.soundBankDialog = false;
+      const count = this.data.soundBankEntries.filter((entry) => entry.selected).length;
+      appendCompileLog(`Imported ${count} sound${count === 1 ? '' : 's'} into the project`, 'stage');
+    },
+
+    // The example's website as a link, or '' if it isn't a web address (only
+    // http/https are linked, so a project file can't smuggle in another scheme).
+    exampleWebsiteUrl(example) {
+      const website = ((example && example.website) || '').trim();
+      if (!website) return '';
+      const url = /^[a-z][a-z0-9+.-]*:/i.test(website) ? website : `https://${website}`;
+      return /^https?:\/\//i.test(url) ? url : '';
     },
 
     // Opens the example in the popup like a project file opened from disk,
@@ -1442,7 +1597,109 @@ export default defineComponent({
 }
 
 .example-dialog-screenshot {
-  margin-bottom: 16px;
+  flex: 0 0 auto;
+  margin: 0 auto 16px;
+  width: min(100%, calc(36vh * 320 / 220));
+}
+
+/* The card fits the window; the buttons stay visible and only the description
+   takes up whatever height is left (scrolling when its text needs it). */
+.example-card {
+  display: flex;
+  flex-direction: column;
+  max-height: 88vh;
+}
+
+.example-card > .v-card__text {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.example-card > .v-card__text > * {
+  flex: 0 0 auto;
+}
+
+.example-card > .v-card__text > .example-description {
+  flex: 1 1 auto;
+  min-height: 72px;
+}
+
+.example-info-fields >>> .example-description .v-input__control,
+.example-info-fields >>> .example-description .v-input__slot {
+  height: 100%;
+  min-height: 0;
+}
+
+.example-info-fields >>> .v-input__slot:before,
+.example-info-fields >>> .v-input__slot:after {
+  display: none;
+}
+
+/* Every field block (text field, textarea, website link) is the same height:
+   12px above (room for the floating label), the 32px field, 12px below. */
+.example-info-fields >>> .v-text-field__details {
+  display: none;
+}
+
+.example-info-fields >>> .v-input {
+  margin: 0 0 12px;
+  padding-top: 12px;
+}
+
+.example-info-fields >>> .v-input__slot {
+  margin-bottom: 0;
+}
+
+.example-info-fields .project-tight-row {
+  margin: 0 -12px !important;
+}
+
+.example-info-fields .project-tight-row > .col {
+  min-width: 0;
+  max-width: 50%;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+/* Only the description scrolls (scrollbar only when the text needs it). */
+.example-info-fields >>> .v-textarea textarea {
+  height: 100%;
+  margin-top: 0;
+  overflow-y: auto;
+}
+
+.example-website {
+  box-sizing: border-box;
+  max-width: 100%;
+  overflow: hidden;
+  height: 56px;
+  padding-top: 12px;
+  position: relative;
+}
+
+.example-website-label {
+  position: absolute;
+  top: 4px;
+  font-size: 12px;
+  line-height: 12px;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.example-website a {
+  display: block;
+  line-height: 32px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sound-bank-names {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .example-error {
@@ -1472,5 +1729,13 @@ export default defineComponent({
    margin, so the 4px gap each side is all the spacing, and full height. */
 .project-toolbar-divider {
   margin: 0;
+}
+</style>
+
+<style>
+/* The example info popup never scrolls as a whole - only its description does
+   (see .example-card in the scoped styles). */
+.v-dialog.example-dialog {
+  overflow: hidden;
 }
 </style>

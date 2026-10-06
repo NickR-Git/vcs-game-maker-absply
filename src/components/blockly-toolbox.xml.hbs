@@ -187,6 +187,14 @@
                 </shadow>
             </value>
         </block>
+        <block type="titlescreen_scroll_by">
+            <value name="VALUE">
+                <shadow type="math_number">
+                    <field name="NUM">1</field>
+                </shadow>
+            </value>
+        </block>
+        <block type="titlescreen_scroll_edge_reached"></block>
         <block type="titlescreen_player_frame_set">
             <value name="VALUE">
                 <shadow type="math_number">
@@ -553,6 +561,18 @@
             </value>
         </block>
         <block type="background_get_color"></block>
+        <block type="background_fade_rows_from">
+            <value name="VALUE">
+                <shadow type="color_get">
+                    <field name="COLOR">0</field>
+                </shadow>
+            </value>
+            <value name="FRAMES">
+                <shadow type="math_number">
+                    <field name="NUM">30</field>
+                </shadow>
+            </value>
+        </block>
         <block type="background_fade_to">
             <field name="VAR">COLUBK</field>
             <value name="VALUE">

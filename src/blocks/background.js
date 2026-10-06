@@ -75,6 +75,19 @@ export const backgroundFadeTimerVarName = (rawVar) => `${fadeTag(rawVar)}FadeTim
 export const backgroundFadePaceVarName = (rawVar) => `${fadeTag(rawVar)}FadePace`;
 export const backgroundFadeTargetVarName = (rawVar) => `${fadeTag(rawVar)}FadeTarget`;
 
+// State of "Fade playfield rows from color to playfield colors" (see that
+// block): Step 0-4 is which prebuilt row-color table is showing (255 = idle),
+// Timer/Pace count the frames per step, Start picks which fade-from color's
+// tables are used, Bg is the background currently loaded.
+export const backgroundRowFadeVarName = (part) => `bgRowFade${part}`;
+export const ROW_FADE_IDLE_STEP = 255;
+// The fade-from color has to be a plain color picker block (a constant), since
+// every step's row colors are built into the ROM ahead of time.
+export const rowFadeStartColor = (block) => {
+  const target = block.getInputTargetBlock('VALUE');
+  return target && target.type === 'color_get' ? (parseInt(target.getFieldValue('COLOR')) || 0) & 0xFE : 0;
+};
+
 // Fixed at 4 (not a user-choosable STEPS dropdown, as an earlier version of
 // this had) specifically because 4 is a power of 2: "frames / 4" always
 // compiles to a cheap bit-shift, never the real "jsr div8" subroutine call
@@ -288,6 +301,13 @@ export const effectiveBackgroundRows = (config) => {
   return cfg.enableSuperchip ? Math.max(1, Number(cfg.pfres) || DEFAULT_BACKGROUND_ROWS) :
     DEFAULT_BACKGROUND_ROWS;
 };
+
+// How many rows of playfield data a background holds: the visible rows plus,
+// without Superchip RAM, the one extra row the standard kernel's playfield
+// keeps below the 11 you can see (its implicit pfres is 12). It scrolls into
+// view with pfscroll. With Superchip, pfres already counts that row.
+export const backgroundDataRows = (config) =>
+  effectiveBackgroundRows(config) + ((config && config.enableSuperchip) ? 0 : 1);
 
 // Pads or truncates every background's pixel matrix (and per-row colors, if
 // set) to exactly targetRows. Used when the global playfield resolution
@@ -711,6 +731,29 @@ Blockly.defineBlocksWithJsonArray([
       'wherever it currently is, whichever direction actually gets closer. Only needs to be triggered ' +
       'once - the fade keeps running by itself every frame afterward, even from inside an "if" block ' +
       'that only briefly becomes true, until it reaches the target and stops.',
+  },
+  {
+    'type': `background_fade_rows_from`,
+    'message0': `${BACKGROUND_ICON} Fade playfield rows from ${COLOR_ICON} color %1 up/down to playfield colors over %2 frames`,
+    'args0': [
+      {
+        'type': 'input_value',
+        'name': 'VALUE',
+      },
+      {
+        'type': 'input_value',
+        'name': 'FRAMES',
+        'check': 'Number',
+      },
+    ],
+    'inputsInline': true,
+    'previousStatement': null,
+    'nextStatement': null,
+    'colour': BACKGROUND_COLOR,
+    'tooltip': 'Starts every playfield row at the brightness of the chosen color and fades each row ' +
+      'up or down to its real color from the Background editor, over roughly this many frames. Needs ' +
+      '"Enable per-row playfield colors" (Options tab) and a color from the color picker block. Only ' +
+      'needs to be triggered once. Switching backgrounds cancels it.',
   },
   // Block for reading a playfield pixel
   {

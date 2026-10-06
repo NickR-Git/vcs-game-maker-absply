@@ -511,6 +511,7 @@ import {escapeHtml} from './utils/build-error';
 import {captureEmulatorScreenshot} from './utils/emulator-screenshot';
 import {sanitizeForFilename} from './utils/file';
 import {syncExamples} from './hooks/examples';
+import {syncSoundBanks} from './hooks/soundbanks';
 import KeyMappingDialog from './components/KeyMappingDialog.vue';
 import pkg from '../package.json';
 const {productName, version} = pkg;
@@ -620,6 +621,7 @@ export default {
   mounted() {
     // Once per page load: fetch new/changed example projects (see hooks/examples.js).
     syncExamples();
+    syncSoundBanks();
     this.attachEmulator();
     this.$vuetify.theme.dark = this.darkMode;
     window.addEventListener('resize', this.handleWindowResize);
@@ -2142,6 +2144,14 @@ html {
    one so it covers that text. */
 .blocklyWidgetDiv .blocklyHtmlInput {
   background-color: #fff;
+}
+
+/* The multiline (comment block) editing box is sized to the block's text,
+   which is drawn in the block font, but Blockly's textarea defaults to
+   monospace - wider characters - so what was being typed got cropped. Use
+   the block font so the box and the text agree. */
+.blocklyWidgetDiv .blocklyHtmlTextAreaInput {
+  font-family: var(--blockly-font-family) !important;
 }
 
 [class*="-renderer"][class*="-theme"] .blocklyText,
@@ -3938,25 +3948,20 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
    white, so this handle reads exactly as visibly as .emulator-resize-handle's
    does, regardless of which of the two is actually on. The emulator pane's
    handle takes the very same values (rest, hover and grip), so the two match
-   in Dark Mode and Subdued Palette. */
+   in Dark Mode (with or without Subdued Palette). With Subdued Palette alone the
+   surfaces stay light grey, so the black-based rest-state values above apply. */
 .dark-mode .error-resize-handle:hover,
-.desaturate-app-colors .error-resize-handle:hover,
-.dark-mode .emulator-resize-handle:hover,
-.desaturate-app-colors .emulator-resize-handle:hover {
+.dark-mode .emulator-resize-handle:hover {
   background-color: rgba(255, 255, 255, 0.15);
 }
 
 .dark-mode .error-resize-handle::after,
-.desaturate-app-colors .error-resize-handle::after,
-.dark-mode .emulator-resize-handle::after,
-.desaturate-app-colors .emulator-resize-handle::after {
+.dark-mode .emulator-resize-handle::after {
   background-color: rgba(255, 255, 255, 0.25);
 }
 
 .dark-mode .error-resize-handle:hover::after,
-.desaturate-app-colors .error-resize-handle:hover::after,
-.dark-mode .emulator-resize-handle:hover::after,
-.desaturate-app-colors .emulator-resize-handle:hover::after {
+.dark-mode .emulator-resize-handle:hover::after {
   background-color: rgba(255, 255, 255, 0.4);
 }
 </style>

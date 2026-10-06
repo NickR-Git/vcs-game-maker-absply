@@ -3,7 +3,7 @@
 import {TITLE_SCREEN_KERNEL_TYPES, MAX_KERNEL_COPIES_PER_TYPE,
   processTitleScreenStorageDefaults, isCardAnimated, cardFrameHeight,
   titleCardFrameCounterVarName, titleCardScrollOffsetVarName,
-  titleCardIndexVarName} from '../../blocks/titlescreen';
+  titleCardIndexVarName, titleCardScrollEdgeFlagsVarName, TITLE_SCROLL_EDGE_BITS} from '../../blocks/titlescreen';
 import {useTitleScreenStorage, usePlayerAnimationsStorage,
   useConfigurationStorage} from '../../hooks/project';
 import {processPlayerAnimationsStorageDefaults} from './sprites';
@@ -866,6 +866,63 @@ export default (Blockly) => {
     // alias name, no separate "dim" needed at THIS call site since
     // buildCardDataAsm's pre-scan already reserved it.
     return `bmp_${key}_index = ${value}\n`;
+  };
+
+  Blockly.BBasic['titlescreen_scroll_by'] = function(block) {
+    const ref = block.getFieldValue('CARD');
+    const key = Blockly.BBasic.titleScreenCardSlots && Blockly.BBasic.titleScreenCardSlots[ref];
+    if (!key) return 'rem No scrolling title screen graphic selected\n';
+    const resolveVar = (canonicalName) =>
+      Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+    const amount = Blockly.BBasic.valueToCode(block, 'VALUE', Blockly.BBasic.ORDER_ASSIGNMENT) || '0';
+    const down = block.getFieldValue('DIRECTION') === 'down';
+    const cardAnimation = Blockly.BBasic.titleScreenCardAnimations && Blockly.BBasic.titleScreenCardAnimations[ref];
+    // Same target var as titlescreen_scroll_set (see its comment).
+    const scrollVar = cardAnimation ? resolveVar(titleCardScrollOffsetVarName(ref)) : `bmp_${key}_index`;
+    if (block.getFieldValue('STOP') !== 'TRUE') {
+      return `${scrollVar} = ${scrollVar} ${down ? '+' : '-'} ${amount}\n`;
+    }
+    const watches = Blockly.BBasic.titleScrollEdgeWatches || new Set();
+    const edge = down ? 'bottom' : 'top';
+    const flagLine = watches.has(`${ref}|${edge}`) ?
+      ` if temp1 >= temp2 then ${resolveVar(titleCardScrollEdgeFlagsVarName(ref))}{${TITLE_SCROLL_EDGE_BITS[edge]}} = 1\n` : '';
+    if (!down) {
+      // temp2 = old position; clamp at 0 (bB bytes are unsigned, so compare
+      // before subtracting).
+      return ` temp1 = ${amount}\n temp2 = ${scrollVar}\n ${scrollVar} = 0\n` +
+        ` if temp1 < temp2 then ${scrollVar} = temp2 - temp1\n${flagLine}`;
+    }
+    // Largest offset = one frame's height minus the window height. The same
+    // for every frame of an animated card, so it holds for whichever frame
+    // is currently showing.
+    const card = processTitleScreenStorageDefaults(useTitleScreenStorage()).screens
+        .reduce((found, screen) => found || (screen.cards || [])
+            .find((candidate) => `${screen.id}:${candidate.id}` === ref), null);
+    if (!card) return 'rem No scrolling title screen graphic selected\n';
+    const maxOffset = Math.max(0, cardFrameHeight(card) - (Number(card.scrollWindow) || 0));
+    // temp2 = rows left before the bottom (0 if already at or past it).
+    return ` temp1 = ${amount}\n temp2 = 0\n if ${scrollVar} < ${maxOffset} then temp2 = ${maxOffset} - ${scrollVar}\n` +
+      ` if temp1 < temp2 then ${scrollVar} = ${scrollVar} + temp1\n` +
+      ` if temp1 >= temp2 then ${scrollVar} = ${maxOffset}\n${flagLine}`;
+  };
+
+  // Runs once after a "Scroll title screen graphic" block stopped at the
+  // chosen edge - same flag-then-clear shape as background_scroll_edge_reached.
+  Blockly.BBasic['titlescreen_scroll_edge_reached'] = function(block) {
+    const ref = block.getFieldValue('CARD');
+    const edge = block.getFieldValue('EDGE');
+    const watches = Blockly.BBasic.titleScrollEdgeWatches || new Set();
+    if (!ref || !watches.has(`${ref}|${edge}`)) return '';
+    const code = Blockly.BBasic.statementToCode(block, 'DO').trim();
+    const flag = `${Blockly.BBasic.nameDB_.getName(titleCardScrollEdgeFlagsVarName(ref),
+        Blockly.Names.DEVELOPER_VARIABLE_TYPE)}{${TITLE_SCROLL_EDGE_BITS[edge]}}`;
+    const labelEnd = `_titlescrolledge_${Blockly.BBasic.blockNumbers.next()}_end`;
+    return '\n' + [
+      `if !${flag} then goto ${labelEnd}`,
+      `${flag} = 0`,
+      code,
+      `@ ${labelEnd}`,
+    ].join('\n') + '\n';
   };
 
   Blockly.BBasic['titlescreen_player_frame_set'] = function(block) {

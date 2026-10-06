@@ -26,8 +26,9 @@ import {DEFAULT_ROW_COLOR, processBackgroundStorageDefaults,
   backgroundScrollEdgeFlagsVarName, backgroundScrollStartVarName,
   backgroundScrollRowVarName, backgroundScrollRowMaxVarName,
   backgroundScrollPacking, backgroundScrollActiveVarName, backgroundScrollSubRowVarName,
-  backgroundsWithOverflowRows, effectiveBackgroundRows,
-  BACKGROUND_SCROLL_PATCH_SUBROUTINE_NAME, resolveUsedBackgroundIds} from '../blocks/background';
+  backgroundsWithOverflowRows, backgroundDataRows,
+  BACKGROUND_SCROLL_PATCH_SUBROUTINE_NAME, resolveUsedBackgroundIds,
+  backgroundRowFadeVarName, ROW_FADE_IDLE_STEP, rowFadeStartColor} from '../blocks/background';
 import {functionCallDiscardVarName, functionCallArgVarName, functionParamVarName,
   MAX_FUNCTION_ARGS} from '../blocks/function';
 import {dataTableSymbolName, processDataTablesStorageDefaults} from '../blocks/data';
@@ -42,7 +43,7 @@ import {keypadKeyVarName} from '../utils/keypad';
 import {registerTitleScreenSubroutine} from './bbasic/titlescreen';
 import {resolveAnimatedTitleScreenCardRefs, titleCardFrameCounterVarName, processTitleScreenStorageDefaults,
   titleCardScrollOffsetVarName, resolveTitleScreenCardsNeedingIndexRefs,
-  titleCardIndexVarName} from '../blocks/titlescreen';
+  titleCardIndexVarName, titleCardScrollEdgeFlagsVarName} from '../blocks/titlescreen';
 import {registerKeypadPollSubroutine, generateJoystickDirection8Table,
   reserveJoystickDirection8DevVars, generateJoystickDirection8Checks,
   reserveJoystickButtonDevVars, reserveJoystickDoubleTapDevVars,
@@ -1491,8 +1492,18 @@ Blockly.BBasic.init = function(workspace) {
     // and titlescreen_scroll_set's generator (both run later) know which
     // refs actually got one, without re-scanning the workspace themselves.
     this.titleScreenScrollTargetRefs = new Set(workspace.getAllBlocks(false)
-        .filter((block) => block.type === 'titlescreen_scroll_set')
+        .filter((block) => block.type === 'titlescreen_scroll_set' || block.type === 'titlescreen_scroll_by')
         .map((block) => block.getFieldValue('CARD')));
+    // Which "ref|edge" a "When title screen scroll reaches" block watches -
+    // "Scroll title screen graphic" only sets the flags something watches.
+    this.titleScrollEdgeWatches = new Set(workspace.getAllBlocks(false)
+        .filter((block) => block.type === 'titlescreen_scroll_edge_reached')
+        .map((block) => `${block.getFieldValue('CARD')}|${block.getFieldValue('EDGE')}`));
+    new Set([...this.titleScrollEdgeWatches].map((watch) => watch.split('|')[0])).forEach((ref) => {
+      if (!ref) return;
+      reserveDevVar(titleCardScrollEdgeFlagsVarName(ref), undefined,
+          'bit 0 = title screen scroll reached the top, bit 1 = reached the bottom');
+    });
     resolveAnimatedTitleScreenCardRefs().forEach((ref) => {
       reserveDevVar(titleCardFrameCounterVarName(ref), undefined,
           'title screen card animation: duration-tick counter');
@@ -1892,6 +1903,18 @@ Blockly.BBasic.init = function(workspace) {
     reserveDevVar(backgroundFadePaceVarName(rawVar), undefined, 'this register\'s fade: frames per step');
     reserveDevVar(backgroundFadeTargetVarName(rawVar), undefined, 'this register\'s fade: color it\'s fading toward');
   });
+  // "Fade playfield rows from color to playfield colors": needs the row color
+  // table (see needsPlayfieldColorTable), so it does nothing without it.
+  const rowFadeBlocks = workspace.getAllBlocks(false).filter((block) => block.type === 'background_fade_rows_from');
+  this.rowFadeStartColors = this.usePlayfieldRowColors() ?
+    [...new Set(rowFadeBlocks.map(rowFadeStartColor))].sort((a, b) => a - b) : [];
+  if (this.rowFadeStartColors.length) {
+    [['Step', 'which prebuilt row color table is showing (255 = no fade)'],
+      ['Timer', 'frames since the last step'], ['Pace', 'frames per step'],
+      ['Start', 'which fade-from color\'s tables to use'], ['Bg', 'background currently loaded']]
+        .forEach(([part, description]) => reserveDevVar(backgroundRowFadeVarName(part), undefined,
+            `playfield row fade: ${description}`));
+  }
   // One shared byte per group of up to 4 fadeable registers (see
   // FADE_FLAGS_REGISTER_GROUPS' comment in blocks/background.js - a 5th+
   // register, like sprite_player_fade_to's  player0realcolor/
@@ -1948,7 +1971,7 @@ Blockly.BBasic.init = function(workspace) {
   // nor takes a position in the index.
   const includedBackgrounds = this.getIncludedBackgrounds();
   this.backgroundScrollOverflowBackgrounds = this.backgroundScrollUsed ?
-    backgroundsWithOverflowRows(includedBackgrounds, effectiveBackgroundRows(config)) :
+    backgroundsWithOverflowRows(includedBackgrounds, backgroundDataRows(config)) :
     [];
   this.backgroundScrollPacking = this.backgroundScrollOverflowBackgrounds.length ?
     backgroundScrollPacking(includedBackgrounds) : null;
@@ -2840,6 +2863,14 @@ Blockly.BBasic.finish = function(code) {
     ...(Blockly.BBasic.backgroundScrollEdgeWatches.size ?
       [` ${Blockly.BBasic.nameDB_.getName(backgroundScrollEdgeFlagsVarName(),
           Blockly.Names.DEVELOPER_VARIABLE_TYPE)} = 0`] : []),
+    ...[...(Blockly.BBasic.titleScrollEdgeWatches || [])]
+        .map((watch) => watch.split('|')[0])
+        .filter((ref, index, refs) => ref && refs.indexOf(ref) === index)
+        .map((ref) => ` ${Blockly.BBasic.nameDB_.getName(titleCardScrollEdgeFlagsVarName(ref),
+            Blockly.Names.DEVELOPER_VARIABLE_TYPE)} = 0`),
+    ...((Blockly.BBasic.rowFadeStartColors || []).length ?
+      [` ${Blockly.BBasic.nameDB_.getName(backgroundRowFadeVarName('Step'),
+          Blockly.Names.DEVELOPER_VARIABLE_TYPE)} = ${ROW_FADE_IDLE_STEP}`] : []),
     ...(Blockly.BBasic.backgroundScrollStartUsed ?
       [` ${Blockly.BBasic.nameDB_.getName(backgroundScrollStartVarName(),
           Blockly.Names.DEVELOPER_VARIABLE_TYPE)} = 0`] : []),
@@ -2921,7 +2952,8 @@ Blockly.BBasic.finish = function(code) {
   // side effect already happened during the main workspaceToCode() pass
   // (this file's  blockToCode call, well before finish() runs), same as
   // every other block's  side effects generateDivMul() below depends on.
-  const generatedBackgroundFadeChecks = Blockly.BBasic.generateBackgroundFadeChecks();
+  const generatedBackgroundFadeChecks = Blockly.BBasic.generateBackgroundFadeChecks() +
+    Blockly.BBasic.generateRowFadeChecks();
   // Also has to run before generateRelocatedSections() below: it registers
   // its "musicEngine" unit into relocatableGraphicsUnits (see its
   // comment, right where it calls wrapRelocatableGraphics), which that call
@@ -4058,6 +4090,22 @@ Blockly.BBasic.getIncludedBackgrounds = function() {
   return all.filter((background) => this.usedBackgroundIds.has(Number(background.id)));
 };
 
+// One background's "pfcolors:" block plus the playfieldrealcolor line that
+// carries its top row (see generateBackgrounds' comment on that batari Basic
+// bug). Also used for each prebuilt step of "Fade playfield rows from".
+const buildPfcolorsBlock = (rowCount, rowColors, blankLinesShown) => {
+  const resolved = [];
+  for (let i = 0; i < rowCount; i++) {
+    resolved.push((rowColors && rowColors[i] != null) ? rowColors[i] : DEFAULT_ROW_COLOR);
+  }
+  const outputBytes = blankLinesShown ?
+    resolved.concat([resolved[resolved.length - 1]]) :
+    [resolved[0]].concat(resolved);
+  const rows = outputBytes.map((byte) => '  ' + colorByteToBuildBBasic(byte));
+  return ' pfcolors:\n' + rows.join('\n') + '\nend\n' +
+    ` playfieldrealcolor = ${colorByteToBuildBBasic(resolved[0])}\n`;
+};
+
 Blockly.BBasic.generateBackgrounds = function() {
   // The backgrounds that go in the ROM (see getIncludedBackgrounds). The
   // scrolling code finds each background's data by its position in this same
@@ -4118,20 +4166,9 @@ Blockly.BBasic.generateBackgrounds = function() {
   // background happened to be at.
   const configurationStorage = useConfigurationStorage();
   const config = (configurationStorage && configurationStorage.value) || {};
-  const visibleRows = effectiveBackgroundRows(config);
+  const visibleRows = backgroundDataRows(config);
   const scrollTrackingUsed = this.backgroundScrollTracking;
-  const buildPfcolors = (pixels, rowColors) => {
-    const resolved = [];
-    for (let i = 0; i < pixels.length; i++) {
-      resolved.push((rowColors && rowColors[i] != null) ? rowColors[i] : DEFAULT_ROW_COLOR);
-    }
-    const outputBytes = blankLinesShown ?
-      resolved.concat([resolved[resolved.length - 1]]) :
-      [resolved[0]].concat(resolved);
-    const rows = outputBytes.map((byte) => '  ' + colorByteToBuildBBasic(byte));
-    return ' pfcolors:\n' + rows.join('\n') + '\nend\n' +
-      ` playfieldrealcolor = ${colorByteToBuildBBasic(resolved[0])}\n`;
-  };
+  const buildPfcolors = (pixels, rowColors) => buildPfcolorsBlock(pixels.length, rowColors, blankLinesShown);
 
   // Registers the shared row-patch subroutine (see its comment) as a side
   // effect, for its relocation bookkeeping - not concatenated into this
@@ -4218,12 +4255,77 @@ Blockly.BBasic.generateBackgrounds = function() {
     const colorTableSaveLines = (usePfColors && this.backgroundRainbowUsed) ?
       ` ${Blockly.BBasic.superchipRwPairs[backgroundColorTableLoVarName()].write} = pfcolortable\n` +
       ` ${Blockly.BBasic.superchipRwPairs[backgroundColorTableHiVarName()].write} = aux2\n` : '';
+    const rowFadeLines = (this.rowFadeStartColors || []).length ?
+      ` ${backgroundRowFadeVarName('Bg')} = ${index}\n` +
+      ` ${backgroundRowFadeVarName('Step')} = ${ROW_FADE_IDLE_STEP}\n` : '';
     return ` if newbackground <> ${id} then goto ${endLabel}` + '\n' +
+      rowFadeLines +
       scrollTrackingLines +
       Blockly.BBasic.wrapRelocatableGraphics(`background${id}`, payload) + '\n' +
       colorTableSaveLines +
       endLabel;
   }).join('\n\n');
+};
+
+// Per-frame step of "Fade playfield rows from color to playfield colors".
+// Each step shows a prebuilt row color table (the real one for step 4) by
+// running its "pfcolors:" block, picked by the loaded background, the
+// fade-from color and the step. Each row keeps its hue; only the
+// brightness runs from the fade-from color's to the row's, in four equal
+// steps. Spliced in with the other fade checks.
+Blockly.BBasic.generateRowFadeChecks = function() {
+  const startColors = this.rowFadeStartColors || [];
+  if (!startColors.length) return '';
+  const resolveVar = (part) =>
+    this.nameDB_.getName(backgroundRowFadeVarName(part), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+  const stepVar = resolveVar('Step');
+  const timerVar = resolveVar('Timer');
+  const paceVar = resolveVar('Pace');
+  const startVar = resolveVar('Start');
+  const bgVar = resolveVar('Bg');
+  const configurationStorage = useConfigurationStorage();
+  const config = (configurationStorage && configurationStorage.value) || {};
+  const visibleRows = backgroundDataRows(config);
+  const blankLinesShown = this.effectiveShowBlankLines();
+  const number = this.blockNumbers.next();
+  const endLabel = `_rowfade_${number}_end`;
+  const applyLabel = `_rowfade_${number}_apply`;
+  let skipCounter = 0;
+  const lines = [
+    ` if ${stepVar} > 4 then goto ${endLabel}`,
+    ` ${timerVar} = ${timerVar} + 1`,
+    ` if ${timerVar} < ${paceVar} then goto ${endLabel}`,
+    ` ${timerVar} = 0`,
+  ];
+  const emitTable = (conditions, rowColors, rowCount) => {
+    const skipLabel = `_rowfade_${number}_skip${skipCounter++}`;
+    conditions.forEach((condition) => lines.push(` if ${condition} then goto ${skipLabel}`));
+    lines.push(buildPfcolorsBlock(rowCount, rowColors, blankLinesShown).replace(/\n$/, ''));
+    lines.push(` goto ${applyLabel}`);
+    lines.push(skipLabel);
+  };
+  this.getIncludedBackgrounds().forEach(({pixels, rowColors}, index) => {
+    const rowCount = Math.min(pixels.length, visibleRows);
+    startColors.forEach((startColor, startIndex) => {
+      for (let step = 0; step < 4; step++) {
+        const colors = [];
+        for (let row = 0; row < rowCount; row++) {
+          const target = (rowColors && rowColors[row] != null) ? rowColors[row] : DEFAULT_ROW_COLOR;
+          const from = (startColor & 0x0E) >> 1;
+          const to = (target & 0x0E) >> 1;
+          colors.push((target & 0xF0) | ((from + Math.round((to - from) * step / 4)) << 1));
+        }
+        emitTable([`${bgVar} <> ${index}`, `${startVar} <> ${startIndex}`, `${stepVar} <> ${step}`],
+            colors, rowCount);
+      }
+    });
+    emitTable([`${bgVar} <> ${index}`, `${stepVar} <> 4`], rowColors, rowCount);
+  });
+  lines.push(applyLabel);
+  lines.push(` ${stepVar} = ${stepVar} + 1`);
+  lines.push(` if ${stepVar} > 4 then ${stepVar} = ${ROW_FADE_IDLE_STEP}`);
+  lines.push(endLabel);
+  return lines.join('\n') + '\n';
 };
 
 // The subroutine that makes scrolling past a customHeight background's

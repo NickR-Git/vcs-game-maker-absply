@@ -805,7 +805,18 @@ export default {
       // Every tool draws through editor.set(), so mirror drawing hooks in here
       // (see mirrorPixels).
       const set = this.editor.set.bind(this.editor);
-      this.editor.set = (pixels, logToHistory = true) => set(this.mirrorPixels(pixels, logToHistory), logToHistory);
+      // Cells outside the grid are dropped first. The editor stores cells by
+      // y * width + x, so a cell past an edge (a Shift-snapped line or square
+      // reaching beyond the canvas, a moved selection) lands on a cell at the
+      // opposite edge or the next row instead, and Undo (which every preview
+      // tool uses to erase its last preview) then leaves it behind as a stray
+      // pixel.
+      this.editor.set = (pixels, logToHistory = true) => {
+        const {width, height} = this.editor;
+        const inside = pixels.filter((pixel) =>
+          pixel.x >= 0 && pixel.y >= 0 && pixel.x < width && pixel.y < height);
+        return set(this.mirrorPixels(inside, logToHistory), logToHistory);
+      };
       // Not logged to the history: this is loading the image, not an edit, and as
       // an entry it made Undo (once the strokes were undone, or on its own)
       // wipe the whole graphic back to empty.

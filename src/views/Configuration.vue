@@ -281,7 +281,7 @@ import {useBackgroundsStorage, useConfigurationStorage,
   useHideDescriptionTextStorage, useHideSidebarStorage, useLoadLastProjectStorage, useMuteBlocklySoundsStorage,
   useProjectAutoIncrementVersionStorage, useStellaPathStorage} from '../hooks/project';
 import {BANK_COUNT_BY_ROMSIZE, countUsedVariables, usesPlayer0RainbowColors} from '../hooks/rom';
-import {effectiveBackgroundRows, reflowBackgroundsToHeight} from '../blocks/background';
+import {backgroundDataRows, reflowBackgroundsToHeight} from '../blocks/background';
 
 // 64k compiles correctly (see generators/bbasic.js's  SUPPORTED_ROM_SIZES/
 // BANK_COUNT_BY_ROMSIZE_MINI) - used to be left out of this list because the
@@ -528,7 +528,7 @@ export default defineComponent({
       }
       configurationState.value = enforceInlineRandExclusivity(state);
 
-      reflowBackgroundsToHeight(backgroundsStorage, effectiveBackgroundRows(state));
+      reflowBackgroundsToHeight(backgroundsStorage, backgroundDataRows(state));
     };
 
     // Unlike pfres above, this doesn't change how many rows the playfield

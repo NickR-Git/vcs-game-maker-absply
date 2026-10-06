@@ -47,6 +47,7 @@ export const setCompiledRomBytes = (result) => {
 export const clearLoadedRom = () => {
   lastLoadedRomBytes.value = null;
   lastLoadedTvSpec.value = 'NTSC';
+  lastBuildScreenshot.value = null;
   compiledRomBytes.value = null;
   hasCompiledRom.value = false;
   romOutdated.value = true;
@@ -80,6 +81,13 @@ const LAST_LOADED_TV_SPEC_KEY = 'vcsgm-last-loaded-tv-spec';
 // the right value before either the 'gopher2600-ready' listener (hooks/
 // emulator.js) or a real page reload's first render can run.
 const lastLoadedRomBytes = ref(null);
+
+// A PNG data URL of what the last real build showed once it had been running
+// for a moment (see buildRom in hooks/rom.js), taken ahead of time so saving a
+// project doesn't have to build one. Null until that picture exists.
+const lastBuildScreenshot = ref(null);
+
+export const useLastBuildScreenshot = () => lastBuildScreenshot;
 
 export const useLastLoadedRomBytes = () => lastLoadedRomBytes;
 

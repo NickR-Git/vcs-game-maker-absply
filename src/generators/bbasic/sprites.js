@@ -1668,8 +1668,13 @@ const animationLoopBitsCode = (block, varName) => {
   const loopField = block.getField('LOOP');
   const loop = loopField ? block.getFieldValue('LOOP') === 'TRUE' : true;
   const sizeVar = varName.replace('animation', 'size');
+  // "restart" (only on the one-step set animation blocks) puts the animation's
+  // frame counter back to its first frame; without it the new animation picks
+  // up from the counter's current position.
+  const restart = block.getField('RESTART') && block.getFieldValue('RESTART') === 'TRUE';
   return `${sizeVar}{4} = ${loop ? 0 : 1}\n` +
-    `${sizeVar}{5} = 0\n`;
+    `${sizeVar}{5} = 0\n` +
+    (restart ? `${varName.replace('animation', 'frame')} = 0\n` : '');
 };
 
 export default (Blockly) => {
