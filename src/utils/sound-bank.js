@@ -20,6 +20,10 @@ export const buildSoundBankImportEntries = (bankData, soundEffects) =>
     data: imported,
     name: imported.name || 'Unnamed sound effect',
     selected: true,
+    // Whether a sound that matches an existing one's name replaces it (the
+    // popup offers this as "Replace existing" when there is only one sound);
+    // unticked, it is added as a new sound effect instead.
+    replace: true,
     isExisting: !!(imported.name && soundEffects.find((o) => o.name === imported.name)),
   }));
 
@@ -47,13 +51,19 @@ export const importSoundBankEntries = (soundEffects, entries) => {
     const imported = entry.data;
     // eslint-disable-next-line no-unused-vars
     const {id, ...importedData} = imported;
-    const existing = imported.name && soundEffects.find((o) => o.name === imported.name);
+    const existing = entry.replace !== false && imported.name && soundEffects.find((o) => o.name === imported.name);
     if (existing) {
       Object.assign(existing, importedData, {id: existing.id});
       snapAudfToValid(existing);
     } else {
       maxId += 1;
-      const newSoundEffect = {...importedData, id: maxId, name: imported.name || `Sound effect ${maxId}`};
+      // A new copy of a name already in use gets a number, so later imports
+      // by name still find the original.
+      let name = imported.name || `Sound effect ${maxId}`;
+      for (let copy = 2; soundEffects.some((o) => o.name === name); copy++) {
+        name = `${imported.name} ${copy}`;
+      }
+      const newSoundEffect = {...importedData, id: maxId, name};
       soundEffects.push(newSoundEffect);
       snapAudfToValid(newSoundEffect);
     }

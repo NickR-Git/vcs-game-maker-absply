@@ -233,6 +233,9 @@ export const useDarkModeStorage = () =>
 // Project Settings (false), so a page refresh stays on the same one.
 export const useProjectShowExamplesStorage = () =>
   useBooleanAppSetting('vcs-game-maker.projectShowExamples');
+// Same, for the Sound Banks screen, which takes the place of either of those two.
+export const useProjectShowSoundBanksStorage = () =>
+  useBooleanAppSetting('vcs-game-maker.projectShowSoundBanks');
 export const useHideDescriptionTextStorage = () =>
   useBooleanAppSetting('vcs-game-maker.hideDescriptionText');
 export const useMuteBlocklySoundsStorage = () =>

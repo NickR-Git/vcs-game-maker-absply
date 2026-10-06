@@ -1,7 +1,7 @@
 import {reactive} from '@vue/composition-api';
 import {soundEffectsInBankFile} from '../utils/sound-bank';
 
-// Sound banks and single sounds (.vcsbnk or .json files) are kept in a folder
+// Sound banks and single sounds (.vcssnd for single sounds, .vcsbnk for banks, or .json files) are kept in a folder
 // of a GitHub repo and copied into this browser's IndexedDB once per page
 // load, the same way the example projects are (see hooks/examples.js): one
 // request lists the folder (each file comes with a content hash), and only
@@ -63,12 +63,15 @@ const deleteRecord = (key) => runTransaction('readwrite', (store) => store.delet
 // from the file itself.
 const summarize = (name, text) => {
   let sounds = [];
+  let isBank = false;
   try {
-    sounds = soundEffectsInBankFile(JSON.parse(text)).map((sound) => sound.name || 'Unnamed sound effect');
+    const parsed = JSON.parse(text);
+    isBank = !!(parsed && Array.isArray(parsed.soundEffects));
+    sounds = soundEffectsInBankFile(parsed).map((sound) => sound.name || 'Unnamed sound effect');
   } catch (e) {
     console.error(`Could not read sound bank ${name}`, e);
   }
-  return {sounds};
+  return {sounds, isBank};
 };
 
 const toEntry = (record) => ({
@@ -85,8 +88,13 @@ const showCached = async () => {
   return records;
 };
 
-const listRemoteFiles = async () => {
-  const {owner, repo, branch, path} = SOUND_BANKS_SOURCE;
+// Lists one folder, then the folders inside it (down to MAX_FOLDER_DEPTH), so
+// sounds and banks can be kept in subfolders as well as straight in the main
+// one. Each file's name is its path below the main folder.
+const MAX_FOLDER_DEPTH = 2;
+
+const listRemoteFiles = async (path = SOUND_BANKS_SOURCE.path, depth = 0) => {
+  const {owner, repo, branch} = SOUND_BANKS_SOURCE;
   const response = await fetch(
       `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${encodeURIComponent(branch)}`,
       // no-cache: the API marks listings cacheable for a minute, which kept a
@@ -97,7 +105,15 @@ const listRemoteFiles = async () => {
   if (response.status === 404) return [];
   if (!response.ok) throw new Error(`GitHub returned ${response.status}`);
   const listing = await response.json();
-  return listing.filter((item) => item.type === 'file' && /\.(vcsbnk|json)$/i.test(item.name));
+  const prefix = `${SOUND_BANKS_SOURCE.path}/`;
+  const files = listing
+      .filter((item) => item.type === 'file' && /\.(vcssnd|vcsbnk|json)$/i.test(item.name))
+      .map((item) => ({...item, name: item.path.startsWith(prefix) ? item.path.slice(prefix.length) : item.name}));
+  if (depth >= MAX_FOLDER_DEPTH) return files;
+  for (const folder of listing.filter((item) => item.type === 'dir')) {
+    files.push(...await listRemoteFiles(folder.path, depth + 1));
+  }
+  return files;
 };
 
 let started = false;

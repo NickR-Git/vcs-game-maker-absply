@@ -35,7 +35,7 @@
               icon
               small
               class="soundfx-bank-btn soundfx-icon-btn-size"
-              title="Save every sound effect/instrument in this project to a single .JSON sound bank file"
+              title="Save every sound effect/instrument in this project to a single .vcsbnk sound bank file"
               @click="handleExportSoundBank"
             >
               <!-- mdi-database-export/-import, not the plain mdi-export/
@@ -56,7 +56,7 @@
               icon
               small
               class="soundfx-bank-btn soundfx-icon-btn-size"
-              title="Load a .JSON sound bank file - a sound effect whose name matches one already here has its parameters replaced; every other sound effect in the file is added as a new card"
+              title="Load a .vcsbnk sound bank file - a sound effect whose name matches one already here has its parameters replaced; every other sound effect in the file is added as a new card"
               @click="handleImportSoundBank"
             >
               <v-icon>mdi-database-import</v-icon>
@@ -86,7 +86,7 @@
             <v-btn
               icon
               small
-              title="Export sound effect to .JSON file (Shift+E)"
+              title="Export sound effect to .vcssnd file (Shift+E)"
               class="soundfx-bank-btn soundfx-icon-btn-size"
               :disabled="!selectedSoundEffect"
               @click="() => handleExportSoundEffect(selectedSoundEffect)"
@@ -96,7 +96,7 @@
             <v-btn
               icon
               small
-              title="Import sound effect from .JSON file (Shift+I)"
+              title="Import sound effect from .vcssnd file (Shift+I)"
               class="soundfx-bank-btn soundfx-icon-btn-size"
               :disabled="!selectedSoundEffect"
               @click="() => handleImportSoundEffect(selectedSoundEffect)"
@@ -833,7 +833,7 @@ export default defineComponent({
       instance.proxy.$forceUpdate();
     };
 
-    // Sound effect data as a standalone .vcsbnk file, for sharing an
+    // Sound effect data as a standalone .vcssnd file, for sharing an
     // instrument between projects or keeping an external backup - same
     // pattern as MusicEditor.vue's  handleExportSong/handleImportSong
     // (including leaving the card's  id out of the export, kept as the
@@ -844,15 +844,15 @@ export default defineComponent({
       const {id, ...soundEffectData} = soundEffect;
       const blob = new Blob([JSON.stringify(soundEffectData, null, 2)], {type: 'application/json'});
       const filename = (soundEffect.name || `sound-${soundEffect.id}`).replace(/[^A-Za-z0-9]+/g, '_');
-      saveAs(blob, `Sound_${filename}-${getDateInfix()}.vcsbnk`);
+      saveAs(blob, `Sound_${filename}-${getDateInfix()}.vcssnd`);
     };
 
     // Overwrites this sound effect card's  data with a previously
-    // exported .vcsbnk file's contents - keeps this card's  id (see
+    // exported .vcssnd file's contents - keeps this card's  id (see
     // handleExportSoundEffect) untouched so every soundfx_play block and
     // Music tab track already pointing at this card keeps working.
     const handleImportSoundEffect = (soundEffect) => {
-      openFileDialog('.vcsbnk,.json')
+      openFileDialog('.vcssnd,.vcsbnk,.json')
           .then((file) => file.text())
           .then((text) => {
             const soundEffectData = JSON.parse(text);
@@ -911,7 +911,7 @@ export default defineComponent({
     // way to bring in just a few sounds from a bank without also
     // overwriting/adding every other one it happened to contain.
     const handleImportSoundBank = () => {
-      openFileDialog('.vcsbnk,.json')
+      openFileDialog('.vcssnd,.vcsbnk,.json')
           .then((file) => file.text())
           .then((text) => {
             soundBankImportEntries.value = buildSoundBankImportEntries(JSON.parse(text), state.value.soundEffects);

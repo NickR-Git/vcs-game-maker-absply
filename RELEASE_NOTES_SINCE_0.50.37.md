@@ -1,6 +1,6 @@
 # VCS Game Maker: everything since 0.50.37
 
-This covers versions 0.50.38 through 0.51.23, grouped by area. The per-version
+This covers versions 0.50.38 through 0.51.24, grouped by area. The per-version
 detail is in `CHANGES_SINCE_0.50.37.txt`.
 
 ## Emulator and TV standard
@@ -20,6 +20,9 @@ detail is in `CHANGES_SINCE_0.50.37.txt`.
 
 ## Blocks and code generation
 
+- **Title screen:** scroll-by block with stop at edge, and a block that runs when a scroll
+  reaches its top or bottom. **Background:** fade playfield rows to the row colors, and a
+  12th playfield row without Superchip. **Player:** "restart" option on set animation.
 - **Sprites:** Inertia (accelerate/decelerate) blocks, a unified bounce block,
   16-direction Fire, and blocks that make sprites follow playfield scrolling.
   Player 0/1 and Missile 0/1 are now single dropdown-driven blocks (existing
@@ -73,6 +76,9 @@ detail is in `CHANGES_SINCE_0.50.37.txt`.
 
 ## Project tab
 
+- New Sound Banks view (piano icon): sounds (`.vcssnd`) and banks (`.vcsbnk`) from the
+  GitHub repo's `soundbanks` folder, with a preview button per card and the import popup
+  for the open project. Saved projects always include a screenshot.
 - New Example Projects view: a grid of cards (screenshot, title, version,
   "by" developer) with a details popup and an Open example button. Examples are
   downloaded from the GitHub repo's `examples` folder once per page load,

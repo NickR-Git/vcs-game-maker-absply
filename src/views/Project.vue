@@ -1,6 +1,6 @@
 <template>
   <v-card flat class="editor-container">
-    <v-card-title>Project</v-card-title>
+    <v-card-title>{{ showExamples || showSoundBanks ? 'Project' : 'Project Settings' }}</v-card-title>
     <v-card-text class="tab-intro-section">
       <p class="v-messages theme--light v-messages__message project-intro-paragraph">
         Save your project to a .vcsgm file, or open one you saved earlier - everything on every
@@ -245,13 +245,23 @@
           :key="bank.name"
           outlined
           :ripple="false"
-          class="example-card"
+          class="example-card sound-bank-card"
           @click="handleSelectSoundBank(bank)"
         >
+          <v-btn
+            icon
+            small
+            class="sound-bank-preview-btn"
+            :title="data.previewingSoundBank === bank.name ? 'Stop the preview' : (bank.isBank ? 'Preview every sound in this bank, one after another' : 'Preview this sound')"
+            @click.stop="handlePreviewSoundBank(bank)"
+          >
+            <v-icon>{{ data.previewingSoundBank === bank.name ? 'mdi-stop' : 'mdi-play' }}</v-icon>
+          </v-btn>
           <div class="example-card-text">
             <div class="example-card-title">{{ soundBankTitle(bank) }}</div>
             <div class="example-card-line">
-              {{ bank.sounds.length === 1 ? '1 sound' : `${bank.sounds.length} sounds` }}
+              {{ bank.isBank ? 'Sound bank' : 'Sound' }}<template v-if="bank.isBank">
+                - {{ bank.sounds.length === 1 ? '1 sound' : `${bank.sounds.length} sounds` }}</template>
             </div>
             <div v-if="bank.sounds.length" class="example-card-line sound-bank-names">
               {{ bank.sounds.join(', ') }}
@@ -398,7 +408,7 @@ import {defineComponent, reactive, computed, onMounted, onBeforeUnmount, ref, ge
 import {saveAs} from 'file-saver';
 import YAML from 'yaml';
 
-import {appendCompileLog, useBackgroundsStorage, useColorPaletteStorage, useConfigurationStorage, useDataTablesStorage, usePlayerAnimationsStorage, useProjectAutoIncrementVersionStorage, useProjectIncludeDateInFilenameStorage, useProjectShowExamplesStorage, useScoreFontStorage, useSongsStorage, useSoundEffectsStorage, useSquishCustomScoreFontStorage, useTextFontStorage, useTextStringsStorage, useTitleScreenStorage, useWorkspaceStorage} from '../hooks/project';
+import {appendCompileLog, useBackgroundsStorage, useColorPaletteStorage, useConfigurationStorage, useDataTablesStorage, usePlayerAnimationsStorage, useProjectAutoIncrementVersionStorage, useProjectIncludeDateInFilenameStorage, useProjectShowExamplesStorage, useProjectShowSoundBanksStorage, useScoreFontStorage, useSongsStorage, useSoundEffectsStorage, useSquishCustomScoreFontStorage, useTextFontStorage, useTextStringsStorage, useTitleScreenStorage, useWorkspaceStorage} from '../hooks/project';
 import {combineLegacyPlayerAnimations, remapPlayer1AnimationIndexesInWorkspaceXml} from '../hooks/migrate-player-animations';
 import {migrateLegacyPlayerBlocksInWorkspaceXml} from '../hooks/migrate-player-blocks';
 import {migrateLegacyBounceBlocksInWorkspaceXml} from '../hooks/migrate-bounce-blocks';
@@ -418,8 +428,9 @@ import {persistActiveFileHandle, loadPersistedFileHandle, ensureWritePermission,
 import {examplesState} from '../hooks/examples';
 import {soundBanksState} from '../hooks/soundbanks';
 import {processSoundEffectsStorageDefaults} from '../blocks/soundfx';
-import {buildSoundBankImportEntries, importSoundBankEntries} from '../utils/sound-bank';
+import {buildSoundBankImportEntries, importSoundBankEntries, soundEffectsInBankFile} from '../utils/sound-bank';
 import SoundBankImportDialog from '../components/SoundBankImportDialog.vue';
+import {previewSoundEffect, stopSoundEffectPreview} from '../utils/sound-preview';
 import pkg from '../../package.json';
 const appVersion = pkg.version;
 
@@ -470,6 +481,8 @@ export default defineComponent({
       soundBankDialog: false,
       soundBankEntries: [],
       soundBankError: '',
+      // Name of the sound bank whose preview is playing, or ''.
+      previewingSoundBank: '',
       // The handle "Save" writes back to, from the last "Save As..." or
       // "Open Project" that went through the File System Access API (see
       // SUPPORTS_FILE_SYSTEM_ACCESS above) - null whenever there's nothing
@@ -493,8 +506,8 @@ export default defineComponent({
     // Whether the Example Projects section replaces the Project Settings
     // section; remembered across page refreshes.
     const showExamples = useProjectShowExamplesStorage();
-    // The Sound Banks screen (only while this tab is open, unlike showExamples).
-    const showSoundBanks = ref(false);
+    // The Sound Banks screen, kept across a refresh like showExamples.
+    const showSoundBanks = useProjectShowSoundBanksStorage();
 
     // Same "growing padding + a bottom border once actually scrolled"
     // treatment as the graphic editor toolbar. This component's root is the
@@ -1253,8 +1266,40 @@ export default defineComponent({
       return example.title || example.name.replace(/\.vcsgm$/i, '');
     },
 
+    // A single sound is titled with the name saved inside its file, a bank with
+    // its file name.
     soundBankTitle(bank) {
-      return bank.name.replace(/\.(vcsbnk|json)$/i, '');
+      if (!bank.isBank && bank.sounds.length === 1 && bank.sounds[0] !== 'Unnamed sound effect') return bank.sounds[0];
+      return bank.name.split('/').pop().replace(/\.(vcssnd|vcsbnk|json)$/i, '');
+    },
+
+    // Plays a card's sound, or every sound in a bank one after another (each
+    // starts when the one before has run its duration). Clicking again, or
+    // starting another card's preview, stops it.
+    handlePreviewSoundBank(bank) {
+      const wasPlaying = this.data.previewingSoundBank === bank.name;
+      (this.soundBankPreviewTimers || []).forEach((timer) => window.clearTimeout(timer));
+      this.soundBankPreviewTimers = [];
+      stopSoundEffectPreview();
+      this.data.previewingSoundBank = '';
+      if (wasPlaying) return;
+      let sounds;
+      try {
+        sounds = soundEffectsInBankFile(JSON.parse(bank.text));
+      } catch (e) {
+        this.data.soundBankError = `Could not read ${bank.name}: ${e.message}`;
+        return;
+      }
+      this.data.soundBankError = '';
+      this.data.previewingSoundBank = bank.name;
+      let startMs = 0;
+      sounds.forEach((sound) => {
+        this.soundBankPreviewTimers.push(window.setTimeout(() => previewSoundEffect(sound), startMs));
+        startMs += (Math.max(0, Number(sound.duration) || 0) / 60) * 1000 + 250;
+      });
+      this.soundBankPreviewTimers.push(window.setTimeout(() => {
+        this.data.previewingSoundBank = '';
+      }, startMs));
     },
 
     // Opens the import popup for a bank's sounds against the open project's
@@ -1694,6 +1739,17 @@ export default defineComponent({
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.sound-bank-card {
+  position: relative;
+}
+
+.sound-bank-preview-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 1;
 }
 
 .sound-bank-names {

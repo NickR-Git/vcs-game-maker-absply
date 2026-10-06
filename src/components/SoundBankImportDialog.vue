@@ -1,22 +1,35 @@
 <template>
   <v-dialog :value="value" width="480" @input="(open) => $emit('input', open)">
     <v-card>
-      <v-card-title>Import Sound Bank</v-card-title>
+      <v-card-title>{{ single ? 'Import Sound' : 'Import Sound Bank' }}</v-card-title>
       <v-card-text>
-        <p class="v-messages theme--light v-messages__message">
-          Choose which sounds to import. A name that matches an existing sound effect
-          replaces its parameters; anything else is added as a new card.
+        <div v-if="single" class="text-subtitle-1">{{ entries[0].name }}</div>
+        <p v-else class="v-messages theme--light v-messages__message">
+          Choose which sounds to import. With "Replace existing" ticked, a name that
+          matches an existing sound effect replaces its parameters; anything else is added as a
+          new card.
         </p>
-        <v-btn small @click="selectAll(true)">Select all</v-btn>
-        <v-btn small class="ml-2" @click="selectAll(false)">Select none</v-btn>
         <v-checkbox
-          v-for="(entry, index) in entries"
-          :key="index"
-          v-model="entry.selected"
-          :label="entry.isExisting ? `${entry.name} (replaces existing)` : entry.name"
+          v-if="entries.some((entry) => entry.isExisting)"
+          :input-value="entries.every((entry) => entry.replace !== false)"
+          label="Replace existing"
           hide-details
           dense
+          class="mt-0 mb-3"
+          @change="setReplace"
         />
+        <template v-if="!single">
+          <v-btn small @click="selectAll(true)">Select all</v-btn>
+          <v-btn small class="ml-2" @click="selectAll(false)">Select none</v-btn>
+          <v-checkbox
+            v-for="(entry, index) in entries"
+            :key="index"
+            v-model="entry.selected"
+            :label="entry.name"
+            hide-details
+            dense
+          />
+        </template>
       </v-card-text>
       <v-card-actions>
         <v-btn small @click="$emit('input', false)">Cancel</v-btn>
@@ -24,10 +37,10 @@
         <v-btn
           color="primary"
           text
-          :disabled="!entries.some((entry) => entry.selected)"
+          :disabled="!single && !entries.some((entry) => entry.selected)"
           @click="$emit('confirm')"
         >
-          Import selected
+          {{ single ? 'Import' : 'Import selected' }}
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -35,7 +48,7 @@
 </template>
 
 <script>
-import {defineComponent} from '@vue/composition-api';
+import {computed, defineComponent} from '@vue/composition-api';
 
 // The "Import Sound Bank" popup, shared by the Sound tab (a file opened from
 // disk) and the Project tab's Sound Banks screen (a file from GitHub). The
@@ -52,7 +65,14 @@ export default defineComponent({
         entry.selected = selected;
       });
     };
-    return {selectAll};
+    // One sound alone has nothing to pick between, so no checkboxes.
+    const single = computed(() => props.entries.length === 1);
+    const setReplace = (replace) => {
+      props.entries.forEach((entry) => {
+        entry.replace = !!replace;
+      });
+    };
+    return {selectAll, single, setReplace};
   },
 });
 </script>

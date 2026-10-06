@@ -736,3 +736,32 @@ Save ROM as .bin or .a26, named after the project
   and the Examples arrow in the Actions toolbox is white.
 - The emulator pane's resize handle uses exactly the same colors as the console log's (rest,
   hover and grip), in light mode, Dark Mode and Subdued Palette.
+
+=== 0.51.24 ===
+Sound Banks screen, title screen scroll blocks, playfield row fade, 12th playfield row
+
+- Project tab: a Sound Banks button (piano icon) right of the Examples button lists the
+  sounds (.vcssnd) and sound banks (.vcsbnk) in the repository's new soundbanks folder (and
+  its subfolders). Each card has a preview button; clicking a card opens the import popup for
+  the open project, with a single "Replace existing" checkbox. Single sounds export as .vcssnd,
+  banks stay .vcsbnk, and the Sound tab icons' hover text names those extensions. The screen
+  you were on (Settings, Examples or Sound Banks) is kept across a refresh, and the title says
+  Project Settings on the settings screen. The example info popup lost its field underlines
+  and the description box, the website is a clickable link opening in a new window, and only
+  the description scrolls.
+- Title screen scrolling: "Scroll title screen graphic [Up/Down] by [n]" with a "stop at edge"
+  checkbox (graphic top against window top, graphic bottom against window bottom, for the frame
+  currently showing), and "When title screen scroll of [graphic] reaches the Top/Bottom".
+  Start anywhere with "Set title screen scroll position".
+- Background: "Fade playfield rows from [color] up/down to playfield colors over [n] frames"
+  fades every row from the chosen color's brightness to its real row color (needs per-row
+  playfield colors). Without Superchip RAM, backgrounds get a 12th row (the hidden row the
+  standard kernel scrolls into view); backgrounds opened in the editor are padded to match.
+- Player set animation blocks have a "restart" checkbox before "loop" (on by default): on plays
+  the new animation from its first frame, off carries on from the current position.
+- A saved project always includes a screenshot: one is taken after every successful build, and
+  Save/Save As build first if there is none yet.
+- Pixel editors: cells outside the grid are dropped, which fixes stray pixels left behind by
+  Shift-snapped lines, squares and ovals dragged past an edge.
+- The emulator pane and console log resize handles are the normal grey with Subdued Palette
+  alone; the white ones are for Dark Mode only. Create New Project is before Save, then Open.
