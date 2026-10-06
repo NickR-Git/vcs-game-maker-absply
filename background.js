@@ -25,6 +25,9 @@ const createWindow = () => {
   const win = new BrowserWindow({
     width: 800,
     height: 600,
+    // The window/taskbar icon on Linux (Windows and macOS take theirs from
+    // the packaged app).
+    icon: path.join(__dirname, 'build', 'icons', '512x512.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
     },

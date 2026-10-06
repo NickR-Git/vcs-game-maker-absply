@@ -4,12 +4,17 @@ const {FuseV1Options, FuseVersion} = require('@electron/fuses');
 module.exports = {
   packagerConfig: {
     asar: true,
+    // Without the extension: the packager adds .ico on Windows and .icns on
+    // macOS (Linux packages get theirs from the makers below).
+    icon: 'build/icons/icon',
   },
   rebuildConfig: {},
   makers: [
     {
       name: '@electron-forge/maker-squirrel',
-      config: {},
+      config: {
+        setupIcon: 'build/icons/icon.ico',
+      },
     },
     {
       name: '@electron-forge/maker-zip',
@@ -17,11 +22,19 @@ module.exports = {
     },
     {
       name: '@electron-forge/maker-deb',
-      config: {},
+      config: {
+        options: {
+          icon: 'build/icons/512x512.png',
+        },
+      },
     },
     {
       name: '@electron-forge/maker-rpm',
-      config: {},
+      config: {
+        options: {
+          icon: 'build/icons/512x512.png',
+        },
+      },
     },
   ],
   plugins: [
