@@ -787,6 +787,6 @@ Smoother circles, score hiding with text, 12th row not drawn, default background
   shows the name, and the compile log names the background being previewed.
 - Without Superchip RAM the extra 12th playfield row is no longer put in the game's playfield
   data (it glitched the text drawn on the same screen); it stays in the Background editor, and
-  a project that scrolls tall backgrounds still loads it as part of the scrolling window.
+  a project that scrolls the playfield still loads it, since it is the row that scrolls into view.
 - A new project's starting background is the border on the top, left and right edges with two
   filled rows at the bottom, across the full row count.

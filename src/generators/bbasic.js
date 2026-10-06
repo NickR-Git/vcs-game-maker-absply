@@ -4154,11 +4154,11 @@ Blockly.BBasic.generateBackgrounds = function() {
   // subroutines) instead of always being inline-spliced into bank 1.
   Blockly.BBasic.generateBackgroundScrollPatch(backgrounds, visibleRows);
   // Without Superchip RAM the extra 12th row of a background (see
-  // backgroundDataRows) is not drawn: putting it in the playfield data
-  // glitched the text drawn on the same screen (the Play preview's name).
-  // Only a project that scrolls tall backgrounds loads it, as part of the
-  // scrolling window.
-  const drawnRows = this.backgroundScrollOverflowBackgrounds.length > 0 ?
+  // backgroundDataRows) is only put in the playfield data when the project
+  // scrolls the playfield: it is the row that scrolls into view, so leaving it
+  // out left a gap. Otherwise it stays out, since a lit 12th row glitched the
+  // text drawn on the same screen (the Play preview's name).
+  const drawnRows = (this.backgroundScrollUsed || this.backgroundScrollOverflowBackgrounds.length > 0) ?
     visibleRows : effectiveBackgroundRows(config);
 
   return backgrounds.map(({id, pixels, rowColors}, index) => {
@@ -4269,7 +4269,7 @@ Blockly.BBasic.generateRowFadeChecks = function() {
   const bgVar = resolveVar('Bg');
   const configurationStorage = useConfigurationStorage();
   const config = (configurationStorage && configurationStorage.value) || {};
-  const visibleRows = this.backgroundScrollOverflowBackgrounds.length > 0 ?
+  const visibleRows = (this.backgroundScrollUsed || this.backgroundScrollOverflowBackgrounds.length > 0) ?
     backgroundDataRows(config) : effectiveBackgroundRows(config);
   const blankLinesShown = this.effectiveShowBlankLines();
   const number = this.blockNumbers.next();
