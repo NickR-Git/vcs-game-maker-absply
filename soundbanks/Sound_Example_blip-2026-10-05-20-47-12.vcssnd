@@ -1,0 +1,21 @@
+{
+  "name": "Example blip",
+  "audc": "4",
+  "audf": 16,
+  "audv": 15,
+  "duration": 5,
+  "envelope": false,
+  "envelopeAttack": 0,
+  "envelopeDecay": 0,
+  "envelopeDecayEnd": 100,
+  "envelopeReleaseStart": 100,
+  "envelopeSustainLength": 32,
+  "envelopeRelease": 4,
+  "arpeggio": false,
+  "arpeggioDivision": 8,
+  "arpeggioInterval": 3,
+  "arpeggioRange": 0,
+  "priority": 1,
+  "color": null,
+  "isInstrument": true
+}
