@@ -577,7 +577,17 @@ export const DEFAULT_BACKGROUNDS = {
 export const processBackgroundStorageDefaults = (backgroundsStorage) => {
   const backgrounds = backgroundsStorage.value;
   if (!backgrounds || !backgrounds.backgrounds || !backgrounds.backgrounds.length) {
-    return structuredClone(DEFAULT_BACKGROUNDS);
+    // The starting background is a border of lit pixels along all four edges,
+    // sized to the project's full row count (see backgroundDataRows).
+    const defaults = structuredClone(DEFAULT_BACKGROUNDS);
+    const rows = backgroundDataRows((useConfigurationStorage() || {}).value);
+    defaults.backgrounds.forEach((background) => {
+      const width = background.pixels[0] ? background.pixels[0].length : 32;
+      background.pixels = Array.from({length: rows}, (_, y) =>
+        Array.from({length: width}, (__, x) =>
+          (y === 0 || y === rows - 1 || x === 0 || x === width - 1) ? 1 : 0));
+    });
+    return defaults;
   }
   return backgrounds;
 };

@@ -765,3 +765,14 @@ Sound Banks screen, title screen scroll blocks, playfield row fade, 12th playfie
   Shift-snapped lines, squares and ovals dragged past an edge.
 - The emulator pane and console log resize handles are the normal grey with Subdued Palette
   alone; the white ones are for Dark Mode only. Create New Project is before Save, then Open.
+
+=== 0.51.25 ===
+New app icon, default background border, grid snap and comment box fixes
+
+- New app icon (the VCS badge) in every size: favicons, web icons, and .ico/.icns/PNG files in
+  build/icons that the Windows, macOS and Linux (.deb/.rpm) packaging uses.
+- A new project's starting background is a border of lit pixels along all four edges, across the
+  full row count (12 rows without Superchip RAM, 11 of them visible).
+- Sound Banks: the preview buttons play at the DIM volume when DIM is on.
+- Fixed the Blockly grid snap icon being white (invisible) in light mode, and the comment block
+  editor wrapping words while typing.
