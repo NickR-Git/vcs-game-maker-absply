@@ -2152,6 +2152,11 @@ html {
    the block font so the box and the text agree. */
 .blocklyWidgetDiv .blocklyHtmlTextAreaInput {
   font-family: var(--blockly-font-family) !important;
+  /* The box is sized to the longest line as it is typed, so a line must never wrap
+     inside it (a wrap shows the words jumping to the next line mid-typing). */
+  white-space: pre;
+  overflow-wrap: normal;
+  overflow-x: hidden;
 }
 
 [class*="-renderer"][class*="-theme"] .blocklyText,
