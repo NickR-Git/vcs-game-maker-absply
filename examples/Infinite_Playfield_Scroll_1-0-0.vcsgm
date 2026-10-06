@@ -1,0 +1,176 @@
+type: VCS Game Maker Project
+format-version: 1
+app-version: 0.51.23
+generation-time: 2026-10-06T01:25:31.388Z
+screenshot: data:image/png;base64,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
+configuration:
+  projectTitle: Infinite Playfield Scroll
+  projectDeveloper: AbstractPolygon
+  projectVersion: 1.0.0
+  projectWebsite: https://abstractpolygon.com/
+  projectDescription: An example of an infinitely scrolling playfield.
+blockly-workspace: |-
+  <xml xmlns="https://developers.google.com/blockly/xml">
+    <block type="event_block" id="iV*+T=b{u6oL!?xAaR^H" x="588" y="37">
+      <field name="EVENT">gameplay_start</field>
+      <statement name="DO">
+        <block type="sprite_player_set" id="AKJ+Z|XD]]OBObfiPt17">
+          <field name="PLAYER">0</field>
+          <field name="VAR">player0x</field>
+          <field name="LOOP">TRUE</field>
+          <value name="VALUE">
+            <shadow type="math_number" id="0N9AAK7xb2aph.v!0(n=">
+              <field name="NUM">78</field>
+            </shadow>
+          </value>
+          <next>
+            <block type="sprite_player_set" id="7+8_Q9(c?u]@.%i#4Qn%">
+              <field name="PLAYER">1</field>
+              <field name="VAR">player1x</field>
+              <field name="LOOP">TRUE</field>
+              <value name="VALUE">
+                <shadow type="math_number" id="o:jeUYE@v)OTY.+H{y@u">
+                  <field name="NUM">78</field>
+                </shadow>
+              </value>
+            </block>
+          </next>
+        </block>
+      </statement>
+      <next>
+        <block type="event_block" id="}]$5-aMM~oJwT8-=GscX">
+          <field name="EVENT">gameplay_update</field>
+          <statement name="DO">
+            <block type="event_frame_every_n" id="Dj7O#`dC8Up@.FvY*c=-">
+              <field name="MASK">1</field>
+              <field name="DELTA">0</field>
+              <statement name="DO">
+                <block type="background_scroll" id="PRALge0XwByB@|Q;WjuP">
+                  <field name="DIRECTION">down</field>
+                  <field name="STOPATEDGE">FALSE</field>
+                </block>
+              </statement>
+            </block>
+          </statement>
+        </block>
+      </next>
+    </block>
+  </xml>
+player-animations:
+  animations:
+    - id: 0
+      name: Example1
+      frames:
+        - id: 1
+          duration: 2
+          pixels: |-
+            ..XXXX..
+            .XXXXXX.
+            XXX..XXX
+            XX....XX
+            XXXXXXXX
+            .XXXXXX.
+            XXXXXXXX
+            XX....XX
+            XXXXXXXX
+            .XXXXXX.
+        - id: 2
+          duration: 2
+          pixels: |-
+            ..XXXX..
+            .XXXXXX.
+            .XX..XX.
+            XX....XX
+            XXXXXXXX
+            .XXXXXX.
+            .XXXXXX.
+            XX....XX
+            XXXXXXXX
+            .XXXXXX.
+        - id: 3
+          duration: 2
+          pixels: |-
+            ..XXXX..
+            .XXXXXX.
+            XXX..XXX
+            .X....X.
+            XXXXXXXX
+            .XXXXXX.
+            XXXXXXXX
+            .X....X.
+            XXXXXXXX
+            .XXXXXX.
+        - id: 4
+          duration: 2
+          pixels: |-
+            ..XXXX..
+            .XXXXXX.
+            XXX..XXX
+            XX....XX
+            .XXXXXX.
+            .XXXXXX.
+            XXXXXXXX
+            XX....XX
+            .XXXXXX.
+            .XXXXXX.
+      previewWidthScale: 1
+backgrounds:
+  backgrounds:
+    - id: 1
+      name: Background
+      pixels: |-
+        XXX..........................XXX
+        X.X..........................X.X
+        XXX..........................XXX
+        X.X..........................X.X
+        XXX..........................XXX
+        X.X..........................X.X
+        XXX..........................XXX
+        X.X..........................X.X
+        XXX..........................XXX
+        X.X..........................X.X
+        XXX..........................XXX
+        X.X..........................X.X
+      customHeight: true
+    - id: 2
+      name: Background
+      pixels: |-
+        ................................
+        ................................
+        ................................
+        ................................
+        ................................
+        ................................
+        ................................
+        ................................
+        ................................
+        ................................
+        ................................
+        ................................
+title-screen:
+  screens:
+    - id: 1
+      name: Title Screen 1
+      backgroundColor: 0
+      cards: []
+score-font: null
+squish-custom-score-font: null
+data-tables: null
+text-strings: null
+text-font: null
+sound-effects: null
+songs: null
+quick-colors:
+  - 150
+  - 154
+  - 170
+  - 174
+  - 14
+  - 26
+  - 216
+  - 202
+  - 58
+  - 70
+  - 86
+  - 100
+  - 186
