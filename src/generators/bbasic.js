@@ -4183,8 +4183,8 @@ Blockly.BBasic.generateBackgrounds = function() {
   // text drawn on the same screen (the Play preview's name).
   const drawnRows = (this.backgroundScrollUsed || this.backgroundScrollOverflowBackgrounds.length > 0) ?
     visibleRows : effectiveBackgroundRows(config);
-  // Scrolling the playfield colors with the pixels: each background gets its
-  // own color table instead of the compiler's "pfcolors:" one (see
+  // Scrolling the playfield colors with the pixels: each background gets a
+  // separate color table instead of the compiler's "pfcolors:" one (see
   // buildBackgroundColorScroll).
   this.backgroundColorScrollTablesAsm = '';
   this.backgroundColorScrollTopBank = 0;

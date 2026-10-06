@@ -490,7 +490,7 @@ export const BACKGROUND_SCROLL_PATCH_SUBROUTINE_NAME = 'bgscrollpatch';
 // "Background scroll" with "scroll playfield colors" checked: the row colors
 // scroll along with the pixels. The kernel reads each row's color through a
 // pointer (pfcolortable) into a ROM table with one entry every 4 bytes, so
-// scrolling a row just moves that pointer 4 bytes: each background gets its own
+// scrolling a row just moves that pointer 4 bytes: each background gets a separate
 // longer, page-aligned table (see generateBackgroundColorScrollTables in
 // generators/bbasic.js) and this subroutine points the kernel at the part of it
 // for the current scroll offset. bgColorBg is the loaded background's index and
