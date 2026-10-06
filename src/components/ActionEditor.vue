@@ -327,7 +327,7 @@ export default {
         const active = this.gridSnapEnabled;
         // Off: the near-black glyph, or white in Dark Mode (a filter can't be used:
         // it would turn the active blue into another color). On: always the blue.
-        icon.setAttribute('fill', active ? '#1976d2' : (this.darkModeStorage ? '#ffffff' : '#000000'));
+        icon.setAttribute('fill', active ? '#1976d2' : (this.darkModeStorage.value ? '#ffffff' : '#000000'));
         icon.style.opacity = active ? '1' : '.25';
         title.textContent = active ?
           'Turn off block grid snap' : 'Turn on block grid snap';
@@ -413,11 +413,6 @@ export default {
     },
   },
   watch: {
-    // Redraws the grid snap icon in the colors for the new theme (see render in
-    // setupGridSnapZoomButton).
-    darkModeStorage() {
-      if (this.renderGridSnapIcon_) this.renderGridSnapIcon_();
-    },
     blocklySoundsEnabled(newVal) {
       this.options.sounds = newVal;
     },
@@ -446,6 +441,12 @@ export default {
     // group's rendered screen position, so it isn't affected by layout
     // settling the way a getBoundingClientRect()-based measurement was.
     this.setupGridSnapZoomButton();
+    // Redraws the grid snap icon in the colors for the new theme (see render in
+    // setupGridSnapZoomButton). darkModeStorage is a ref held as is in data(), so
+    // it is read through .value.
+    this.$watch(() => this.darkModeStorage.value, () => {
+      if (this.renderGridSnapIcon_) this.renderGridSnapIcon_();
+    });
   },
   beforeDestroy() {
     if (this.gridSnapSvgGroup_ && this.gridSnapSvgGroup_.parentNode) {

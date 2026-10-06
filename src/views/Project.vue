@@ -408,7 +408,7 @@ import {defineComponent, reactive, computed, onMounted, onBeforeUnmount, ref, ge
 import {saveAs} from 'file-saver';
 import YAML from 'yaml';
 
-import {appendCompileLog, useBackgroundsStorage, useColorPaletteStorage, useConfigurationStorage, useDataTablesStorage, usePlayerAnimationsStorage, useProjectAutoIncrementVersionStorage, useProjectIncludeDateInFilenameStorage, useProjectShowExamplesStorage, useProjectShowSoundBanksStorage, useScoreFontStorage, useSongsStorage, useSoundEffectsStorage, useSquishCustomScoreFontStorage, useTextFontStorage, useTextStringsStorage, useTitleScreenStorage, useWorkspaceStorage} from '../hooks/project';
+import {appendCompileLog, useBackgroundsStorage, useColorPaletteStorage, useConfigurationStorage, useDataTablesStorage, usePlayerAnimationsStorage, useProjectAutoIncrementVersionStorage, useProjectIncludeDateInFilenameStorage, useProjectShowExamplesStorage, useDimSoundFxPercentStorage, useDimSoundFxStorage, useProjectShowSoundBanksStorage, useScoreFontStorage, useSongsStorage, useSoundEffectsStorage, useSquishCustomScoreFontStorage, useTextFontStorage, useTextStringsStorage, useTitleScreenStorage, useWorkspaceStorage} from '../hooks/project';
 import {combineLegacyPlayerAnimations, remapPlayer1AnimationIndexesInWorkspaceXml} from '../hooks/migrate-player-animations';
 import {migrateLegacyPlayerBlocksInWorkspaceXml} from '../hooks/migrate-player-blocks';
 import {migrateLegacyBounceBlocksInWorkspaceXml} from '../hooks/migrate-bounce-blocks';
@@ -431,6 +431,7 @@ import {processSoundEffectsStorageDefaults} from '../blocks/soundfx';
 import {buildSoundBankImportEntries, importSoundBankEntries, soundEffectsInBankFile} from '../utils/sound-bank';
 import SoundBankImportDialog from '../components/SoundBankImportDialog.vue';
 import {previewSoundEffect, stopSoundEffectPreview} from '../utils/sound-preview';
+import {DEFAULT_DIM_PERCENT, dimVolume} from '../generators/bbasic/soundfx';
 import pkg from '../../package.json';
 const appVersion = pkg.version;
 
@@ -1292,9 +1293,13 @@ export default defineComponent({
       }
       this.data.soundBankError = '';
       this.data.previewingSoundBank = bank.name;
+      const dimOn = useDimSoundFxStorage().value;
+      const dimPercent = useDimSoundFxPercentStorage(DEFAULT_DIM_PERCENT).value;
       let startMs = 0;
       sounds.forEach((sound) => {
-        this.soundBankPreviewTimers.push(window.setTimeout(() => previewSoundEffect(sound), startMs));
+        // The volume the compiled game would play it at with DIM on (see the Sound tab).
+        const audv = dimOn ? dimVolume(sound.audv, dimPercent) : sound.audv;
+        this.soundBankPreviewTimers.push(window.setTimeout(() => previewSoundEffect({...sound, audv}), startMs));
         startMs += (Math.max(0, Number(sound.duration) || 0) / 60) * 1000 + 250;
       });
       this.soundBankPreviewTimers.push(window.setTimeout(() => {
