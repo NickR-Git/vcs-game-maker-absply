@@ -1,6 +1,7 @@
 GIMP Palette
-Name: Atari 2600 NTSC (gopher2600)
-Columns: 8
+#
+# Atari 2600 NTSC (gopher2600)
+# Colors are named by their Atari color byte, as used in batari Basic
 #
   6   6   6	$00
  52  52  52	$02
