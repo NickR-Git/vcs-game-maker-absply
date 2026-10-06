@@ -1,0 +1,936 @@
+type: VCS Game Maker Project
+format-version: 1
+app-version: 0.51.27
+generation-time: 2026-10-06T05:36:51.795Z
+screenshot: data:image/png;base64,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
+configuration:
+  projectTitle: Infinite Playfield Scroll with SuperChip
+  projectDeveloper: AbstractPolygon
+  projectVersion: 1.0.0
+  projectWebsite: https://abstractpolygon.com/
+  projectDescription: An example of an infinitely scrolling playfield, this time
+    using Superchip RAM for a higher playfield resolution.
+  showScore: false
+  enableScoreFade: false
+  showBlankLines: true
+  enablePlayer0SpriteColors: true
+  enablePlayer1SpriteColors: true
+  enablePfColors: true
+  enableSuperchip: true
+  enableOptimizationSpeed: false
+  enableInlineRand: true
+  enableRand16: true
+  enableCycleScore: false
+  enableScanlinesDebug: false
+  pfres: 24
+  enablePfRowHeight: false
+  pfrowheight: 8
+  tvStandard: ntsc
+  romSize: 8k
+  scoreFont: ""
+  muteAllAudio: false
+  showVariableComments: true
+blockly-workspace: >-
+  <xml xmlns="https://developers.google.com/blockly/xml">
+    <block type="event_block" id="iV*+T=b{u6oL!?xAaR^H" x="588" y="37">
+      <field name="EVENT">gameplay_start</field>
+      <statement name="DO">
+        <block type="background_set_color" id="G]cQE{KzaD}!*e.dUPJP">
+          <field name="VAR">COLUBK</field>
+          <value name="VALUE">
+            <shadow type="color_get" id="i;kzOaGCf)8$Ny^Y~lh_">
+              <field name="COLOR">160</field>
+            </shadow>
+          </value>
+          <next>
+            <block type="sprite_player_set_animation" id="k2QMo[yHKA+G;GCuA8%l">
+              <field name="PLAYER">0</field>
+              <field name="VAR">0</field>
+              <field name="RESTART">TRUE</field>
+              <field name="LOOP">TRUE</field>
+              <next>
+                <block type="sprite_player_set" id="AKJ+Z|XD]]OBObfiPt17">
+                  <field name="PLAYER">0</field>
+                  <field name="VAR">player0x</field>
+                  <field name="LOOP">TRUE</field>
+                  <value name="VALUE">
+                    <shadow type="math_number" id="0N9AAK7xb2aph.v!0(n=">
+                      <field name="NUM">72</field>
+                    </shadow>
+                  </value>
+                  <next>
+                    <block type="sprite_player_set" id="urE.XL1v%R+^m?J72UWd">
+                      <field name="PLAYER">0</field>
+                      <field name="VAR">player0y</field>
+                      <field name="LOOP">TRUE</field>
+                      <value name="VALUE">
+                        <shadow type="math_number" id="tRK}f4qd#e7#4{1vN~1O">
+                          <field name="NUM">44</field>
+                        </shadow>
+                      </value>
+                      <next>
+                        <block type="sprite_player_set_animation" id="lg=ZaO76HmYk|5:C~b,d">
+                          <field name="PLAYER">1</field>
+                          <field name="VAR">1</field>
+                          <field name="RESTART">TRUE</field>
+                          <field name="LOOP">TRUE</field>
+                          <next>
+                            <block type="sprite_player_set" id="7+8_Q9(c?u]@.%i#4Qn%">
+                              <field name="PLAYER">1</field>
+                              <field name="VAR">player1x</field>
+                              <field name="LOOP">TRUE</field>
+                              <value name="VALUE">
+                                <shadow type="math_number" id="o:jeUYE@v)OTY.+H{y@u">
+                                  <field name="NUM">72</field>
+                                </shadow>
+                              </value>
+                              <next>
+                                <block type="sprite_player_set" id="vBh,0`x,8Kn]Y]VB[C3Z">
+                                  <field name="PLAYER">1</field>
+                                  <field name="VAR">player1y</field>
+                                  <field name="LOOP">TRUE</field>
+                                  <value name="VALUE">
+                                    <shadow type="math_number" id="OM}HObipl=1Oj!B9,Akk">
+                                      <field name="NUM">92</field>
+                                    </shadow>
+                                  </value>
+                                </block>
+                              </next>
+                            </block>
+                          </next>
+                        </block>
+                      </next>
+                    </block>
+                  </next>
+                </block>
+              </next>
+            </block>
+          </next>
+        </block>
+      </statement>
+      <next>
+        <block type="event_block" id="}]$5-aMM~oJwT8-=GscX">
+          <field name="EVENT">gameplay_update</field>
+          <statement name="DO">
+            <block type="event_comment_wrapper" id="+j]|68p:J`-Tv]%`~%Pi">
+              <field name="TEXT">Scroll the background vertically.&amp;#10;&amp;#10;Backgrounds auto-wrap by default.&amp;#10;&amp;#10;Turn on "stop at edge..." to automatically stop&amp;#10;scrolling when the top/bottom of a background is&amp;#10;reached.&amp;#10;&amp;#10;Turn on "scroll playfield colors" to scroll&amp;#10;playfield colors with the background.</field>
+              <statement name="DO">
+                <block type="background_scroll" id="PRALge0XwByB@|Q;WjuP">
+                  <field name="DIRECTION">down</field>
+                  <field name="STOPATEDGE">FALSE</field>
+                  <field name="COLORS">FALSE</field>
+                </block>
+              </statement>
+            </block>
+          </statement>
+        </block>
+      </next>
+    </block>
+  </xml>
+player-animations:
+  animations:
+    - id: 0
+      name: Sports Car
+      frames:
+        - id: 1
+          duration: 4
+          pixels: |-
+            ..XXXX..
+            .XXXXXX.
+            .XXXXXX.
+            .XXXXXX.
+            XXXXXXXX
+            XX....XX
+            XX....XX
+            XXX..XXX
+            XXXXXXXX
+            XXXXXXXX
+            .XXXXXX.
+            .XXXXXX.
+            XXXXXXXX
+            XX....XX
+            XXX..XXX
+            XXXXXXXX
+            XXXXXXXX
+            XXXXXXXX
+            ..XXXX..
+            .XXXXXX.
+            XX......
+            XX......
+            XX......
+            XX......
+            ........
+            ........
+            ........
+            ........
+            .......X
+            .......X
+            ........
+            X.......
+          rowColors:
+            - 66
+            - 68
+            - 70
+            - 70
+            - 70
+            - 70
+            - 70
+            - 70
+            - 72
+            - 72
+            - 72
+            - 72
+            - 72
+            - 70
+            - 70
+            - 70
+            - 70
+            - 68
+            - 8
+            - 10
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+        - id: 2
+          duration: 4
+          pixels: |-
+            ..XXXX..
+            .XXXXXX.
+            .XXXXXX.
+            .XXXXXX.
+            .XXXXXX.
+            .X....X.
+            XX....XX
+            XXX..XXX
+            XXXXXXXX
+            XXXXXXXX
+            .XXXXXX.
+            .XXXXXX.
+            .XXXXXX.
+            .X....X.
+            XXX..XXX
+            XXXXXXXX
+            XXXXXXXX
+            XXXXXXXX
+            ..XXXX..
+            .XXXXXX.
+            ........
+            ........
+            ........
+            ........
+            XX......
+            XX......
+            XX......
+            XX......
+            ........
+            ........
+            ........
+            ........
+          rowColors:
+            - 66
+            - 68
+            - 70
+            - 70
+            - 70
+            - 70
+            - 70
+            - 70
+            - 72
+            - 72
+            - 72
+            - 72
+            - 72
+            - 70
+            - 70
+            - 70
+            - 70
+            - 68
+            - 8
+            - 10
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+        - id: 3
+          duration: 4
+          pixels: |-
+            ..XXXX..
+            .XXXXXX.
+            .XXXXXX.
+            .XXXXXX.
+            XXXXXXXX
+            XX....XX
+            .X....X.
+            .XX..XX.
+            XXXXXXXX
+            XXXXXXXX
+            .XXXXXX.
+            .XXXXXX.
+            XXXXXXXX
+            XX....XX
+            .XX..XX.
+            .XXXXXX.
+            XXXXXXXX
+            XXXXXXXX
+            ..XXXX..
+            .XXXXXX.
+            ......XX
+            ......XX
+            ......XX
+            ......XX
+            ........
+            ........
+            ........
+            ........
+            X.......
+            X.......
+            ........
+            .......X
+          rowColors:
+            - 66
+            - 68
+            - 70
+            - 70
+            - 70
+            - 70
+            - 70
+            - 70
+            - 72
+            - 72
+            - 72
+            - 72
+            - 72
+            - 70
+            - 70
+            - 70
+            - 70
+            - 68
+            - 8
+            - 10
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+        - id: 4
+          duration: 4
+          pixels: |-
+            ..XXXX..
+            .XXXXXX.
+            .XXXXXX.
+            .XXXXXX.
+            XXXXXXXX
+            XX....XX
+            XX....XX
+            XXX..XXX
+            .XXXXXX.
+            .XXXXXX.
+            .XXXXXX.
+            .XXXXXX.
+            XXXXXXXX
+            XX....XX
+            XXX..XXX
+            XXXXXXXX
+            .XXXXXX.
+            .XXXXXX.
+            ..XXXX..
+            .XXXXXX.
+            ........
+            ........
+            ........
+            ........
+            ......XX
+            ......XX
+            ......XX
+            ......XX
+            ........
+            ........
+            ........
+            ........
+          rowColors:
+            - 66
+            - 68
+            - 70
+            - 70
+            - 70
+            - 70
+            - 70
+            - 70
+            - 72
+            - 72
+            - 72
+            - 72
+            - 72
+            - 70
+            - 70
+            - 70
+            - 70
+            - 68
+            - 8
+            - 10
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+      previewWidthScale: 2
+    - id: 1
+      name: Police Car
+      frames:
+        - id: 1
+          duration: 2
+          pixels: |-
+            XXXXXXXX
+            .XXXXXX.
+            .XXXXXX.
+            XXXXXXXX
+            XXXXXXXX
+            XX....XX
+            XX....XX
+            XXX..XXX
+            XXXXXXXX
+            XXXXXXXX
+            .XXXXXX.
+            .XXXXXX.
+            XXXXXXXX
+            XX....XX
+            XXX..XXX
+            XXXXXXXX
+            XXXXXXXX
+            .XXXXXX.
+            ..XXXX..
+            .XXXXXX.
+            XX......
+            XX......
+            XX......
+            XX......
+            ........
+            ........
+            ........
+            ........
+            .......X
+            .......X
+            ........
+            X.......
+          rowColors:
+            - 10
+            - 8
+            - 2
+            - 4
+            - 4
+            - 4
+            - 4
+            - 4
+            - 6
+            - 6
+            - 156
+            - 6
+            - 6
+            - 4
+            - 4
+            - 4
+            - 4
+            - 2
+            - 8
+            - 10
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+        - id: 5
+          duration: 2
+          pixels: |-
+            XXXXXXXX
+            .XXXXXX.
+            .XXXXXX.
+            XXXXXXXX
+            XXXXXXXX
+            XX....XX
+            XX....XX
+            XXX..XXX
+            XXXXXXXX
+            XXXXXXXX
+            .XXXXXX.
+            .XXXXXX.
+            XXXXXXXX
+            XX....XX
+            XXX..XXX
+            XXXXXXXX
+            XXXXXXXX
+            .XXXXXX.
+            ..XXXX..
+            .XXXXXX.
+            XX......
+            XX......
+            XX......
+            XX......
+            ........
+            ........
+            ........
+            ........
+            .......X
+            .......X
+            ........
+            X.......
+          rowColors:
+            - 10
+            - 8
+            - 2
+            - 4
+            - 4
+            - 4
+            - 4
+            - 4
+            - 6
+            - 6
+            - 70
+            - 6
+            - 6
+            - 4
+            - 4
+            - 4
+            - 4
+            - 2
+            - 8
+            - 10
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+        - id: 2
+          duration: 2
+          pixels: |-
+            XXXXXXXX
+            .XXXXXX.
+            .XXXXXX.
+            XXXXXXXX
+            XXXXXXXX
+            XX....XX
+            XX....XX
+            XXX..XXX
+            XXXXXXXX
+            XXXXXXXX
+            .XXXXXX.
+            .XXXXXX.
+            XXXXXXXX
+            XX....XX
+            XXX..XXX
+            XXXXXXXX
+            XXXXXXXX
+            .XXXXXX.
+            ..XXXX..
+            .XXXXXX.
+            ........
+            ........
+            ........
+            ........
+            XX......
+            XX......
+            XX......
+            XX......
+            ........
+            ........
+            ........
+            ........
+          rowColors:
+            - 10
+            - 8
+            - 2
+            - 4
+            - 4
+            - 4
+            - 4
+            - 4
+            - 6
+            - 154
+            - 156
+            - 154
+            - 6
+            - 4
+            - 4
+            - 4
+            - 4
+            - 2
+            - 8
+            - 10
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+        - id: 6
+          duration: 2
+          pixels: |-
+            XXXXXXXX
+            .XXXXXX.
+            .XXXXXX.
+            XXXXXXXX
+            XXXXXXXX
+            XX....XX
+            XX....XX
+            XXX..XXX
+            XXXXXXXX
+            XXXXXXXX
+            .XXXXXX.
+            .XXXXXX.
+            XXXXXXXX
+            XX....XX
+            XXX..XXX
+            XXXXXXXX
+            XXXXXXXX
+            .XXXXXX.
+            ..XXXX..
+            .XXXXXX.
+            ........
+            ........
+            ........
+            ........
+            XX......
+            XX......
+            XX......
+            XX......
+            ........
+            ........
+            ........
+            ........
+          rowColors:
+            - 10
+            - 8
+            - 2
+            - 4
+            - 4
+            - 4
+            - 4
+            - 4
+            - 6
+            - 70
+            - 74
+            - 70
+            - 6
+            - 4
+            - 4
+            - 4
+            - 4
+            - 2
+            - 8
+            - 10
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+        - id: 3
+          duration: 4
+          pixels: |-
+            XXXXXXXX
+            .XXXXXX.
+            .XXXXXX.
+            XXXXXXXX
+            XXXXXXXX
+            XX....XX
+            XX....XX
+            XXX..XXX
+            XXXXXXXX
+            XXXXXXXX
+            .XXXXXX.
+            .XXXXXX.
+            XXXXXXXX
+            XX....XX
+            XXX..XXX
+            XXXXXXXX
+            XXXXXXXX
+            .XXXXXX.
+            ..XXXX..
+            .XXXXXX.
+            ......XX
+            ......XX
+            ......XX
+            ......XX
+            ........
+            ........
+            ........
+            ........
+            X.......
+            X.......
+            ........
+            .......X
+          rowColors:
+            - 10
+            - 8
+            - 2
+            - 4
+            - 4
+            - 4
+            - 4
+            - 4
+            - 70
+            - 70
+            - 74
+            - 70
+            - 70
+            - 4
+            - 4
+            - 4
+            - 4
+            - 2
+            - 8
+            - 10
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+        - id: 4
+          duration: 4
+          pixels: |-
+            XXXXXXXX
+            .XXXXXX.
+            .XXXXXX.
+            XXXXXXXX
+            XXXXXXXX
+            XX....XX
+            XX....XX
+            XXX..XXX
+            XXXXXXXX
+            XXXXXXXX
+            .XXXXXX.
+            .XXXXXX.
+            XXXXXXXX
+            XX....XX
+            XXX..XXX
+            XXXXXXXX
+            XXXXXXXX
+            .XXXXXX.
+            ..XXXX..
+            .XXXXXX.
+            ........
+            ........
+            ........
+            ........
+            ......XX
+            ......XX
+            ......XX
+            ......XX
+            ........
+            ........
+            ........
+            ........
+          rowColors:
+            - 10
+            - 8
+            - 2
+            - 4
+            - 4
+            - 4
+            - 4
+            - 4
+            - 6
+            - 154
+            - 156
+            - 154
+            - 6
+            - 4
+            - 4
+            - 4
+            - 4
+            - 2
+            - 8
+            - 10
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+            - 6
+      previewWidthScale: 2
+backgrounds:
+  backgrounds:
+    - id: 1
+      name: Background
+      pixels: |-
+        XXX..........................XXX
+        XXX..........................XXX
+        X.X..........................X.X
+        X.X..........................X.X
+        XXX..........................XXX
+        XXX..........................XXX
+        X.X..........................X.X
+        X.X..........................X.X
+        XXX..........................XXX
+        XXX..........................XXX
+        X.X..........................X.X
+        X.X..........................X.X
+        XXX..........................XXX
+        XXX..........................XXX
+        X.X..........................X.X
+        X.X..........................X.X
+        XXX..........................XXX
+        XXX..........................XXX
+        X.X..........................X.X
+        X.X..........................X.X
+        XXX..........................XXX
+        XXX..........................XXX
+        X.X..........................X.X
+        X.X..........................X.X
+      customHeight: true
+      rowColors:
+        - 4
+        - 4
+        - 6
+        - 6
+        - 8
+        - 8
+        - 10
+        - 10
+        - 14
+        - 10
+        - 14
+        - 14
+        - 14
+        - 14
+        - 14
+        - 14
+        - 10
+        - 14
+        - 10
+        - 10
+        - 8
+        - 8
+        - 6
+        - 6
+title-screen:
+  screens:
+    - id: 1
+      name: Title Screen 1
+      backgroundColor: 0
+      cards: []
+score-font: null
+squish-custom-score-font: null
+data-tables: null
+text-strings:
+  textStrings:
+    - id: 1
+      name: Example message
+      text: |-
+        HELLO WORLD!
+        Line 2
+      justify: center
+      wrapToLine2: true
+text-font: null
+sound-effects:
+  soundEffects:
+    - id: 1
+      name: Example blip
+      audc: "4"
+      audf: 16
+      audv: 15
+      duration: 5
+      envelope: false
+      envelopeAttack: 0
+      envelopeDecay: 0
+      envelopeDecayEnd: 100
+      envelopeReleaseStart: 100
+      envelopeSustainLength: 32
+      envelopeRelease: 4
+      arpeggio: false
+      arpeggioDivision: 8
+      arpeggioInterval: 3
+      arpeggioRange: 0
+      priority: 1
+      color: null
+      isInstrument: true
+songs: null
+quick-colors:
+  - 150
+  - 154
+  - 170
+  - 174
+  - 14
+  - 26
+  - 216
+  - 202
+  - 58
+  - 70
+  - 86
+  - 100
+  - 186
+  - 42
+  - 6
+  - 10
+  - 44
+  - 8
+  - 146
