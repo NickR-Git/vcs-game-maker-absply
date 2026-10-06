@@ -1,0 +1,21 @@
+{
+  "name": "Electric Piano 01",
+  "audc": "1",
+  "audf": 31,
+  "audv": 10,
+  "duration": 34,
+  "envelope": true,
+  "envelopeAttack": 0,
+  "envelopeDecay": 2,
+  "envelopeDecayEnd": 75,
+  "envelopeReleaseStart": 75,
+  "envelopeSustainLength": 16,
+  "envelopeRelease": 16,
+  "arpeggio": false,
+  "arpeggioDivision": 16,
+  "arpeggioInterval": 2,
+  "arpeggioRange": 4,
+  "priority": 1,
+  "color": null,
+  "isInstrument": true
+}
