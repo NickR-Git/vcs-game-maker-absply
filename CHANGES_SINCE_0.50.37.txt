@@ -790,3 +790,20 @@ Smoother circles, score hiding with text, 12th row not drawn, default background
   a project that scrolls the playfield still loads it, since it is the row that scrolls into view.
 - A new project's starting background is the border on the top, left and right edges with two
   filled rows at the bottom, across the full row count.
+
+=== 0.51.27 ===
+Scroll playfield colors, scroll direction, mirror draw preview, Sprites zoom
+
+- Background scroll: a "scroll playfield colors" checkbox (and "stop at top/bottom edge" is now a
+  checkbox in front of its text, spaced like the Player blocks) moves each row's color along with
+  its pixels. It works with Superchip RAM on or off, in bankswitched ROMs, and for backgrounds of
+  any height. The color tables go in the kernel's bank, in 256 byte pages, so the kernel's timing
+  is not disturbed.
+- Background scroll direction is the same for every background size: Down moves the background
+  down and Up moves it up (backgrounds taller than the screen used to scroll the other way). The
+  edge-reached events follow: Up reaches the bottom edge, Down the top edge.
+- Mirror draw: with a mirror switch on, the hover highlight also shows the pixels a draw tool
+  would also change.
+- Sprites tab: the zoom goes down to 25%.
+- New gopher2600-palettes folder with the NTSC and PAL palettes as an Aseprite extension (copy it to
+  Aseprite's data/extensions folder).
