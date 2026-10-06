@@ -26,7 +26,7 @@ import {DEFAULT_ROW_COLOR, processBackgroundStorageDefaults,
   backgroundScrollEdgeFlagsVarName, backgroundScrollStartVarName,
   backgroundScrollRowVarName, backgroundScrollRowMaxVarName,
   backgroundScrollPacking, backgroundScrollActiveVarName, backgroundScrollSubRowVarName,
-  backgroundsWithOverflowRows, backgroundDataRows,
+  backgroundsWithOverflowRows, backgroundDataRows, effectiveBackgroundRows,
   BACKGROUND_SCROLL_PATCH_SUBROUTINE_NAME, resolveUsedBackgroundIds,
   backgroundRowFadeVarName, ROW_FADE_IDLE_STEP, rowFadeStartColor} from '../blocks/background';
 import {functionCallDiscardVarName, functionCallArgVarName, functionParamVarName,
@@ -3839,34 +3839,11 @@ Blockly.BBasic.generateConfiguration = function() {
   // "noscore" is a compile-time ifconst gate in the standard kernel - it
   // decides whether the score-digit-drawing assembly is even assembled into
   // the ROM at all, nothing runtime can override it after the fact. The Text
-  // Minikernel's  manual is explicit that "noscore" is NOT the option to
-  // pair with it: "Set this constant to 1 to turn off the score when using
-  // this minikernel instead of using the standard 'noscore' option" - i.e.
-  // "noscore" and the Text Minikernel don't actually work together, so with
-  // it active, unchecking "Show score" has to emit "noscoretxt" instead, or
-  // the standard kernel's score-digit code stays compiled in and keeps
-  // running (and drawing) every frame right alongside the Text Minikernel's
-  // status row, regardless of this toggle.
-  //
-  // This WAS changed to emit "noscore" alongside "noscoretxt" for the extra
-  // cycle savings (the standard kernel's  score block IS fully self-
-  // contained register/var-wise, confirmed by tracing every line it
-  // touches), on the theory that the manual's warning only meant "noscore
-  // alone won't hide the Text Minikernel's  row, use noscoretxt for
-  // that" rather than "these actively conflict." That combination shipped
-  // and immediately caused a real, reported regression - the Text
-  // Minikernel's  glyph spacing came out wrong with "Show score" off,
-  // strongly suggesting the standard kernel's score block ISN'T just decorative
-  // padding time-wise: std_kernel.asm's  TIM64T/overscan setup right
-  // before "jsr minikernel" computes its timer value assuming a FIXED
-  // subsequent duration that (per stock std_kernel.asm, unmodified by this
-  // app) already accounts for that score block always running - removing it
-  // shifts that assumption in a way that wasn't fully traced through before
-  // shipping. Reverted back to the manual's  documented, safe combination
-  // (noscoretxt only) rather than continuing to guess at 6502-cycle-exact
-  // timing without an actual rendered-frame check to verify against - a
-  // static compile check (which is all that was used) can assemble cleanly
-  // while still being wrong about this.
+  // Minikernel (public/bb19/text-minikernel/text12a.asm) sets "noscore = 1"
+  // itself and draws its own score digits ahead of its text row, so with it in
+  // use "noscore" can't hide the score: "noscoretxt" is the constant that
+  // does. It removes only the digits (and the space they take); the text row
+  // still renders. Without the Text Minikernel it is plain "noscore".
   const scoreConfigurationCode = (showScore ?? true) ? '' :
     `const ${this.isTextMinikernelActive() ? 'noscoretxt' : 'noscore'} = 1`;
   // "scorefade" - a standard-kernel-only compile-time gate that adds shading
@@ -4176,6 +4153,13 @@ Blockly.BBasic.generateBackgrounds = function() {
   // ordinary user-subroutine relocation machinery (Blockly.BBasic.
   // subroutines) instead of always being inline-spliced into bank 1.
   Blockly.BBasic.generateBackgroundScrollPatch(backgrounds, visibleRows);
+  // Without Superchip RAM the extra 12th row of a background (see
+  // backgroundDataRows) is not drawn: putting it in the playfield data
+  // glitched the text drawn on the same screen (the Play preview's name).
+  // Only a project that scrolls tall backgrounds loads it, as part of the
+  // scrolling window.
+  const drawnRows = this.backgroundScrollOverflowBackgrounds.length > 0 ?
+    visibleRows : effectiveBackgroundRows(config);
 
   return backgrounds.map(({id, pixels, rowColors}, index) => {
     const endLabel = `background${id}end`;
@@ -4192,7 +4176,7 @@ Blockly.BBasic.generateBackgrounds = function() {
     // aren't patched in on scroll, a known, narrower gap than the pixel
     // one this fix targets.
     const pfcolorsBlock = usePfColors ?
-      buildPfcolors(pixels.slice(0, visibleRows), rowColors) : '';
+      buildPfcolors(pixels.slice(0, drawnRows), rowColors) : '';
     const overflowUsed = this.backgroundScrollOverflowBackgrounds.length > 0;
     // A literal "playfield:" block, directly loading this background's
     // first visibleRows rows, ONLY once no background in the project
@@ -4206,7 +4190,7 @@ Blockly.BBasic.generateBackgrounds = function() {
     // manualdraw") and is used purely as a backing data source.
     const payloadLines = overflowUsed ? [] : [
       ' playfield:',
-      convertPlayfield(matrixToPlayfield(pixels.slice(0, visibleRows))),
+      convertPlayfield(matrixToPlayfield(pixels.slice(0, drawnRows))),
       'end',
     ];
     if (pfcolorsBlock) payloadLines.push(pfcolorsBlock.replace(/\n$/, ''));
@@ -4285,7 +4269,8 @@ Blockly.BBasic.generateRowFadeChecks = function() {
   const bgVar = resolveVar('Bg');
   const configurationStorage = useConfigurationStorage();
   const config = (configurationStorage && configurationStorage.value) || {};
-  const visibleRows = backgroundDataRows(config);
+  const visibleRows = this.backgroundScrollOverflowBackgrounds.length > 0 ?
+    backgroundDataRows(config) : effectiveBackgroundRows(config);
   const blankLinesShown = this.effectiveShowBlankLines();
   const number = this.blockNumbers.next();
   const endLabel = `_rowfade_${number}_end`;

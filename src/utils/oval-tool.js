@@ -14,31 +14,39 @@ const squareEndpoint = (x0, y0, x1, y1) => {
   return {x: x0 + sx * size, y: y0 + sy * size};
 };
 
-// Traces the ellipse inscribed in [xStart,yStart]-[xEnd,yEnd] by sampling
-// angles around its center and rounding each to the nearest pixel cell,
-// deduplicating via a Map keyed on that cell - rather than a classic
-// midpoint-ellipse algorithm (which assumes an integer radius pair and
-// gets awkward at the tiny, often even-width/height bounding boxes a pixel
-// art canvas actually produces). Step count scales with size so adjacent
-// samples never skip a pixel and leave a gap in the outline, while staying
-// cheap at the small sizes these editors actually draw at.
+// Traces the ellipse inscribed in [xStart,yStart]-[xEnd,yEnd]: a cell is part
+// of the ellipse's body when its center is inside it (the same test the Circle
+// select tool uses), and the outline is the body's cells that touch the
+// outside (up, down, left or right). That gives an even, one pixel wide line
+// that reaches all four sides of the box and steps evenly, where rounding
+// points sampled around the edge bunched up at some angles, left bumps
+// and spilled one cell past the box.
 const ellipseOutline = (xStart, yStart, xEnd, yEnd, color) => {
   const width = xEnd - xStart + 1;
   const height = yEnd - yStart + 1;
-  const cx = xStart + (width - 1) / 2;
-  const cy = yStart + (height - 1) / 2;
+  const cx = (width - 1) / 2;
+  const cy = (height - 1) / 2;
   const rx = width / 2;
   const ry = height / 2;
-  const steps = Math.max(64, Math.ceil((rx + ry) * 4));
+  // A tiny allowance so a cell whose center sits exactly on the edge counts as
+  // inside, whatever floating point rounding does.
+  const inside = (x, y) => {
+    if (x < 0 || y < 0 || x >= width || y >= height) return false;
+    const nx = (x - cx) / rx;
+    const ny = (y - cy) / ry;
+    return nx * nx + ny * ny <= 1.0001;
+  };
 
-  const pixels = new Map();
-  for (let i = 0; i < steps; i++) {
-    const angle = (i / steps) * Math.PI * 2;
-    const x = Math.round(cx + Math.cos(angle) * rx);
-    const y = Math.round(cy + Math.sin(angle) * ry);
-    pixels.set(`${x},${y}`, {x, y, color});
+  const pixels = [];
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (!inside(x, y)) continue;
+      if (!inside(x - 1, y) || !inside(x + 1, y) || !inside(x, y - 1) || !inside(x, y + 1)) {
+        pixels.push({x: xStart + x, y: yStart + y, color});
+      }
+    }
   }
-  return [...pixels.values()];
+  return pixels;
 };
 
 /**

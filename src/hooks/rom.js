@@ -1722,7 +1722,6 @@ const previewNameBlockXml = (name) => {
 // the text replaces) left on.
 const PREVIEW_TEXT_CONFIG = {
   textMaxDisplayWidth: TEXT_MESSAGE_LENGTH,
-  showScore: true,
   scoreBkColor: 0,
   // The debug displays that write numbers into the score.
   enableCycleScore: false,
@@ -1742,7 +1741,7 @@ export const buildBackgroundPreviewRom = (backgroundId, name) => {
   ];
   const chain = steps.map((step) => step + '<next>').join('') + steps.map(() => '</next></block>').join('');
   return buildPreviewRom({
-    name: `Background ${backgroundId}`,
+    name: name ? `Background ${backgroundId} (${name})` : `Background ${backgroundId}`,
     configOverride: PREVIEW_TEXT_CONFIG,
     xml: `<xml xmlns="https://developers.google.com/blockly/xml">` +
       `<block type="event_block"><field name="EVENT">system_start</field>` +

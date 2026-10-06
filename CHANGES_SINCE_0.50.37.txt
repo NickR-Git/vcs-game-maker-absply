@@ -776,3 +776,17 @@ New app icon, default background border, grid snap and comment box fixes
 - Sound Banks: the preview buttons play at the DIM volume when DIM is on.
 - Fixed the Blockly grid snap icon being white (invisible) in light mode, and the comment block
   editor wrapping words while typing.
+
+=== 0.51.26 ===
+Smoother circles, score hiding with text, 12th row not drawn, default background
+
+- Circles and ovals are drawn as an even one pixel line that stays inside the dragged box and
+  reaches all four sides, instead of the bumpy outline from rounding points around the edge.
+- "Show score" off hides only the score digits (and their space) when the Text Minikernel is
+  in use, via noscoretxt; the text lines still render. The Play preview of a background always
+  shows the name, and the compile log names the background being previewed.
+- Without Superchip RAM the extra 12th playfield row is no longer put in the game's playfield
+  data (it glitched the text drawn on the same screen); it stays in the Background editor, and
+  a project that scrolls tall backgrounds still loads it as part of the scrolling window.
+- A new project's starting background is the border on the top, left and right edges with two
+  filled rows at the bottom, across the full row count.
