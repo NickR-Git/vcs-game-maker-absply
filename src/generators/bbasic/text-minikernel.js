@@ -1238,6 +1238,9 @@ export default (Blockly) => {
       '',
       ' inline text12a.asm',
       ' inline text12b.asm',
+      // The playfield color scroll tables go in this bank too (the kernel's):
+      // see buildBackgroundColorScroll in generators/bbasic.js.
+      ...(Blockly.BBasic.backgroundColorScrollTopBank ? ['', Blockly.BBasic.backgroundColorScrollTablesAsm] : []),
     ].join('\n');
 
     const configurationStorage = useConfigurationStorage();

@@ -166,6 +166,12 @@ export default {
     };
   },
   computed: {
+    // Changes whenever a mirror drawing switch is flipped, so the hover
+    // highlight can be redrawn with or without the mirrored cells.
+    mirrorKey() {
+      const mirror = useMirrorDraw();
+      return `${mirror.horizontal}-${mirror.vertical}`;
+    },
     // 'pencil' or 'eraser' - which tool is currently active, shared across
     // every PixelEditor.vue instance (see hooks/pixel-tool.js's comment
     // for why this moved out of per-instance data()). Read externally by
@@ -194,6 +200,9 @@ export default {
     this.teardownGridOverlay();
   },
   watch: {
+    mirrorKey() {
+      if (this.hoverCell && this.gridResizeObserver) this.$nextTick(() => this.drawGridOverlay());
+    },
     // Keeps THIS instance's underlying editor.tool object (a real
     // Pencil, colored with this instance's fgColor/bgColor - see
     // data()) in sync with the shared toggledTool (hooks/pixel-tool.js) at
@@ -205,6 +214,7 @@ export default {
     // clicked again there too - exactly the bug being fixed here.
     toggledTool(toolName, previousToolName) {
       if (this.editor) this.editor.tool = this.toolFor(toolName);
+      if (this.hoverCell && this.gridResizeObserver) this.$nextTick(() => this.drawGridOverlay());
       // Leaving the selection tools and Move for a drawing tool drops the
       // selection (and a half-made polygon). Moving between the selection tools
       // and Move keeps it, since Move works on the selection. Every editor sees
@@ -505,12 +515,15 @@ export default {
       // overlay (not the selection's blue) so it never looks like an
       // actual selection - just a cursor-following highlight.
       if (this.hoverCell) {
-        const {x: hx, y: hy} = this.hoverCell;
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-        ctx.fillRect(hx * cellWidth, hy * cellHeight, cellWidth, cellHeight);
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(hx * cellWidth + 0.5, hy * cellHeight + 0.5, cellWidth - 1, cellHeight - 1);
+        // With mirror drawing on, the cells a draw tool would also change get
+        // the same highlight.
+        this.hoverCellsWithMirrors().forEach(({x: hx, y: hy}) => {
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+          ctx.fillRect(hx * cellWidth, hy * cellHeight, cellWidth, cellHeight);
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(hx * cellWidth + 0.5, hy * cellHeight + 0.5, cellWidth - 1, cellHeight - 1);
+        });
       }
 
       if (!this.showCellIds) return;
@@ -604,6 +617,25 @@ export default {
       while (history.undoStack.length > start.historyLength) this.editor.undo();
       history.redoStack = start.redoStack;
       this.selection = start.selection;
+    },
+
+    // The hovered cell plus, when mirror drawing is on and a draw tool is
+    // selected, the cells mirroring it (the same ones mirrorPixels adds).
+    hoverCellsWithMirrors() {
+      const cell = this.hoverCell;
+      if (!cell || !this.editor) return [];
+      const mirror = useMirrorDraw();
+      const drawTools = ['pencil', 'eraser', 'fill', 'line', 'rectangle', 'oval'];
+      if ((!mirror.horizontal && !mirror.vertical) || !drawTools.includes(this.toggledTool)) return [cell];
+      const {width, height} = this.editor;
+      const cells = new Map([[`${cell.x},${cell.y}`, cell]]);
+      const add = (x, y) => {
+        if (!cells.has(`${x},${y}`)) cells.set(`${x},${y}`, {x, y});
+      };
+      if (mirror.horizontal) add(width - 1 - cell.x, cell.y);
+      if (mirror.vertical) add(cell.x, height - 1 - cell.y);
+      if (mirror.horizontal && mirror.vertical) add(width - 1 - cell.x, height - 1 - cell.y);
+      return [...cells.values()];
     },
 
     // Tracks the cell under the pointer for the hover highlight (see

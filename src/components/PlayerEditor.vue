@@ -12,7 +12,7 @@
 
         <graphic-editor-toolbar class="tight-under-intro" import-export-first :active-editor="effectiveFrameEditor" @height-hotkey="handleSetHeightHotkey">
           <template v-slot:before-tools>
-            <editor-zoom v-model="zoom" />
+            <editor-zoom v-model="zoom" :levels="playerZoomLevels" />
             <pixel-grid-toggle v-model="showPixelGrid" />
           </template>
           <template v-slot:after-tools>
@@ -441,7 +441,10 @@ import {DEFAULT_ROW_COLOR, clearRowColors} from '../blocks/background';
 import {DEFAULT_SPRITES, processPlayerAnimationsStorageDefaults} from '../generators/bbasic/sprites';
 import {useColorPaletteStorage, useConfigurationStorage, useErrorStorage, usePixelGridOverlayStorage} from '../hooks/project';
 import {buildPlayerAnimationPreviewRom, useBuildInProgress} from '../hooks/rom';
-import {useEditorZoom} from '../hooks/zoom';
+import {useEditorZoom, ZOOM_LEVELS} from '../hooks/zoom';
+
+// The Sprites tab zooms out further than the other tabs, down to 25%.
+const PLAYER_ZOOM_LEVELS = [0.25, ...ZOOM_LEVELS];
 import {colorByteToCss} from '../utils/palette';
 import {playfieldToMatrix, resizePixelMatrixHeight, scaleRowColors} from '../utils/pixels';
 import {loadImageFromFile, openFileDialogMultiple, sortImportedAnimationFrameFiles} from '../utils/file';
@@ -478,7 +481,7 @@ export default defineComponent({
     // 0.75, not the shared 100% default - same "this tab reads better at a
     // different starting zoom" reasoning useEditorZoom's comment already
     // documents for Text (200%) and Score (150%).
-    const zoom = useEditorZoom(props.name, 0.75);
+    const zoom = useEditorZoom(props.name, 0.75, PLAYER_ZOOM_LEVELS);
     // Shared across Player 0/1 AND the Background tab (see
     // PixelGridToggle.vue's  comment) - not per-player like zoom above.
     const showPixelGrid = usePixelGridOverlayStorage();
@@ -1204,7 +1207,7 @@ export default defineComponent({
       isCollapsed, toggleCollapsed,
       dragAttrs, dragCardClass, dragHandleListeners, dragTargetListeners, frameDrag, frameHandleListeners,
       armedFrameKey, frameKey, armFrameDrag,
-      zoom, showPixelGrid, editorWidth, frameEditorWidth,
+      zoom, playerZoomLevels: PLAYER_ZOOM_LEVELS, showPixelGrid, editorWidth, frameEditorWidth,
       activeFrameEditor, setActiveFrame, isFrameActive, frameHighlightState, selectedAnimation,
       effectiveFrameEditor, pixelEditorRefKey,
       heightMenuVisible, heightMenuValue, heightMenuScaleContents,

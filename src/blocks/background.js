@@ -487,6 +487,18 @@ export const backgroundsWithOverflowRows = (backgrounds, visibleRows) =>
 // getSubroutineBank call).
 export const BACKGROUND_SCROLL_PATCH_SUBROUTINE_NAME = 'bgscrollpatch';
 
+// "Background scroll" with "scroll playfield colors" checked: the row colors
+// scroll along with the pixels. The kernel reads each row's color through a
+// pointer (pfcolortable) into a ROM table with one entry every 4 bytes, so
+// scrolling a row just moves that pointer 4 bytes: each background gets its own
+// longer, page-aligned table (see generateBackgroundColorScrollTables in
+// generators/bbasic.js) and this subroutine points the kernel at the part of it
+// for the current scroll offset. bgColorBg is the loaded background's index and
+// bgColorOffset the number of rows its colors are scrolled by.
+export const BACKGROUND_COLOR_SCROLL_SUBROUTINE_NAME = 'bgcolorscroll';
+export const backgroundColorBgVarName = () => 'bgColorBg';
+export const backgroundColorOffsetVarName = () => 'bgColorOffset';
+
 const BACKGROUND_PFPIXEL_OPTIONS = [
   [`${CHECKBOX_CHECKED_ICON} Set`, 'on'],
   [`${CHECKBOX_CLEAR_ICON} Clear`, 'off'],
@@ -552,6 +564,42 @@ Blockly.Extensions.register('background_scroll_direction_sync', function() {
     field.setValue('up');
   }
 });
+
+// Block for scrolling the background. STOPATEDGE only has any effect for
+// Up/Down/Up (2x)/Down (2x) - see backgroundScrollRowVarName's
+// comment for why Left/Right have no edge to stop at on the standard
+// kernel (a fixed 32-column playfield width, nothing to scroll past).
+Blockly.Blocks['background_scroll'] = {
+  init: function() {
+    this.appendDummyInput()
+        .appendField(`${BACKGROUND_ICON} Background scroll`)
+        .appendField(new Blockly.FieldDropdown(BACKGROUND_PFSCROLL_OPTIONS), 'DIRECTION')
+        .appendField(' ')
+        .appendField(new Blockly.FieldCheckbox('FALSE'), 'STOPATEDGE')
+        .appendField('stop at top/bottom edge')
+        .appendField(' ')
+        .appendField(new Blockly.FieldCheckbox('FALSE'), 'COLORS')
+        .appendField('scroll playfield colors');
+    this.setPreviousStatement(true);
+    this.setNextStatement(true);
+    this.setColour(BACKGROUND_COLOR);
+    Blockly.Extensions.apply('background_scroll_direction_sync', this, false);
+    this.setTooltip(`Scrolls the background in the given direction. Left/Right aren't offered while Superchip ` +
+        `RAM is enabled (Options tab) - real batari Basic doesn't support horizontal playfield scrolling ` +
+        `on that kernel. "stop at top/bottom edge", when checked, ` +
+        `tracks how far Up/Down/Up (2x)/Down (2x) scrolling has moved within the CURRENT background's ` +
+        `real row count (not just the fixed 12-row window batari Basic's pfscroll rotates through) ` +
+        `and skips the scroll instead of continuing past the top (row 0) or the bottom (this background's ` +
+        `last row). Has no effect on Left/Right, which have no edge to stop at - the standard kernel's ` +
+        `playfield is always exactly 32 columns wide, so there's nothing beyond it to scroll into. Position ` +
+        `is tracked regardless of whether this checkbox is on, so "Background scroll position" always ` +
+        `reflects where the current background actually is, even from a scroll block that doesn't stop at ` +
+        `the edges itself. "scroll playfield colors", when checked (and per-row playfield colors are on in ` +
+        `the Options tab), moves each row's color along with its pixels for Up/Down/Up (2x)/Down (2x), ` +
+        `instead of the colors staying where they are on the screen. Use it on every scroll block of a ` +
+        `project that scrolls colors.`);
+  },
+};
 
 export const DEFAULT_BACKGROUNDS = {
   backgrounds: [
@@ -1154,45 +1202,6 @@ Blockly.defineBlocksWithJsonArray([
     'nextStatement': null,
     'colour': BACKGROUND_COLOR,
     'tooltip': `Turns off every playfield pixel, the same as batari Basic's "pfclear".`,
-  },
-  // Block for scrolling the background. STOPATEDGE only has any effect for
-  // Up/Down/Up (2x)/Down (2x) - see backgroundScrollRowVarName's
-  // comment for why Left/Right have no edge to stop at on the standard
-  // kernel (a fixed 32-column playfield width, nothing to scroll past).
-  {
-    'type': `background_scroll`,
-    'message0': `${BACKGROUND_ICON} Background scroll %1`,
-    'args0': [
-      {
-        'type': 'field_dropdown',
-        'name': 'DIRECTION',
-        'options': BACKGROUND_PFSCROLL_OPTIONS,
-      },
-    ],
-    'message1': 'stop at top/bottom edge %1',
-    'args1': [
-      {
-        'type': 'field_checkbox',
-        'name': 'STOPATEDGE',
-        'checked': false,
-      },
-    ],
-    'inputsInline': true,
-    'previousStatement': null,
-    'nextStatement': null,
-    'colour': BACKGROUND_COLOR,
-    'extensions': ['background_scroll_direction_sync'],
-    'tooltip': `Scrolls the background in the given direction. Left/Right aren't offered while Superchip ` +
-      `RAM is enabled (Options tab) - real batari Basic doesn't support horizontal playfield scrolling ` +
-      `on that kernel. "stop at top/bottom edge", when checked, ` +
-      `tracks how far Up/Down/Up (2x)/Down (2x) scrolling has moved within the CURRENT background's ` +
-      `real row count (not just the fixed 12-row window batari Basic's pfscroll rotates through) ` +
-      `and skips the scroll instead of continuing past the top (row 0) or the bottom (this background's ` +
-      `last row). Has no effect on Left/Right, which have no edge to stop at - the standard kernel's ` +
-      `playfield is always exactly 32 columns wide, so there's nothing beyond it to scroll into. Position ` +
-      `is tracked regardless of whether this checkbox is on, so "Background scroll position" always ` +
-      `reflects where the current background actually is, even from a scroll block that doesn't stop at ` +
-      `the edges itself.`,
   },
   // Read-only - how far Up/Down scrolling has moved the CURRENTLY shown
   // background from its top row (0 = top, at most that background's

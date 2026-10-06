@@ -8,7 +8,7 @@ import {effectiveBackgroundRows, backgroundDataRows, backgroundFadeTimerVarName,
   collisionPixelColumnVarName, collisionPixelRowVarName, areaClearLeftVarName,
   backgroundScrollRowVarName, backgroundScrollRowMaxVarName, backgroundScrollSubRowVarName,
   backgroundScrollEdgeFlagsVarName, BACKGROUND_SCROLL_EDGE_BITS, backgroundScrollStartVarName,
-  BACKGROUND_SCROLL_PATCH_SUBROUTINE_NAME} from '../../blocks/background';
+  BACKGROUND_SCROLL_PATCH_SUBROUTINE_NAME, backgroundColorOffsetVarName} from '../../blocks/background';
 import {pfRowDivisorFor, PLAYER_PF_X_OFFSET, MISSILE_BALL_PF_X_OFFSET} from '../../utils/playfield-coords';
 import {ctrlpfShadowVarName, spriteScrollFlagsVarName, spriteScrollActiveBit,
   missileBounceStageVarName,
@@ -1460,8 +1460,38 @@ export default (Blockly) => {
   Blockly.BBasic[`background_scroll`] = function(block) {
     const direction = block.getFieldValue('DIRECTION');
     const delta = BACKGROUND_SCROLL_ROW_DELTA[direction];
+    // "scroll playfield colors": the row colors move with the pixels (see
+    // buildBackgroundColorScroll in generators/bbasic.js). Only for the
+    // directions that move rows.
+    const colorsOn = delta != null && block.getFieldValue('COLORS') === 'TRUE' &&
+      !!Blockly.BBasic.backgroundColorScrollUsed;
+    // Without tracking nothing is taller than the screen, so pfscroll rotates the
+    // rows in place and the colors rotate the same way. The rotation is noticed
+    // by the same thing pfscroll itself goes by: playfieldpos is reset to the
+    // row height when "up" has moved a whole row, and to 1 when "down" has.
+    const colorRotationLines = (uid) => {
+      const resolve = (name) =>
+        Blockly.BBasic.nameDB_.getName(name, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+      const config = (useConfigurationStorage() && useConfigurationStorage().value) || {};
+      const rows = backgroundDataRows(config);
+      const offset = resolve(backgroundColorOffsetVarName());
+      const skip = `_bgcolorscroll_${uid}_skip`;
+      const up = delta < 0;
+      return [
+        ` if playfieldpos <> ${up ? pfRowDivisorFor(config) : 1} then goto ${skip}`,
+        ...(up ? [
+          ` ${offset} = ${offset} + 1`,
+          ` if ${offset} >= ${rows} then ${offset} = 0`,
+        ] : [
+          ` if ${offset} = 0 then ${offset} = ${rows - 1} else ${offset} = ${offset} - 1`,
+        ]),
+        Blockly.BBasic.backgroundColorScrollApplyLines(),
+        `@ ${skip}`,
+      ];
+    };
     if (!Blockly.BBasic.backgroundScrollTracking || delta == null) {
-      return `pfscroll ${direction}\n`;
+      if (!colorsOn) return `pfscroll ${direction}\n`;
+      return [` pfscroll ${direction}`, ...colorRotationLines(Blockly.BBasic.blockNumbers.next('bgscroll'))].join('\n') + '\n';
     }
 
     const resolveVar = (canonicalName) =>
@@ -1510,6 +1540,7 @@ export default (Blockly) => {
           ` if ${rowVar} >= ${maxVar} then goto ${doneLabel}`);
       }
       lines.push(` pfscroll ${direction}`);
+      if (colorsOn) lines.push(...colorRotationLines(uid));
       // Real pfscroll moves by ONE SCANLINE per call, not one logical
       // playfield row (confirmed directly against pf_scrolling.asm - it
       // only actually rotates a row once the kernel's internal
@@ -1554,14 +1585,15 @@ export default (Blockly) => {
       // Which pfscroll direction advances the background is fixed by the
       // hardware (traced through pf_scrolling.asm): pfscroll "up" rotates
       // every row toward slot 0, leaving the BOTTOM slot stale and needing
-      // the window's top row to INCREASE; "down" is the mirror image. This
-      // block's "Down" (delta > 0) is the direction that moves further into
-      // the background, so it issues pfscroll "up" (and "downdown" -> "upup"),
-      // keeping the on-screen motion each direction label already had.
-      const mechDirection = {up: 'down', down: 'up', upup: 'downdown', downdown: 'upup'}[direction];
+      // the window's top row to INCREASE; "down" is the mirror image. The
+      // block's direction is the way the background moves on the screen, as
+      // with a background that fits the screen: Up moves it up (further into
+      // the background, so the row increases) and Down moves it down (back
+      // towards its top).
+      const mechDirection = direction;
       const step = Math.abs(delta);
       const visibleRows = backgroundDataRows(config);
-      const forward = delta > 0;
+      const forward = delta < 0;
       const {rowMask, indexMask} = Blockly.BBasic.backgroundScrollPacking;
       const gosubPatch = ` gosub ${BACKGROUND_SCROLL_PATCH_SUBROUTINE_NAME}${Blockly.BBasic.bankJumpSuffix(
           Blockly.BBasic.getCurrentBank(), Blockly.BBasic.getSubroutineBank(BACKGROUND_SCROLL_PATCH_SUBROUTINE_NAME))}`;
@@ -1639,6 +1671,12 @@ export default (Blockly) => {
         setEdgeFlag('top', 'temp4 = 0');
       }
       nudgeSprites();
+      if (colorsOn) {
+        // The colors follow the top row of the window.
+        lines.push(` ${Blockly.BBasic.nameDB_.getName(backgroundColorOffsetVarName(),
+            Blockly.Names.DEVELOPER_VARIABLE_TYPE)} = ${rowVar} & ${rowMask}`);
+        lines.push(Blockly.BBasic.backgroundColorScrollApplyLines());
+      }
       if (forward) {
         // The newly-visible BOTTOM row: top row + visibleRows - 1, wrapped
         // around the background's row count.
@@ -1708,6 +1746,12 @@ export default (Blockly) => {
       ` playfieldpos = ${pfRowDivisorFor(config)}`,
       ' temp5 = 255',
       gosubPatch,
+      // The playfield colors follow to the new row.
+      ...(Blockly.BBasic.backgroundColorScrollUsed ? [
+        ` ${resolveVar(backgroundColorOffsetVarName())} = ${resolveVar(backgroundScrollRowVarName())} & ${
+          Blockly.BBasic.backgroundScrollPacking.rowMask}`,
+        Blockly.BBasic.backgroundColorScrollApplyLines(),
+      ] : []),
       `@ ${doneLabel}`,
     ].join('\n') + '\n';
   };

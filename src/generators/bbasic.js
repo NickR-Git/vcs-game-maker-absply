@@ -15,8 +15,8 @@ import templateText from 'raw-loader!./bbasic.bb.hbs';
 import Handlebars from 'handlebars';
 import {sumBy, chunk} from 'lodash';
 
-import {useBackgroundsStorage, useConfigurationStorage, useDataTablesStorage, usePlayerAnimationsStorage,
-  useTitleScreenStorage} from '../hooks/project';
+import {appendCompileLog, useBackgroundsStorage, useConfigurationStorage, useDataTablesStorage,
+  usePlayerAnimationsStorage, useTitleScreenStorage} from '../hooks/project';
 import {getRelocationBanks} from '../hooks/relocation-banks';
 import {DEFAULT_ROW_COLOR, processBackgroundStorageDefaults,
   backgroundFadeTimerVarName, backgroundFadePaceVarName, backgroundFadeTargetVarName,
@@ -28,7 +28,8 @@ import {DEFAULT_ROW_COLOR, processBackgroundStorageDefaults,
   backgroundScrollPacking, backgroundScrollActiveVarName, backgroundScrollSubRowVarName,
   backgroundsWithOverflowRows, backgroundDataRows, effectiveBackgroundRows,
   BACKGROUND_SCROLL_PATCH_SUBROUTINE_NAME, resolveUsedBackgroundIds,
-  backgroundRowFadeVarName, ROW_FADE_IDLE_STEP, rowFadeStartColor} from '../blocks/background';
+  backgroundRowFadeVarName, ROW_FADE_IDLE_STEP, rowFadeStartColor,
+  backgroundColorBgVarName, backgroundColorOffsetVarName, BACKGROUND_COLOR_SCROLL_SUBROUTINE_NAME} from '../blocks/background';
 import {functionCallDiscardVarName, functionCallArgVarName, functionParamVarName,
   MAX_FUNCTION_ARGS} from '../blocks/function';
 import {dataTableSymbolName, processDataTablesStorageDefaults} from '../blocks/data';
@@ -2006,6 +2007,17 @@ Blockly.BBasic.init = function(workspace) {
         'a requested starting scroll row + 1 (0 = none), applied by the next background load');
   }
   reserveSpriteScrollDevVars(reserveDevVar, this.spriteScrollUsedFor);
+  // "Background scroll" with "scroll playfield colors" checked (needs the row
+  // color table, see needsPlayfieldColorTable) - see
+  // BACKGROUND_COLOR_SCROLL_SUBROUTINE_NAME in blocks/background.js.
+  this.backgroundColorScrollUsed = this.usePlayfieldRowColors() && workspace.getAllBlocks(false)
+      .some((block) => block.type === 'background_scroll' && block.getFieldValue('COLORS') === 'TRUE');
+  if (this.backgroundColorScrollUsed) {
+    reserveDevVar(backgroundColorBgVarName(), undefined,
+        'playfield color scroll: which background is loaded');
+    reserveDevVar(backgroundColorOffsetVarName(), undefined,
+        'playfield color scroll: how many rows the playfield colors are scrolled');
+  }
 
   // Add user variables, but only ones that are being used. Their FINAL
   // routed names are tracked separately (userVarNames) so the ROM capacity
@@ -2705,6 +2717,11 @@ Blockly.BBasic.generateRelocatedSections = function(eventResults) {
   const maxBanks = BANK_COUNT_BY_ROMSIZE_MINI[config.romSize] || 0;
   const everyDeclaredBank =
     maxBanks > 1 && !Blockly.BBasic.isTextMinikernelActive() ? [maxBanks] : [];
+  // The playfield color scroll tables live in the top bank (the kernel's), see
+  // buildBackgroundColorScroll. With the Text Minikernel they go in its section
+  // of that bank instead.
+  const colorScrollTopBank = Blockly.BBasic.backgroundColorScrollTopBank || 0;
+  const colorScrollTablesInRelocated = colorScrollTopBank && !Blockly.BBasic.isTextMinikernelActive();
 
   // Numerically sorted, not left in whatever order events/graphics/music/
   // subroutines happen to appear in (a plain Set preserves insertion order,
@@ -2782,6 +2799,8 @@ Blockly.BBasic.generateRelocatedSections = function(eventResults) {
       ...subroutineBodies,
       ...functionBodies,
       tablesForBank,
+      colorScrollTablesInRelocated && bank === colorScrollTopBank ?
+        Blockly.BBasic.backgroundColorScrollTablesAsm : '',
       textOffsetTablesForBank,
       textStaticOffsetTablesForBank,
       textRow2OffsetsTableForBank,
@@ -2922,6 +2941,9 @@ Blockly.BBasic.finish = function(code) {
   // generateRelocatedSections" reasoning as generatedTextOffsetTables just
   // above.
   const generatedJoyDir8Table = generateJoystickDirection8Table(Blockly);
+  // The playfield color scroll's tables (built by generateBackgrounds above).
+  const generatedBackgroundColorScrollTables = Blockly.BBasic.backgroundColorScrollTopBank ? '' :
+    (Blockly.BBasic.backgroundColorScrollTablesAsm || '');
   const generatedSubroutines = Blockly.BBasic.generateSubroutines();
   const generatedFunctions = Blockly.BBasic.generateFunctions();
 
@@ -3017,6 +3039,7 @@ Blockly.BBasic.finish = function(code) {
     generatedRainbowColorGraphics, generatedRainbowColorChecks, generatedMissileFireChecks,
     generatedSeekChecks, generatedInertiaChecks, generatedShakeScreenChecks,
     generatedTextOffsetTables, generatedTextStaticOffsetTables, generatedTextRow2OffsetsTable, generatedJoyDir8Table,
+    generatedBackgroundColorScrollTables,
     generatedSubroutines, generatedFunctions, generatedRelocatedEvents, generatedTextMinikernel,
     systemStartEvent, titleStartEvent, titleUpdateEvent, gamePlayStartEvent,
     gameOverStartEvent, gameOverUpdateEvent, generatedProjectInfo, generatedConfiguration, generatedRomSize, generatedTv, generatedScrollDefaults, defaultPlayer1Color, defaultPlayer0Color,
@@ -4160,6 +4183,13 @@ Blockly.BBasic.generateBackgrounds = function() {
   // text drawn on the same screen (the Play preview's name).
   const drawnRows = (this.backgroundScrollUsed || this.backgroundScrollOverflowBackgrounds.length > 0) ?
     visibleRows : effectiveBackgroundRows(config);
+  // Scrolling the playfield colors with the pixels: each background gets its
+  // own color table instead of the compiler's "pfcolors:" one (see
+  // buildBackgroundColorScroll).
+  this.backgroundColorScrollTablesAsm = '';
+  this.backgroundColorScrollTopBank = 0;
+  const colorScroll = !!this.backgroundColorScrollUsed && usePfColors;
+  if (colorScroll) this.buildBackgroundColorScroll(backgrounds, config);
 
   return backgrounds.map(({id, pixels, rowColors}, index) => {
     const endLabel = `background${id}end`;
@@ -4175,7 +4205,7 @@ Blockly.BBasic.generateBackgrounds = function() {
     // (see generateBackgroundScrollPatch), newly-exposed rows' colors
     // aren't patched in on scroll, a known, narrower gap than the pixel
     // one this fix targets.
-    const pfcolorsBlock = usePfColors ?
+    const pfcolorsBlock = (usePfColors && !colorScroll) ?
       buildPfcolors(pixels.slice(0, drawnRows), rowColors) : '';
     const overflowUsed = this.backgroundScrollOverflowBackgrounds.length > 0;
     // A literal "playfield:" block, directly loading this background's
@@ -4239,6 +4269,16 @@ Blockly.BBasic.generateBackgrounds = function() {
     const colorTableSaveLines = (usePfColors && this.backgroundRainbowUsed) ?
       ` ${Blockly.BBasic.superchipRwPairs[backgroundColorTableLoVarName()].write} = pfcolortable\n` +
       ` ${Blockly.BBasic.superchipRwPairs[backgroundColorTableHiVarName()].write} = aux2\n` : '';
+    // Points the kernel at this background's color table, scrolled to its
+    // current row (the first one, or the row a pending "Set background scroll
+    // to row" just put it at).
+    const colorScrollLines = colorScroll ? [
+      ` ${Blockly.BBasic.nameDB_.getName(backgroundColorBgVarName(),
+          Blockly.Names.DEVELOPER_VARIABLE_TYPE)} = ${index}`,
+      ` ${Blockly.BBasic.nameDB_.getName(backgroundColorOffsetVarName(), Blockly.Names.DEVELOPER_VARIABLE_TYPE)} = ${
+        overflowUsed ? `${backgroundScrollRowVarName()} & ${this.backgroundScrollPacking.rowMask}` : '0'}`,
+      this.backgroundColorScrollApplyLines(),
+    ].join('\n') + '\n' : '';
     const rowFadeLines = (this.rowFadeStartColors || []).length ?
       ` ${backgroundRowFadeVarName('Bg')} = ${index}\n` +
       ` ${backgroundRowFadeVarName('Step')} = ${ROW_FADE_IDLE_STEP}\n` : '';
@@ -4246,9 +4286,147 @@ Blockly.BBasic.generateBackgrounds = function() {
       rowFadeLines +
       scrollTrackingLines +
       Blockly.BBasic.wrapRelocatableGraphics(`background${id}`, payload) + '\n' +
+      colorScrollLines +
       colorTableSaveLines +
       endLabel;
   }).join('\n\n');
+};
+
+// The bB lines that run the color scroll routine for the current
+// bgColorBg/bgColorOffset (inputs temp1 and temp2 - see
+// buildBackgroundColorScroll).
+Blockly.BBasic.backgroundColorScrollApplyLines = function() {
+  const resolve = (name) => this.nameDB_.getName(name, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+  const suffix = this.bankJumpSuffix(this.getCurrentBank(),
+      this.getSubroutineBank(BACKGROUND_COLOR_SCROLL_SUBROUTINE_NAME));
+  return ` temp1 = ${resolve(backgroundColorBgVarName())}\n` +
+    ` temp2 = ${resolve(backgroundColorOffsetVarName())}\n` +
+    ` gosub ${BACKGROUND_COLOR_SCROLL_SUBROUTINE_NAME}${suffix}`;
+};
+
+// Builds what "Background scroll" needs to scroll the playfield colors with
+// the pixels (see BACKGROUND_COLOR_SCROLL_SUBROUTINE_NAME in
+// blocks/background.js). The kernel reads a row's color with
+// "lda (pfcolortable),y", the table holding one color every 4 bytes, so
+// scrolling the colors by a row is moving pfcolortable up 4 bytes.
+//
+// An indexed read that crosses a page boundary takes an extra cycle, and the
+// kernel's timing has none to spare, so the pointer and everything it reaches
+// have to be in one 256 byte page. A background can be much taller than that
+// allows, so its colors are cut into pages: page p holds the colors of rows
+// p * 16 and on (wrapping round to the first row after the last, which is how
+// the playfield wraps) for as many rows as the kernel can read from a pointer
+// anywhere in the first 16 rows of the page. To scroll to row k the pointer goes
+// to page k / 16, 4 * (k mod 16) bytes in, and the same reads then land on the
+// colors of rows k and on. The pages go in the fixed bank the kernel runs in
+// (the "bank 1" data tables area), and the routine that sets the pointer
+// carries its lookup tables with it, like bgscrollpatch.
+//
+// The kernel's table from "pfcolors:" (see buildPfcolorsBlock) holds the rows
+// after the first (the first goes straight to COLUPF), starting one row
+// further down when blank lines are shown, and the kernel starts reading it at
+// pfcolortable + 132 - 4 * pfres (pfres being 12 without Superchip RAM). A page
+// starts that many bytes (less 4 for the extra row) before its first entry, so
+// the pointer is simply the page's address plus the offset. The top row's color
+// goes in playfieldrealcolor (the value COLUPF is restored from every frame).
+Blockly.BBasic.buildBackgroundColorScroll = function(backgrounds, config) {
+  const windowRows = backgroundDataRows(config);
+  const overflowMode = this.backgroundScrollOverflowBackgrounds.length > 0;
+  const blankLinesShown = this.effectiveShowBlankLines() ? 1 : 0;
+  const yBase = 132 - 4 * windowRows;
+  const before = Math.max(0, yBase - 4 * blankLinesShown);
+  const pageRows = 16;
+  const entriesPerPage = pageRows + windowRows + 3;
+  const tableLines = [' asm', ' align 256'];
+  const firstPage = [];
+  const pageHigh = [];
+  // The top row's color comes from a plain list of each background's row colors
+  // kept with the routine: the table pages can be in another bank than the
+  // routine (the kernel's), where the routine can't read them.
+  const rowStart = [];
+  const rowList = [];
+  let pageCount = 0;
+  backgrounds.forEach(({pixels, rowColors}, index) => {
+    const tall = overflowMode && pixels.length > windowRows;
+    // The rows the colors cycle through: the whole background when it is taller
+    // than the screen, else the rows the playfield rotates through.
+    const rowCount = tall ? pixels.length : windowRows;
+    const colorOf = (row) => (row < pixels.length && rowColors && rowColors[row] != null) ?
+      rowColors[row] : DEFAULT_ROW_COLOR;
+    firstPage.push(pageCount);
+    rowStart.push(rowList.length);
+    for (let row = 0; row < rowCount; row++) rowList.push(colorByteToBuildBBasic(colorOf(row)));
+    for (let page = 0; page < Math.ceil(rowCount / pageRows); page++) {
+      pageHigh.push(`bgcolorpage${pageCount}`);
+      tableLines.push(`bgcolorpage${pageCount}`);
+      if (before > 0) tableLines.push(` repeat ${before}`, ' .byte 0', ' repend');
+      for (let i = 0; i < entriesPerPage; i++) {
+        tableLines.push(` .byte ${colorByteToBuildBBasic(colorOf((page * pageRows + i) % rowCount))},0,0,0`);
+      }
+      tableLines.push(' align 256');
+      pageCount++;
+    }
+    if (rowCount > pageRows * 4) {
+      appendCompileLog(`Background ${index + 1} has more than ${pageRows * 4} rows: ` +
+        'its scrolling playfield colors stop at row ' + (pageRows * 4) + '.', 'info');
+    }
+  });
+  tableLines.push('end');
+  if (rowList.length > 255) {
+    appendCompileLog('The backgrounds have more than 255 rows in all: the top row of the scrolling ' +
+      'playfield colors can show the wrong color on the later ones.', 'info');
+  }
+  this.backgroundColorScrollTablesAsm = tableLines.join('\n') + '\n';
+  // The kernel reads these tables, so with bankswitching they have to be in the
+  // bank the kernel runs from (the top one, see KERNEL_BANK_BY_ROMSIZE in
+  // generators/bbasic/text-minikernel.js): a bank 1 table is not what the
+  // kernel sees there. The pfcolors tables the compiler makes go there too.
+  this.backgroundColorScrollTopBank = BANK_COUNT_BY_ROMSIZE_MINI[config.romSize] > 1 ?
+    BANK_COUNT_BY_ROMSIZE_MINI[config.romSize] : 0;
+
+  const playfieldColorVar = this.nameDB_.getName('playfieldrealcolor', Blockly.VARIABLE_CATEGORY_NAME);
+  // The routine itself (temp1 = background index, temp2 = row offset): picks the
+  // page, sets pfcolortable to it plus 4 bytes per row within the page, then
+  // reads the top row's color.
+  this.subroutines[BACKGROUND_COLOR_SCROLL_SUBROUTINE_NAME] = [
+    'asm',
+    'lda temp2',
+    'lsr',
+    'lsr',
+    'lsr',
+    'lsr',
+    'ldx temp1',
+    'clc',
+    'adc bgcolor_first,x',
+    'tax',
+    'lda bgcolor_pagehigh,x',
+    'sta pfcolortable+1',
+    'lda temp2',
+    'and #15',
+    'asl',
+    'asl',
+    'sta pfcolortable',
+    'ldx temp1',
+    'lda bgcolor_rowstart,x',
+    'clc',
+    'adc temp2',
+    'tax',
+    'lda bgcolor_rows,x',
+    `sta ${playfieldColorVar}`,
+    '@end',
+    ' return',
+    '',
+    'asm',
+    '@bgcolor_first',
+    `.byte ${firstPage.join(', ')}`,
+    '@bgcolor_pagehigh',
+    `.byte ${pageHigh.map((label) => `>${label}`).join(', ')}`,
+    '@bgcolor_rowstart',
+    `.byte ${rowStart.map((start) => Math.min(start, 255)).join(', ')}`,
+    '@bgcolor_rows',
+    `.byte ${rowList.slice(0, 256).join(', ')}`,
+    '@end',
+  ].join('\n');
 };
 
 // Per-frame step of "Fade playfield rows from color to playfield colors".
