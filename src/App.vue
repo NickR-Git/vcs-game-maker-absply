@@ -273,13 +273,25 @@
           <div class="emulator-toolbar-icons">
             <v-btn
               icon
+              small
+              class="emulator-flat-icon-btn emulator-fullscreen-btn"
+              title="Show the emulator full screen (Esc to leave)"
+              @click="handleFullscreen"
+            >
+              <v-icon>mdi-fullscreen</v-icon>
+            </v-btn>
+            <v-btn
+              icon
+              small
               class="emulator-flat-icon-btn emulator-screenshot-btn"
               title="Save a screenshot of the emulator screen as a PNG"
               @click="handleScreenshot"
             >
-              <v-icon :size="22" style="margin-top: -1px">mdi-camera-outline</v-icon>
+              <v-icon>mdi-camera-outline</v-icon>
             </v-btn>
+            <v-divider class="emulator-toolbar-divider" vertical />
             <key-mapping-dialog></key-mapping-dialog>
+            <emulator-settings-dialog></emulator-settings-dialog>
           </div>
         </div>
         <div id="gopher2600-target-container" :style="emulatorScaleStyle"></div>
@@ -515,6 +527,7 @@ import {startGamepadInput} from './hooks/gamepad';
 import {startTapHold} from './hooks/tap-hold';
 import {syncSoundBanks} from './hooks/soundbanks';
 import KeyMappingDialog from './components/KeyMappingDialog.vue';
+import EmulatorSettingsDialog from './components/EmulatorSettingsDialog.vue';
 import pkg from '../package.json';
 const {productName, version} = pkg;
 
@@ -583,7 +596,7 @@ const readStoredErrorHeight = () => {
 const readStoredEmulatorVisible = () => localStorage.getItem(EMULATOR_VISIBLE_KEY) !== 'false';
 
 export default {
-  components: {KeyMappingDialog},
+  components: {KeyMappingDialog, EmulatorSettingsDialog},
   data: () => ({
     drawer: null,
     emulatorWidth: readStoredWidth(),
@@ -1043,6 +1056,7 @@ export default {
       this.updateEmulatorScale();
     },
     updateEmulatorScale(retriesLeft = EMULATOR_MEASURE_RETRIES) {
+      if (document.fullscreenElement) this.syncFullscreenAspect();
       const container = document.getElementById('gopher2600-target-container');
       const screen = document.getElementById('gopher2600-screen');
       if (!container || !screen) return;
@@ -1171,6 +1185,24 @@ export default {
     handleRefreshEmulator() {
       markSkipLoadLastProjectCheckOnce();
       window.location.reload();
+    },
+    // Shows the emulator picture full screen: the canvas's container is what goes full screen
+    // (see the #gopher2600-target-container:fullscreen rules), since the browser fixes the size
+    // of the full screen element itself and the picture has to keep its aspect ratio.
+    handleFullscreen() {
+      const container = document.getElementById('gopher2600-target-container');
+      if (!container || !container.requestFullscreen) return;
+      this.syncFullscreenAspect();
+      container.requestFullscreen().catch(() => {});
+    },
+    // The picture's width over its height, for the full screen rules to fit it to the display.
+    syncFullscreenAspect() {
+      const container = document.getElementById('gopher2600-target-container');
+      const screen = document.getElementById('gopher2600-screen');
+      if (!container || !screen) return;
+      const width = parseFloat(screen.style.width) || screen.width;
+      const height = parseFloat(screen.style.height) || screen.height;
+      if (width && height) container.style.setProperty('--fullscreen-aspect', String(width / height));
     },
     // Saves what the emulator is showing as a PNG.
     handleScreenshot() {
@@ -1340,6 +1372,8 @@ export default {
    (see further below), which otherwise holds these icons at a fixed dark grey
    with no hover change. */
 .v-application .emulator-toolbar-row .emulator-flat-icon-btn.v-btn .v-icon {
+  /* The graphic editor toolbar's icon size. */
+  font-size: 19px;
   color: rgba(0, 0, 0, 0.38) !important;
   transition: color 0.15s ease;
 }
@@ -2299,6 +2333,22 @@ html {
   flex-shrink: 0;
 }
 
+/* Full screen: the container fills the display (the browser sets that) and the canvas, which
+   keeps the picture's aspect ratio, is the largest size that fits, centered. */
+#gopher2600-target-container:fullscreen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+}
+
+#gopher2600-target-container:fullscreen > #gopher2600-screen {
+  transform: none;
+  margin: 0;
+  width: min(100vw, calc(100vh * var(--fullscreen-aspect, 1.333))) !important;
+  height: min(100vh, calc(100vw / var(--fullscreen-aspect, 1.333))) !important;
+}
+
 #gopher2600-target-container > #gopher2600-screen {
   transform: scale(var(--emulator-scale, 1));
   transform-origin: top left;
@@ -2649,6 +2699,25 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
 
 .dark-mode.v-application .pixel-grid-toggle-btn-active .pixel-grid-toggle-label {
   color: #fff !important;
+}
+
+/* Active (selected or switched-on) icon buttons keep the blue the light theme gives them. The
+   dim-at-rest rules above are as specific and !important, so without these every active
+   icon went back to the dim grey and nothing showed which button was selected. The extra
+   class in each selector makes them win. */
+.dark-mode.v-application .project-toolbar-row .v-btn.project-flat-icon-btn-active .v-icon,
+.dark-mode.v-application .get-tools .v-btn.v-btn--active .v-icon,
+.dark-mode.v-application .pixel-grid-toggle-btn.pixel-grid-toggle-btn-active .v-icon,
+.dark-mode.v-application .music-flat-icon-btn.v-btn.music-icon-btn-active .v-icon,
+.dark-mode.v-application .soundfx-arpeggio-btn.v-btn.soundfx-arpeggio-btn-active .v-icon {
+  color: var(--v-primary-lighten1, #2196f3) !important;
+}
+
+/* Active icons keep the blue on hover too. */
+.dark-mode.v-application .project-toolbar-row .v-btn.project-flat-icon-btn-active:not(.v-btn--disabled):hover .v-icon,
+.dark-mode.v-application .get-tools .v-btn.v-btn--active:not(.v-btn--disabled):hover .v-icon,
+.dark-mode.v-application .pixel-grid-toggle-btn.pixel-grid-toggle-btn-active:not(.v-btn--disabled):hover .v-icon {
+  color: var(--v-primary-lighten1, #2196f3) !important;
 }
 
 /* The tab area and the sticky toolbars above each editor: black like the
@@ -3255,20 +3324,26 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
 .emulator-toolbar-icons {
   display: flex;
   align-items: center;
+  gap: 4px;
   margin-left: auto;
 }
 
+.emulator-toolbar-divider {
+  margin: 0;
+}
+
 /* "Refresh emulator" plus both icon buttons have to fit the drawer's default
-   256 px width (240 px row): trimmed padding on Refresh and 28 px icon
+   256 px width (240 px row): trimmed padding on Refresh and 26 px icon
    buttons (the keyboard one included, so the two match) make that fit. */
 .emulator-refresh-button.v-btn {
   padding: 0 8px !important;
 }
 
 .emulator-toolbar-icons >>> .v-btn.v-btn--icon {
-  width: 28px !important;
-  height: 28px !important;
-  margin-right: 0 !important;
+  width: 26px !important;
+  height: 26px !important;
+  min-width: 0 !important;
+  margin: 0 !important;
 }
 
 /* A sibling of the drawer (see the template), NOT a child of it - v-

@@ -3961,8 +3961,8 @@ Blockly.BBasic.generateConfiguration = function() {
   // gating as scoreFontConfigurationCode's "const font = hex" above,
   // via the same customScoreFontUsesExtraGlyphs check - a Squish Custom
   // project that never touches glyphs 10-15 shouldn't pay this either.
-  const scoreFontExtraGlyphsConfigurationCode = scoreFont === SQUISH_CUSTOM_SCORE_FONT &&
-    customScoreFontUsesExtraGlyphs(SQUISH_CUSTOM_SCORE_FONT) ? 'const fontcharsHEX = 1' : '';
+  const scoreFontExtraGlyphsConfigurationCode = (scoreFont === SQUISH_CUSTOM_SCORE_FONT || scoreFont === SQUISH_SCORE_FONT) &&
+    customScoreFontUsesExtraGlyphs(scoreFont) ? 'const fontcharsHEX = 1' : '';
   // Two different, INDEPENDENTLY settable colors inside text12a.asm/
   // text12b.asm's "minikernel" subroutine:
   // - "scorebkcolor" (from the Score tab's  background color picker -

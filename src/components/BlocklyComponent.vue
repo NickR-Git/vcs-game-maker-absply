@@ -671,6 +671,7 @@ export default {
     }
 
     this.ensureBlockFontSizing();
+    this.watchFontLoading();
 
     // Applied synchronously, right here - BEFORE the browser ever paints
     // this mount's  first frame - rather than from inside the resize-
@@ -715,6 +716,7 @@ export default {
     this.resizeObserver.observe(this.$refs['blocklyDiv']);
   },
   beforeDestroy() {
+    this.unwatchFontLoading();
     // Flushes any pending debounced save (see mounted()'s comment on
     // debouncedHandleChange) before the workspace below is disposed and
     // this component's "value" prop's last-known state becomes the
@@ -846,12 +848,48 @@ export default {
     // it's already loading/cached) and its returned promise only resolves
     // once THAT specific load genuinely completes - a real signal, not an
     // ambient one.
+    // Re-measures the blocks every time the browser finishes loading ANY font file, not just
+    // the one confirmed once at mount. The single check in ensureBlockFontSizing can pass
+    // too early: document.fonts.check() answers true when no matching font face is
+    // registered yet (the web font's stylesheet still arriving, the first visit after a
+    // project load), and a font loads in pieces by character range, so text with a symbol
+    // or emoji from a range not fetched yet is measured against the fallback font the
+    // first time and stays the wrong size - the "blocks sized wrong for the font, and
+    // sometimes again later" reports. 'loadingdone' fires after each such load; the
+    // short delay folds a burst of them into one re-render.
+    watchFontLoading() {
+      if (!document.fonts || !document.fonts.addEventListener) return;
+      this.fontsLoadedListener = () => {
+        clearTimeout(this.fontRerenderTimer);
+        this.fontRerenderTimer = setTimeout(() => this.rerenderForFontLoad(), 60);
+      };
+      document.fonts.addEventListener('loadingdone', this.fontsLoadedListener);
+    },
+    unwatchFontLoading() {
+      clearTimeout(this.fontRerenderTimer);
+      if (this.fontsLoadedListener && document.fonts && document.fonts.removeEventListener) {
+        document.fonts.removeEventListener('loadingdone', this.fontsLoadedListener);
+      }
+      this.fontsLoadedListener = null;
+    },
+    // Whether IBM Plex Mono is really loaded: a face for it is registered AND finished
+    // loading. document.fonts.check() alone also says yes while no face is registered yet.
+    blockFontLoaded() {
+      let registered = false;
+      let loaded = false;
+      document.fonts.forEach((face) => {
+        if (String(face.family).replace(/["']/g, '') !== 'IBM Plex Mono') return;
+        registered = true;
+        if (face.status === 'loaded') loaded = true;
+      });
+      return registered && loaded && document.fonts.check('normal 11px "IBM Plex Mono"');
+    },
     ensureBlockFontSizing() {
       if (!document.fonts) {
         this.rerenderForFontLoad();
         return;
       }
-      if (blocklyFontConfirmedLoaded || document.fonts.check('normal 11px "IBM Plex Mono"')) {
+      if (blocklyFontConfirmedLoaded || this.blockFontLoaded()) {
         blocklyFontConfirmedLoaded = true;
         this.rerenderForFontLoad();
         return;

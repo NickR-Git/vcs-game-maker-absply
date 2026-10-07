@@ -309,27 +309,28 @@ export const effectiveBackgroundRows = (config) => {
 export const backgroundDataRows = (config) =>
   effectiveBackgroundRows(config) + ((config && config.enableSuperchip) ? 0 : 1);
 
-// Pads or truncates every background's pixel matrix (and per-row colors, if
-// set) to exactly targetRows. Used when the global playfield resolution
-// (pfres) changes, since that setting reshapes every non-custom-height
-// background's playfield RAM layout at once. A background the user has
-// explicitly resized (via the pixel editor's "Set height" tool on the
-// Background tab - see BackgroundEditor.vue's resize handler, which
-// sets customHeight) is skipped entirely: it's meant to be taller than one
-// screen's worth of rows on purpose (e.g. to hold extra rows a vertical
-// scroll block will pan through later), so a pfres change must never
-// silently truncate/pad it back down.
+// Pads every background's pixel matrix (and per-row colors, if set) up to
+// targetRows. Used when the global playfield resolution (pfres) changes, since
+// that setting reshapes every non-custom-height background's playfield RAM
+// layout at once. Rows are never removed: a background with more rows than
+// targetRows keeps them, and the extra rows become rows that scroll into view
+// (see backgroundsWithOverflowRows), so lowering pfres cannot crop a scrolling
+// background. A background the user has explicitly resized (via the pixel
+// editor's "Set height" tool on the Background tab - see BackgroundEditor.vue's
+// resize handler, which sets customHeight) is skipped entirely: it's meant to
+// be taller than one screen's worth of rows on purpose (e.g. to hold extra rows
+// a vertical scroll block will pan through later).
 export const reflowBackgroundsToHeight = (backgroundsStorage, targetRows) => {
   const data = processBackgroundStorageDefaults(backgroundsStorage);
   const reflowRows = (rows, emptyRow) => {
-    const next = rows.slice(0, targetRows);
+    const next = rows.slice();
     while (next.length < targetRows) next.push(emptyRow());
     return next;
   };
 
   const backgrounds = data.backgrounds.map((background) => {
     if (background.customHeight) return background;
-    if (background.pixels.length === targetRows) return background;
+    if (background.pixels.length >= targetRows) return background;
     const width = background.pixels[0] ? background.pixels[0].length : 32;
     return {
       ...background,

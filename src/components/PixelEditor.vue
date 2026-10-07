@@ -129,7 +129,7 @@ export default {
       oval: new Oval(this.fgColor),
       move: new Move(() => this.selection, (sel) => {
         this.selection = sel;
-      }, this.bgColor),
+      }, this.bgColor, (move) => this.handleMoveRows(move)),
       rectSelect: new RectangleSelect((sel) => {
         this.selection = sel;
       }, () => this.selection),
@@ -146,6 +146,11 @@ export default {
       // mutated in place) every time it changes, since Vue 2 can't observe
       // a plain Set's mutations.
       selection: null,
+      // The rows (and how far) the pixels of a Move drag in progress have moved, and the moves
+      // that can be undone or redone - see handleMoveRows. Plain data nothing renders from.
+      rowMove: null,
+      rowMoveUndo: [],
+      rowMoveRedo: [],
       // See handleStrokeStart/cancelStroke - the state to roll back to if
       // the current drag leaves the canvas, or null while no button is down.
       strokeStart: null,
@@ -580,7 +585,11 @@ export default {
     // pixel state) - the release itself needs to happen synchronously, or
     // a mousemove landing before the debounce fires would still draw.
     handleMouseLeave(event) {
+      // The release below is forced by leaving, and cancelStroke then rolls the drag back, so a
+      // Move drag is not recorded as a finished move (see handleMoveRows).
+      this.leavingCanvas = true;
       if (this.editor) this.editor.mouseup(event);
+      this.leavingCanvas = false;
       this.cancelStroke();
       this.handleMouse();
       this.hoverCell = null;
@@ -592,6 +601,8 @@ export default {
     // cancelStroke.
     handleStrokeStart() {
       if (!this.editor) return;
+      // A new gesture ends whatever could still be redone.
+      this.rowMoveRedo = [];
       this.strokeStart = {
         historyLength: this.editor.history.undoStack.length,
         redoStack: [...this.editor.history.redoStack],
@@ -617,6 +628,11 @@ export default {
       while (history.undoStack.length > start.historyLength) this.editor.undo();
       history.redoStack = start.redoStack;
       this.selection = start.selection;
+      // A Move drag abandoned like this puts the rows' colors back too.
+      if (this.rowMove) {
+        this.$emit('move-rows', {rows: this.rowMove.rows, dy: 0});
+        this.rowMove = null;
+      }
     },
 
     // The hovered cell plus, when mirror drawing is on and a draw tool is
@@ -704,12 +720,45 @@ export default {
       this.polygonSelect.cancel();
     },
 
+    // Moving the selected pixels with the Move tool moves the colors of the rows they were on
+    // too (the 'move-rows' event - see utils/row-color-move.js for the graphics that have them).
+    // A finished move is remembered here so undo and redo can move the colors back and forth
+    // together with the pixels: `depth` is how many entries the pixel history had once it was done.
+    handleMoveRows(move) {
+      if (move.end) {
+        if (this.leavingCanvas) return;
+        const done = this.rowMove;
+        this.rowMove = null;
+        if (done && done.dy !== 0 && this.editor) {
+          this.rowMoveUndo.push({depth: this.editor.history.undoStack.length, rows: done.rows, dy: done.dy});
+        }
+        return;
+      }
+      this.rowMove = {rows: move.rows, dy: move.dy};
+      this.$emit('move-rows', move);
+    },
+
     undo() {
+      const last = this.rowMoveUndo[this.rowMoveUndo.length - 1];
+      const depth = this.editor.history.undoStack.length;
       this.editor.undo();
+      if (last && last.depth === depth) {
+        this.rowMoveUndo.pop();
+        this.rowMoveRedo.push(last);
+        // The inverse of the move: the rows where its pixels ended up, moving back.
+        this.$emit('move-rows', {rows: last.rows.map((row) => row + last.dy), dy: -last.dy, start: true});
+      }
     },
 
     redo() {
+      const next = this.rowMoveRedo[this.rowMoveRedo.length - 1];
+      const depth = this.editor.history.undoStack.length;
       this.editor.redo();
+      if (next && next.depth === depth + 1) {
+        this.rowMoveRedo.pop();
+        this.rowMoveUndo.push(next);
+        this.$emit('move-rows', {rows: next.rows, dy: next.dy, start: true});
+      }
     },
 
     handleMouse: debounce(function() {

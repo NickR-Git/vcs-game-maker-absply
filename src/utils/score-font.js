@@ -1,6 +1,7 @@
 import {SCORE_FONTS} from '../generators/score-fonts';
 import {getExtendedScoreGraphics} from '../generators/bbasic/text-minikernel-files';
-import {useConfigurationStorage, useScoreFontStorage, useSquishCustomScoreFontStorage} from '../hooks/project';
+import {useConfigurationStorage, useScoreFontEditsStorage, useScoreFontStorage,
+  useSquishCustomScoreFontStorage} from '../hooks/project';
 
 export const CUSTOM_SCORE_FONT = 'custom';
 // A special option, not one of SCORE_FONTS' byte-swappable presets: SQUISH
@@ -226,6 +227,68 @@ const customSquishFontBytes = () => {
   }
 };
 
+// Every font can be redrawn, not only Custom and Squish Custom. Those two are stored in
+// separate storage; every other font (Default, the presets, plain Squish) keeps what was
+// drawn in the "scoreFontEdits" storage, one entry per font, and shows its original digits
+// until it has one. This is that entry's key, or null for the two fonts stored separately.
+export const scoreFontEditKey = (font) => {
+  if (font === CUSTOM_SCORE_FONT || font === SQUISH_CUSTOM_SCORE_FONT) return null;
+  return font || 'default';
+};
+
+// Rows per digit: Squish and Squish Custom only read 5 (see SQUISH_DIGIT_HEIGHT).
+export const scoreFontDigitHeight = (font) =>
+  (font === SQUISH_SCORE_FONT || font === SQUISH_CUSTOM_SCORE_FONT) ? SQUISH_DIGIT_HEIGHT : DIGIT_HEIGHT;
+
+/**
+ * A font's original digits as DIGIT_COUNT * rows-per-digit "%00111100" style rows. The presets
+ * only have the ten decimal digits, so slots 10-15 are blank.
+ * @param {string} font Font name, "" for the default, "custom", "SQUISH" or "SQUISH_CUSTOM".
+ * @return {!Array<string>} The rows.
+ */
+export const scoreFontOriginalBytes = (font) => {
+  const height = scoreFontDigitHeight(font);
+  let bytes = DEFAULT_SCORE_FONT;
+  if (font === SQUISH_SCORE_FONT || font === SQUISH_CUSTOM_SCORE_FONT) bytes = SQUISH_DEFAULT_SCORE_FONT;
+  else if (font && SCORE_FONTS[font]) bytes = SCORE_FONTS[font];
+  const padded = bytes.slice();
+  while (padded.length < DIGIT_COUNT * height) padded.push('%00000000');
+  return padded.slice(0, DIGIT_COUNT * height);
+};
+
+/**
+ * The digits drawn for a font in the edits storage, or null when it has none (or is one of the
+ * two fonts stored separately).
+ * @param {string} font Font name, as scoreFontOriginalBytes.
+ * @return {?Array<!Array<!Array<number>>>} One pixel matrix per digit.
+ */
+export const editedScoreFontDigits = (font) => {
+  const key = scoreFontEditKey(font);
+  if (key === null) return null;
+  try {
+    const stored = useScoreFontEditsStorage().value;
+    const entry = stored && stored.fonts && stored.fonts[key];
+    const height = scoreFontDigitHeight(font);
+    if (!entry || !Array.isArray(entry.digits) || entry.digits.length !== DIGIT_COUNT ||
+        !entry.digits[0] || entry.digits[0].length !== height) return null;
+    return entry.digits;
+  } catch (e) {
+    console.error('Error loading the edited score font', e);
+    return null;
+  }
+};
+
+export const scoreFontIsEdited = (font) => !!editedScoreFontDigits(font);
+
+// An edited font's rows as the score_graphics.asm table wants them (8 per digit; Squish's 5
+// padded back out), without the unused extra glyphs - or null when the font has no edits.
+const editedFontBytes = (font) => {
+  const digits = editedScoreFontDigits(font);
+  if (!digits) return null;
+  const bytes = digitsToFont(digits);
+  return trimUnusedExtraGlyphs(scoreFontDigitHeight(font) === SQUISH_DIGIT_HEIGHT ? padSquishDigitBytes(bytes) : bytes);
+};
+
 // Just the 10 real decimal digits (DECIMAL_DIGIT_COUNT*DIGIT_HEIGHT = 80
 // bytes), for whatever font is actually configured on the Score tab -
 // unlike buildScoreFontOverride (which returns null for the Default preset,
@@ -246,12 +309,15 @@ export const resolveScoreDigitBytes = (font) => {
       const bytes = customSquishFontBytes();
       if (bytes) return bytes.slice(0, decimalByteCount);
     } else if (font === SQUISH_SCORE_FONT) {
-      return padSquishDigitBytes(SQUISH_DEFAULT_SCORE_FONT).slice(0, decimalByteCount);
+      const edited = editedFontBytes(font);
+      return (edited || padSquishDigitBytes(SQUISH_DEFAULT_SCORE_FONT)).slice(0, decimalByteCount);
     } else if (font === CUSTOM_SCORE_FONT) {
       const bytes = customFontBytes();
       if (bytes) return bytes.slice(0, decimalByteCount);
-    } else if (font && SCORE_FONTS[font]) {
-      return SCORE_FONTS[font].slice(0, decimalByteCount);
+    } else {
+      const edited = editedFontBytes(font);
+      if (edited) return edited.slice(0, decimalByteCount);
+      if (font && SCORE_FONTS[font]) return SCORE_FONTS[font].slice(0, decimalByteCount);
     }
   } catch (e) {
     console.error('Error resolving the score font for the Title tab\'s score minikernel', e);
@@ -269,7 +335,10 @@ export const resolveScoreDigitBytes = (font) => {
 // whether this build is paying the extra-glyph cost.
 export const customScoreFontUsesExtraGlyphs = (font) => {
   const decimalByteCount = DECIMAL_DIGIT_COUNT * DIGIT_HEIGHT;
-  const bytes = font === SQUISH_CUSTOM_SCORE_FONT ? customSquishFontBytes() : customFontBytes();
+  let bytes;
+  if (font === SQUISH_CUSTOM_SCORE_FONT) bytes = customSquishFontBytes();
+  else if (font === CUSTOM_SCORE_FONT) bytes = customFontBytes();
+  else bytes = editedFontBytes(font);
   return !!bytes && bytes.length > decimalByteCount;
 };
 
@@ -368,8 +437,15 @@ export const buildScoreFontOverride = async (font) => {
     return buildSquishScoreFontOverride(customSquishFontBytes());
   }
 
+  // Plain Squish only has an override once it has been edited (hooks/rom.js uses the extended
+  // score_graphics.asm as it is until then): it splices into the same Squish block as Squish Custom.
+  if (font === SQUISH_SCORE_FONT) {
+    const edited = editedFontBytes(font);
+    return edited ? buildSquishScoreFontOverride(edited) : null;
+  }
+
   const digits = font === CUSTOM_SCORE_FONT ?
-    customFontBytes() : (font && SCORE_FONTS[font]);
+    customFontBytes() : (editedFontBytes(font) || (font && SCORE_FONTS[font]));
   // Presets (SCORE_FONTS) are still exactly DECIMAL_DIGIT_COUNT*DIGIT_HEIGHT
   // bytes (80) - only 10 real digits, same as they've always been (see
   // generators/score-fonts.js's  comment) - only CUSTOM can actually be

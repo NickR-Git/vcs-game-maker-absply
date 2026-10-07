@@ -260,6 +260,7 @@
                       @input="(pixels) => handleBackgroundPixelsInput(background, pixels)"
                       @clear="() => handleClearRowColors(background)"
                       @clear-colors="() => handleClearRowColors(background)"
+                      @move-rows="(move) => handleMoveRows(background, move)"
                       @activate="(editorInstance) => setActiveEditor(editorInstance, background.id)"
                     >
                       <template v-if="pfColorsEnabled" v-slot:sidebar>
@@ -336,6 +337,7 @@ import {remapBackgroundReferences} from '../utils/background-refs';
 import {colorByteToCss} from '../utils/palette';
 import {PF_COLUMN_WIDTH_PX, pfRowDivisorFor} from '../utils/playfield-coords';
 import {resizePixelMatrixHeight, scaleRowColors} from '../utils/pixels';
+import {rowColorsForMove} from '../utils/row-color-move';
 import {DEFAULT_BACKGROUNDS, DEFAULT_ROW_COLOR, clearRowColors, backgroundDataRows,
   reflowBackgroundsToHeight,
   processBackgroundStorageDefaults} from '../blocks/background';
@@ -403,10 +405,11 @@ export default defineComponent({
 
     // Backgrounds saved before the extra hidden row existed (see
     // backgroundDataRows) get it added; ones with a custom height are left
-    // alone.
+    // alone, and a background with more rows than the playfield keeps them (they scroll
+    // into view).
     const savedBackgrounds = (backgroundsStorage.value && backgroundsStorage.value.backgrounds) || [];
     if (savedBackgrounds.some((background) =>
-      !background.customHeight && background.pixels.length !== backgroundRows.value)) {
+      !background.customHeight && background.pixels.length < backgroundRows.value)) {
       reflowBackgroundsToHeight(backgroundsStorage, backgroundRows.value);
     }
 
@@ -684,6 +687,14 @@ export default defineComponent({
       instance.proxy.$forceUpdate();
     };
 
+    // Moving selected pixels with the Move tool takes the colors of their rows along
+    // (PixelEditor.vue's 'move-rows' event - see utils/row-color-move.js).
+    const handleMoveRows = (background, move) => {
+      if (!pfColorsEnabled.value) return;
+      const colors = rowColorsForMove(background, move);
+      if (colors) handleRowColorsInput(background, colors);
+    };
+
     // Clearing a graphic (PixelEditor.vue's "clear" event, separate from
     // an ordinary pixel edit) resets its row colors back to the same default
     // every row starts at, rather than leaving old per-row picks behind on
@@ -797,7 +808,7 @@ export default defineComponent({
       state, handleChildChange, handleBackgroundPixelsInput, handleAddBackground, handleDeleteBackground, handleDuplicateBackground,
       testingId, buildInProgress, handleTestBackground,
       selectedQuickColor, quickColorPalette,
-      handleRowColorsInput, handleClearRowColors, editorRowColors, isCollapsed, toggleCollapsed,
+      handleRowColorsInput, handleMoveRows, handleClearRowColors, editorRowColors, isCollapsed, toggleCollapsed,
       zoom, showPixelGrid, showPixelGridLabels, editorWidth, backgroundRows, pfColorsEnabled,
       dragAttrs, dragCardClass, dragHandleListeners, dragTargetListeners,
       copiedBackgroundRowColors, handleCopyBackgroundRowColors, handlePasteBackgroundRowColors,

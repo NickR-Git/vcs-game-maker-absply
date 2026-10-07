@@ -330,6 +330,7 @@
                         @input="handleChildChange"
                         @clear="() => handleClearRowColors(frame)"
                         @clear-colors="() => handleClearRowColors(frame)"
+                        @move-rows="(move) => handleMoveRows(frame, move)"
                         @activate="(editorInstance) => setActiveFrame(editorInstance, animation.id, frame.id)"
                       >
                         <template v-if="spriteColorsEnabled" v-slot:sidebar>
@@ -456,6 +457,7 @@ import {useEditorZoom, ZOOM_LEVELS} from '../hooks/zoom';
 const PLAYER_ZOOM_LEVELS = [0.25, ...ZOOM_LEVELS];
 import {colorByteToCss} from '../utils/palette';
 import {playfieldToMatrix, resizePixelMatrixHeight, scaleRowColors} from '../utils/pixels';
+import {rowColorsForMove} from '../utils/row-color-move';
 import {loadImageFromFile, openFileDialogMultiple, sortImportedAnimationFrameFiles} from '../utils/file';
 import {createCroppedResizedCanvas, createResizedCanvas} from '../utils/image';
 import {parseAsepriteSheet} from '../utils/aseprite';
@@ -1154,6 +1156,14 @@ export default defineComponent({
       instance.proxy.$forceUpdate();
     };
 
+    // Moving selected pixels with the Move tool takes the colors of their rows along
+    // (PixelEditor.vue's 'move-rows' event - see utils/row-color-move.js).
+    const handleMoveRows = (frame, move) => {
+      if (!spriteColorsEnabled.value) return;
+      const colors = rowColorsForMove(frame, move);
+      if (colors) handleRowColorsInput(frame, colors);
+    };
+
     // Clearing a frame (PixelEditor.vue's "clear" event, separate from
     // an ordinary pixel edit) resets its row colors back to the same
     // default every row starts at, rather than leaving old per-row picks
@@ -1223,7 +1233,7 @@ export default defineComponent({
       handleImportAsepriteSheet, asepriteReplaceAnimations, asepriteImportMenuOpen,
       handleAddAnimation, handleDeleteAnimation, handleDuplicateAnimation, handleSetPreviewScale,
       testingId, buildInProgress, handleTestAnimation,
-      handleRowColorsInput, handleClearRowColors, editorRowColors, spriteColorsEnabled,
+      handleRowColorsInput, handleMoveRows, handleClearRowColors, editorRowColors, spriteColorsEnabled,
       copiedFrameRowColors, handleCopyRowColors, handlePasteRowColors,
       copiedFrameData, handleCopyFrame, handlePasteFrame,
       spriteColorPalette, selectedQuickColor,

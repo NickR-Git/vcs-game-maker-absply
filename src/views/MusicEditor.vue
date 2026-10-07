@@ -478,7 +478,7 @@
                           <v-btn
                             icon
                             small
-                            title="Undo"
+                            :title="UNDO_TITLE"
                             class="music-flat-icon-btn music-icon-btn-size piano-roll-transport-btn"
                             :disabled="!canUndoPattern(activePattern(song))"
                             @click="() => handleUndoPattern(song, activePattern(song))"
@@ -488,7 +488,7 @@
                           <v-btn
                             icon
                             small
-                            title="Redo"
+                            :title="REDO_TITLE"
                             class="music-flat-icon-btn music-icon-btn-size piano-roll-transport-btn"
                             :disabled="!canRedoPattern(activePattern(song))"
                             @click="() => handleRedoPattern(song, activePattern(song))"
@@ -817,6 +817,7 @@ import {effectiveTempo, getPlaybackHead, playPattern, playSequence, previewPatte
   stopPatternPlayback} from '../utils/music-playback';
 import {autoInstrumentColor, instrumentColorFor, isLightColor,
   mixColorWithWhite, mixColorWithTransparent} from '../utils/instrument-colors';
+import {REDO_TITLE, UNDO_TITLE, undoRedoKind} from '../utils/undo-hotkey';
 
 // The piano roll's  zoom range (25%-1600%) goes well past the shared
 // hooks/zoom.js's  discrete ZOOM_LEVELS (used by the sprite/background/
@@ -3905,6 +3906,17 @@ export default defineComponent({
     // plain 'e' tool-hotkey lookup below, same as GraphicEditorToolbar.vue's
     // Shift+E/Shift+I checks run ahead of its Eraser lookup.
     const handlePianoRollToolHotkey = (event) => {
+      const history = undoRedoKind(event);
+      if (history) {
+        const song = activeSong();
+        const pattern = song && activePattern(song);
+        if (!pattern) return;
+        if (history === 'undo' ? canUndoPattern(pattern) : canRedoPattern(pattern)) {
+          event.preventDefault();
+          (history === 'undo' ? handleUndoPattern : handleRedoPattern)(song, pattern);
+        }
+        return;
+      }
       // event.repeat - skips the synthetic keydowns the OS fires while a
       // key is held, same reasoning as SoundFXEditor.vue's
       // handleSoundFxPlaybackHotkey: without this, holding Space/
@@ -3969,7 +3981,7 @@ export default defineComponent({
       activeSongId, activeSong, activeSongArray, setActiveSong, songName, songOptions, handleSongFieldChange,
       handleAddPattern, handleDuplicatePattern, handleDeletePattern, handleStepCountChange,
       handlePatternFieldChange,
-      canUndoPattern, canRedoPattern, handleUndoPattern, handleRedoPattern,
+      canUndoPattern, canRedoPattern, handleUndoPattern, handleRedoPattern, UNDO_TITLE, REDO_TITLE,
       handleExportPattern, handleImportPattern,
       handleAddTrack, handleDeleteTrack, copiedTrackNotes, handleCopyTrack, handlePasteTrack,
       handleAddSequenceStep, handleRemoveSequenceGroup,

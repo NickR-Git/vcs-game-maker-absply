@@ -35,7 +35,7 @@
             <v-btn
               icon
               small
-              title="Undo"
+              :title="UNDO_TITLE"
               class="data-flat-icon-btn data-icon-btn-size"
               :disabled="!selectedTable || !canUndoTable(selectedTable)"
               @click="() => handleUndoTable(selectedTable)"
@@ -45,7 +45,7 @@
             <v-btn
               icon
               small
-              title="Redo"
+              :title="REDO_TITLE"
               class="data-flat-icon-btn data-icon-btn-size"
               :disabled="!selectedTable || !canRedoTable(selectedTable)"
               @click="() => handleRedoTable(selectedTable)"
@@ -366,6 +366,7 @@ import {getDateInfix} from '../utils/date';
 import {openFileDialog} from '../utils/file';
 import ColorSwatchPicker from '../components/ColorSwatchPicker.vue';
 import ConfirmDeleteMenu from '../components/ConfirmDeleteMenu.vue';
+import {REDO_TITLE, UNDO_TITLE, undoRedoKind} from '../utils/undo-hotkey';
 
 // A data table is just a flat array of 0-255 bytes (see blocks/data.js), so
 // its CSV form is a single row of comma-separated integers - no header, no
@@ -645,7 +646,18 @@ export default defineComponent({
         dataToolbarScrollContainer.addEventListener('scroll', handleDataToolbarScroll);
       }
     });
+    const handleHistoryHotkey = (event) => {
+      const history = undoRedoKind(event);
+      const table = selectedTable.value;
+      if (!history || !table) return;
+      if (history === 'undo' ? canUndoTable(table) : canRedoTable(table)) {
+        event.preventDefault();
+        (history === 'undo' ? handleUndoTable : handleRedoTable)(table);
+      }
+    };
+    onMounted(() => window.addEventListener('keydown', handleHistoryHotkey));
     onBeforeUnmount(() => {
+      window.removeEventListener('keydown', handleHistoryHotkey);
       if (dataToolbarScrollContainer) {
         dataToolbarScrollContainer.removeEventListener('scroll', handleDataToolbarScroll);
       }
@@ -1207,7 +1219,7 @@ export default defineComponent({
       handleExportCsv, handleImportCsv,
       tableColumns, handleColumnsInput, handleColumnsChange, handleNotesInput,
       isCollapsed, toggleCollapsed,
-      canUndoTable, canRedoTable, handleUndoTable, handleRedoTable,
+      canUndoTable, canRedoTable, handleUndoTable, handleRedoTable, UNDO_TITLE, REDO_TITLE,
       maxValues: MAX_DATA_TABLE_VALUES,
       DATA_VALUE_CELL_MIN_PX,
       DATA_VALUES_EXTRA_SLACK_PX,

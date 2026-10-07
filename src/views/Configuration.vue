@@ -30,6 +30,7 @@
           @change="handleChangeConfiguration"
           :items="romSizeOptions"
           label="ROM size"
+          class="rom-size-field"
           :hint="configurationState.enableSuperchip ?
             'Smaller sizes are hidden while Superchip RAM is on - see below.' : undefined"
           :persistent-hint="configurationState.enableSuperchip"
@@ -219,7 +220,7 @@
         <v-switch
           v-model="adaptiveFrameSkip"
           label="Adaptive frame skipping"
-          hint="On a slower computer, the preview emulator draws only some of the frames it runs when it is close to falling behind, which leaves more time for emulating. Game speed and sound are unchanged."
+          hint="On a slower computer, the gopher2600 emulator draws only some of the frames it runs when it is close to falling behind, which leaves more time for emulating. Game speed and sound are unchanged. The default 6502.ts emulator is fast enough not to need it."
           persistent-hint
           class="option-switch"
         />
@@ -718,6 +719,16 @@ export default defineComponent({
   margin-top: 2px;
 }
 
+/* Room between the TV standard's hint text above and this field's label. With the small
+   description text hidden there is no hint to make room from. */
+.rom-size-field {
+  margin-top: 12px;
+}
+
+.hide-description-text .rom-size-field {
+  margin-top: 0;
+}
+
 /* Reads as a sub-option of the Superchip switch above it, so it's indented to
    line up under that switch's label text rather than its toggle track.
    margin-top adds a bit of breathing room from that switch's hint text
@@ -742,6 +753,15 @@ export default defineComponent({
    fixed width. */
 .pfres-field >>> .v-input__slot {
   max-width: 110px;
+}
+
+/* The label sits inside that 110px box, where Vuetify cuts it off with an ellipsis; let it run
+   past the box so the whole field name shows. */
+.pfres-field >>> .v-label,
+.pfrowheight-field >>> .v-label {
+  max-width: none !important;
+  overflow: visible;
+  white-space: nowrap;
 }
 
 /* See App.vue's "Hide small description text" support - with that

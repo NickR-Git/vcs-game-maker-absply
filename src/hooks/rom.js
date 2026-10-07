@@ -16,7 +16,7 @@ import {titleScreenAnyPageOverRowBudget} from '../blocks/titlescreen';
 import {effectiveBackgroundRows, processBackgroundStorageDefaults} from '../blocks/background';
 import {pfRowDivisorFor} from '../utils/playfield-coords';
 import {findSongById} from '../blocks/music';
-import {buildScoreFontOverride, SQUISH_SCORE_FONT} from '../utils/score-font';
+import {buildScoreFontOverride, scoreFontIsEdited, SQUISH_SCORE_FONT} from '../utils/score-font';
 import {buildTextFontOverride, buildTextScrollCursorOverride, buildTextRow2ColorOverride,
   packCursorGlyphByte, processCursorGlyphDefaults, resolveBlinkMask} from '../utils/text-font';
 import {textLinesMaxVarName, textLinesBaseVarName, textRow2ColorVarName,
@@ -1232,7 +1232,7 @@ const buildRomInner = async () => {
       // straight into the score too, sized for the standard kernel's
       // full-height digits, not Squish's shorter ones.
       const effectiveScoreFont = (config.enableCycleScore || config.enableScanlinesDebug) ? null : config.scoreFont;
-      if (effectiveScoreFont === SQUISH_SCORE_FONT) {
+      if (effectiveScoreFont === SQUISH_SCORE_FONT && !scoreFontIsEdited(SQUISH_SCORE_FONT)) {
         if (!textMinikernelActive) siblingFiles['score_graphics.asm'] = await getExtendedScoreGraphics();
       } else {
         const scoreFontOverride = await buildScoreFontOverride(effectiveScoreFont);

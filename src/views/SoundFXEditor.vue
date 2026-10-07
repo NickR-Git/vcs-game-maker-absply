@@ -65,7 +65,7 @@
             <v-btn
               icon
               small
-              title="Undo"
+              :title="UNDO_TITLE"
               class="soundfx-bank-btn soundfx-icon-btn-size"
               :disabled="!selectedSoundEffect || !canUndoEnvelope(selectedSoundEffect)"
               @click="() => handleUndoEnvelope(selectedSoundEffect)"
@@ -75,7 +75,7 @@
             <v-btn
               icon
               small
-              title="Redo"
+              :title="REDO_TITLE"
               class="soundfx-bank-btn soundfx-icon-btn-size"
               :disabled="!selectedSoundEffect || !canRedoEnvelope(selectedSoundEffect)"
               @click="() => handleRedoEnvelope(selectedSoundEffect)"
@@ -212,6 +212,15 @@
                      the delete button to the top right of each card, like
                      it is on data table cards. use the same positioning"). -->
                 <div class="soundfx-toolbar-top-right">
+                  <v-btn
+                    icon
+                    small
+                    title="Duplicate this sound effect"
+                    class="soundfx-play-btn soundfx-icon-btn-size"
+                    @click.stop="() => handleDuplicateSoundEffect(soundEffect)"
+                  >
+                    <v-icon>mdi-content-duplicate</v-icon>
+                  </v-btn>
                   <confirm-delete-menu
                     v-if="state.soundEffects.length > 1"
                     title="Delete this sound effect?"
@@ -249,16 +258,17 @@
                       icon
                       small
                       class="soundfx-instrument-btn soundfx-icon-btn-size"
-                      :class="{'soundfx-instrument-btn-active': soundEffect.isInstrument}"
                       :title="(soundEffect.isInstrument ?
-                        'Tagged as an instrument (click to untag) ' :
-                        'Not tagged as an instrument (click to tag) ') +
+                        'An instrument (click to make it a sound) ' :
+                        'A sound (click to make it an instrument) ') +
                         '- purely a tag for this tab\'s \'Show\' filter above; every sound effect can ' +
                         'already be used both as a soundfx_play trigger and as a Music tab instrument ' +
                         'regardless of this.'"
                       @click="() => handleToggleInstrument(soundEffect)"
                     >
-                      <v-icon small>mdi-piano</v-icon>
+                      <!-- The icon is the kind itself (a waveform for a sound, a piano for an
+                           instrument), swapped by the click, not one icon switched on and off. -->
+                      <v-icon small>{{ soundEffect.isInstrument ? 'mdi-piano' : 'mdi-waveform' }}</v-icon>
                     </v-btn>
                   </div>
                 </v-card-text>
@@ -434,7 +444,7 @@
                           <v-btn
                             icon
                             small
-                            title="Undo"
+                            :title="UNDO_TITLE"
                             class="soundfx-stop-btn soundfx-icon-btn-size"
                             :disabled="!canUndoEnvelope(soundEffect)"
                             @click="() => handleUndoEnvelope(soundEffect)"
@@ -444,7 +454,7 @@
                           <v-btn
                             icon
                             small
-                            title="Redo"
+                            :title="REDO_TITLE"
                             class="soundfx-stop-btn soundfx-icon-btn-size"
                             :disabled="!canRedoEnvelope(soundEffect)"
                             @click="() => handleRedoEnvelope(soundEffect)"
@@ -518,6 +528,7 @@ import ColorSwatchPicker from '../components/ColorSwatchPicker.vue';
 import SoundBankImportDialog from '../components/SoundBankImportDialog.vue';
 import ConfirmDeleteMenu from '../components/ConfirmDeleteMenu.vue';
 import EnvelopeGraph from '../components/EnvelopeGraph.vue';
+import {REDO_TITLE, UNDO_TITLE, undoRedoKind} from '../utils/undo-hotkey';
 
 export default defineComponent({
   components: {ColorSwatchPicker, ConfirmDeleteMenu, EnvelopeGraph, SoundBankImportDialog},
@@ -756,6 +767,16 @@ export default defineComponent({
     // never hijack a real text field) as GraphicEditorToolbar.vue's
     // handleToolHotkey.
     const handleSoundFxPlaybackHotkey = (event) => {
+      const history = undoRedoKind(event);
+      if (history) {
+        const soundEffect = selectedSoundEffect.value;
+        if (!soundEffect) return;
+        if (history === 'undo' ? canUndoEnvelope(soundEffect) : canRedoEnvelope(soundEffect)) {
+          event.preventDefault();
+          (history === 'undo' ? handleUndoEnvelope : handleRedoEnvelope)(soundEffect);
+        }
+        return;
+      }
       // event.repeat - true for every synthetic keydown the OS fires while
       // a key is held down (not just the first real press) - without this,
       // holding Space re-triggered the preview from scratch dozens of
@@ -823,6 +844,18 @@ export default defineComponent({
 
       state.value.soundEffects.push(newSoundEffect);
 
+      handleChildChange();
+      instance.proxy.$forceUpdate();
+    };
+
+    // A copy of a sound effect (every parameter, its color and instrument tag) added at the end
+    // of the list under a new id, so no existing id or block that uses one changes.
+    const handleDuplicateSoundEffect = (soundEffect) => {
+      const soundEffects = state.value.soundEffects;
+      const copy = JSON.parse(JSON.stringify(soundEffect));
+      copy.id = (max(soundEffects.map((o) => o.id)) || 0) + 1;
+      copy.name = `${soundEffect.name || 'Sound effect'} copy`;
+      soundEffects.push(copy);
       handleChildChange();
       instance.proxy.$forceUpdate();
     };
@@ -986,11 +1019,12 @@ export default defineComponent({
 
     return {
       selectedCardId, selectCard, deselectCard, selectedSoundEffect, isSoundFxToolbarScrolled,
-      state, handleChildChange, handleAddSoundEffect, handleDeleteSoundEffect, handlePlaySoundEffect,
+      state, handleChildChange, handleAddSoundEffect, handleDeleteSoundEffect, handleDuplicateSoundEffect,
+      handlePlaySoundEffect,
       handleExportSoundEffect, handleImportSoundEffect,
       handleExportSoundBank, handleImportSoundBank,
       soundBankImportOpen, soundBankImportEntries, handleConfirmSoundBankImport,
-      canUndoEnvelope, canRedoEnvelope, handleUndoEnvelope, handleRedoEnvelope, handleResetEnvelope,
+      canUndoEnvelope, canRedoEnvelope, handleUndoEnvelope, handleRedoEnvelope, UNDO_TITLE, REDO_TITLE, handleResetEnvelope,
       handleStopPreview, handleSetSoundEffectColor, handleToggleInstrument, autoInstrumentColor,
       isCollapsed, toggleCollapsed,
       audcHasTunableNotes, frequencyItems, handleAudcChange,
@@ -1385,10 +1419,8 @@ export default defineComponent({
 }
 
 /* Same flat-icon, fade-in-on-hover treatment as .soundfx-stop-btn/
-   .soundfx-play-btn below, plus an "on" tint (see .soundfx-instrument-btn-
-   active) matching the Music tab's mute/solo toggle buttons
-   (MusicEditor.vue's .music-icon-btn-active - same blue, #1976d2, Vuetify's
-   default "primary"). 30px roughly centers it against .soundfx-name-field's
+   .soundfx-play-btn below (its icon swaps between a waveform and a piano rather
+   than being tinted when on). 30px roughly centers it against .soundfx-name-field's
    floating label/text (20px offset) - not a measured value, nudge if it
    doesn't quite line up. !important because this element also carries
    .soundfx-icon-btn-size (defined later in this same file), whose
@@ -1416,9 +1448,6 @@ export default defineComponent({
   color: rgba(0, 0, 0, 0.87) !important;
 }
 
-.soundfx-instrument-btn.soundfx-instrument-btn-active >>> .v-icon {
-  color: var(--v-primary-base, #1976d2) !important;
-}
 
 /* Vuetify's v-menu renders its activator slot content as a SIBLING of its
    (empty, zero-size) root element, not nested inside it - a class on

@@ -829,3 +829,32 @@ Gamepads, 64k fixes, smaller generated code, faster emulator
   longer force a full pixel update, and the frame is converted to RGBA through a color table.
   The desktop app uses Electron 44 (was 22) and Node 24 builds the project.
 - Save ROM shows its error message instead of throwing.
+
+=== 0.51.29 ===
+6502.ts emulator, emulator settings, undo shortcuts, row colors that move with pixels
+
+- Emulator: the preview now runs on 6502.ts (about seven times faster than gopher2600 in the
+  browser, pixel-identical on the 16k, 32k, 64k and DPC+ ROMs tried). gopher2600 stays as the other
+  choice, and a ROM that uses a keypad runs on it automatically. New Emulator Settings popup (the
+  cog next to the Input Mapping button): which emulator, TV signal (composite, S-Video), phosphor
+  glow, scanlines, gamma, scaling, CPU accuracy, and the full screen resolution and scaling.
+- New full screen button next to the screenshot button; the toolbar icons now match the graphic
+  editor toolbar.
+- The color swatches and the Aseprite palette files (now the 6502ts-palettes folder) use the
+  6502.ts colors.
+- Ctrl+Z undoes and Ctrl+Shift+Z or Ctrl+Y redoes in the graphic editors, the Data tab, the
+  Music pattern editor and the Sound FX envelopes; the buttons' tooltips show them.
+- Moving selected pixels with the Move tool takes their row colors with them (backgrounds,
+  sprite frames and title screen cards), and undo and redo restore them.
+- Score fonts: every font can be redrawn, the edits are kept for that font only and saved with the
+  project, and a Reset brings back the original digits.
+- Sound Banks: icons show whether a download is a sound, a sound bank or an instrument, a filter
+  chooses which to list, sound cards swap between a waveform and a piano icon, and have a Duplicate
+  button. The example blip is a sound effect.
+- Playfield vertical resolution above 24: the ball and missiles collide with the playfield again
+  (a division routine landed in the wrong bank and reset the ROM). Changing the playfield
+  resolution no longer deletes background rows.
+- Dark mode: active toolbar icons keep their blue.
+- Project tab: Settings is the first icon, then New, Open, Save and Save As, then Example Projects
+  and Sound Banks.
+- Options: the playfield vertical resolution label is no longer cut off.

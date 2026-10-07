@@ -26,10 +26,10 @@
           <slot name="extra-tools" />
           <v-divider class="get-inner-divider" vertical />
         </template>
-        <v-btn icon small title="Undo" :disabled="!activeEditor && !hasPendingQuickColorUndo && !hasPendingCardUndo" @click="handleUndo">
+        <v-btn icon small :title="UNDO_TITLE" :disabled="!activeEditor && !hasPendingQuickColorUndo && !hasPendingCardUndo" @click="handleUndo">
           <v-icon>mdi-undo</v-icon>
         </v-btn>
-        <v-btn icon small title="Redo" :disabled="!activeEditor" @click="() => activeEditor.redo()">
+        <v-btn icon small :title="REDO_TITLE" :disabled="!activeEditor" @click="() => activeEditor.redo()">
           <v-icon>mdi-redo</v-icon>
         </v-btn>
         <v-divider class="get-inner-divider" vertical />
@@ -210,6 +210,7 @@ import {tryUndoQuickColorDeletion, usePendingQuickColorDeletion} from '../hooks/
 import {tryUndoCardDeletion, usePendingCardDeletion} from '../hooks/card-delete-undo';
 import {usePixelGridOverlayStorage, usePixelGridLabelsStorage} from '../hooks/project';
 import {useMirrorDraw} from '../hooks/pixel-tool';
+import {REDO_TITLE, UNDO_TITLE, undoRedoKind} from '../utils/undo-hotkey';
 
 // The standard Photoshop/Aseprite-style single-letter tool shortcuts -
 // see handleToolHotkey's comment for why these specific letters.
@@ -268,6 +269,8 @@ export default {
   },
   data() {
     return {
+      UNDO_TITLE,
+      REDO_TITLE,
       isScrolled: false,
     };
   },
@@ -363,7 +366,22 @@ export default {
     // users coming from those tools already reach for them without
     // thinking.
     handleToolHotkey(event) {
-      // Skip Ctrl/Cmd/Alt combos entirely (e.g. leaves Ctrl+Z/Ctrl+Shift+Z
+      // Ctrl/Cmd+Z is the toolbar's Undo button, and Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y its Redo
+      // button.
+      const history = undoRedoKind(event);
+      if (history === 'undo') {
+        if (!this.activeEditor && !this.hasPendingQuickColorUndo && !this.hasPendingCardUndo) return;
+        event.preventDefault();
+        this.handleUndo();
+        return;
+      }
+      if (history === 'redo') {
+        if (!this.activeEditor) return;
+        event.preventDefault();
+        this.activeEditor.redo();
+        return;
+      }
+      // Skip the other Ctrl/Cmd/Alt combos entirely (e.g. leaves
       // browser/OS shortcuts alone) - Shift alone is deliberately NOT
       // excluded, since holding it is also how Line/Rectangle/Oval's
       // 45-degree/square/circle snap works (see hooks/shift-key.js), and

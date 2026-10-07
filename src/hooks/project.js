@@ -47,6 +47,11 @@ export const useScoreFontStorage = () =>
   withRomInvalidation(useJsonProjectStorage('scoreFont'));
 export const useSquishCustomScoreFontStorage = () =>
   withRomInvalidation(useJsonProjectStorage('squishCustomScoreFont'));
+// The drawn digits of every font other than Custom and Squish Custom, which are stored
+// separately above: {fonts: {<font key>: {digits}}} - see scoreFontEditKey in utils/score-font.js.
+// A font with no entry shows its original digits.
+export const useScoreFontEditsStorage = () =>
+  withRomInvalidation(useJsonProjectStorage('scoreFontEdits'));
 export const useSoundEffectsStorage = () =>
   withRomInvalidation(useJsonProjectStorage('soundEffects'));
 export const useDataTablesStorage = () =>
@@ -67,7 +72,7 @@ export const useTitleScreenStorage = () =>
 // from an older saved project - see hooks/migrate-player-animations.js.
 export const PROJECT_STORAGE_TYPES = [
   'workspace', 'backgrounds', 'player0', 'player1', 'playerAnimations', 'configuration',
-  'scoreFont', 'soundEffects', 'dataTables', 'textStrings', 'songs', 'titleScreen', 'spriteColorPalette',
+  'scoreFont', 'scoreFontEdits', 'soundEffects', 'dataTables', 'textStrings', 'songs', 'titleScreen', 'spriteColorPalette',
 ];
 
 /**

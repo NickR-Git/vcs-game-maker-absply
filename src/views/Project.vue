@@ -22,47 +22,6 @@
           <v-icon>mdi-cog-outline</v-icon>
         </v-btn>
         <v-divider class="project-toolbar-divider" vertical />
-        <v-btn
-          icon
-          small
-          class="project-flat-icon-btn data-icon-btn-size"
-          :class="{'project-flat-icon-btn-active': showExamples && !showSoundBanks}"
-          :title="examples.status === 'loading' ? 'Example Projects (checking for updates...)' : 'Example Projects'"
-          @click="showSoundBanks = false; showExamples = true"
-        >
-          <v-progress-circular
-            v-if="examples.status === 'loading'"
-            indeterminate
-            :size="18"
-            :width="2"
-          />
-          <!-- An Atari 2600 joystick (ball top, stick, base with its fire button), drawn on
-               the same 24 unit grid and weight as the icon font's glyphs: the font has none. -->
-          <svg v-else class="v-icon example-joystick-icon" viewBox="0 0 24 24" aria-hidden="true">
-            <path
-              fill="currentColor"
-              fill-rule="evenodd"
-              d="M12 2.3a3.2 3.2 0 1 0 0 6.4a3.2 3.2 0 1 0 0-6.4zM11 8.5h2V13h-2zM5 13h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2zM7 15.2a1.8 1.8 0 1 0 0 3.6a1.8 1.8 0 1 0 0-3.6z"
-            />
-          </svg>
-        </v-btn>
-        <v-btn
-          icon
-          small
-          class="project-flat-icon-btn data-icon-btn-size"
-          :class="{'project-flat-icon-btn-active': showSoundBanks}"
-          :title="soundBanks.status === 'loading' ? 'Sound Banks (checking for updates...)' : 'Sound Banks'"
-          @click="showSoundBanks = true"
-        >
-          <v-progress-circular
-            v-if="soundBanks.status === 'loading'"
-            indeterminate
-            :size="18"
-            :width="2"
-          />
-          <v-icon v-else>mdi-piano</v-icon>
-        </v-btn>
-        <v-divider class="project-toolbar-divider" vertical />
         <template>
             <v-dialog
               v-model="data.newProjectDialog"
@@ -142,6 +101,47 @@
         >
           <v-icon>mdi-content-save-edit</v-icon>
         </v-btn>
+        <v-divider class="project-toolbar-divider" vertical />
+        <v-btn
+          icon
+          small
+          class="project-flat-icon-btn data-icon-btn-size"
+          :class="{'project-flat-icon-btn-active': showExamples && !showSoundBanks}"
+          :title="examples.status === 'loading' ? 'Example Projects (checking for updates...)' : 'Example Projects'"
+          @click="showSoundBanks = false; showExamples = true"
+        >
+          <v-progress-circular
+            v-if="examples.status === 'loading'"
+            indeterminate
+            :size="18"
+            :width="2"
+          />
+          <!-- An Atari 2600 joystick (ball top, stick, base with its fire button), drawn on
+               the same 24 unit grid and weight as the icon font's glyphs: the font has none. -->
+          <svg v-else class="v-icon example-joystick-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              fill="currentColor"
+              fill-rule="evenodd"
+              d="M12 2.3a3.2 3.2 0 1 0 0 6.4a3.2 3.2 0 1 0 0-6.4zM11 8.5h2V13h-2zM5 13h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2zM7 15.2a1.8 1.8 0 1 0 0 3.6a1.8 1.8 0 1 0 0-3.6z"
+            />
+          </svg>
+        </v-btn>
+        <v-btn
+          icon
+          small
+          class="project-flat-icon-btn data-icon-btn-size"
+          :class="{'project-flat-icon-btn-active': showSoundBanks}"
+          :title="soundBanks.status === 'loading' ? 'Sound Banks (checking for updates...)' : 'Sound Banks'"
+          @click="showSoundBanks = true"
+        >
+          <v-progress-circular
+            v-if="soundBanks.status === 'loading'"
+            indeterminate
+            :size="18"
+            :width="2"
+          />
+          <v-icon v-else>mdi-waveform</v-icon>
+        </v-btn>
         <input
           ref="importFileInput"
           type="file"
@@ -220,6 +220,12 @@
 
     <v-card-text v-else-if="showSoundBanks" class="project-settings-text">
       <span class="text-subtitle-1 project-settings-label">Sound Banks</span>
+      <v-select
+        v-model="data.soundBankFilter"
+        :items="soundBankFilterItems"
+        label="Show"
+        class="sound-bank-filter"
+      />
       <p class="v-messages theme--light v-messages__message example-status">
         Sounds and sound banks from GitHub. Click one to choose which sounds to import into the
         open project.
@@ -238,10 +244,16 @@
         </template>
         <template v-else>There are no sound banks yet.</template>
       </p>
+      <p
+        v-else-if="!filteredSoundBanks.length && soundBanks.status !== 'loading'"
+        class="v-messages theme--light v-messages__message example-status"
+      >
+        Nothing of that kind in the list. Choose All to see everything.
+      </p>
       <p v-if="data.soundBankError" class="example-error">{{ data.soundBankError }}</p>
       <div class="example-list">
         <v-card
-          v-for="bank in soundBanks.entries"
+          v-for="bank in filteredSoundBanks"
           :key="bank.name"
           outlined
           :ripple="false"
@@ -258,9 +270,15 @@
             <v-icon>{{ data.previewingSoundBank === bank.name ? 'mdi-stop' : 'mdi-play' }}</v-icon>
           </v-btn>
           <div class="example-card-text">
-            <div class="example-card-title">{{ soundBankTitle(bank) }}</div>
+            <div class="example-card-title">
+              <!-- The same icons the app uses elsewhere: the Sound tab's waveform for a sound,
+                   the database icon of its bank import/export buttons for a bank, and the
+                   piano of its instrument tag for an instrument. -->
+              <v-icon small class="sound-bank-kind-icon" :title="soundBankKindLabel(bank)">{{ soundBankKindIcon(bank) }}</v-icon>
+              {{ soundBankTitle(bank) }}
+            </div>
             <div class="example-card-line">
-              {{ bank.isBank ? 'Sound bank' : 'Sound' }}<template v-if="bank.isBank">
+              {{ soundBankKindLabel(bank) }}<template v-if="bank.isBank">
                 - {{ bank.sounds.length === 1 ? '1 sound' : `${bank.sounds.length} sounds` }}</template>
             </div>
             <div v-if="bank.sounds.length" class="example-card-line sound-bank-names">
@@ -408,7 +426,7 @@ import {defineComponent, reactive, computed, onMounted, onBeforeUnmount, ref, ge
 import {saveAs} from 'file-saver';
 import YAML from 'yaml';
 
-import {appendCompileLog, useBackgroundsStorage, useColorPaletteStorage, useConfigurationStorage, useDataTablesStorage, usePlayerAnimationsStorage, useProjectAutoIncrementVersionStorage, useProjectIncludeDateInFilenameStorage, useProjectShowExamplesStorage, useDimSoundFxPercentStorage, useDimSoundFxStorage, useProjectShowSoundBanksStorage, useScoreFontStorage, useSongsStorage, useSoundEffectsStorage, useSquishCustomScoreFontStorage, useTextFontStorage, useTextStringsStorage, useTitleScreenStorage, useWorkspaceStorage} from '../hooks/project';
+import {appendCompileLog, useBackgroundsStorage, useColorPaletteStorage, useConfigurationStorage, useDataTablesStorage, usePlayerAnimationsStorage, useProjectAutoIncrementVersionStorage, useProjectIncludeDateInFilenameStorage, useProjectShowExamplesStorage, useDimSoundFxPercentStorage, useDimSoundFxStorage, useProjectShowSoundBanksStorage, useScoreFontEditsStorage, useScoreFontStorage, useSongsStorage, useSoundEffectsStorage, useSquishCustomScoreFontStorage, useTextFontStorage, useTextStringsStorage, useTitleScreenStorage, useWorkspaceStorage} from '../hooks/project';
 import {combineLegacyPlayerAnimations, remapPlayer1AnimationIndexesInWorkspaceXml} from '../hooks/migrate-player-animations';
 import {migrateLegacyPlayerBlocksInWorkspaceXml} from '../hooks/migrate-player-blocks';
 import {migrateLegacyBounceBlocksInWorkspaceXml} from '../hooks/migrate-bounce-blocks';
@@ -482,6 +500,8 @@ export default defineComponent({
       soundBankDialog: false,
       soundBankEntries: [],
       soundBankError: '',
+      // Which downloads the Sound Banks screen lists: 'all', 'bank', 'sound' or 'instrument'.
+      soundBankFilter: 'all',
       // Name of the sound bank whose preview is playing, or ''.
       previewingSoundBank: '',
       // The handle "Save" writes back to, from the last "Save As..." or
@@ -527,6 +547,7 @@ export default defineComponent({
     const configurationStorage = useConfigurationStorage();
     const scoreFontStorage = useScoreFontStorage();
     const squishCustomScoreFontStorage = useSquishCustomScoreFontStorage();
+    const scoreFontEditsStorage = useScoreFontEditsStorage();
     const dataTablesStorage = useDataTablesStorage();
     const textStringsStorage = useTextStringsStorage();
     const textFontStorage = useTextFontStorage();
@@ -614,8 +635,18 @@ export default defineComponent({
       });
     }
 
-    return {data, router, showExamples, showSoundBanks, isToolbarScrolled, examples: examplesState, soundBanks: soundBanksState, backgroundsStorage, playerAnimationsStorage,
-      workspaceStorage, configurationStorage, scoreFontStorage, squishCustomScoreFontStorage, dataTablesStorage,
+    const soundBankFilterItems = [
+      {text: 'All', value: 'all'},
+      {text: 'Sound banks', value: 'bank'},
+      {text: 'Sounds', value: 'sound'},
+      {text: 'Instruments', value: 'instrument'},
+    ];
+    const filteredSoundBanks = computed(() => soundBanksState.entries.filter(
+        (bank) => data.soundBankFilter === 'all' || bank.kind === data.soundBankFilter));
+
+    return {data, router, showExamples, showSoundBanks, isToolbarScrolled, examples: examplesState, soundBanks: soundBanksState,
+      soundBankFilterItems, filteredSoundBanks, backgroundsStorage, playerAnimationsStorage,
+      workspaceStorage, configurationStorage, scoreFontStorage, squishCustomScoreFontStorage, scoreFontEditsStorage, dataTablesStorage,
       textStringsStorage, textFontStorage, soundEffectsStorage, songsStorage, titleScreenStorage, colorPaletteStorage, projectTitle,
       projectDescription, projectDeveloper, projectVersion, projectAutoIncrementVersion, projectIncludeDateInFilename,
       projectWebsite, projectEmail};
@@ -689,6 +720,14 @@ export default defineComponent({
         digits: this.squishCustomScoreFontStorage.digits.map(matrixToPlayfield),
       };
 
+      // Fonts other than Custom and Squish Custom that have been redrawn: one entry each.
+      const scoreFontEdits = !this.scoreFontEditsStorage || !this.scoreFontEditsStorage.fonts ? null : {
+        ...this.scoreFontEditsStorage,
+        fonts: Object.fromEntries(Object.entries(this.scoreFontEditsStorage.fonts).map(([key, font]) => [
+          key, {...font, digits: font.digits.map(matrixToPlayfield)},
+        ])),
+      };
+
       const textFont = !this.textFontStorage ? null : {
         ...this.textFontStorage,
         glyphs: this.textFontStorage.glyphs.map(matrixToPlayfield),
@@ -745,6 +784,7 @@ export default defineComponent({
         'title-screen': titleScreen,
         'score-font': scoreFont,
         'squish-custom-score-font': squishCustomScoreFont,
+        'score-font-edits': scoreFontEdits,
         'data-tables': this.dataTablesStorage,
         'text-strings': this.textStringsStorage,
         'text-font': textFont,
@@ -1184,6 +1224,15 @@ export default defineComponent({
         };
       }
 
+      if (project['score-font-edits'] && project['score-font-edits'].fonts) {
+        this.scoreFontEditsStorage = {
+          ...project['score-font-edits'],
+          fonts: Object.fromEntries(Object.entries(project['score-font-edits'].fonts).map(([key, font]) => [
+            key, {...font, digits: font.digits.map(playfieldToMatrix)},
+          ])),
+        };
+      }
+
       if (project.backgrounds) {
         const backgrounds = {
           ...project.backgrounds,
@@ -1265,6 +1314,13 @@ export default defineComponent({
 
     exampleTitle(example) {
       return example.title || example.name.replace(/\.vcsgm$/i, '');
+    },
+
+    soundBankKindIcon(bank) {
+      return {bank: 'mdi-database', instrument: 'mdi-piano'}[bank.kind] || 'mdi-waveform';
+    },
+    soundBankKindLabel(bank) {
+      return {bank: 'Sound bank', instrument: 'Instrument'}[bank.kind] || 'Sound';
     },
 
     // A single sound is titled with the name saved inside its file, a bank with
@@ -1371,6 +1427,7 @@ export default defineComponent({
       this.titleScreenStorage = null;
       this.scoreFontStorage = null;
       this.squishCustomScoreFontStorage = null;
+      this.scoreFontEditsStorage = null;
       this.dataTablesStorage = null;
       // A new project has nothing to "Save" back to yet, and shouldn't
       // silently overwrite whatever file the PREVIOUS project came from -
@@ -1744,6 +1801,19 @@ export default defineComponent({
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* The Show drop-down under the Sound Banks title: as wide as its choices need, not the page. */
+.sound-bank-filter {
+  max-width: 220px;
+}
+
+/* The kind icon (sound, bank or instrument) before a card's title: the title's grey
+   (the text color), a little lower than the baseline so it centers on the text. */
+.sound-bank-kind-icon {
+  margin-right: 4px;
+  vertical-align: -2px;
+  color: inherit !important;
 }
 
 .sound-bank-card {

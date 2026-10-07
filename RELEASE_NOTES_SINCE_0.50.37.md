@@ -1,6 +1,6 @@
 # VCS Game Maker: everything since 0.50.37
 
-This covers versions 0.50.38 through 0.51.28, grouped by area. The per-version
+This covers versions 0.50.38 through 0.51.29, grouped by area. The per-version
 detail is in `CHANGES_SINCE_0.50.37.txt`.
 
 ## Emulator and TV standard
@@ -19,6 +19,12 @@ detail is in `CHANGES_SINCE_0.50.37.txt`.
 - The blank screen (no ROM running) has the same proportions as a running game.
 - A once-a-second safety check restores the emulator canvas if it goes missing.
 - The last loaded ROM survives a page refresh.
+- The preview now runs on 6502.ts by default (about seven times faster), with gopher2600 as the
+  other choice; a keypad ROM switches to gopher2600. The cog next to the Input Mapping button opens
+  Emulator Settings: TV signal, phosphor, scanlines, gamma, scaling, CPU accuracy, and the full
+  screen resolution and scaling. A full screen button sits next to the screenshot button.
+- Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y undo and redo in the graphic editors, Data, Music patterns and
+  Sound FX envelopes.
 
 ## Blocks and code generation
 

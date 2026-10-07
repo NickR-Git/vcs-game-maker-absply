@@ -74,10 +74,24 @@ const summarize = (name, text) => {
   return {sounds, isBank};
 };
 
+// What a download is: a 'bank' (a file of several sounds), an 'instrument' (a single sound
+// tagged as an instrument on the Sound tab) or a plain 'sound'. Read from the file's text
+// each time rather than kept in the stored summary, so files downloaded before this existed
+// get one too.
+const kindOf = (text, isBank) => {
+  if (isBank) return 'bank';
+  try {
+    return JSON.parse(text).isInstrument ? 'instrument' : 'sound';
+  } catch (e) {
+    return 'sound';
+  }
+};
+
 const toEntry = (record) => ({
   name: record.name,
   text: record.text,
   ...record.summary,
+  kind: kindOf(record.text, record.summary && record.summary.isBank),
 });
 
 const sortEntries = (entries) => entries.sort((a, b) => a.name.localeCompare(b.name));

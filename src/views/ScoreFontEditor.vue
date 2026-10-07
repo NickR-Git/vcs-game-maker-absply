@@ -31,19 +31,14 @@
           class="score-fade-switch"
         />
       </div>
-      <p v-if="isEditableFontSelected" class="v-messages theme--light v-messages__message">
-        Draw the ten score digits below. They are used when the score font is
-        set to <strong>Custom</strong> or <strong>Squish Custom</strong>.
+      <p class="v-messages theme--light v-messages__message">
+        Draw the score digits below. Every font can be redrawn: what you draw is kept for the
+        selected font only{{ fontIsEdited ? ' (this one has been edited)' : '' }}, and "{{ resetLabel }}"
+        brings back its original digits.
       </p>
-      <p v-else class="v-messages theme--light v-messages__message">
-        Set the score font to <strong>Custom</strong> or <strong>Squish Custom</strong> above to draw custom
-        digits - {{ selectedFont ? 'the selected preset' : 'Default' }} is a fixed, built-in font with nothing
-        to edit here.
-      </p>
-      <template v-if="isEditableFontSelected">
+      <template>
         <div class="score-extras-row">
           <v-switch
-            v-if="showExtraGlyphs"
             v-model="extraGlyphsEnabled"
             label="Use extra glyphs (10-15)"
             hint="Costs 48 extra bytes of ROM space."
@@ -70,7 +65,7 @@
             class="digit"
             :style="{width: digitWidth}"
             v-for="(digit, index) in state.digits"
-            v-show="index < DECIMAL_DIGIT_COUNT || (showExtraGlyphs && extraGlyphsEnabled)"
+            v-show="index < DECIMAL_DIGIT_COUNT || extraGlyphsEnabled"
             :key="index"
           >
             <div class="digit-label">{{ index }}</div>
@@ -118,23 +113,23 @@
             </div>
           </div>
         </div>
-        <v-btn class="reset-button" color="secondary" @click="handleReset">
+        <v-btn class="reset-button" color="secondary" :disabled="!canReset" @click="handleReset">
           <v-icon>mdi-restore</v-icon>
-          <div>Reset to default digits</div>
+          <div>{{ resetLabel }}</div>
         </v-btn>
       </template>
     </v-card-text>
   </v-card>
 </template>
 <script>
-import {computed, defineComponent, ref} from '@vue/composition-api';
+import {computed, defineComponent, ref, watch} from '@vue/composition-api';
 
 import ColorSwatchPicker from '../components/ColorSwatchPicker.vue';
 import EditorZoom from '../components/EditorZoom.vue';
 import GraphicEditorToolbar from '../components/GraphicEditorToolbar.vue';
 import PixelEditor from '../components/PixelEditor.vue';
 import PixelGridToggle from '../components/PixelGridToggle.vue';
-import {useConfigurationStorage, usePixelGridOverlayStorage, useScoreFontStorage,
+import {useConfigurationStorage, usePixelGridOverlayStorage, useScoreFontEditsStorage, useScoreFontStorage,
   useSquishCustomScoreFontStorage} from '../hooks/project';
 import {useEditorZoom} from '../hooks/zoom';
 import {colorByteToCss} from '../utils/palette';
@@ -142,14 +137,14 @@ import {SCORE_FONT_NAMES} from '../generators/score-fonts';
 import {
   CUSTOM_SCORE_FONT,
   DECIMAL_DIGIT_COUNT,
-  DEFAULT_SCORE_FONT,
-  DIGIT_HEIGHT,
   SQUISH_SCORE_FONT,
   SQUISH_CUSTOM_SCORE_FONT,
-  SQUISH_DEFAULT_SCORE_FONT,
-  SQUISH_DIGIT_HEIGHT,
+  editedScoreFontDigits,
   fontToDigits,
   processScoreFontDefaults,
+  scoreFontDigitHeight,
+  scoreFontEditKey,
+  scoreFontOriginalBytes,
 } from '../utils/score-font';
 
 // Score digits are drawn with player graphics, one colour clock per pixel, and
@@ -185,6 +180,7 @@ export default defineComponent({
   setup() {
     const scoreFontStorage = useScoreFontStorage();
     const squishCustomScoreFontStorage = useSquishCustomScoreFontStorage();
+    const scoreFontEditsStorage = useScoreFontEditsStorage();
     const configurationStorage = useConfigurationStorage();
     const zoom = useEditorZoom('scorefont', 1.5);
     // Shared with every other tab's pixel grid toggle (see
@@ -197,10 +193,13 @@ export default defineComponent({
     // row to make room for the Text Minikernel's  text lines underneath
     // it - always offered, even with no Text Minikernel block placed yet,
     // since a smaller score font is a reasonable choice by itself.
+    // A font with changes drawn for it is marked as edited (Custom and Squish Custom are all
+    // drawing, so they are not).
     const scoreFontOptions = computed(() => [...BASE_SCORE_FONT_OPTIONS,
       {text: 'Squish (compact - shrinks the score row)', value: SQUISH_SCORE_FONT},
       {text: 'Squish Custom (compact - drawn below)', value: SQUISH_CUSTOM_SCORE_FONT},
-      CUSTOM_SCORE_FONT_OPTION]);
+      CUSTOM_SCORE_FONT_OPTION].map((option) => (editedScoreFontDigits(option.value) ?
+        {...option, text: `${option.text} (edited)`} : option)));
 
     // Only this one option is owned here, so it is merged into the stored
     // configuration rather than replacing it.
@@ -300,30 +299,6 @@ export default defineComponent({
     // instead of the standard 8-row digits), so the editor below switches
     // which one it's bound to based on the current selection.
     const isSquishCustomSelected = computed(() => selectedFont.value === SQUISH_CUSTOM_SCORE_FONT);
-    // Gates the 6 extra glyph cards (10-15, see DECIMAL_DIGIT_COUNT's
-    // comment) below - only the two fonts a project can actually EDIT get
-    // them; every preset (and plain Squish) is a fixed, non-editable
-    // bitmap already, so there's nothing useful to draw for slots those
-    // fonts don't expose in the compiled ROM anyway (see
-    // buildScoreFontOverride/buildSquishScoreFontOverride in
-    // utils/score-font.js - only CUSTOM/SQUISH_CUSTOM ever splice them in
-    // at all).
-    const showExtraGlyphs = computed(() =>
-      selectedFont.value === CUSTOM_SCORE_FONT || isSquishCustomSelected.value);
-    // Same condition as showExtraGlyphs above, but gating the base 0-9 digit
-    // editors themselves (see the template's  v-if on .digit-list) - only
-    // Custom/Squish Custom are actually EDITABLE fonts (backed by real
-    // storage this editor writes to); Default and every named preset are
-    // fixed, compiled-in bitmaps (see generators/score-fonts.js) with no
-    // storage of their  to write to at all. Before this, the digit grid
-    // stayed visible and editable regardless of selectedFont - editing it
-    // always silently wrote to the Custom (or Squish Custom) font's
-    // storage no matter what was actually selected, which looked like (and
-    // was reported as) "editing Default" even though Default itself was
-    // never actually touched - just confusingly implied to be, and any
-    // edits made this way were invisible until Custom was later selected.
-    const isEditableFontSelected = computed(() =>
-      selectedFont.value === CUSTOM_SCORE_FONT || isSquishCustomSelected.value);
     // Explicit, stored opt-in (see utils/score-font.js's
     // customScoreFontExtraGlyphsEnabled/trimUnusedExtraGlyphs, the actual
     // source of truth this reads/writes the same configuration key as) -
@@ -371,15 +346,19 @@ export default defineComponent({
         };
       },
     });
-    const activeScoreFontStorage = computed(() =>
+    // Custom and Squish Custom keep their digits in separate storage; every other font in
+    // the scoreFontEdits storage (see scoreFontEditKey in utils/score-font.js).
+    const editKey = computed(() => scoreFontEditKey(selectedFont.value));
+    const ownStorage = computed(() =>
       isSquishCustomSelected.value ? squishCustomScoreFontStorage : scoreFontStorage);
-    const activeDefaultFont = computed(() =>
-      isSquishCustomSelected.value ? SQUISH_DEFAULT_SCORE_FONT : DEFAULT_SCORE_FONT);
-    // Squish Custom's editor is 5 rows tall instead of the usual 8 - Squish
-    // never reads the top 3 rows at runtime (see SQUISH_DIGIT_HEIGHT), so
-    // there's nothing useful to draw there.
-    const activeDigitHeight = computed(() =>
-      isSquishCustomSelected.value ? SQUISH_DIGIT_HEIGHT : DIGIT_HEIGHT);
+    const originalBytes = computed(() => scoreFontOriginalBytes(selectedFont.value));
+    // Squish and Squish Custom are 5 rows tall instead of the usual 8 - Squish never reads the
+    // top 3 rows at runtime (see SQUISH_DIGIT_HEIGHT), so there's nothing useful to draw there.
+    const activeDigitHeight = computed(() => scoreFontDigitHeight(selectedFont.value));
+    const fontIsEdited = computed(() => editKey.value !== null && !!editedScoreFontDigits(selectedFont.value));
+    const canReset = computed(() => editKey.value === null || fontIsEdited.value);
+    const resetLabel = computed(() =>
+      editKey.value === null ? 'Reset to default digits' : 'Reset to original digits');
 
     // Tracks whichever digit's PixelEditor instance was last clicked
     // into (see its "activate" event, emitted from PixelEditor.vue's
@@ -398,25 +377,61 @@ export default defineComponent({
       activeEditorIndex.value = index;
     };
 
-    const state = computed({
-      get() {
-        try {
-          return processScoreFontDefaults(activeScoreFontStorage.value, activeDefaultFont.value, activeDigitHeight.value);
-        } catch (e) {
-          console.error('Error loading the score font from local storage', e);
-          return {digits: fontToDigits(activeDefaultFont.value, activeDigitHeight.value)};
+    // PixelEditor only reads its "value" prop once, on mount - it has no
+    // watcher to notice external changes after that (e.g. dragging pixels
+    // updates it, via handleChange, but writes from outside the component
+    // don't). Reset replaces all the digits' data at once from here, so
+    // resetToken is bumped into the editors' :key below to force them to
+    // remount and pick the new data up, the same trick used for
+    // activeDigitHeight when switching between fonts.
+    const resetToken = ref(0);
+
+    // The digits being edited: a working copy of the selected font's, loaded when the font
+    // changes (the stored digits for Custom/Squish Custom or an edited font, otherwise the
+    // font's original ones), and saved back by handleChange. A font that was never edited
+    // stores nothing until the first change, so just looking at one costs nothing.
+    const working = ref({digits: []});
+    const loadWorking = () => {
+      try {
+        if (editKey.value === null) {
+          working.value = processScoreFontDefaults(ownStorage.value, originalBytes.value, activeDigitHeight.value);
+        } else {
+          const edited = editedScoreFontDigits(selectedFont.value);
+          working.value = {
+            digits: edited ? JSON.parse(JSON.stringify(edited)) :
+              fontToDigits(originalBytes.value, activeDigitHeight.value),
+          };
         }
-      },
+      } catch (e) {
+        console.error('Error loading the score font from local storage', e);
+        working.value = {digits: fontToDigits(originalBytes.value, activeDigitHeight.value)};
+      }
+    };
+    watch(selectedFont, () => {
+      loadWorking();
+      resetToken.value++;
+    }, {immediate: true});
 
-      set(newState) {
-        activeScoreFontStorage.value.value = newState;
-      },
-    });
+    const state = computed(() => working.value);
 
-    // The pixel editor mutates its matrix in place, so the whole object is
-    // reassigned to push it back into storage.
+    const persist = () => {
+      if (editKey.value === null) {
+        ownStorage.value.value = working.value;
+        return;
+      }
+      const stored = scoreFontEditsStorage.value;
+      scoreFontEditsStorage.value = {
+        ...(stored || {}),
+        fonts: {
+          ...((stored && stored.fonts) || {}),
+          [editKey.value]: {digits: JSON.parse(JSON.stringify(working.value.digits))},
+        },
+      };
+    };
+
+    // The pixel editor mutates its matrix in place, so the whole font is saved back.
     const handleChange = () => {
-      state.value = state.value;
+      persist();
     };
 
     // Same "whole image" copy/paste pair as PlayerEditor.vue's
@@ -437,16 +452,17 @@ export default defineComponent({
       resetToken.value++;
     };
 
-    // PixelEditor only reads its "value" prop once, on mount - it has no
-    // watcher to notice external changes after that (e.g. dragging pixels
-    // updates it, via handleChange, but writes from outside the component
-    // don't). Reset replaces all ten digits' data at once from here, so
-    // resetToken is bumped into the editors' :key below to force them to
-    // remount and pick the new data up, the same trick already used for
-    // activeDigitHeight when switching between Custom and Squish Custom.
-    const resetToken = ref(0);
     const handleReset = () => {
-      state.value = {digits: fontToDigits(activeDefaultFont.value, activeDigitHeight.value)};
+      if (editKey.value === null) {
+        working.value = {digits: fontToDigits(originalBytes.value, activeDigitHeight.value)};
+        persist();
+      } else {
+        const stored = scoreFontEditsStorage.value || {};
+        const fonts = {...(stored.fonts || {})};
+        delete fonts[editKey.value];
+        scoreFontEditsStorage.value = {...stored, fonts};
+        loadWorking();
+      }
       resetToken.value++;
     };
 
@@ -466,10 +482,11 @@ export default defineComponent({
       zoom,
       showPixelGrid,
       digitWidth,
-      showExtraGlyphs,
       extraGlyphsEnabled,
       scorePaddingLines,
-      isEditableFontSelected,
+      fontIsEdited,
+      canReset,
+      resetLabel,
       DECIMAL_DIGIT_COUNT,
       activeEditor, activeEditorIndex, setActiveEditor,
       copiedDigitData, handleCopyDigit, handlePasteDigit,

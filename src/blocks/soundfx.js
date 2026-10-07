@@ -161,13 +161,10 @@ export const DEFAULT_SOUND_EFFECTS = {
       // A display tag for the Sound tab's "show all/instruments/sounds"
       // filter (see SoundFXEditor.vue), but also the actual gate on the
       // Music tab's Instrument dropdown (see MusicEditor.vue's
-      // soundEffectOptions, which only lists isInstrument sounds there) -
-      // true here (not the usual "off by default" a brand new flag would
-      // get) so a fresh project's one default sound card is actually
-      // pickable as an instrument out of the box, instead of the Music tab
-      // silently showing no instruments at all until the user remembers to
-      // flip this on manually - confirmed as a real reported bug.
-      isInstrument: true,
+      // soundEffectOptions, which only lists isInstrument sounds there).
+      // The default sound starts as a plain sound effect; clicking its
+      // icon on the Sound tab makes it an instrument.
+      isInstrument: false,
     },
   ],
 };

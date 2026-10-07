@@ -3,12 +3,13 @@
     <template v-slot:activator="{ on, attrs }">
       <v-btn
         icon
+        small
         class="emulator-flat-icon-btn"
         title="Configure keyboard and gamepad input mapping"
         v-bind="attrs"
         v-on="on"
       >
-        <v-icon :size="22" style="margin-top: -1px">mdi-keyboard-outline</v-icon>
+        <v-icon>mdi-keyboard-outline</v-icon>
       </v-btn>
     </template>
     <v-card>

@@ -447,6 +447,7 @@
                                       @resize="() => handleFramePixelsInput(card, frame)"
                                       @clear="() => handleClearCardColors(card)"
                                       @clear-colors="() => handleClearCardColors(card)"
+                                      @move-rows="(move) => handleMoveRows(card, frame, move)"
                                       @activate="(editorInstance) => setActiveFrame(editorInstance, card.id, frame.id)"
                                     >
                                       <template v-if="cardHasRowColors(card)" v-slot:sidebar>
@@ -593,6 +594,7 @@ import {chunk, max} from 'lodash';
 
 import {colorByteToCss} from '../utils/palette';
 import {resizePixelMatrixHeight, scaleRowColors} from '../utils/pixels';
+import {rowColorsForMove} from '../utils/row-color-move';
 import {loadImageFromFile, openFileDialogMultiple, sortImportedAnimationFrameFiles} from '../utils/file';
 import {createCroppedResizedCanvas, createResizedCanvas} from '../utils/image';
 import {parseAsepriteSheet} from '../utils/aseprite';
@@ -919,6 +921,14 @@ export default defineComponent({
     const handleRowColorsInput = (frame, colors) => {
       frame.rowColors = colors;
       handleChildChange();
+    };
+
+    // Moving selected pixels with the Move tool takes the colors of their rows along
+    // (PixelEditor.vue's 'move-rows' event - see utils/row-color-move.js).
+    const handleMoveRows = (card, frame, move) => {
+      if (!cardHasRowColors(card)) return;
+      const colors = rowColorsForMove(frame, move);
+      if (colors) handleRowColorsInput(frame, colors);
     };
 
     // Same shape as PlayerEditor.vue's handleAddFrame - prefills the new
@@ -1337,7 +1347,7 @@ export default defineComponent({
       addCardOptions, canAddCardType, maxCopies, maxCopiesForType, playerAnimationOptions,
       handleAddCard, handleDeleteCard,
       handleSetBackgroundColor, handleSetCardColor, handleClearCardColors,
-      handleFramePixelsInput, handleRowColorsInput, cardFrameHeight,
+      handleFramePixelsInput, handleRowColorsInput, handleMoveRows, cardFrameHeight,
       handleAddFrame, handleDeleteFrame,
       handleImportCardFrames, replaceFramesOnImport, importMenuOpenCardRef,
       handleImportAsepriteCardFrames, asepriteImportMenuOpen,
