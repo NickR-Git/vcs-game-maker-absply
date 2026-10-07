@@ -1,6 +1,6 @@
 # VCS Game Maker: everything since 0.50.37
 
-This covers versions 0.50.38 through 0.51.27, grouped by area. The per-version
+This covers versions 0.50.38 through 0.51.28, grouped by area. The per-version
 detail is in `CHANGES_SINCE_0.50.37.txt`.
 
 ## Emulator and TV standard
@@ -12,6 +12,8 @@ detail is in `CHANGES_SINCE_0.50.37.txt`.
 - New TV standard option (NTSC or PAL60) at the top of the ROM options. PAL60
   keeps NTSC's 60 Hz timing, swaps every build-time color for the closest PAL
   color, and makes the Sound and Music previews use the PAL audio clock.
+- The emulator runs in a web worker at 60 frames per second on any refresh rate, with an
+  adaptive frame skipping option; gamepads are mapped per player in the Input Mapping dialog.
 - New camera button saves the emulator screen as a PNG.
 - Creating or importing a project clears the emulator.
 - The blank screen (no ROM running) has the same proportions as a running game.

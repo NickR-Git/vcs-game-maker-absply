@@ -1,7 +1,7 @@
 {
   "name": "vcs-game-maker",
   "productName": "VCS Game Maker",
-  "version": "0.51.27",
+  "version": "0.51.28",
   "private": true,
   "description": "A no-code environment for creating Atari 2600 games using Blockly and batari Basic.",
   "author": "haroldo-ok, with contributions by AbstractPolygon",
@@ -56,7 +56,7 @@
     "browserify-fs": "^1.0.0",
     "buffer": "^4.9.2",
     "crypto-browserify": "^3.12.0",
-    "electron": "^22.3.27",
+    "electron": "^44.6.0",
     "electron-devtools-installer": "^3.1.0",
     "eslint": "^7.30.0",
     "eslint-config-google": "^0.14.0",

@@ -807,3 +807,25 @@ Scroll playfield colors, scroll direction, mirror draw preview, Sprites zoom
 - Sprites tab: the zoom goes down to 25%.
 - New gopher2600-palettes folder with the NTSC and PAL palettes as an Aseprite extension (copy it to
   Aseprite's data/extensions folder).
+
+=== 0.51.28 ===
+Gamepads, 64k fixes, smaller generated code, faster emulator
+
+- Gamepads: the Input Mapping dialog (the old Key Mapping dialog) maps keyboard and gamepad
+  controls for each player separately, both at once. Select and Restart (the console's switches)
+  can be mapped too. Player 2's fire is Right Ctrl by default, and the two players' default
+  keyboard joysticks are swapped. A quick tap of the joystick or fire is no longer missed.
+- 64k ROMs: a subroutine called from another bank now returns to the right bank (the picture used
+  to roll, or sprites vanished when a collision ran a relocated routine), and the Text Minikernel
+  score routine has its 64k cases.
+- Generated code is smaller: if/while conditions are inverted so they jump less, always-true and
+  always-false conditions are removed, jumps to the next label are dropped, and several flags,
+  counters and line variables share bytes or use the Superchip read/write RAM. The two shake
+  screen blocks are merged (up to 127 frames).
+- Emulator: runs in a web worker at a steady 60 frames per second on any monitor refresh rate,
+  pauses while a ROM compiles, and has an "Adaptive frame skipping" option (on by default) that
+  draws only some frames on a slow computer. Frames are about a third faster to emulate: no
+  allocation per CPU instruction, profile-guided optimization, heavier inlining, idle sprites no
+  longer force a full pixel update, and the frame is converted to RGBA through a color table.
+  The desktop app uses Electron 44 (was 22) and Node 24 builds the project.
+- Save ROM shows its error message instead of throwing.
