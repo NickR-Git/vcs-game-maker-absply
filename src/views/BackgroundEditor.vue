@@ -163,6 +163,15 @@
 
                   <div class="background-corner-toolbar">
                     <v-btn
+                      icon
+                      small
+                      title="Duplicate this background"
+                      class="titlescreen-play-btn player-icon-btn-size"
+                      @click.stop="() => handleDuplicateBackground(background)"
+                    >
+                      <v-icon>mdi-content-duplicate</v-icon>
+                    </v-btn>
+                    <v-btn
                       v-if="pfColorsEnabled"
                       icon
                       small
@@ -765,6 +774,18 @@ export default defineComponent({
       }
     };
 
+    // A copy of a background (pixels, row colors, height) added at the end of the
+    // list under a new id, so no existing id or block that uses one changes.
+    const handleDuplicateBackground = (background) => {
+      const backgrounds = state.value.backgrounds;
+      const copy = JSON.parse(JSON.stringify(background));
+      copy.id = (max(backgrounds.map((o) => o.id)) || 0) + 1;
+      copy.name = `${background.name || 'Background'} copy`;
+      backgrounds.push(copy);
+      handleChildChange();
+      instance.proxy.$forceUpdate();
+    };
+
     const handleDeleteBackground = (background) => {
       state.value.backgrounds = state.value.backgrounds.filter(({id}) => id != background.id);
       console.info('Deleted ', background);
@@ -773,7 +794,7 @@ export default defineComponent({
     };
 
     return {selectedCardId, selectCard, deselectCard, backgroundAspectRatio,
-      state, handleChildChange, handleBackgroundPixelsInput, handleAddBackground, handleDeleteBackground,
+      state, handleChildChange, handleBackgroundPixelsInput, handleAddBackground, handleDeleteBackground, handleDuplicateBackground,
       testingId, buildInProgress, handleTestBackground,
       selectedQuickColor, quickColorPalette,
       handleRowColorsInput, handleClearRowColors, editorRowColors, isCollapsed, toggleCollapsed,

@@ -18,7 +18,6 @@
     <!-- built files will be auto injected -->
 
     <canvas id="gopher2600-screen" style="display: none; background-color: #000;"></canvas>
-    <script src="js/wasm_exec.js"></script>
     <script>
       // Web Audio playback for the gopher2600-wasm preview emulator (see
       // tools/gopher2600-wasm/main.go's onAnimationFrame): each rendered
@@ -28,26 +27,23 @@
       // there's no single long-lived buffer to append to.
       let gopher2600AudioCtx = null;
       let gopher2600AudioNextStart = 0;
-      // How far ahead of real time this is ever allowed to schedule -
-      // without a cap, any burst of onAnimationFrame calls arriving faster
-      // than real-time audio playback (a hidden/throttled tab catching up
-      // when it regains focus, a devtools pause/resume, a slow frame
-      // followed by several fast ones) pushes gopher2600AudioNextStart
-      // further ahead with NO way to ever recover: every later chunk keeps
-      // stacking onto that same ever-growing timestamp regardless of how
-      // far it's already drifted from gopher2600AudioCtx.currentTime,
-      // scheduling an unbounded, permanently-growing queue of live
-      // AudioBufferSourceNodes further and further into the future - a real
-      // reported crash (the whole PC needing a hard restart, not just the
-      // tab). Clamping the schedule-ahead window means a burst just
-      // re-syncs close to real time (audible as a brief glitch/skip, the
-      // same tradeoff any live-streaming audio scheduler makes) instead of
-      // diverging forever.
-      const GOPHER2600_AUDIO_MAX_LOOKAHEAD_SECONDS = 0.5;
+      // The audio queue's lag behind real time is what a player hears as a
+      // delay between something happening on screen and its sound. Chunks are
+      // played back to back, so any burst of onAnimationFrame calls (a
+      // throttled tab catching up, a slow frame followed by fast ones, a build
+      // running) leaves the queue that far behind for good: the old cap let it
+      // stay up to half a second late, which showed up as sound effects playing
+      // a fraction of a second after the event. Now a backlog beyond
+      // GOPHER2600_AUDIO_MAX_LAG_SECONDS is dropped and playback restarts a short
+      // cushion (GOPHER2600_AUDIO_CUSHION_SECONDS) ahead of real time - one brief
+      // glitch instead of a lasting delay - and an underrun restarts at the same
+      // cushion. This also bounds the queue of scheduled nodes.
+      const GOPHER2600_AUDIO_MAX_LAG_SECONDS = 0.15;
+      const GOPHER2600_AUDIO_CUSHION_SECONDS = 0.04;
       window.playGopher2600AudioChunk = function(sampleRate, samples) {
         if (!gopher2600AudioCtx) {
-          gopher2600AudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-          gopher2600AudioNextStart = gopher2600AudioCtx.currentTime;
+          gopher2600AudioCtx = new (window.AudioContext || window.webkitAudioContext)({latencyHint: 'interactive'});
+          gopher2600AudioNextStart = gopher2600AudioCtx.currentTime + GOPHER2600_AUDIO_CUSHION_SECONDS;
         }
         if (gopher2600AudioCtx.state === 'suspended') {
           gopher2600AudioCtx.resume();
@@ -57,10 +53,12 @@
         const source = gopher2600AudioCtx.createBufferSource();
         source.buffer = buffer;
         source.connect(gopher2600AudioCtx.destination);
-        const maxStart = gopher2600AudioCtx.currentTime + GOPHER2600_AUDIO_MAX_LOOKAHEAD_SECONDS;
-        const startAt = Math.min(Math.max(gopher2600AudioNextStart, gopher2600AudioCtx.currentTime), maxStart);
-        source.start(startAt);
-        gopher2600AudioNextStart = startAt + buffer.duration;
+        const now = gopher2600AudioCtx.currentTime;
+        if (gopher2600AudioNextStart < now || gopher2600AudioNextStart - now > GOPHER2600_AUDIO_MAX_LAG_SECONDS) {
+          gopher2600AudioNextStart = now + GOPHER2600_AUDIO_CUSHION_SECONDS;
+        }
+        source.start(gopher2600AudioNextStart);
+        gopher2600AudioNextStart += buffer.duration;
       };
       // Browsers block audio until a user gesture; the emulator keeps
       // rendering silently until the first click anywhere resumes it.
@@ -70,56 +68,179 @@
         }
       });
 
-      // Instantiated once at page load (independent of the app's build
-      // pipeline) so window.gopher2600 is ready before the first "Update
-      // ROM" finishes - see src/hooks/rom.js. Wrapped in a reusable function
-      // (not just a one-shot top-level call) so a fatal WASM trap - a real
-      // reported crash ("RuntimeError: memory access out of bounds" from
-      // inside onAnimationFrame) - can be recovered from automatically
-      // instead of leaving the preview permanently dead until the user
-      // notices and manually reloads the whole page. Go's own panic/recover
-      // (see onAnimationFrame's own defer in main.go) can NOT catch this -
-      // a raw WASM memory trap halts the entire Go runtime instantly, below
-      // the level Go's own recover() operates at, so window.gopher2600's
-      // function properties survive as live JS references but every call
-      // into them throws "Go program has already exited" from that point on
-      // forever, unless a genuinely NEW WASM instance replaces it.
-      let gopher2600Go = null;
-      const loadGopher2600Wasm = () => {
-        gopher2600Go = new Go();
-        WebAssembly.instantiateStreaming(fetch('js/gopher2600.wasm'), gopher2600Go.importObject)
-            .then((result) => {
-              gopher2600Go.run(result.instance);
-              // A fresh instance is powered on with no ROM attached (Go's
-              // own console.powerOn() default) - src/hooks/emulator.js's
-              // own listener re-pushes whatever ROM was last compiled, and
-              // App.vue's own listener re-applies the current front-panel
-              // switch positions, once this fires.
-              window.dispatchEvent(new Event('gopher2600-ready'));
-            })
-            .catch((err) => console.error('gopher2600-wasm failed to load:', err));
-      };
-      loadGopher2600Wasm();
+      // The emulator runs in a web worker (public/js/gopher2600-worker.js), so a
+      // frame that takes 12 ms to emulate never blocks the page. This is the
+      // page's side of it: window.gopher2600 forwards every call to the worker,
+      // each display refresh sends it one "tick" (it turns those into a steady
+      // 60 frames per second whatever the monitor's refresh rate), and the
+      // frames and audio that come back are drawn on the canvas and played.
+      //
+      // Created once at page load (independent of the app's build pipeline) so
+      // window.gopher2600 is ready before the first "Update ROM" finishes - see
+      // src/hooks/rom.js. Calls made before the worker has loaded its WASM wait
+      // in the worker until it has. A fatal WASM trap - a real reported crash
+      // ("RuntimeError: memory access out of bounds") - halts the Go runtime
+      // below what Go's recover() can catch, so the worker is thrown away
+      // and a new one started automatically instead of leaving the preview
+      // dead until the user reloads the page.
+      const GOPHER2600_API = [
+        'loadRom', 'powerOn', 'clearRom', 'powerOff', 'pressReset', 'releaseReset',
+        'pressSelect', 'releaseSelect', 'setColorMode', 'setDifficulty', 'setKeypadMode', 'setKeyMapping',
+      ];
+      let gopher2600Worker = null;
+      let gopher2600Ready = false;
+      let gopher2600TicksInFlight = 0;
+      // Set while a ROM is compiling (see setEmulatorPaused in src/hooks/emulator.js): no
+      // ticks are sent, so the worker runs no frames and the compiler has the machine to itself.
+      let gopher2600Paused = false;
+      // The Options tab's adaptive frame skipping, kept here so a replacement worker (after a
+      // crash) is told it too.
+      let gopher2600AdaptiveFrameSkip = true;
+      // The page needs the key bindings and keypad modes too, to know which keys
+      // to claim (preventDefault) without waiting on the worker.
+      let gopher2600KeyMapping = [];
+      const gopher2600KeypadMode = {left: false, right: false};
 
-      // Detects the fatal-trap signature specifically (rather than every
-      // window "error" event, which also fires for completely unrelated
-      // page errors this has no business reacting to) and reinstantiates.
-      // Rate-limited: a ROM that reliably crashes the emulator every frame
-      // would otherwise reinstantiate in a tight, page-freezing loop -
-      // capped to a handful of automatic recoveries per page load, after
-      // which it gives up and leaves the (now genuinely unrecoverable)
-      // error on screen for the user to see, same as before this existed.
+      const gopher2600Canvas = () => document.getElementById('gopher2600-screen');
+      // The picture is always opaque, so the canvas is created without an alpha
+      // channel: the browser can then skip blending it with the page behind it.
+      // The options only count on the first getContext call, so this is made
+      // once, here, before anything else asks the canvas for a context.
+      const gopher2600Context = () => gopher2600Canvas().getContext('2d', {alpha: false});
+      gopher2600Context();
+      const gopher2600SizeCanvas = (canvas, width, height) => {
+        if (canvas.width === width && canvas.height === height) return;
+        canvas.width = width;
+        canvas.height = height;
+        // TIA color clocks are not square pixels: a real 2600's picture is shown
+        // about twice as wide as its clock count, the standard stretch that gives
+        // a ~4:3 TV aspect. App.vue scales the canvas by this CSS box.
+        canvas.style.width = (width * 2) + 'px';
+        canvas.style.height = height + 'px';
+      };
+
+      const handleGopher2600Message = (message) => {
+        const canvas = gopher2600Canvas();
+        switch (message.type) {
+          case 'ready':
+            gopher2600Ready = true;
+            // A fresh instance has no ROM attached - src/hooks/emulator.js's
+            // listener re-pushes whatever ROM was last compiled, and App.vue's
+            // re-applies the front-panel switches, once this fires.
+            window.dispatchEvent(new Event('gopher2600-ready'));
+            break;
+          case 'tickDone':
+            gopher2600TicksInFlight = Math.max(0, gopher2600TicksInFlight - 1);
+            break;
+          case 'frame':
+            if (!canvas) break;
+            gopher2600SizeCanvas(canvas, message.width, message.height);
+            gopher2600Context().putImageData(
+                new ImageData(new Uint8ClampedArray(message.pixels), message.width, message.height), 0, 0);
+            break;
+          case 'blank':
+            if (!canvas) break;
+            gopher2600SizeCanvas(canvas, message.width, message.height);
+            // Filled black, not cleared (which leaves it transparent and shows
+            // whatever is behind it instead of a dark "no signal" screen).
+            gopher2600Context().fillStyle = '#000';
+            gopher2600Context().fillRect(0, 0, canvas.width, canvas.height);
+            break;
+          case 'audio':
+            window.playGopher2600AudioChunk(message.frequency, new Float32Array(message.samples));
+            break;
+          case 'crashed':
+          case 'exited':
+            recoverGopher2600Worker(message.message || message.type);
+            break;
+        }
+      };
+
       let gopher2600CrashRecoveries = 0;
       const GOPHER2600_MAX_CRASH_RECOVERIES = 5;
-      window.addEventListener('error', (event) => {
-        const message = (event && event.message) || '';
-        if (!/memory access out of bounds|Go program has already exited/.test(message)) return;
-        if (gopher2600CrashRecoveries >= GOPHER2600_MAX_CRASH_RECOVERIES) return;
+      const startGopher2600Worker = () => {
+        gopher2600Ready = false;
+        gopher2600TicksInFlight = 0;
+        gopher2600Worker = new Worker('js/gopher2600-worker.js');
+        gopher2600Worker.onmessage = (event) => handleGopher2600Message(event.data);
+        gopher2600Worker.postMessage({type: 'setting', name: 'adaptiveFrameSkip', value: gopher2600AdaptiveFrameSkip});
+        // A fatal trap shows up as an error event on the worker (rate-limited
+        // below: a ROM that crashes the emulator every frame would otherwise
+        // restart it in a tight loop).
+        gopher2600Worker.onerror = (event) => {
+          event.preventDefault();
+          recoverGopher2600Worker((event && event.message) || 'worker error');
+        };
+      };
+      const recoverGopher2600Worker = (reason) => {
+        if (gopher2600CrashRecoveries >= GOPHER2600_MAX_CRASH_RECOVERIES) {
+          console.error('gopher2600-wasm stopped (' + reason + ') - giving up after ' +
+            GOPHER2600_MAX_CRASH_RECOVERIES + ' automatic recoveries');
+          return;
+        }
         gopher2600CrashRecoveries++;
-        console.error('gopher2600-wasm crashed (' + message + ') - reinstantiating a fresh instance ' +
+        console.error('gopher2600-wasm crashed (' + reason + ') - starting a fresh instance ' +
           '(recovery ' + gopher2600CrashRecoveries + '/' + GOPHER2600_MAX_CRASH_RECOVERIES + ')');
-        loadGopher2600Wasm();
+        gopher2600Worker.terminate();
+        startGopher2600Worker();
+      };
+      startGopher2600Worker();
+
+      window.gopher2600 = {};
+      GOPHER2600_API.forEach((name) => {
+        window.gopher2600[name] = (...args) => {
+          if (name === 'setKeyMapping') gopher2600KeyMapping = args[0] || [];
+          if (name === 'setKeypadMode') gopher2600KeypadMode[args[0]] = !!args[1];
+          gopher2600Worker.postMessage({type: 'call', name, args});
+        };
       });
+
+      window.gopher2600.setPaused = (paused) => {
+        gopher2600Paused = !!paused;
+      };
+      window.gopher2600.setAdaptiveFrameSkip = (enabled) => {
+        gopher2600AdaptiveFrameSkip = !!enabled;
+        gopher2600Worker.postMessage({type: 'setting', name: 'adaptiveFrameSkip', value: gopher2600AdaptiveFrameSkip});
+      };
+
+      // One tick per display refresh. A few may wait in the worker (a frame can
+      // take nearly a whole refresh to emulate, and waiting for each one to
+      // finish before sending the next would drop every other frame), but not an
+      // unbounded pile if the worker stalls. Ticks that wait cost nothing: the
+      // worker works out how many frames are due from their timestamps.
+      const GOPHER2600_MAX_TICKS_IN_FLIGHT = 3;
+      const sendGopher2600Tick = (timestamp) => {
+        if (gopher2600Ready && !gopher2600Paused && gopher2600TicksInFlight < GOPHER2600_MAX_TICKS_IN_FLIGHT) {
+          gopher2600TicksInFlight++;
+          gopher2600Worker.postMessage({type: 'tick', timestamp});
+        }
+        window.requestAnimationFrame(sendGopher2600Tick);
+      };
+      window.requestAnimationFrame(sendGopher2600Tick);
+
+      // Keyboard input. The worker has no DOM, so the page decides which keys are
+      // the emulator's and forwards them; keys in text fields are left alone.
+      const gopher2600IsEditableTarget = (event) => {
+        const target = event.target;
+        if (!target) return false;
+        if (target.isContentEditable) return true;
+        return ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
+      };
+      // A key can be bound as both a joystick and a keypad control for the same
+      // port (the defaults overlap); only the one matching what is plugged in
+      // is live.
+      const gopher2600HasBinding = (code) => gopher2600KeyMapping.some((binding) =>
+        binding.code === code && (binding.kind === 'keypad') === !!gopher2600KeypadMode[binding.port]);
+      const forwardGopher2600Key = (event, down) => {
+        if (gopher2600IsEditableTarget(event) || !gopher2600HasBinding(event.code)) return;
+        event.preventDefault();
+        // Auto-repeat keydowns are not new presses (the joystick toggles on
+        // each real press edge, so repeats would make a held direction stutter).
+        if (down && event.repeat) return;
+        gopher2600Worker.postMessage({type: 'key', code: event.code, down});
+      };
+      document.addEventListener('keydown', (event) => forwardGopher2600Key(event, true));
+      document.addEventListener('keyup', (event) => forwardGopher2600Key(event, false));
     </script>
    </body>
 </html>

@@ -14,6 +14,8 @@
 // replaced the npm package.
 import {WASI, File, Directory, OpenFile, PreopenDirectory} from '@bjorn3/browser_wasi_shim';
 
+import {adaptFor64k} from '../utils/bank64-returns';
+
 const wasmCache = {};
 const fetchWasm = async (path) => {
   if (wasmCache[path]) return wasmCache[path];
@@ -164,7 +166,8 @@ const prepareException = (mainMessage, errors, joinedOverride) => {
 };
 
 export const preprocessBatariBasic = async (code, log) => {
-  const r = await runWasi('bb19/preprocess.wasm', [], code, {}, log);
+  // A 64k ROM needs its gosubs and returns rewritten for bankswitching (see utils/bank64-returns.js).
+  const r = await runWasi('bb19/preprocess.wasm', [], adaptFor64k(code), {}, log);
   const errors = parseParenErrors(r.stderr);
   if (errors.length || r.exitCode !== 0) {
     throw prepareException('Errors while preprocessing.', errors.length ? errors : [{line: 0, msg: r.stderr}]);

@@ -502,7 +502,7 @@
 
 <script>
 import {useCompileLog, useConfigurationStorage, useDarkModeStorage, useDesaturateBlocklyColorsStorage, useErrorBannerHighlight, useErrorStorage,
-  useHideDescriptionTextStorage, useHideSidebarStorage, useStellaPathStorage,
+  useAdaptiveFrameSkipStorage, useHideDescriptionTextStorage, useHideSidebarStorage, useStellaPathStorage,
   markSkipLoadLastProjectCheckOnce} from './hooks/project';
 import {buildRom, useRomCapacity, useRomOutdated, useHasCompiledRom, useCompiledRomBytes,
   useBuildInProgress} from './hooks/rom';
@@ -511,6 +511,8 @@ import {escapeHtml} from './utils/build-error';
 import {captureEmulatorScreenshot} from './utils/emulator-screenshot';
 import {sanitizeForFilename} from './utils/file';
 import {syncExamples} from './hooks/examples';
+import {startGamepadInput} from './hooks/gamepad';
+import {startTapHold} from './hooks/tap-hold';
 import {syncSoundBanks} from './hooks/soundbanks';
 import KeyMappingDialog from './components/KeyMappingDialog.vue';
 import pkg from '../package.json';
@@ -613,6 +615,7 @@ export default {
       hideSidebarStorage: useHideSidebarStorage(),
       desaturateAppColorsStorage: useDesaturateBlocklyColorsStorage(),
       darkModeStorage: useDarkModeStorage(),
+      adaptiveFrameSkipStorage: useAdaptiveFrameSkipStorage(),
       configurationStorage: useConfigurationStorage(),
       romSaveMenuOpen: false,
       stellaPathStorage: useStellaPathStorage(),
@@ -623,6 +626,9 @@ export default {
     syncExamples();
     syncSoundBanks();
     this.attachEmulator();
+    this.applyAdaptiveFrameSkip();
+    this.stopGamepadInput = startGamepadInput();
+    this.stopTapHold = startTapHold();
     this.$vuetify.theme.dark = this.darkMode;
     window.addEventListener('resize', this.handleWindowResize);
     window.addEventListener('gopher2600-ready', this.handleGopher2600Ready);
@@ -630,6 +636,8 @@ export default {
   },
   beforeDestroy() {
     this.stopResize();
+    if (this.stopGamepadInput) this.stopGamepadInput();
+    if (this.stopTapHold) this.stopTapHold();
     window.clearInterval(this.emulatorWatchdogTimer);
     window.removeEventListener('resize', this.handleWindowResize);
     window.removeEventListener('gopher2600-ready', this.handleGopher2600Ready);
@@ -822,6 +830,10 @@ export default {
     },
   },
   watch: {
+    // The Options tab's adaptive frame skipping, passed on to the emulator whenever it changes.
+    'adaptiveFrameSkipStorage'() {
+      this.applyAdaptiveFrameSkip();
+    },
     // Vuetify's dark theme (see the .dark-mode CSS comment).
     darkMode(value) {
       this.$vuetify.theme.dark = value;
@@ -972,6 +984,13 @@ export default {
     // re-observing an already-observed one is a no-op).
     handleGopher2600Ready() {
       this.attachEmulator();
+      this.applyAdaptiveFrameSkip();
+    },
+    applyAdaptiveFrameSkip() {
+      const enabled = !!this.adaptiveFrameSkipStorage;
+      safeWithGopher2600((gopher2600) => {
+        if (typeof gopher2600.setAdaptiveFrameSkip === 'function') gopher2600.setAdaptiveFrameSkip(enabled);
+      });
     },
     // A single measurement is fragile: if it runs while the container's width
     // has not settled to the drawer width yet, the scale comes out too large,
@@ -1157,7 +1176,7 @@ export default {
     handleScreenshot() {
       const shot = captureEmulatorScreenshot();
       if (!shot) {
-        this.errorStorage.value = 'There is no emulator picture to capture yet.';
+        this.errorStorage = 'There is no emulator picture to capture yet.';
         return;
       }
       const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
@@ -1192,7 +1211,7 @@ export default {
     // list (see handleSaveRomClick); ignored when there is one.
     async handleRomDownload(extension = 'bin') {
       if (!this.compiledRomBytes) {
-        this.errorStorage.value =
+        this.errorStorage =
           'There is no compiled ROM yet; use "Update ROM" first.';
         return;
       }
@@ -1216,7 +1235,7 @@ export default {
           await writable.close();
         } catch (e) {
           // Cancelling the dialog is not an error.
-          if (e && e.name !== 'AbortError') this.errorStorage.value = `Could not save the ROM: ${e.message}`;
+          if (e && e.name !== 'AbortError') this.errorStorage = `Could not save the ROM: ${e.message}`;
         }
         return;
       }
@@ -1234,11 +1253,11 @@ export default {
     // browser tab has no way to launch a local program.
     async handleTestInStella() {
       if (!this.compiledRomBytes) {
-        this.errorStorage.value = 'There is no compiled ROM yet; use "Update ROM" first.';
+        this.errorStorage = 'There is no compiled ROM yet; use "Update ROM" first.';
         return;
       }
       if (!this.stellaPathStorage) {
-        this.errorStorage.value = 'Set the Stella installation location on the Options tab first.';
+        this.errorStorage = 'Set the Stella installation location on the Options tab first.';
         return;
       }
       this.launchingStella = true;
@@ -1248,7 +1267,7 @@ export default {
           // escapeHtml - errorStorage's <pre> renders via v-html now (see
           // showError's boldenErrorHeaders), so a raw '<'/'>'/'&' in a
           // Stella launch error would otherwise be parsed as real markup.
-          this.errorStorage.value = `Couldn't launch Stella: ${escapeHtml(result.error)}`;
+          this.errorStorage = `Couldn't launch Stella: ${escapeHtml(result.error)}`;
         }
       } finally {
         this.launchingStella = false;
@@ -2705,7 +2724,6 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
 /* Text that was dark grey. */
 .dark-mode.v-application .about-version,
 .dark-mode.v-application .app-logo-version,
-.dark-mode.v-application .key-mapping-hint,
 .dark-mode.v-application .quick-color-section-label,
 .dark-mode.v-application .music-section-label,
 .dark-mode.v-application .generated-code-search-count,

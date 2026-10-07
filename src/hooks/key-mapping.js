@@ -9,20 +9,18 @@ import {withGopher2600, safeWithGopher2600} from './emulator';
 // comment on keeping view/input preferences out of project storage.
 const STORAGE_KEY = 'vcs-game-maker.keyMapping';
 
-// Matches what the preview shipped with before this was configurable
-// (arrow keys + Space for Player 1's joystick, WASD + left-Ctrl for Player
-// 2's - see tools/gopher2600-wasm/main.go's git history), plus new
-// defaults for Keypad mode modeled on this project's earlier Javatari-based
-// preview's equivalent defaults (UserPreferences.js's keypadKeys):
-// Player 1's Keypad defaults to 1,2,3/Q,W,E/A,S,D/Z,X,C - this overlaps
-// Player 2's WASD joystick defaults, which is fine, since a port is only
-// ever actually Joystick OR Keypad at a time (see main.go's
+// WASD + left-Ctrl for Player 1's joystick, arrow keys + right Ctrl for Player 2's,
+// plus defaults for Keypad mode modeled on this project's earlier
+// Javatari-based preview's equivalent defaults (UserPreferences.js's
+// keypadKeys): Player 1's Keypad defaults to 1,2,3/Q,W,E/A,S,D/Z,X,C - this
+// overlaps Player 1's WASD joystick defaults, which is fine, since a port is
+// only ever actually Joystick OR Keypad at a time (see main.go's
 // keypadModeByPort/findKeyBinding) - and Player 2's Keypad defaults to the
 // numeric keypad.
 export const DEFAULT_KEY_MAPPING = {
   joystick: [
-    {up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight', fire: 'Space'},
     {up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD', fire: 'ControlLeft'},
+    {up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight', fire: 'ControlRight'},
   ],
   // k1-k9 read left-to-right, top-to-bottom (1,2,3/4,5,6/7,8,9); k10-k12 are
   // the bottom row (*, 0, #) - the same reading order

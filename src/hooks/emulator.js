@@ -53,6 +53,15 @@ export const withGopher2600 = (callback, retriesLeft = 40) => {
   window.setTimeout(() => withGopher2600(callback, retriesLeft - 1), 250);
 };
 
+// Stops (or restarts) the emulator running its frames, keeping the ROM and its state. A build
+// pauses it so the compiler has the machine to itself instead of sharing it with a game
+// running at 60 frames per second. A no-op if the emulator is an older build without it.
+export const setEmulatorPaused = (paused) => {
+  withGopher2600((gopher2600) => {
+    if (typeof gopher2600.setPaused === 'function') gopher2600.setPaused(paused);
+  });
+};
+
 // Empties the emulator and forgets the ROM behind it, for a new or imported
 // project (the ROM belonged to the project it replaces). A no-op on the
 // emulator side if it isn't loaded yet or is an older build without clearRom.

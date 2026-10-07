@@ -212,6 +212,15 @@
                   </v-btn-toggle>
 
                   <div class="animation-corner-toolbar">
+                    <v-btn
+                      icon
+                      small
+                      title="Duplicate this animation"
+                      class="titlescreen-play-btn player-icon-btn-size"
+                      @click.stop="() => handleDuplicateAnimation(animation)"
+                    >
+                      <v-icon>mdi-content-duplicate</v-icon>
+                    </v-btn>
                     <v-menu
                           top
                           :close-on-content-click="false"
@@ -1103,6 +1112,20 @@ export default defineComponent({
       }
     };
 
+    // A copy of an animation (every frame, with its pixels, row colors and
+    // duration) added at the end of the list under a new id, so no existing
+    // animation number or block that uses one changes.
+    const handleDuplicateAnimation = (animation) => {
+      const copy = JSON.parse(JSON.stringify(animation));
+      copy.id = getMaxId(state.value.animations) + 1;
+      copy.name = `${animation.name || 'Animation'} copy`;
+      state.value.animations.push(copy);
+      // Opened right away, like a newly added animation.
+      toggleCollapsed(copy);
+      handleChildChange();
+      instance.proxy.$forceUpdate();
+    };
+
     const handleDeleteAnimation = (animation) => {
       state.value.animations = state.value.animations.filter(({id}) => id != animation.id);
       console.info('Deleted ', animation);
@@ -1198,7 +1221,7 @@ export default defineComponent({
       handleAddFrame, handleDeleteFrame,
       handleImportAnimationFrames, replaceFramesOnImport, importMenuOpenAnimationId,
       handleImportAsepriteSheet, asepriteReplaceAnimations, asepriteImportMenuOpen,
-      handleAddAnimation, handleDeleteAnimation, handleSetPreviewScale,
+      handleAddAnimation, handleDeleteAnimation, handleDuplicateAnimation, handleSetPreviewScale,
       testingId, buildInProgress, handleTestAnimation,
       handleRowColorsInput, handleClearRowColors, editorRowColors, spriteColorsEnabled,
       copiedFrameRowColors, handleCopyRowColors, handlePasteRowColors,

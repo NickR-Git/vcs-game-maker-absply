@@ -52,19 +52,36 @@ const scoreDigitTarget = (digit) => {
 // temp1/temp2 are only clobbered by drawscreen, which can't run in the
 // middle of this. "end" has to sit at column 0, hence the "@" the indent
 // normaliser strips.
-const buildDigitPokeLines = (address, high, valueExpression) => [
-  `temp1 = ${valueExpression}`,
-  'asm',
-  'lda temp1',
-  'and #$0F',
-  ...(high ? ['asl', 'asl', 'asl', 'asl'] : []),
-  'sta temp2',
-  `lda ${address}`,
-  `and #${high ? '$0F' : '$F0'}`,
-  'ora temp2',
-  `sta ${address}`,
-  '@end',
-].join('\n');
+const buildDigitPokeLines = (address, high, valueExpression) => {
+  // A number known at build time needs no temp1 round trip or shifting: its
+  // nibble is merged straight in as an immediate (a plain 0 just clears it).
+  if (/^\s*\d+\s*$/.test(valueExpression)) {
+    const nibble = parseInt(valueExpression, 10) & 0x0F;
+    const merged = high ? nibble << 4 : nibble;
+    return [
+      'asm',
+      `lda ${address}`,
+      `and #${high ? '$0F' : '$F0'}`,
+      ...(merged ? [`ora #$${merged.toString(16).toUpperCase().padStart(2, '0')}`] : []),
+      `sta ${address}`,
+      '@end',
+    ].join('\n');
+  }
+  return [
+    `temp1 = ${valueExpression}`,
+    'asm',
+    'lda temp1',
+    // Four shifts push everything but the low nibble out of the byte, so the
+    // mask is only needed for the low digit.
+    ...(high ? ['asl', 'asl', 'asl', 'asl'] : ['and #$0F']),
+    'sta temp2',
+    `lda ${address}`,
+    `and #${high ? '$0F' : '$F0'}`,
+    'ora temp2',
+    `sta ${address}`,
+    '@end',
+  ].join('\n');
+};
 
 // Shared by score_set's literal-VALUE branch and
 // generateScanlinesDebugScoreCode below - a plain JS number, known at
@@ -76,11 +93,10 @@ const buildDigitPokeLines = (address, high, valueExpression) => [
 export const pokeScoreLiteral = (value) => {
   const clamped = Math.max(0, Math.min(999999, Math.round(value)));
   const digits = String(clamped).padStart(6, '0').split('');
-  const lines = digits.map((digitChar, i) => {
-    const {address, high} = scoreDigitTarget(String(i + 1));
-    return buildDigitPokeLines(address, high, digitChar);
-  });
-  return lines.join('\n') + '\n';
+  // Every digit is known, so each of the three score bytes is written whole.
+  const bytes = [0, 1, 2].map((byteIndex) =>
+    `lda #$${digits[byteIndex * 2]}${digits[byteIndex * 2 + 1]}\nsta ${byteIndex ? `score+${byteIndex}` : 'score'}`);
+  return ['asm', ...bytes, '@end'].join('\n') + '\n';
 };
 
 // Options tab's "Show NTSC scanlines used as the score (debug)" toggle

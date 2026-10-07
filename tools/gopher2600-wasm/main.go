@@ -8,11 +8,14 @@
 package main
 
 import (
+	"encoding/binary"
 	"fmt"
 	"image"
+	"image/color"
 	"runtime"
 	"runtime/debug"
 	"syscall/js"
+	"unsafe"
 
 	"github.com/jetsetilly/gopher2600/cartridgeloader"
 	"github.com/jetsetilly/gopher2600/environment"
@@ -39,7 +42,11 @@ type canvasRenderer struct {
 	crop       image.Rectangle
 	rgba       []byte
 	frameDone  bool
-	debugCount int
+
+	// color table for the current TV standard, see render()
+	lut      [256]uint32
+	lutID    string
+	lutValid bool
 }
 
 func (c *canvasRenderer) NewFrame(fi frameinfo.Current) error {
@@ -77,54 +84,53 @@ func (c *canvasRenderer) render() bool {
 		c.rgba = make([]byte, crop.Dx()*crop.Dy()*4)
 	}
 
-	c.debugCount++
-	debugThisFrame := c.debugCount%60 == 0 && c.debugCount < 600
-	if debugThisFrame {
-		js.Global().Get("console").Call("log", fmt.Sprintf(
-			"DEBUG frame=%d crop=%d,%d-%d,%d len(sig)=%d", c.debugCount,
-			crop.Min.X, crop.Min.Y, crop.Max.X, crop.Max.Y, len(sig)))
+	// Colors come from a 256-entry table built once per TV standard. SECAM colors depend on
+	// the line above (see Spec.GetColorScreen), so it keeps the per-pixel call.
+	if spec := c.frameInfo.Spec; spec.ID != c.lutID {
+		c.lutID = spec.ID
+		c.lutValid = spec.ID != "SECAM"
+		if c.lutValid {
+			for i := range c.lut {
+				col := spec.GetColor(signal.ColorSignal(i))
+				c.lut[i] = uint32(col.R) | uint32(col.G)<<8 | uint32(col.B)<<16 | 0xff000000
+			}
+		}
 	}
 
+	width := crop.Dx()
+	black := c.lut[signal.ZeroBlack]
 	for y := crop.Min.Y; y < crop.Max.Y; y++ {
+		rowOff := (y - crop.Min.Y) * width * 4
 		for x := crop.Min.X; x < crop.Max.X; x++ {
 			i := y*specification.ClksScanline + x
 			if i < 0 || i >= len(sig) {
 				continue
 			}
 
-			if debugThisFrame && y == crop.Min.Y+10 && x == crop.Min.X+10 {
-				js.Global().Get("console").Call("log", fmt.Sprintf(
-					"DEBUG bg pixel y=%d x=%d i=%d VBlank=%v Index=%v",
-					y, x, i, sig[i].VBlank, sig[i].Index))
-			}
-
-			var r, g, b byte
-			if sig[i].VBlank || sig[i].Index == signal.NoSignal {
-				col := c.frameInfo.Spec.GetColor(signal.ZeroBlack)
-				r, g, b = col.R, col.G, col.B
+			var px uint32
+			if c.lutValid {
+				if sig[i].VBlank || sig[i].Index == signal.NoSignal {
+					px = black
+				} else {
+					px = c.lut[sig[i].Color]
+				}
 			} else {
-				col := c.frameInfo.Spec.GetColorScreen(sig, i, specification.ClksScanline)
-				r, g, b = col.R, col.G, col.B
+				var col color.RGBA
+				if sig[i].VBlank || sig[i].Index == signal.NoSignal {
+					col = c.frameInfo.Spec.GetColor(signal.ZeroBlack)
+				} else {
+					col = c.frameInfo.Spec.GetColorScreen(sig, i, specification.ClksScanline)
+				}
+				px = uint32(col.R) | uint32(col.G)<<8 | uint32(col.B)<<16 | 0xff000000
 			}
 
-			off := ((y-crop.Min.Y)*crop.Dx() + (x - crop.Min.X)) * 4
-			// Defensive bounds check - off is normally guaranteed in-range
-			// by the loop bounds matching crop.Dx()*crop.Dy() (c.rgba's own
-			// size), but a real reported crash ("memory access out of
-			// bounds" inside onAnimationFrame, only after the emulator sat
-			// idle for a while with no interaction) couldn't be root-caused
-			// from static reading alone, and an out-of-range slice write
-			// here would surface as exactly that kind of fatal WASM trap
-			// rather than a recoverable Go panic in some circumstances.
-			// Skipping a would-be-out-of-range pixel is a visible glitch at
-			// worst; a raw memory trap kills the whole instance.
+			// Defensive bounds check, kept from before: an out-of-range slice write here
+			// would be a fatal WASM trap rather than a recoverable Go panic.
+			off := rowOff + (x-crop.Min.X)*4
 			if off < 0 || off+3 >= len(c.rgba) {
 				continue
 			}
-			c.rgba[off+0] = r
-			c.rgba[off+1] = g
-			c.rgba[off+2] = b
-			c.rgba[off+3] = 255
+			binary.LittleEndian.PutUint32(c.rgba[off:], px)
 		}
 	}
 	return true
@@ -174,13 +180,8 @@ type console struct {
 	romAttached bool
 	jamReported bool
 
-	canvas    js.Value
-	ctx       js.Value
-	jsBuf     js.Value
-	imageData js.Value
-	jsBufSize int
-
-	renderFrame js.Func
+	// audioBuf is reused every frame for the float32 conversion handed to JS.
+	audioBuf []float32
 
 	// frameCount paces the periodic runtime.GC() call in onAnimationFrame -
 	// see that call's comment for why.
@@ -231,28 +232,26 @@ const (
 	defaultCropHeight = 220
 )
 
-func newConsole(canvas js.Value) *console {
-	c := &console{canvas: canvas, keypadModeByPort: map[plugging.PortID]bool{}}
-	c.ctx = canvas.Call("getContext", "2d")
-
+func newConsole() *console {
+	c := &console{keypadModeByPort: map[plugging.PortID]bool{}}
 	c.resetCanvasSize()
-	c.renderFrame = js.FuncOf(c.onAnimationFrame)
 	return c
 }
 
-// resetCanvasSize puts the canvas back at the idle size and blanks it. The
-// next rendered frame resizes it again (jsBufSize 0 forces that).
+// resetCanvasSize tells the page to put its canvas back at the idle size and
+// blank it (this program runs in a web worker, with no canvas - see
+// public/js/gopher2600-worker.js). The next rendered frame resizes it again.
 func (c *console) resetCanvasSize() {
-	c.canvas.Set("width", defaultCropWidth)
-	c.canvas.Set("height", defaultCropHeight)
-	style := c.canvas.Get("style")
-	style.Set("width", fmt.Sprintf("%dpx", defaultCropWidth*2)) // see onAnimationFrame's comment on the 2x stretch
-	style.Set("height", fmt.Sprintf("%dpx", defaultCropHeight))
-	c.jsBufSize = 0
-	c.fillBlack()
+	js.Global().Call("g2kBlank", defaultCropWidth, defaultCropHeight)
 }
 
-func (c *console) onAnimationFrame(this js.Value, args []js.Value) (result any) {
+// stepFrame runs one emulated video frame. The page's frame loop (see
+// public/index.html) decides how many to run per display refresh so the
+// console always runs at 60 frames per second, whatever the monitor's refresh
+// rate; emit is false for a frame that is about to be replaced by a later one
+// in the same refresh, so its picture is not built or sent. Audio is always
+// sent, so no sound is lost.
+func (c *console) stepFrame(emit bool) (result any) {
 	defer func() {
 		if r := recover(); r != nil {
 			js.Global().Get("console").Call("error", fmt.Sprintf("PANIC in render loop: %v\n%s", r, debug.Stack()))
@@ -261,7 +260,6 @@ func (c *console) onAnimationFrame(this js.Value, args []js.Value) (result any) 
 	}()
 
 	if !c.poweredOn || c.vcs == nil || !c.romAttached {
-		js.Global().Call("requestAnimationFrame", c.renderFrame)
 		return nil
 	}
 
@@ -303,7 +301,6 @@ func (c *console) onAnimationFrame(this js.Value, args []js.Value) (result any) 
 					"data instead of code. This is a real hardware halt condition, not an emulator bug.",
 				c.vcs.CPU.PC.Address(), c.vcs.Mem.Cart.MappedBanks()))
 		}
-		js.Global().Call("requestAnimationFrame", c.renderFrame)
 		return nil
 	}
 
@@ -320,57 +317,31 @@ func (c *console) onAnimationFrame(this js.Value, args []js.Value) (result any) 
 		steps++
 	}
 
-	// Temporary diagnostic (not gated by debugCount's 600-frame cap like the
-	// existing DEBUG logs above, since a real reported freeze - confirmed
-	// directly via pixel-diffing the canvas, byte-identical across several
-	// seconds of input with zero console errors, so neither the Jammed check
-	// above nor Step()'s error path is firing - can outlast that cap.
-	// Logs the PC and whether this frame's step loop completed a real frame
-	// (frameDone) or bailed out on the 200_000-step safety cap, so a frozen
-	// picture can be told apart from "legitimately still running, just not
-	// visibly changing" - if PC stays IDENTICAL across many of these
-	// low-rate samples, the CPU is stuck spinning a tight loop that never
-	// reaches a JAM (an unbounded, all-legal-opcodes loop - not the same bug
-	// the Jammed check above catches).
-	if c.frameCount%30 == 0 {
-		js.Global().Get("console").Call("log", fmt.Sprintf(
-			"DIAG frame=%d PC=$%04x steps=%d frameDone=%v",
-			c.frameCount, c.vcs.CPU.PC.Address(), steps, c.renderer.frameDone))
-	}
-
-	if c.renderer.render() {
-		if c.jsBufSize != len(c.renderer.rgba) {
-			c.canvas.Set("width", c.renderer.crop.Dx())
-			c.canvas.Set("height", c.renderer.crop.Dy())
-			// TIA color clocks aren't square pixels - a real 2600's visible
-			// picture is displayed roughly twice as wide as its raw
-			// clock-count would suggest, the standard "double-wide" stretch
-			// every 2600 emulator applies to land on the correct ~4:3 TV
-			// aspect. App.vue's updateEmulatorScale scales this canvas
-			// uniformly (offsetWidth/offsetHeight, not the pixel buffer
-			// size), so setting the CSS box here is what makes that scaling
-			// preserve the right aspect instead of the raw (too-narrow)
-			// buffer shape.
-			style := c.canvas.Get("style")
-			style.Set("width", fmt.Sprintf("%dpx", c.renderer.crop.Dx()*2))
-			style.Set("height", fmt.Sprintf("%dpx", c.renderer.crop.Dy()))
-			c.jsBuf = js.Global().Get("Uint8ClampedArray").New(len(c.renderer.rgba))
-			c.imageData = js.Global().Get("ImageData").New(c.jsBuf, c.renderer.crop.Dx(), c.renderer.crop.Dy())
-			c.jsBufSize = len(c.renderer.rgba)
-		}
-		js.CopyBytesToJS(c.jsBuf, c.renderer.rgba)
-		c.ctx.Call("putImageData", c.imageData, 0, 0)
+	if emit && c.renderer.render() {
+		// The picture is copied into a fresh typed array the page can take
+		// over without copying again (it is transferred to the main thread).
+		// TIA color clocks are not square pixels: a real 2600's visible picture
+		// is shown roughly twice as wide as its raw clock count suggests, the
+		// standard "double-wide" stretch every 2600 emulator applies to land on
+		// a ~4:3 TV aspect; the page sets the canvas's CSS box to that.
+		pixels := js.Global().Get("Uint8Array").New(len(c.renderer.rgba))
+		js.CopyBytesToJS(pixels, c.renderer.rgba)
+		js.Global().Call("g2kPostFrame", c.renderer.crop.Dx(), c.renderer.crop.Dy(), pixels)
 	}
 
 	if samples := c.mixer.drain(); len(samples) > 0 && c.mixer.freq > 0 {
-		jsSamples := js.Global().Get("Float32Array").New(len(samples))
-		for i, s := range samples {
-			jsSamples.SetIndex(i, float64(s)/32768.0)
+		if cap(c.audioBuf) < len(samples) {
+			c.audioBuf = make([]float32, len(samples))
 		}
-		js.Global().Call("playGopher2600AudioChunk", c.mixer.freq, jsSamples)
+		floats := c.audioBuf[:len(samples)]
+		for i, s := range samples {
+			floats[i] = float32(s) / 32768.0
+		}
+		raw := unsafe.Slice((*byte)(unsafe.Pointer(&floats[0])), len(floats)*4)
+		bytes := js.Global().Get("Uint8Array").New(len(raw))
+		js.CopyBytesToJS(bytes, raw)
+		js.Global().Call("g2kPostAudio", c.mixer.freq, bytes)
 	}
-
-	js.Global().Call("requestAnimationFrame", c.renderFrame)
 	return nil
 }
 
@@ -392,7 +363,7 @@ func (c *console) powerOn() error {
 	// compiled ROM's kernel timing budget (the actual trigger - a heavy
 	// collision check only running on the one frame a hardware collision
 	// fires) is enough for the auto-detector to reclassify the signal as a
-	// different, longer-scanline spec - directly observed via a DIAG probe,
+	// different, longer-scanline spec - directly observed,
 	// len(sig) jumping 59735->79799 and the same sampled pixel flipping
 	// VBlank=false->true between frames, meaning the crop window
 	// recalculated for the new (wrong) spec lands on blank scanlines from
@@ -416,6 +387,11 @@ func (c *console) powerOn() error {
 	}
 
 	renderer := &canvasRenderer{}
+	// The television's built-in frame limiter makes every frame wait for a 1/60 s
+	// timer tick, which pads each frame out to a full 16.7 ms however little work it
+	// took (2.6 ms natively in a profile) and burns that time on this thread. The
+	// page's frame loop (see public/js/gopher2600-worker.js) does the pacing instead.
+	tv.SetFPSLimit(false)
 	tv.AddPixelRenderer(renderer)
 	mixer := &webAudioMixer{}
 	tv.SetRealTimeAudioMixer(mixer)
@@ -440,20 +416,7 @@ func (c *console) powerOff() {
 	c.poweredOn = false
 	c.vcs = nil
 	c.romAttached = false
-	c.jsBufSize = 0
-	c.fillBlack()
-}
-
-func (c *console) fillBlack() {
-	if !c.ctx.IsUndefined() {
-		// Fill black, not clearRect (which leaves the canvas transparent,
-		// showing whatever's behind it rather than a dark "no signal"
-		// screen matching a real powered-off console).
-		w := c.canvas.Get("width")
-		h := c.canvas.Get("height")
-		c.ctx.Set("fillStyle", "#000")
-		c.ctx.Call("fillRect", 0, 0, w, h)
-	}
+	c.resetCanvasSize()
 }
 
 // clearRom removes the loaded ROM and blanks the screen, leaving the console
@@ -597,97 +560,42 @@ func safeFunc(name string, fn func(this js.Value, args []js.Value) any) js.Func 
 	})
 }
 
-// isEditableTarget reports whether a keyboard event's target is a text-
-// entry element (an <input>/<textarea>, or anything contenteditable) - the
-// app embedding this canvas has real form fields sitting right alongside
-// it (the Project tab's Title field, every tab's name/search fields,
-// etc.), and this console's keydown/keyup listeners are registered on
-// `document` (see main() below), not scoped to the canvas itself, so
-// without this check every mapped key (WASD, arrows, Space, the numeric
-// keypad...) was intercepted - and preventDefault()'d - even while the
-// user was actively typing in one of those fields elsewhere on the page,
-// confirmed as a real reported bug ("why can't I use the space bar in text
-// fields now").
-func isEditableTarget(event js.Value) bool {
-	target := event.Get("target")
-	if target.IsUndefined() || target.IsNull() {
-		return false
-	}
-	if target.Get("isContentEditable").Truthy() {
-		return true
-	}
-	switch target.Get("tagName").String() {
-	case "INPUT", "TEXTAREA", "SELECT":
-		return true
-	}
-	return false
-}
-
 func main() {
-	canvas := js.Global().Get("document").Call("getElementById", "gopher2600-screen")
-	if canvas.IsUndefined() || canvas.IsNull() {
-		js.Global().Get("console").Call("error", "gopher2600-wasm: #gopher2600-screen canvas not found")
-		return
-	}
-
-	c := newConsole(canvas)
+	c := newConsole()
 	if err := c.powerOn(); err != nil {
 		js.Global().Get("console").Call("error", "gopher2600-wasm: power-on failed: "+err.Error())
 		return
 	}
-	// Started exactly once, here - onAnimationFrame re-schedules itself every
-	// frame for the lifetime of the page (as a no-op while powered off), so
-	// powerOn()/powerOff() only ever flip c.poweredOn rather than touching
-	// scheduling. Calling requestAnimationFrame again from powerOn() (as an
-	// earlier version of this did) stacks up an extra concurrent loop every
-	// time the user powers back on, racing multiple onAnimationFrame calls
-	// against the same VCS each frame and corrupting emulation state.
-	js.Global().Call("requestAnimationFrame", c.renderFrame)
-
-	js.Global().Get("document").Call("addEventListener", "keydown", safeFunc("keydown", func(this js.Value, args []js.Value) any {
-		if isEditableTarget(args[0]) {
-			return nil
-		}
-		code := args[0].Get("code").String()
-		if binding, ok := c.findKeyBinding(code); ok {
-			args[0].Call("preventDefault")
-			// KeyboardEvent.repeat is true for every OS-auto-repeated keydown
-			// a held key fires after the initial press, not just the first
-			// one - stick.go's HandleEvent XORs the axis bit for
-			// DataStickTrue (not a plain OR/set - see its "cancel" comment),
-			// so it's only correct to call once per real press edge. Without
-			// this check, every repeat toggled the bit off then back on
-			// again, confirmed as a real reported bug (holding a direction
-			// visibly stuttering - "like it's repeatedly registering the
-			// joystick movement"/"stops detecting... then re-detects").
-			if args[0].Get("repeat").Bool() {
-				return nil
-			}
-			if binding.Kind == "keypad" {
-				c.input(binding.Port, ports.KeypadDown, rune(binding.Control[0]))
-			} else if ev, ok := joystickEvent(binding.Control); ok {
-				c.input(binding.Port, ev, joystickEventData(binding.Control, true))
-			}
-		}
-		return nil
-	}))
-	js.Global().Get("document").Call("addEventListener", "keyup", safeFunc("keyup", func(this js.Value, args []js.Value) any {
-		if isEditableTarget(args[0]) {
-			return nil
-		}
-		code := args[0].Get("code").String()
-		if binding, ok := c.findKeyBinding(code); ok {
-			args[0].Call("preventDefault")
-			if binding.Kind == "keypad" {
-				c.input(binding.Port, ports.KeypadUp, nil)
-			} else if ev, ok := joystickEvent(binding.Control); ok {
-				c.input(binding.Port, ev, joystickEventData(binding.Control, false))
-			}
-		}
-		return nil
-	}))
 
 	api := js.Global().Get("Object").New()
+
+	// stepFrame(emit) runs one emulated frame - called by the worker's frame loop.
+	api.Set("stepFrame", safeFunc("stepFrame", func(this js.Value, args []js.Value) any {
+		c.stepFrame(len(args) == 0 || args[0].Truthy())
+		return nil
+	}))
+
+	// keyEvent(code, down) handles a keyboard press or release forwarded by the
+	// page. The page has already skipped text fields and auto-repeat (see
+	// public/index.html); stick.go's HandleEvent toggles the axis bit for
+	// DataStickTrue, so only real press edges may arrive here.
+	api.Set("keyEvent", safeFunc("keyEvent", func(this js.Value, args []js.Value) any {
+		binding, ok := c.findKeyBinding(args[0].String())
+		if !ok {
+			return nil
+		}
+		down := args[1].Bool()
+		if binding.Kind == "keypad" {
+			if down {
+				c.input(binding.Port, ports.KeypadDown, rune(binding.Control[0]))
+			} else {
+				c.input(binding.Port, ports.KeypadUp, nil)
+			}
+		} else if ev, ok := joystickEvent(binding.Control); ok {
+			c.input(binding.Port, ev, joystickEventData(binding.Control, down))
+		}
+		return nil
+	}))
 
 	api.Set("loadRom", safeFunc("loadRom", func(this js.Value, args []js.Value) any {
 		jsBytes := args[0]
@@ -802,6 +710,7 @@ func main() {
 
 	js.Global().Set("gopher2600", api)
 	js.Global().Get("console").Call("log", "gopher2600-wasm ready")
+	js.Global().Call("g2kReady")
 
 	select {} // keep the wasm program alive
 }

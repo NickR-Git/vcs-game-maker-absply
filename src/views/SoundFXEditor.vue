@@ -905,7 +905,7 @@ export default defineComponent({
 
     // Loads a previously exported sound bank file and opens the picker
     // dialog for it - same "click a card, then confirm what it does" shape
-    // as the emulator's Keyboard Mapping dialog (App.vue/
+    // as the emulator's Input Mapping dialog (App.vue/
     // KeyMappingDialog.vue), rather than importing every sound in the file
     // immediately and unconditionally the moment it's picked, which left no
     // way to bring in just a few sounds from a bank without also

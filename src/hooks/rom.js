@@ -34,7 +34,7 @@ import {markRomUpToDate, markRomOutdated, useRomOutdated, useHasCompiledRom,
   useCompiledRomBytes, setCompiledRomBytes, recordLoadedRomForRecovery, useLastBuildScreenshot} from './rom-status';
 import {captureEmulatorScreenshot} from '../utils/emulator-screenshot';
 import {CHAR_TO_GLYPH, TEXT_MESSAGE_LENGTH} from '../blocks/text-strings';
-import {withGopher2600} from './emulator';
+import {withGopher2600, setEmulatorPaused} from './emulator';
 import {setRomCapacity, useRomCapacity} from './rom-capacity';
 
 Vue.use(VueCompositionApi);
@@ -996,6 +996,7 @@ export const buildRom = async () => {
     return false;
   }
   buildInProgress.value = true;
+  setEmulatorPaused(true);
   const screenshotRef = useLastBuildScreenshot();
   screenshotRef.value = null;
   try {
@@ -1011,6 +1012,7 @@ export const buildRom = async () => {
     return built;
   } finally {
     buildInProgress.value = false;
+    setEmulatorPaused(false);
   }
 };
 
@@ -1790,7 +1792,8 @@ export const buildPlayerAnimationPreviewRom = (animationIndex, centerX, height, 
   const chain = steps.map((step) => step + '<next>').join('') + steps.map(() => '</next></block>').join('');
   return buildPreviewRom({
     name: `Player animation ${animationIndex}`,
-    configOverride: {...PREVIEW_TEXT_CONFIG, ...(spriteColors ? {enablePlayer0SpriteColors: true, enablePlayer1SpriteColors: true} : {})},
+    configOverride: {...PREVIEW_TEXT_CONFIG, previewAnimationOnly: animationIndex,
+      ...(spriteColors ? {enablePlayer0SpriteColors: true, enablePlayer1SpriteColors: true} : {})},
     xml: `<xml xmlns="https://developers.google.com/blockly/xml">` +
       `<block type="event_block"><field name="EVENT">system_start</field>` +
       `<statement name="DO">${chain}</statement></block>` +
@@ -1811,6 +1814,7 @@ const buildPreviewRom = async ({name, xml, titleScreen = false, configOverride =
     return false;
   }
   buildInProgress.value = true;
+  setEmulatorPaused(true);
   const errorStorage = useErrorStorage();
   const configurationStorage = useConfigurationStorage();
   try {
@@ -1987,5 +1991,6 @@ const buildPreviewRom = async ({name, xml, titleScreen = false, configOverride =
     }
   } finally {
     buildInProgress.value = false;
+    setEmulatorPaused(false);
   }
 };

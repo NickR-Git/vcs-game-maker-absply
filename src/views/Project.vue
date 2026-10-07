@@ -15,6 +15,17 @@
           icon
           small
           class="project-flat-icon-btn data-icon-btn-size"
+          :class="{'project-flat-icon-btn-active': !showExamples && !showSoundBanks}"
+          title="Project Settings"
+          @click="showSoundBanks = false; showExamples = false"
+        >
+          <v-icon>mdi-cog-outline</v-icon>
+        </v-btn>
+        <v-divider class="project-toolbar-divider" vertical />
+        <v-btn
+          icon
+          small
+          class="project-flat-icon-btn data-icon-btn-size"
           :class="{'project-flat-icon-btn-active': showExamples && !showSoundBanks}"
           :title="examples.status === 'loading' ? 'Example Projects (checking for updates...)' : 'Example Projects'"
           @click="showSoundBanks = false; showExamples = true"
@@ -130,17 +141,6 @@
           @click="handleSaveProjectAs"
         >
           <v-icon>mdi-content-save-edit</v-icon>
-        </v-btn>
-        <v-divider class="project-toolbar-divider" vertical />
-        <v-btn
-          icon
-          small
-          class="project-flat-icon-btn data-icon-btn-size"
-          :class="{'project-flat-icon-btn-active': !showExamples && !showSoundBanks}"
-          title="Project Settings"
-          @click="showSoundBanks = false; showExamples = false"
-        >
-          <v-icon>mdi-cog-outline</v-icon>
         </v-btn>
         <input
           ref="importFileInput"

@@ -10,6 +10,8 @@
  */
 'use strict';
 
+import {invertCondition} from './logic';
+
 /*
 goog.provide('Blockly.BBasic.loops');
 
@@ -221,9 +223,14 @@ export default (Blockly) => {
     let branch = Blockly.BBasic.statementToCode(block, 'DO');
     branch = Blockly.BBasic.addLoopTrap(branch, block); // eslint-disable-line
 
+    // "while" leaves when the opposite condition holds - one branch and one jump
+    // instead of a branch and three jumps - when that opposite can be written.
+    const opposite = isUntil ? null : invertCondition(argument0.trim());
     const codeForCondition = isUntil ?
       `if ${argument0} then goto ${endLabelName}` :
-      `if ${argument0} then goto ${loopLabelName} else goto ${endLabelName}`;
+      opposite !== null ?
+        `if ${opposite} then goto ${endLabelName}` :
+        `if ${argument0} then goto ${loopLabelName} else goto ${endLabelName}`;
 
     return [
       '@' + startLabelName,

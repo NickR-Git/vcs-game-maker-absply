@@ -123,6 +123,13 @@ export const resolveUsedPlayerAnimations = (workspace) => {
       if (varField === 'player1animation') unsafe.player1 = true;
     }
   });
+  // The Sprites tab's animation preview (see buildPlayerAnimationPreviewRom in
+  // hooks/rom.js) shows one animation on Player 0 and hides Player 1, so only that
+  // animation is built: without this, index 0 for both players came along with
+  // it, and a preview of any later animation could overflow the ROM (the preview
+  // has no relocation to make room).
+  const previewOnly = (useConfigurationStorage().value || {}).previewAnimationOnly;
+  if (Number.isInteger(previewOnly)) return {player0: new Set([previewOnly]), player1: new Set()};
   return {
     player0: unsafe.player0 ? null : used.player0,
     player1: unsafe.player1 ? null : used.player1,
@@ -969,6 +976,20 @@ export const generateRainbowColorChecks = (Blockly) => {
 // research into how Combat's shells ricochet). Index matches ANGLE's 0-15,
 // clockwise from Up, same convention as the 8-way scale just with a step
 // inserted between each original point.
+// The value of a generated expression that is just a number (optionally in parentheses),
+// or null. Lets a generator skip a range check on a value it can see is already in range.
+const literalNumber = (code) => {
+  const match = /^\s*\(?\s*(\d+)\s*\)?\s*$/.exec(code);
+  return match ? Number(match[1]) : null;
+};
+
+// The largest value a generated expression can have when it is a random number
+// divided down, "(rand/N)", which is 255 / N at most; null for anything else.
+const randomDivisionMax = (code) => {
+  const match = /^\s*\(\s*rand\s*\/\s*(\d+)\s*\)\s*$/.exec(code);
+  return match && Number(match[1]) > 0 ? Math.floor(255 / Number(match[1])) : null;
+};
+
 export const DIRECTION16_STEPS = [
   [0, -1], [1, -2], [1, -1], [2, -1],
   [1, 0], [2, 1], [1, 1], [1, 2],
@@ -1746,6 +1767,15 @@ export default (Blockly) => {
         const baseLabel = `_visibility_${blockNumber}`;
 
         const frameVarName = varName.replace('visibility', 'frame');
+        // A constant Visible/Hidden needs no test at all.
+        if (argument0.trim() === 'true') {
+          return `if ${frameVarName} = 255 then ${frameVarName} = 0
+`;
+        }
+        if (argument0.trim() === 'false') {
+          return `${frameVarName} = 255
+`;
+        }
         return [
           `if ${argument0} then goto ${baseLabel}_visible else ${frameVarName} = 255 : goto ${baseLabel}_end`,
           `@ ${baseLabel}_visible`,
@@ -2030,13 +2060,29 @@ export default (Blockly) => {
       const throttled = !!throttlePair;
       const interval = block.getFieldValue('THROTTLE') === 'TRUE' ?
         (resolveEnclosingFrameInterval(block) || 1) : 1;
-      return `${dirVar} = ${angle}\n` +
-        `if ${dirVar} = 255 then ${dirVar} = ${defaultAngle}\n` +
+      // 255 means "no clear direction" and picks the default. An angle that is a number, or a
+      // random number too small to reach 255, needs no check for it, and a speed that is a
+      // number is held to 0-7 here instead of at runtime.
+      const angleNumber = literalNumber(angle);
+      const randomMax = randomDivisionMax(angle);
+      const angleLines = angleNumber === 255 ?
+        `${dirVar} = ${defaultAngle}
+` :
+        `${dirVar} = ${angle}
+` +
+        (angleNumber !== null || (randomMax !== null && randomMax < 255) ? '' :
+          `if ${dirVar} = 255 then ${dirVar} = ${defaultAngle}
+`);
+      const speedNumber = literalNumber(speed);
+      const speedLines = speedIsConst ? '' : speedNumber !== null ?
+        `${speedPair.write} = ${Math.min(speedNumber, 7)}\n` :
+        `${speedPair.write} = ${speed}\n` +
+        // The speed is held to 0-7 whatever was plugged in.
+        `if ${speedPair.read} > 7 then ${speedPair.write} = 7\n`;
+      return angleLines +
         `${name}x = ${x}\n` +
         `${name}y = ${y}\n` +
-        (speedIsConst ? '' : `${speedPair.write} = ${speed}\n` +
-        // The speed is held to 0-7 whatever was plugged in.
-        `if ${speedPair.read} > 7 then ${speedPair.write} = 7\n`) +
+        speedLines +
         (throttled ? `${throttleResetPair.write} = ${interval}\n` : '') +
         // Was "= 1", forcing the very FIRST step to fire after just 1
         // frame regardless of interval, before falling into the correct
@@ -2490,24 +2536,29 @@ export default (Blockly) => {
       ` goto ${label('flipx')}`,
     ];
     if (hasFire) {
-      // One computed jump on the heading (the "on ... goto" statement, a few
-      // instructions) instead of a chain of 12 (8 directions) or 20 (16) compare
-      // lines: a straight heading goes straight to the flip it needs, a
-      // diagonal one sets its heading bits and goes on to look at the wall.
+      // One table read on the heading instead of a chain of 12 (8 directions) or 20
+      // (16) compare lines, or an "on ... goto" with a handler per direction:
+      // the entry is 0 for a straight vertical heading (go to the vertical flip),
+      // 255 for a straight horizontal one (the horizontal flip), and anything
+      // else is a diagonal heading's bits (go on to look at the wall).
       // A heading outside 0..steps-1 (no heading) flips both axes, as before.
       const table = is16 ? DIRECTION16_STEPS : [[0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1]];
-      const handler = (dir) => `_bph${dir}_${name}_${uid}`;
+      const entries = table.map(([xStep, yStep]) => (xStep && yStep) ?
+        (xStep > 0 ? 1 : 3) | (yStep > 0 ? 4 : 12) : (xStep ? 255 : 0));
       lines.push(
           ` if ${fireDirVar} >= ${steps} then goto ${label('flipboth')}`,
-          ` on ${fireDirVar} goto ${table.map((_, dir) => handler(dir)).join(' ')}`);
-      table.forEach(([xStep, yStep], dir) => {
-        lines.push(`@ ${handler(dir)}`);
-        if (xStep && yStep) {
-          lines.push(` temp5 = ${(xStep > 0 ? 1 : 3) | (yStep > 0 ? 4 : 12)}`, ` goto ${label('diagonal')}`);
-        } else {
-          lines.push(` goto ${label(xStep ? 'flipx' : 'flipy')}`);
-        }
-      });
+          ' asm',
+          ` ldx ${fireDirVar}`,
+          ` lda ${label('headtab')},x`,
+          ` jmp ${label('headgo')}`,
+          `@ ${label('headtab')}`,
+          ` .byte ${entries.join(',')}`,
+          `@ ${label('headgo')}`,
+          ' sta temp5',
+          '@end',
+          ` if temp5 = 0 then goto ${label('flipy')}`,
+          ` if temp5 = 255 then goto ${label('flipx')}`,
+          ` goto ${label('diagonal')}`);
     } else {
       lines.push(' temp5 = 0');
       if (hasInertia) {
@@ -2579,12 +2630,13 @@ export default (Blockly) => {
     // Superchip is off), so every access below has to pick whichever side
     // matches its position, same as any other reserveDevVarRW consumer.
     const stagePair = Blockly.BBasic.superchipRwPairs[missileBounceStageVarName(name)];
-    const blockNumber = Blockly.BBasic.blockNumbers.next(`bounce_${name}`);
-    const stage1Label = `_bounce_${name}_${blockNumber}_s1`;
-    const stage2Label = `_bounce_${name}_${blockNumber}_s2`;
-    const stage3Label = `_bounce_${name}_${blockNumber}_s3`;
-    const stage4Label = `_bounce_${name}_${blockNumber}_s4`;
-    const doneLabel = `_bounce_${name}_${blockNumber}_done`;
+    // The stage code is the same for every Bounce block of an object, so it lives
+    // once in a shared subroutine (see stageName below) and the labels are fixed.
+    const stage1Label = `_bounce_${name}_s1`;
+    const stage2Label = `_bounce_${name}_s2`;
+    const stage3Label = `_bounce_${name}_s3`;
+    const stage4Label = `_bounce_${name}_s4`;
+    const doneLabel = `_bounce_${name}_done`;
 
     const fireLines = {stage1: [], stage2: [], stage4: []};
     if (hasFire) {
@@ -2699,8 +2751,12 @@ export default (Blockly) => {
         buildPixelReflect({Blockly, name, resolveVar, hasFire, hasInertia, uid: 'shared'})
             .map((line) => line.replace(/^ /, '')).join('\n');
     }
+    // The stage subroutine can sit in a different bank than the Bounce block
+    // calling it, so its call into the reflect routine is tagged relative to
+    // the bank it is in.
+    const stageName = `_bouncestage_${name}`;
     const reflectSuffix = Blockly.BBasic.bankJumpSuffix(
-        Blockly.BBasic.getCurrentBank(), Blockly.BBasic.getSubroutineBank(reflectName));
+        Blockly.BBasic.getSubroutineBank(stageName), Blockly.BBasic.getSubroutineBank(reflectName));
     const reflectCall = [` gosub ${reflectName}${reflectSuffix}`];
 
     // Optional "new angle": replaces the reflected heading of a fired object on
@@ -2711,46 +2767,60 @@ export default (Blockly) => {
     if (hasFire && angleCode) {
       const dirVar = resolveVar(missileFireDirVarName(name));
       const maxAngle = (Blockly.BBasic.missileFire16UsedFor || new Set()).has(name) ? 15 : 7;
-      manualAngleLines.push(
-          ` ${dirVar} = ${angleCode}`,
-          ` if ${dirVar} > ${maxAngle} then ${dirVar} = ${maxAngle}`);
+      const angleNumber = literalNumber(angleCode);
+      if (angleNumber !== null) {
+        manualAngleLines.push(` ${dirVar} = ${Math.min(angleNumber, maxAngle)}`);
+      } else {
+        manualAngleLines.push(
+            ` ${dirVar} = ${angleCode}`,
+            ` if ${dirVar} > ${maxAngle} then ${dirVar} = ${maxAngle}`);
+      }
     }
 
+    // Reached by every Bounce block through a gosub, not repeated in each one.
+    if (!Blockly.BBasic.subroutines[stageName]) {
+      Blockly.BBasic.subroutines[stageName] = [
+        // "Still the same collision, one frame later" check - frameVar is
+        // advanced to what it'd need to equal for a genuine one-frame gap
+        // FIRST, compared, THEN overwritten with the real framecounter value
+        // for next time - byte-wrapping (0/255 rollover) falls out of this
+        // correctly for free, no special case needed.
+        ` temp6 = ${stagePair.read} & 48`,
+        // Mark this frame as a Bounce frame (see generateBounceStageChecks).
+        ` ${stagePair.write} = ${stagePair.read} | 64`,
+        ` if temp6 = 0 then goto ${stage1Label}`,
+        ` if temp6 = 16 then goto ${stage2Label}`,
+        ` if temp6 = 32 then goto ${stage3Label}`,
+        ` goto ${stage4Label}`,
+        `@ ${stage1Label}`,
+        ...fireLines.stage1,
+        ...inertiaLines.stage1,
+        ...reflectCall,
+        ` ${stagePair.write} = (${stagePair.read} & 79) | 16`,
+        ` goto ${doneLabel}`,
+        `@ ${stage2Label}`,
+        ...fireLines.stage2,
+        ...inertiaLines.stage2,
+        ` ${stagePair.write} = (${stagePair.read} & 79) | 32`,
+        ` goto ${doneLabel}`,
+        // Combat's deliberate "do nothing" grace frame (MxPFcount=$02) -
+        // gives the object one more frame to clear the wall on stage 2's
+        // heading before stage 4 gives up on it.
+        `@ ${stage3Label}`,
+        ` ${stagePair.write} = (${stagePair.read} & 79) | 48`,
+        ` goto ${doneLabel}`,
+        `@ ${stage4Label}`,
+        ...fireLines.stage4,
+        ...inertiaLines.stage4,
+        ` ${stagePair.write} = (${stagePair.read} & 79) | 48`,
+        `@ ${doneLabel}`,
+      ].map((line) => line.replace(/^ /, '')).join('\n');
+    }
+    const stageSuffix = Blockly.BBasic.bankJumpSuffix(
+        Blockly.BBasic.getCurrentBank(), Blockly.BBasic.getSubroutineBank(stageName));
+
     return [
-      // "Still the same collision, one frame later" check - frameVar is
-      // advanced to what it'd need to equal for a genuine one-frame gap
-      // FIRST, compared, THEN overwritten with the real framecounter value
-      // for next time - byte-wrapping (0/255 rollover) falls out of this
-      // correctly for free, no special case needed.
-      ` temp6 = ${stagePair.read} & 48`,
-      // Mark this frame as a Bounce frame (see generateBounceStageChecks).
-      ` ${stagePair.write} = ${stagePair.read} | 64`,
-      ` if temp6 = 0 then goto ${stage1Label}`,
-      ` if temp6 = 16 then goto ${stage2Label}`,
-      ` if temp6 = 32 then goto ${stage3Label}`,
-      ` goto ${stage4Label}`,
-      `@ ${stage1Label}`,
-      ...fireLines.stage1,
-      ...inertiaLines.stage1,
-      ...reflectCall,
-      ` ${stagePair.write} = (${stagePair.read} & 79) | 16`,
-      ` goto ${doneLabel}`,
-      `@ ${stage2Label}`,
-      ...fireLines.stage2,
-      ...inertiaLines.stage2,
-      ` ${stagePair.write} = (${stagePair.read} & 79) | 32`,
-      ` goto ${doneLabel}`,
-      // Combat's deliberate "do nothing" grace frame (MxPFcount=$02) -
-      // gives the object one more frame to clear the wall on stage 2's
-      // heading before stage 4 gives up on it.
-      `@ ${stage3Label}`,
-      ` ${stagePair.write} = (${stagePair.read} & 79) | 48`,
-      ` goto ${doneLabel}`,
-      `@ ${stage4Label}`,
-      ...fireLines.stage4,
-      ...inertiaLines.stage4,
-      ` ${stagePair.write} = (${stagePair.read} & 79) | 48`,
-      `@ ${doneLabel}`,
+      ` gosub ${stageName}${stageSuffix}`,
       // Set on every call, not just the first frame: while the object is still
       // touching what it hit, the give-up stage above would otherwise turn it
       // back around and replace this angle.

@@ -84,9 +84,13 @@ export default (Blockly) => {
     // evenly - see FRAME_OPTIONS in blocks/event.js), the resulting
     // periodicity is identical regardless of which representative of
     // framecounter this lands on.
+    // Folded into one constant (the "- 1" and the block's offset): "(framecounter - 1 + 0)"
+    // cost an extra subtract and add every frame the block runs.
+    const offset = (Number(frameDelta) - 1) & 255;
+    const frameValue = offset === 0 ? 'framecounter' : `(framecounter + ${offset})`;
     return '\n' +
     [
-      `temp1 = (framecounter - 1 + ${frameDelta}) & ${frameMask}`,
+      `temp1 = ${frameValue} & ${frameMask}`,
       `if temp1 then goto ${labelEnd}`,
       code,
       `@ ${labelEnd}`,

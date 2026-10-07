@@ -683,7 +683,7 @@ Blockly.BBasic.init = function(workspace) {
   });
 
   // Same early block-type pre-scan reasoning as missileFireUsedFor above,
-  // for screen_shake's  countdown dev var (see shakeScreenFramesVarName's
+  // for screen_shake's  dev var (see SHAKE_SCREEN_MAX_FRAMES's
   // comment in generators/bbasic/background.js) - a single boolean, not
   // a per-name Set, since there's only ever one screen. Also read directly
   // by generateConfiguration() further down to gate emitting "const
@@ -1455,13 +1455,16 @@ Blockly.BBasic.init = function(workspace) {
   // internally, corrupting them the instant the first pixel was plotted).
   if (this.backgroundLineUsed) {
     this.backgroundLineVarNames = {
-      x1: reserveDevVar('lineX1', undefined, 'background line: current X position'),
-      y1: reserveDevVar('lineY1', undefined, 'background line: current Y position'),
-      x2: reserveDevVar('lineX2', undefined, 'background line: end X position'),
-      y2: reserveDevVar('lineY2', undefined, 'background line: end Y position'),
-      dx: reserveDevVar('lineDX', undefined, 'background line: X distance'),
-      dy: reserveDevVar('lineDY', undefined, 'background line: Y distance'),
-      err: reserveDevVar('lineErr', undefined, 'background line: Bresenham error term'),
+      // Read/write pairs: only plain adds, subtracts and comparisons touch these,
+      // so they fit Superchip RAM's separate pool (see reserveDevVarRW) and
+      // leave seven of the ordinary variables free.
+      x1: reserveDevVarRW('lineX1', 'background line: current X position'),
+      y1: reserveDevVarRW('lineY1', 'background line: current Y position'),
+      x2: reserveDevVarRW('lineX2', 'background line: end X position'),
+      y2: reserveDevVarRW('lineY2', 'background line: end Y position'),
+      dx: reserveDevVarRW('lineDX', 'background line: X distance'),
+      dy: reserveDevVarRW('lineDY', 'background line: Y distance'),
+      err: reserveDevVarRW('lineErr', 'background line: Bresenham error term'),
     };
   }
 
@@ -1774,7 +1777,7 @@ Blockly.BBasic.init = function(workspace) {
   // shared per-joystick state (see reserveJoystickButtonDevVars'
   // comment in generators/bbasic/input.js) - a no-op unless joyButtonUsedFor's
   // early pre-scan (above) found any of them used.
-  reserveJoystickButtonDevVars(reserveDevVar, this.joyButtonUsedFor, this.joyButtonNeedsReleaseFor);
+  reserveJoystickButtonDevVars(reserveDevVar, this.joyButtonUsedFor, this.joyButtonNeedsReleaseFor, reserveDevVarRW);
 
   // Same bucket again, for each "Fire double-tapped" block's  per-
   // instance result+timer pair (see reserveJoystickDoubleTapDevVars'
@@ -2866,6 +2869,7 @@ Blockly.BBasic.finish = function(code) {
   code = Object.getPrototypeOf(this).finish.call(this, code);
   // Normalize indents
   code = Blockly.BBasic.normalizeIndents(code);
+  code = Blockly.BBasic.removeJumpsToNextLabel(code);
   // Workaround negation that's not working
   code = code.replaceAll(/(\W)not_(switch\w+(\W?))/g, '$1 !$2');
 
@@ -3153,6 +3157,35 @@ Blockly.BBasic.generateDivMul = function() {
 // the same way it checks isTextMinikernelActive() for text12a.asm/text12b.asm.
 Blockly.BBasic.usesDivMulRoutine = function() {
   return !!this.usesDivMul;
+};
+
+// Drops every "goto X" line whose only lines before label X are blank lines,
+// comments and other labels: a jump to the next instruction costs 3 bytes and
+// 3 cycles for nothing. The generated if/else, loop and run-once blocks leave
+// plenty of these behind (a body's closing "goto end" right before the end
+// label, a nested block's end label followed by its parent's).
+Blockly.BBasic.removeJumpsToNextLabel = function(code) {
+  const lines = code.split('\n');
+  const kept = [];
+  for (let i = 0; i < lines.length; i++) {
+    const jump = lines[i].match(/^\s*goto\s+(\w+)\s*$/);
+    let redundant = false;
+    if (jump) {
+      for (let j = i + 1; j < lines.length; j++) {
+        const next = lines[j];
+        if (/^\s*$/.test(next) || /^\s*rem(\s|$)/i.test(next)) continue;
+        // A label is the only kind of line that starts in the first column.
+        const label = next.match(/^([A-Za-z_]\w*)\s*$/);
+        if (!label) break;
+        if (label[1] === jump[1]) {
+          redundant = true;
+          break;
+        }
+      }
+    }
+    if (!redundant) kept.push(lines[i]);
+  }
+  return kept.join('\n');
 };
 
 Blockly.BBasic.normalizeIndents = function(code) {

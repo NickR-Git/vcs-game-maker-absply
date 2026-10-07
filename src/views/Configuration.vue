@@ -217,6 +217,13 @@
           class="option-switch"
         />
         <v-switch
+          v-model="adaptiveFrameSkip"
+          label="Adaptive frame skipping"
+          hint="On a slower computer, the preview emulator draws only some of the frames it runs when it is close to falling behind, which leaves more time for emulating. Game speed and sound are unchanged."
+          persistent-hint
+          class="option-switch"
+        />
+        <v-switch
           v-model="configurationState.showVariableComments"
           @change="handleChangeConfiguration"
           label="Show detailed comments in generated code"
@@ -278,7 +285,8 @@ import {TV_STANDARD_OPTIONS} from '../utils/tv-standard';
 import {USER_VARIABLE_LETTERS_WITHOUT_SUPERCHIP} from '../generators/bbasic';
 import {useBackgroundsStorage, useConfigurationStorage,
   useDarkModeStorage, useDesaturateBlocklyColorsStorage, useErrorStorage,
-  useHideDescriptionTextStorage, useHideSidebarStorage, useLoadLastProjectStorage, useMuteBlocklySoundsStorage,
+  useAdaptiveFrameSkipStorage, useHideDescriptionTextStorage, useHideSidebarStorage, useLoadLastProjectStorage,
+  useMuteBlocklySoundsStorage,
   useProjectAutoIncrementVersionStorage, useStellaPathStorage} from '../hooks/project';
 import {BANK_COUNT_BY_ROMSIZE, countUsedVariables, usesPlayer0RainbowColors} from '../hooks/rom';
 import {backgroundDataRows, reflowBackgroundsToHeight} from '../blocks/background';
@@ -364,6 +372,7 @@ export default defineComponent({
     // with the project itself via configurationState, silently resetting
     // every time you switched or started a new project.
     const muteBlocklySounds = useMuteBlocklySoundsStorage();
+    const adaptiveFrameSkip = useAdaptiveFrameSkipStorage();
     const hideSidebar = useHideSidebarStorage();
     const darkMode = useDarkModeStorage();
     const desaturateBlocklyColors = useDesaturateBlocklyColorsStorage();
@@ -595,6 +604,7 @@ export default defineComponent({
 
       loadLastProject.value = false;
       muteBlocklySounds.value = false;
+      adaptiveFrameSkip.value = true;
       hideDescriptionText.value = false;
       projectAutoIncrementVersion.value = false;
     };
@@ -612,7 +622,7 @@ export default defineComponent({
       player0RainbowColorsActive,
       enableMissile0BlankLines,
       loadLastProject,
-      muteBlocklySounds, hideSidebar, darkMode, desaturateBlocklyColors,
+      muteBlocklySounds, adaptiveFrameSkip, hideSidebar, darkMode, desaturateBlocklyColors,
       hideDescriptionText,
       stellaPathStorage, isElectron, handleBrowseForStella,
       isSectionCollapsed,

@@ -4,7 +4,7 @@
       <v-btn
         icon
         class="emulator-flat-icon-btn"
-        title="Configure joystick/keypad keyboard mapping"
+        title="Configure keyboard and gamepad input mapping"
         v-bind="attrs"
         v-on="on"
       >
@@ -12,34 +12,77 @@
       </v-btn>
     </template>
     <v-card>
-      <v-card-title>Keyboard Mapping</v-card-title>
-      <v-card-text>
-        <p class="key-mapping-hint">
-          Click a key, then press a new key on your keyboard. Escape cancels. A key already used
-          elsewhere is cleared from its old spot when reassigned. Two input devices of the same
-          type can't share one key.
+      <v-card-title>Input Mapping</v-card-title>
+      <v-card-text class="key-mapping-text">
+        <p class="v-messages theme--light v-messages__message">
+          Click a keyboard control, then press a new key. Click a gamepad control, then press a
+          button or push a stick. Escape cancels. A key already used elsewhere is cleared from its
+          old spot when reassigned. Two input devices of the same type can't share one key.
         </p>
         <div class="key-mapping-columns">
           <div v-for="(portName, portIndex) in portLabels" :key="portIndex" class="key-mapping-port">
             <h3>{{ portName }}</h3>
 
-            <h4>Joystick</h4>
-            <div class="key-mapping-controls">
-              <v-btn
-                v-for="control in joystickControls"
-                :key="'joystick-' + control"
-                small
-                outlined
-                :color="isCapturing('joystick', portIndex, control) ? 'primary' : undefined"
-                @click="startCapture('joystick', portIndex, control)"
-              >
-                {{ joystickControlLabels[control] }}:
-                {{ isCapturing('joystick', portIndex, control) ? 'Press a key…' : labelForCode(mapping.joystick[portIndex][control]) }}
-              </v-btn>
+            <div class="key-mapping-pair">
+              <div>
+                <h4>Joystick</h4>
+                <div class="key-mapping-controls">
+                  <v-btn
+                    v-for="control in joystickControls"
+                    :key="'joystick-' + control"
+                    small
+                    outlined
+                    :color="isCapturing('joystick', portIndex, control) ? 'primary' : undefined"
+                    @click="startCapture('joystick', portIndex, control)"
+                  >
+                    {{ joystickControlLabels[control] }}:
+                    {{ isCapturing('joystick', portIndex, control) ? 'Press a key…' : labelForCode(mapping.joystick[portIndex][control]) }}
+                  </v-btn>
+                </div>
+              </div>
+              <div>
+                <h4>Gamepad {{ portIndex + 1 }}</h4>
+                <div class="key-mapping-controls">
+                  <v-btn
+                    v-for="control in joystickControls"
+                    :key="'gamepad-' + control"
+                    small
+                    outlined
+                    :color="isCapturingGamepad(portIndex, control) ? 'primary' : undefined"
+                    @click="startGamepadCapture(portIndex, control)"
+                  >
+                    {{ gamepadControlLabels[control] }}:
+                    {{ isCapturingGamepad(portIndex, control) ? 'Press a button…' : gamepadLabel(portIndex, control) }}
+                  </v-btn>
+                  <div class="key-mapping-switch-row">
+                    <v-btn
+                      v-for="control in switchControls"
+                      :key="'gamepad-' + control"
+                      small
+                      outlined
+                      :color="isCapturingGamepad(portIndex, control) ? 'primary' : undefined"
+                      @click="startGamepadCapture(portIndex, control)"
+                    >
+                      {{ gamepadControlLabels[control] }}:
+                      {{ isCapturingGamepad(portIndex, control) ? 'Press a button…' : gamepadLabel(portIndex, control) }}
+                    </v-btn>
+                  </div>
+                </div>
+              </div>
             </div>
+          </div>
+        </div>
 
-            <h4>Keypad</h4>
-            <div class="key-mapping-controls key-mapping-keypad">
+        <div class="key-mapping-columns">
+          <div v-for="(portName, portIndex) in portLabels" :key="'keypad-' + portIndex" class="key-mapping-port">
+            <div class="key-mapping-keypad-heading">
+              <h4>Keypad</h4>
+              <v-btn-toggle v-model="keypadSource" mandatory dense class="key-mapping-keypad-source">
+                <v-btn x-small>Keyboard</v-btn>
+                <v-btn x-small>Gamepad</v-btn>
+              </v-btn-toggle>
+            </div>
+            <div v-if="keypadSource === 0" class="key-mapping-controls key-mapping-keypad">
               <v-btn
                 v-for="control in keypadControls"
                 :key="'keypad-' + control"
@@ -51,10 +94,22 @@
                 {{ isCapturing('keypad', portIndex, control) ? '…' : labelForCode(mapping.keypad[portIndex][control]) }}
               </v-btn>
             </div>
+            <div v-else class="key-mapping-controls key-mapping-keypad">
+              <v-btn
+                v-for="control in keypadControls"
+                :key="'gamepad-keypad-' + control"
+                small
+                outlined
+                :color="isCapturingGamepad(portIndex, control) ? 'primary' : undefined"
+                @click="startGamepadCapture(portIndex, control)"
+              >
+                {{ isCapturingGamepad(portIndex, control) ? '…' : gamepadLabel(portIndex, control, true) }}
+              </v-btn>
+            </div>
           </div>
         </div>
       </v-card-text>
-      <v-card-actions>
+      <v-card-actions class="key-mapping-actions">
         <v-btn text @click="handleReset">Reset to defaults</v-btn>
         <v-spacer></v-spacer>
         <v-btn text @click="open = false">Close</v-btn>
@@ -73,6 +128,13 @@ import {
   setKeyBinding,
   resetKeyMapping,
 } from '../hooks/key-mapping';
+import {
+  captureGamepadInput,
+  labelForGamepadInput,
+  resetGamepadMapping,
+  setGamepadBinding,
+  useGamepadMapping,
+} from '../hooks/gamepad';
 
 // Friendly labels for KeyboardEvent.code strings - only needs to cover the
 // codes an actual keyboard can produce for the controls this dialog binds
@@ -119,11 +181,23 @@ export default {
       joystickControlLabels: {up: 'Up', down: 'Down', left: 'Left', right: 'Right', fire: 'Fire'},
       capturing: null, // {kind, portIndex, control}
       keydownListener: null,
+      // Select and Reset share one row under the other gamepad controls.
+      switchControls: ['select', 'reset'],
+      gamepadControlLabels: {
+        up: 'Up', down: 'Down', left: 'Left', right: 'Right', fire: 'Fire', select: 'Select', reset: 'Reset',
+      },
+      // Which set of keypad buttons is shown (0 keyboard, 1 gamepad); both always work.
+      keypadSource: 0,
+      capturingGamepad: null, // {portIndex, control}
+      cancelGamepadCapture: null,
     };
   },
   computed: {
     mapping() {
       return useKeyMapping().value;
+    },
+    gamepadMapping() {
+      return useGamepadMapping().value;
     },
   },
   watch: {
@@ -159,7 +233,34 @@ export default {
       };
       document.addEventListener('keydown', this.keydownListener, true);
     },
+    gamepadLabel(portIndex, control, short) {
+      let inputs;
+      if (KEYPAD_CONTROLS.includes(control)) {
+        inputs = this.gamepadMapping.keypad[portIndex][control];
+      } else {
+        inputs = this.gamepadMapping.joystick[portIndex][control];
+      }
+      return inputs.map((input) => labelForGamepadInput(input, short)).join(' / ') || '—';
+    },
+    isCapturingGamepad(portIndex, control) {
+      return !!this.capturingGamepad && this.capturingGamepad.portIndex === portIndex &&
+        this.capturingGamepad.control === control;
+    },
+    startGamepadCapture(portIndex, control) {
+      this.stopCapture();
+      this.capturingGamepad = {portIndex, control};
+      // Each player's controls listen to that player's pad.
+      this.cancelGamepadCapture = captureGamepadInput((input) => {
+        setGamepadBinding(portIndex, control, input);
+        this.stopCapture();
+      }, portIndex);
+    },
     stopCapture() {
+      if (this.cancelGamepadCapture) {
+        this.cancelGamepadCapture();
+        this.cancelGamepadCapture = null;
+      }
+      this.capturingGamepad = null;
       if (this.keydownListener) {
         document.removeEventListener('keydown', this.keydownListener, true);
         this.keydownListener = null;
@@ -169,17 +270,13 @@ export default {
     handleReset() {
       this.stopCapture();
       resetKeyMapping();
+      resetGamepadMapping();
     },
   },
 };
 </script>
 
 <style scoped>
-.key-mapping-hint {
-  font-size: 0.85rem;
-  color: rgba(0, 0, 0, 0.6);
-}
-
 .key-mapping-columns {
   display: flex;
   gap: 24px;
@@ -189,6 +286,16 @@ export default {
 .key-mapping-port {
   flex: 1 1 260px;
   min-width: 260px;
+}
+
+/* Tight vertical spacing so the whole dialog fits a 1080p window without
+   scrolling. */
+.key-mapping-port h3 {
+  margin-bottom: 0;
+}
+
+.key-mapping-port h4 {
+  margin: 2px 0;
 }
 
 .key-mapping-controls {
@@ -201,8 +308,28 @@ export default {
      height between the two columns instead of lined up. */
   display: grid;
   grid-template-columns: 1fr;
-  gap: 4px;
-  margin-bottom: 12px;
+  gap: 3px;
+  margin-bottom: 6px;
+}
+
+.key-mapping-text {
+  padding-bottom: 0 !important;
+}
+
+.key-mapping-actions {
+  padding-top: 6px !important;
+}
+
+.key-mapping-switch-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+}
+
+.key-mapping-keypad-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .key-mapping-keypad {

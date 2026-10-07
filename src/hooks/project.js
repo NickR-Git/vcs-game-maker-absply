@@ -240,6 +240,10 @@ export const useHideDescriptionTextStorage = () =>
   useBooleanAppSetting('vcs-game-maker.hideDescriptionText');
 export const useMuteBlocklySoundsStorage = () =>
   useBooleanAppSetting('vcs-game-maker.muteBlocklySounds');
+// On by default (see public/js/gopher2600-worker.js's adaptive frame skipping): it only does
+// anything once the emulator is close to falling behind.
+export const useAdaptiveFrameSkipStorage = () =>
+  useBooleanAppSetting('vcs-game-maker.adaptiveFrameSkip', true);
 // Same "standing app preference, not a project setting" reasoning as the
 // three above - the grid-snap toggle (see ActionEditor.vue's
 // setupGridSnapZoomButton/toggleGridSnap) used to be page-local-only data,

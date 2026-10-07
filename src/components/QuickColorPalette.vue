@@ -112,7 +112,11 @@ export default defineComponent({
     const paletteStorage = useColorPaletteStorage();
     const palette = computed(() => paletteStorage.value || []);
     const handleAddColor = (byte) => {
-      if (palette.value.includes(byte)) return;
+      // A color already in the bar is selected there instead of added again.
+      if (palette.value.includes(byte)) {
+        emit('input', byte);
+        return;
+      }
       paletteStorage.value = [...palette.value, byte];
     };
     const handleRemoveColor = (byte) => {

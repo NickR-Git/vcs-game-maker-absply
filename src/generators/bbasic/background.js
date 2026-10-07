@@ -170,50 +170,50 @@ export const registerBackgroundLineSubroutine = (Blockly, names, operations) => 
     // names as the first.
     const tag = operation.charAt(0).toUpperCase() + operation.slice(1);
     const plot = [
-      `temp1 = ${x1}`,
-      `temp2 = ${y1}`,
+      `temp1 = ${x1.read}`,
+      `temp2 = ${y1.read}`,
       `pfpixel temp1 temp2 ${operation}`,
     ].join('\n');
 
     Blockly.BBasic.subroutines[BACKGROUND_LINE_SUBROUTINE_NAMES[operation]] = [
-      `if ${x2} >= ${x1} then ${dx} = ${x2} - ${x1} else ${dx} = ${x1} - ${x2}`,
-      `if ${y2} >= ${y1} then ${dy} = ${y2} - ${y1} else ${dy} = ${y1} - ${y2}`,
-      `if ${dx} < ${dy} then goto _lineDrawHigh${tag}`,
+      `if ${x2.read} >= ${x1.read} then ${dx.write} = ${x2.read} - ${x1.read} else ${dx.write} = ${x1.read} - ${x2.read}`,
+      `if ${y2.read} >= ${y1.read} then ${dy.write} = ${y2.read} - ${y1.read} else ${dy.write} = ${y1.read} - ${y2.read}`,
+      `if ${dx.read} < ${dy.read} then goto _lineDrawHigh${tag}`,
       '',
       `@ _lineDrawLow${tag}`,
-      `${err} = 128 + ${dy} + ${dy} - ${dx}`,
+      `${err.write} = 128 + ${dy.read} + ${dy.read} - ${dx.read}`,
       `@ _lineLowLoop${tag}`,
       plot,
-      `if ${x1} = ${x2} then return`,
-      `if ${err} <= 128 then goto _lineSkipYLow${tag}`,
-      `if ${y1} < ${y2} then ${y1} = ${y1} + 1 else ${y1} = ${y1} - 1`,
-      `${err} = ${err} - ${dx} - ${dx}`,
+      `if ${x1.read} = ${x2.read} then return`,
+      `if ${err.read} <= 128 then goto _lineSkipYLow${tag}`,
+      `if ${y1.read} < ${y2.read} then ${y1.write} = ${y1.read} + 1 else ${y1.write} = ${y1.read} - 1`,
+      `${err.write} = ${err.read} - ${dx.read} - ${dx.read}`,
       `@ _lineSkipYLow${tag}`,
-      `${err} = ${err} + ${dy} + ${dy}`,
-      `if ${x1} < ${x2} then ${x1} = ${x1} + 1 else ${x1} = ${x1} - 1`,
+      `${err.write} = ${err.read} + ${dy.read} + ${dy.read}`,
+      `if ${x1.read} < ${x2.read} then ${x1.write} = ${x1.read} + 1 else ${x1.write} = ${x1.read} - 1`,
       `goto _lineLowLoop${tag}`,
       '',
       `@ _lineDrawHigh${tag}`,
-      `${err} = 128 + ${dx} + ${dx} - ${dy}`,
+      `${err.write} = 128 + ${dx.read} + ${dx.read} - ${dy.read}`,
       `@ _lineHighLoop${tag}`,
       plot,
-      `if ${y1} = ${y2} then return`,
-      `if ${err} <= 128 then goto _lineSkipXHigh${tag}`,
-      `if ${x1} < ${x2} then ${x1} = ${x1} + 1 else ${x1} = ${x1} - 1`,
-      `${err} = ${err} - ${dy} - ${dy}`,
+      `if ${y1.read} = ${y2.read} then return`,
+      `if ${err.read} <= 128 then goto _lineSkipXHigh${tag}`,
+      `if ${x1.read} < ${x2.read} then ${x1.write} = ${x1.read} + 1 else ${x1.write} = ${x1.read} - 1`,
+      `${err.write} = ${err.read} - ${dy.read} - ${dy.read}`,
       `@ _lineSkipXHigh${tag}`,
-      `${err} = ${err} + ${dx} + ${dx}`,
-      `if ${y1} < ${y2} then ${y1} = ${y1} + 1 else ${y1} = ${y1} - 1`,
+      `${err.write} = ${err.read} + ${dx.read} + ${dx.read}`,
+      `if ${y1.read} < ${y2.read} then ${y1.write} = ${y1.read} + 1 else ${y1.write} = ${y1.read} - 1`,
       `goto _lineHighLoop${tag}`,
     ].join('\n');
   });
 };
 
-// screen_shake's  countdown (see generateShakeScreenChecks below for the
-// per-frame use of it) - only reserved when a screen_shake block is
-// actually on the canvas (screenShakeUsed, same early-pre-scan pattern as
-// every other feature's "*Used"/"*UsedFor" dev var reservation).
-export const shakeScreenFramesVarName = () => 'shakeScreenFrames';
+// screen_shake's frame countdown lives in the low 7 bits of "shakescreen" itself (see
+// generateShakeScreenChecks below): the kernel only looks at bit 7 of that byte, so the
+// rest of it is free, and a separate countdown variable is not needed. That limits a shake
+// to 127 frames.
+export const SHAKE_SCREEN_MAX_FRAMES = 127;
 
 // Unlike every other feature in this file, this ALSO has to reserve the
 // literal bareword "shakescreen" itself, not just a private canonical dev
@@ -233,8 +233,8 @@ export const shakeScreenFramesVarName = () => 'shakeScreenFrames';
 export const reserveShakeScreenDevVar = (reserveDevVar, used) => {
   if (!used) return;
   reserveDevVar('shakescreen', undefined,
-      'literal name the standard kernel checks for/reads every frame to drive screen shake');
-  reserveDevVar(shakeScreenFramesVarName(), undefined, 'frames remaining in the current screen shake');
+      'literal name the standard kernel checks for/reads every frame to drive screen shake ' +
+      '(bit 7), also holding the frames left in the shake (bits 0-6)');
 };
 
 // Spliced into commongamelogic (see bbasic.bb.hbs) once, unconditionally -
@@ -263,23 +263,34 @@ export const reserveShakeScreenDevVar = (reserveDevVar, used) => {
 // tested.
 export const generateShakeScreenChecks = (Blockly) => {
   if (!Blockly.BBasic.screenShakeUsed) return '';
-  const resolveVar = (canonicalName) =>
-    Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
-  const framesVar = resolveVar(shakeScreenFramesVarName());
-  const shakeVar = resolveVar('shakescreen');
+  const shakeVar = Blockly.BBasic.nameDB_.getName('shakescreen', Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+  // One byte holds both things: bits 0-6 are the frames left, bit 7 is the kernel's flag
+  // (set draws normally, clear shifts the picture down a scanline). Each frame it reads
+  // the frames left (f), and with none left sets the byte to 128 (normal). Otherwise it
+  // stores f-1 with bit 7 set when f-1 is odd, which is the same as the old "shake on the
+  // frames where the countdown was odd, read before the decrement" (a 1-frame shake still
+  // shows one shaken frame). Hand-written 6502 in the same format as the other asm
+  // splices in commongamelogic: one leading space on "asm", labels in the first column.
   return [
-    ` if ${framesVar} = 0 then goto _shakescreen_off`,
-    ` if ${framesVar}{0} then goto _shakescreen_on`,
-    ` ${shakeVar} = 128`,
-    ` goto _shakescreen_decrement`,
-    `_shakescreen_on`,
-    ` ${shakeVar} = 0`,
-    `_shakescreen_decrement`,
-    ` ${framesVar} = ${framesVar} - 1`,
-    ` goto _shakescreen_done`,
-    `_shakescreen_off`,
-    ` ${shakeVar} = 128`,
-    `_shakescreen_done`,
+    ' asm',
+    '       lda ' + shakeVar,
+    '       and #$7F',
+    '       beq _shakescreenasm_off',
+    '       sec',
+    '       sbc #1',
+    '       sta temp1',
+    '       lsr',
+    '       lda temp1',
+    '       bcc _shakescreenasm_store',
+    '       ora #$80',
+    '_shakescreenasm_store',
+    '       sta ' + shakeVar,
+    '       jmp _shakescreenasm_done',
+    '_shakescreenasm_off',
+    '       lda #$80',
+    '       sta ' + shakeVar,
+    '_shakescreenasm_done',
+    'end',
   ].join('\n') + '\n';
 };
 
@@ -507,12 +518,32 @@ export default (Blockly) => {
     const label = (part) => `_fp_${sprite}_${is16 ? 16 : 8}_${part}`;
     const lab = (part) => `@ ${label(part)}`;
     const widthBits = coords.sizeBits || null;
-    const lines = ['temp3 = 0', 'temp6 = 0'];
     const steps = is16 ? DIRECTION16_STEPS : [[0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1]];
-    steps.forEach(([xStep, yStep], dir) => {
-      if (xStep) lines.push(`if temp5 = ${dir} then temp3 = ${xStep > 0 ? 1 : 2}`);
-      if (yStep) lines.push(`if temp5 = ${dir} then temp6 = ${yStep > 0 ? 1 : 2}`);
-    });
+    // The direction's horizontal step (0 none, 1 right, 2 left) and vertical step
+    // (0 none, 1 down, 2 up) come from two small tables read by index: a chain of
+    // compares ran up to 2 per direction (about 30 of them for 16 directions) every
+    // time the routine was called. A direction outside the table has no step.
+    const stepCode = (step) => (step > 0 ? 1 : step < 0 ? 2 : 0);
+    const lines = [
+      'asm',
+      'lda #0',
+      'sta temp3',
+      'sta temp6',
+      'ldx temp5',
+      `cpx #${steps.length}`,
+      'bcs ' + label('dirskip'),
+      'lda ' + label('xtab') + ',x',
+      'sta temp3',
+      'lda ' + label('ytab') + ',x',
+      'sta temp6',
+      'jmp ' + label('dirskip'),
+      `@${label('xtab')}`,
+      `.byte ${steps.map(([xStep]) => stepCode(xStep)).join(',')}`,
+      `@${label('ytab')}`,
+      `.byte ${steps.map(([, yStep]) => stepCode(yStep)).join(',')}`,
+      `@${label('dirskip')}`,
+      '@end',
+    ];
     lines.push(
         `${col.write} = (${coords.x} - ${coords.pfXOffset}) / 4`,
         ...(widthBits ? [] : [`if ${coords.stretched} then ${col.write} = (${coords.x} - ${coords.pfXOffset - 1}) / 4`]),
@@ -1432,10 +1463,10 @@ export default (Blockly) => {
     const subroutineName = BACKGROUND_LINE_SUBROUTINE_NAMES[operation];
     const suffix = Blockly.BBasic.bankJumpSuffix(
         Blockly.BBasic.getCurrentBank(), Blockly.BBasic.getSubroutineBank(subroutineName));
-    return `${names.x1} = ${argumentX1}\n` +
-      `${names.y1} = ${argumentY1}\n` +
-      `${names.x2} = ${argumentX2}\n` +
-      `${names.y2} = ${argumentY2}\n` +
+    return `${names.x1.write} = ${argumentX1}\n` +
+      `${names.y1.write} = ${argumentY1}\n` +
+      `${names.x2.write} = ${argumentX2}\n` +
+      `${names.y2.write} = ${argumentY2}\n` +
       `gosub ${subroutineName}${suffix}\n`;
   };
 
@@ -1777,14 +1808,18 @@ export default (Blockly) => {
   // (Re)starts the countdown generateShakeScreenChecks counts down every
   // frame - just the countdown, same "trigger sets state, a separate
   // generate*Checks does the per-frame work" split as every other
-  // multi-frame effect in this codebase. screenShakeUsed's  pre-scan in
-  // bbasic.js's init() guarantees framesVar already exists here.
+  // multi-frame effect in this codebase. The countdown is the low 7 bits of "shakescreen"
+  // (bit 7 stays clear, which the per-frame check turns into the right value before the
+  // kernel ever reads it), so it is limited to SHAKE_SCREEN_MAX_FRAMES.
   Blockly.BBasic[`screen_shake`] = function(block) {
-    const resolveVar = (canonicalName) =>
-      Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
-    const framesVar = resolveVar(shakeScreenFramesVarName());
-    const frames = Blockly.BBasic.valueToCode(block, 'FRAMES', Blockly.BBasic.ORDER_ASSIGNMENT) || '0';
-    return `${framesVar} = ${frames}\n`;
+    const shakeVar = Blockly.BBasic.nameDB_.getName('shakescreen', Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+    const frames = (Blockly.BBasic.valueToCode(block, 'FRAMES', Blockly.BBasic.ORDER_ASSIGNMENT) || '0').trim();
+    if (/^\d+$/.test(frames)) {
+      return `${shakeVar} = ${Math.min(Number(frames), SHAKE_SCREEN_MAX_FRAMES)}\n`;
+    }
+    return `temp1 = ${frames}\n` +
+      `if temp1 > ${SHAKE_SCREEN_MAX_FRAMES} then temp1 = ${SHAKE_SCREEN_MAX_FRAMES}\n` +
+      `${shakeVar} = temp1\n`;
   };
 };
 

@@ -356,10 +356,12 @@ export const JOY_BUTTON_JUST_RELEASED_BIT = 7;
 // double-tap block used anywhere in the project (has to be known before
 // reserveDevVar hands out user variable letters, well before this feature's
 // generator would otherwise run).
-export const reserveJoystickButtonDevVars = (reserveDevVar, usedFor, needsReleaseFor) => {
+export const reserveJoystickButtonDevVars = (reserveDevVar, usedFor, needsReleaseFor, reserveDevVarRW) => {
   if (!usedFor || !usedFor.size) return;
   usedFor.forEach((name) => {
-    reserveDevVar(joyButtonHeldVarName(name), undefined,
+    // A read/write pair (Superchip RAM's separate pool): only assigned, added to and
+    // compared, so it leaves one of the ordinary variables free.
+    reserveDevVarRW(joyButtonHeldVarName(name),
         'this joystick\'s Fire button: frames continuously held (saturates at 255)');
     // Only for tapped/released/double-tapped (see joyButtonNeedsReleaseFor in
     // bbasic.js): a joystick only checked with "held" skips this variable.
@@ -392,15 +394,15 @@ export const generateJoystickButtonChecks = (Blockly) => {
   ['joy0', 'joy1'].forEach((name) => {
     if (!used.has(name)) return;
     const fireVar = resolveSystemVar(`${name}fire`);
-    const heldVar = resolveDevVar(joyButtonHeldVarName(name));
+    const held = Blockly.BBasic.superchipRwPairs[joyButtonHeldVarName(name)];
     if (!(Blockly.BBasic.joyButtonNeedsReleaseFor && Blockly.BBasic.joyButtonNeedsReleaseFor.has(name))) {
       // Only "held" is checked: count the frames Fire has been down, nothing more.
       lines.push(
           ` if ${fireVar} then goto _${name}btn_down`,
-          ` ${heldVar} = 0`,
+          ` ${held.write} = 0`,
           ` goto _${name}btn_done`,
           `_${name}btn_down`,
-          ` if ${heldVar} <> 255 then ${heldVar} = ${heldVar} + 1`,
+          ` if ${held.read} <> 255 then ${held.write} = ${held.read} + 1`,
           `_${name}btn_done`,
       );
       return;
@@ -417,12 +419,12 @@ export const generateJoystickButtonChecks = (Blockly) => {
         // doing that: real batari Basic's  grammar doesn't accept a
         // bit-read as the left side of a "=" comparison, only as a bare
         // boolean.
-        ` if ${heldVar} = 0 then goto _${name}btn_up_done`,
+        ` if ${held.read} = 0 then goto _${name}btn_up_done`,
         // Was down last frame, up now - the release transition.
-        ` ${lastPressFramesVar} = ${heldVar}`,
+        ` ${lastPressFramesVar} = ${held.read}`,
         ` if ${lastPressFramesVar} > 127 then ${lastPressFramesVar} = 127`,
         ` ${justReleasedVar} = 1`,
-        ` ${heldVar} = 0`,
+        ` ${held.write} = 0`,
         ` goto _${name}btn_done`,
         `_${name}btn_up_done`,
         // Already up last frame too - nothing changed.
@@ -430,7 +432,7 @@ export const generateJoystickButtonChecks = (Blockly) => {
         ` goto _${name}btn_done`,
         `_${name}btn_down`,
         ` ${justReleasedVar} = 0`,
-        ` if ${heldVar} <> 255 then ${heldVar} = ${heldVar} + 1`,
+        ` if ${held.read} <> 255 then ${held.write} = ${held.read} + 1`,
         `_${name}btn_done`,
     );
   });
@@ -571,9 +573,8 @@ export default (Blockly) => {
       return [`${flagsVar}{${JOY_BUTTON_JUST_RELEASED_BIT}}`, Blockly.BBasic.ORDER_ATOMIC];
     }
     if (mode === 'HOLD') {
-      const heldVar = Blockly.BBasic.nameDB_.getName(
-          joyButtonHeldVarName(name), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
-      return [`${heldVar} >= ${frames}`, Blockly.BBasic.ORDER_RELATIONAL];
+      const held = Blockly.BBasic.superchipRwPairs[joyButtonHeldVarName(name)];
+      return [`${held.read} >= ${frames}`, Blockly.BBasic.ORDER_RELATIONAL];
     }
     if (mode === 'DOUBLE_TAP') {
       const entry = Blockly.BBasic.joyDoubleTapChecks && Blockly.BBasic.joyDoubleTapChecks.get(block.id);

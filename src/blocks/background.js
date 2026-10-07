@@ -1278,7 +1278,7 @@ Blockly.defineBlocksWithJsonArray([
     'nextStatement': null,
     'colour': BACKGROUND_COLOR,
     'tooltip': 'Vibrates the whole screen up and down by one scanline, every other frame, for roughly ' +
-      'this many frames, then stops automatically. Only needs to be triggered once - the shake keeps ' +
+      'this many frames (at most 127; a longer count is shortened to 127), then stops automatically. Only needs to be triggered once - the shake keeps ' +
       'running by itself every frame afterward, even from inside an "if" block that only briefly ' +
       'becomes true, same as "Fade color to". Triggering it again while already shaking restarts the ' +
       'countdown at the new frame count, rather than stacking.',
