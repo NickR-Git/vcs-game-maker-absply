@@ -35,7 +35,9 @@
               icon
               small
               class="soundfx-bank-btn soundfx-icon-btn-size"
-              title="Save every sound effect/instrument in this project to a single .vcsbnk sound bank file"
+              :title="selectedSoundEffects.length > 1 ?
+                `Save the ${selectedSoundEffects.length} selected sounds to a single .vcsbnk sound bank file` :
+                'Save every sound effect/instrument in this project to a single .vcsbnk sound bank file (Shift+click or Ctrl+click cards to pick which)'"
               @click="handleExportSoundBank"
             >
               <!-- mdi-database-export/-import, not the plain mdi-export/
@@ -67,7 +69,7 @@
               small
               :title="UNDO_TITLE"
               class="soundfx-bank-btn soundfx-icon-btn-size"
-              :disabled="!selectedSoundEffect || !canUndoEnvelope(selectedSoundEffect)"
+              :disabled="!(selectedSoundEffect && canUndoEnvelope(selectedSoundEffect)) && !reorderCanUndo"
               @click="() => handleUndoEnvelope(selectedSoundEffect)"
             >
               <v-icon>mdi-undo</v-icon>
@@ -77,7 +79,7 @@
               small
               :title="REDO_TITLE"
               class="soundfx-bank-btn soundfx-icon-btn-size"
-              :disabled="!selectedSoundEffect || !canRedoEnvelope(selectedSoundEffect)"
+              :disabled="!(selectedSoundEffect && canRedoEnvelope(selectedSoundEffect)) && !reorderCanRedo"
               @click="() => handleRedoEnvelope(selectedSoundEffect)"
             >
               <v-icon>mdi-redo</v-icon>
@@ -86,10 +88,12 @@
             <v-btn
               icon
               small
-              title="Export sound effect to .vcssnd file (Shift+E)"
+              :title="selectedSoundEffects.length > 1 ?
+                `Export each of the ${selectedSoundEffects.length} selected sounds to a separate .vcssnd file (Shift+E)` :
+                'Export sound effect to .vcssnd file (Shift+E)'"
               class="soundfx-bank-btn soundfx-icon-btn-size"
               :disabled="!selectedSoundEffect"
-              @click="() => handleExportSoundEffect(selectedSoundEffect)"
+              @click="handleExportSelectedSoundEffects"
             >
               <v-icon>mdi-export</v-icon>
             </v-btn>
@@ -183,9 +187,10 @@
                 outlined
                 :ripple="false"
                 class="soundfx-card"
-                :class="[dragCardClass(index), {'soundfx-card-selected': soundEffect.id === selectedCardId}]"
+                :class="[dragCardClass(index), {'soundfx-card-selected': selectedCardIds.includes(soundEffect.id)}]"
                 v-on="dragTargetListeners(index)"
-                @click.stop="selectCard(soundEffect.id)"
+                @mousedown.shift.prevent
+                @click.stop="(event) => selectCard(soundEffect.id, event)"
               >
                 <div
                   class="soundfx-drag-handle"
@@ -446,7 +451,7 @@
                             small
                             :title="UNDO_TITLE"
                             class="soundfx-stop-btn soundfx-icon-btn-size"
-                            :disabled="!canUndoEnvelope(soundEffect)"
+                            :disabled="!canUndoEnvelope(soundEffect) && !reorderCanUndo"
                             @click="() => handleUndoEnvelope(soundEffect)"
                           >
                             <v-icon small>mdi-undo</v-icon>
@@ -456,7 +461,7 @@
                             small
                             :title="REDO_TITLE"
                             class="soundfx-stop-btn soundfx-icon-btn-size"
-                            :disabled="!canRedoEnvelope(soundEffect)"
+                            :disabled="!canRedoEnvelope(soundEffect) && !reorderCanRedo"
                             @click="() => handleRedoEnvelope(soundEffect)"
                           >
                             <v-icon small>mdi-redo</v-icon>
@@ -507,6 +512,7 @@ import {max} from 'lodash';
 
 import {useCollapsedIds} from '../hooks/collapse';
 import {useDragReorder} from '../hooks/drag-reorder';
+import {canRedoReorder, canUndoReorder, noteEdit, settleEdits, tryRedoReorder, tryUndoReorder} from '../hooks/reorder-history';
 import {useDimSoundFxPercentStorage, useDimSoundFxStorage, useSoundEffectsStorage,
   useSoundFxColumnsStorage} from '../hooks/project';
 import {AUDC_OPTIONS} from '../blocks/sound';
@@ -562,17 +568,48 @@ export default defineComponent({
     // outside any card (this tab's  outer editor-container, see its
     // @click) clears the selection.
     const selectedCardId = ref(null);
-    const selectCard = (id) => {
-      selectedCardId.value = id;
+    // Every selected card. Shift+click selects the cards from the anchor (the card clicked last
+    // without Shift) to the one clicked; Ctrl/Cmd+click adds a card to the selection or takes it
+    // out. selectedCardId stays the one the shared toolbar's per-sound buttons act on: the card
+    // clicked last.
+    const selectedCardIds = ref([]);
+    let anchorCardId = null;
+    const selectCard = (id, event = {}) => {
+      const ids = state.value.soundEffects.map((soundEffect) => soundEffect.id);
+      if (event.shiftKey && ids.includes(anchorCardId)) {
+        const from = ids.indexOf(anchorCardId);
+        const to = ids.indexOf(id);
+        selectedCardIds.value = ids.slice(Math.min(from, to), Math.max(from, to) + 1);
+        selectedCardId.value = id;
+      } else if (event.ctrlKey || event.metaKey) {
+        if (selectedCardIds.value.includes(id)) {
+          selectedCardIds.value = selectedCardIds.value.filter((other) => other !== id);
+          selectedCardId.value = selectedCardIds.value.length ?
+            selectedCardIds.value[selectedCardIds.value.length - 1] : null;
+        } else {
+          selectedCardIds.value = [...selectedCardIds.value, id];
+          selectedCardId.value = id;
+        }
+        anchorCardId = id;
+      } else {
+        selectedCardIds.value = [id];
+        selectedCardId.value = id;
+        anchorCardId = id;
+      }
     };
     const deselectCard = () => {
       selectedCardId.value = null;
+      selectedCardIds.value = [];
+      anchorCardId = null;
     };
     // The sound effect the shared toolbar below acts on - whichever card is
     // currently selected, same pattern as DataEditor.vue's selectedTable
     // and MusicEditor.vue's activeSong().
     const selectedSoundEffect = computed(() =>
       state.value.soundEffects.find(({id}) => id === selectedCardId.value) || null);
+    // The selected cards, in the order they are listed.
+    const selectedSoundEffects = computed(() =>
+      state.value.soundEffects.filter(({id}) => selectedCardIds.value.includes(id)));
 
     const state = computed({
       get() {
@@ -651,6 +688,7 @@ export default defineComponent({
           const last = envelopeLastSnapshot[soundEffect.id];
           if (last !== undefined && last !== snapshot) {
             const stack = envelopeUndoStacks.value[soundEffect.id] || [];
+            noteEdit();
             envelopeUndoStacks.value = {...envelopeUndoStacks.value, [soundEffect.id]: [...stack, last]};
             if ((envelopeRedoStacks.value[soundEffect.id] || []).length) {
               envelopeRedoStacks.value = {...envelopeRedoStacks.value, [soundEffect.id]: []};
@@ -673,7 +711,11 @@ export default defineComponent({
     };
     const canUndoEnvelope = (soundEffect) => (envelopeUndoStacks.value[soundEffect.id] || []).length > 0;
     const canRedoEnvelope = (soundEffect) => (envelopeRedoStacks.value[soundEffect.id] || []).length > 0;
+    const reorderCanUndo = computed(() => canUndoReorder());
+    const reorderCanRedo = computed(() => canRedoReorder());
     const handleUndoEnvelope = (soundEffect) => {
+      if (tryUndoReorder()) return;
+      if (!soundEffect) return;
       const stack = envelopeUndoStacks.value[soundEffect.id] || [];
       if (!stack.length) return;
       const redoStack = envelopeRedoStacks.value[soundEffect.id] || [];
@@ -681,8 +723,11 @@ export default defineComponent({
         [soundEffect.id]: [...redoStack, snapshotEnvelope(soundEffect)]};
       envelopeUndoStacks.value = {...envelopeUndoStacks.value, [soundEffect.id]: stack.slice(0, -1)};
       applyEnvelopeSnapshot(soundEffect, stack[stack.length - 1]);
+      settleEdits();
     };
     const handleRedoEnvelope = (soundEffect) => {
+      if (tryRedoReorder()) return;
+      if (!soundEffect) return;
       const stack = envelopeRedoStacks.value[soundEffect.id] || [];
       if (!stack.length) return;
       const undoStack = envelopeUndoStacks.value[soundEffect.id] || [];
@@ -770,8 +815,10 @@ export default defineComponent({
       const history = undoRedoKind(event);
       if (history) {
         const soundEffect = selectedSoundEffect.value;
-        if (!soundEffect) return;
-        if (history === 'undo' ? canUndoEnvelope(soundEffect) : canRedoEnvelope(soundEffect)) {
+        const can = history === 'undo' ?
+          reorderCanUndo.value || (soundEffect && canUndoEnvelope(soundEffect)) :
+          reorderCanRedo.value || (soundEffect && canRedoEnvelope(soundEffect));
+        if (can) {
           event.preventDefault();
           (history === 'undo' ? handleUndoEnvelope : handleRedoEnvelope)(soundEffect);
         }
@@ -795,7 +842,7 @@ export default defineComponent({
         handlePlaySoundEffect(selectedSoundEffect.value);
       } else if (key.toLowerCase() === 'e' && event.shiftKey) {
         event.preventDefault();
-        handleExportSoundEffect(selectedSoundEffect.value);
+        handleExportSelectedSoundEffects();
       } else if (key.toLowerCase() === 'i' && event.shiftKey) {
         event.preventDefault();
         handleImportSoundEffect(selectedSoundEffect.value);
@@ -880,6 +927,12 @@ export default defineComponent({
       saveAs(blob, `Sound_${filename}-${getDateInfix()}.vcssnd`);
     };
 
+    // One .vcssnd file for the selected card, or one for each when several are selected.
+    const handleExportSelectedSoundEffects = () => {
+      const chosen = selectedSoundEffects.value.length > 1 ? selectedSoundEffects.value : [selectedSoundEffect.value];
+      chosen.filter(Boolean).forEach((soundEffect) => handleExportSoundEffect(soundEffect));
+    };
+
     // Overwrites this sound effect card's  data with a previously
     // exported .vcssnd file's contents - keeps this card's  id (see
     // handleExportSoundEffect) untouched so every soundfx_play block and
@@ -918,8 +971,10 @@ export default defineComponent({
     // on import, matching Project.vue's  convention of tagging a saved
     // file's kind) purely so a stray file opened outside this app is
     // recognizable at a glance.
+    // With two or more cards selected, only those go in the bank.
     const handleExportSoundBank = () => {
-      const soundEffects = state.value.soundEffects.map(({id, ...rest}) => rest); // eslint-disable-line no-unused-vars
+      const chosen = selectedSoundEffects.value.length > 1 ? selectedSoundEffects.value : state.value.soundEffects;
+      const soundEffects = chosen.map(({id, ...rest}) => rest); // eslint-disable-line no-unused-vars
       const blob = new Blob(
           [JSON.stringify({type: 'VCS Game Maker Sound Bank', soundEffects}, null, 2)],
           {type: 'application/json'});
@@ -1018,13 +1073,14 @@ export default defineComponent({
     };
 
     return {
-      selectedCardId, selectCard, deselectCard, selectedSoundEffect, isSoundFxToolbarScrolled,
+      selectedCardId, selectedCardIds, selectCard, deselectCard, selectedSoundEffect, selectedSoundEffects,
+      handleExportSelectedSoundEffects, isSoundFxToolbarScrolled,
       state, handleChildChange, handleAddSoundEffect, handleDeleteSoundEffect, handleDuplicateSoundEffect,
       handlePlaySoundEffect,
       handleExportSoundEffect, handleImportSoundEffect,
       handleExportSoundBank, handleImportSoundBank,
       soundBankImportOpen, soundBankImportEntries, handleConfirmSoundBankImport,
-      canUndoEnvelope, canRedoEnvelope, handleUndoEnvelope, handleRedoEnvelope, UNDO_TITLE, REDO_TITLE, handleResetEnvelope,
+      canUndoEnvelope, canRedoEnvelope, handleUndoEnvelope, handleRedoEnvelope, reorderCanUndo, reorderCanRedo, UNDO_TITLE, REDO_TITLE, handleResetEnvelope,
       handleStopPreview, handleSetSoundEffectColor, handleToggleInstrument, autoInstrumentColor,
       isCollapsed, toggleCollapsed,
       audcHasTunableNotes, frequencyItems, handleAudcChange,

@@ -938,6 +938,11 @@ export default {
       // font-race bug, but with a NEW symptom ("fields overlapping" rather
       // than plain wrong sizing) that only this ordering, not the font race
       // itself, explains.
+      // render() alone only re-measures a field that is marked dirty, and a field measured
+      // against the fallback font before the real one arrived is not: its text width stays the
+      // old one and the block keeps the wrong size. BlockSvg.markDirty() marks every field of
+      // the block (and the renderer's constants) for a fresh measurement.
+      this.markBlocksDirty(this.workspace);
       this.workspace.render();
       // The toolbox flyout is a genuinely separate sub-workspace (its
       // blocks, its  earlier text measurement race) - workspace.render()
@@ -951,8 +956,14 @@ export default {
       const flyout = this.workspace.getFlyout && this.workspace.getFlyout();
       const flyoutWorkspace = flyout && flyout.getWorkspace && flyout.getWorkspace();
       if (flyoutWorkspace) {
+        this.markBlocksDirty(flyoutWorkspace);
         flyoutWorkspace.render();
       }
+    },
+    markBlocksDirty(workspace) {
+      workspace.getAllBlocks(false).forEach((block) => {
+        if (block.markDirty) block.markDirty();
+      });
     },
     setSoundsEnabled(enabled) {
       const audioMgr = this.workspace.getAudioManager();

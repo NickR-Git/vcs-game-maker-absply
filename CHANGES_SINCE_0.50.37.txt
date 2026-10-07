@@ -858,3 +858,16 @@ Gamepads, 64k fixes, smaller generated code, faster emulator
 - Project tab: Settings is the first icon, then New, Open, Save and Save As, then Example Projects
   and Sound Banks.
 - Options: the playfield vertical resolution label is no longer cut off.
+
+=== 0.51.30 ===
+Undo for reordering, sound multi-select, Blockly sizing
+
+- Dragging cards, frames, backgrounds, title cards, data tables and values, music sequence chips,
+  text cards and quick colors into a new order can be undone and redone (Ctrl+Z, Ctrl+Shift+Z or
+  Ctrl+Y, and the Undo and Redo buttons). A reorder is undone first only when it is the most
+  recent change on the tab, and it is dropped if cards were added or deleted since.
+- Sound FX tab: Shift+click selects the cards between two clicks, Ctrl+click adds or removes one.
+  Saving a sound bank with several selected saves only those sounds, and Export saves each
+  selected sound to a separate file.
+- Blocks are measured again after the font loads, so they are no longer the wrong size after a
+  page reload.

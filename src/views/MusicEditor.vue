@@ -480,7 +480,7 @@
                             small
                             :title="UNDO_TITLE"
                             class="music-flat-icon-btn music-icon-btn-size piano-roll-transport-btn"
-                            :disabled="!canUndoPattern(activePattern(song))"
+                            :disabled="!canUndoPattern(activePattern(song)) && !reorderCanUndo"
                             @click="() => handleUndoPattern(song, activePattern(song))"
                           >
                             <v-icon small>mdi-undo</v-icon>
@@ -490,7 +490,7 @@
                             small
                             :title="REDO_TITLE"
                             class="music-flat-icon-btn music-icon-btn-size piano-roll-transport-btn"
-                            :disabled="!canRedoPattern(activePattern(song))"
+                            :disabled="!canRedoPattern(activePattern(song)) && !reorderCanRedo"
                             @click="() => handleRedoPattern(song, activePattern(song))"
                           >
                             <v-icon small>mdi-redo</v-icon>
@@ -798,6 +798,8 @@ import {max} from 'lodash';
 
 import ConfirmDeleteMenu from '../components/ConfirmDeleteMenu.vue';
 import {useCollapsedIds} from '../hooks/collapse';
+import {recordReorder, sameItems} from '../hooks/reorder-history';
+import {canRedoReorder, canUndoReorder, noteEdit, settleEdits, tryRedoReorder, tryUndoReorder} from '../hooks/reorder-history';
 import {useMusicEditorActiveState, usePlaybackStatusState} from '../hooks/music-editor-state';
 import {useDimSoundFxPercentStorage, useDimSoundFxStorage, useSongsStorage,
   useSoundEffectsStorage, loadMutedMusicTrackIds, loadSoloedMusicTrackIds, MUTED_MUSIC_TRACKS_KEY,
@@ -1197,6 +1199,7 @@ export default defineComponent({
           const last = patternLastSnapshot[pattern.id];
           if (last !== undefined && last !== snapshot) {
             const stack = patternUndoStacks.value[pattern.id] || [];
+            noteEdit();
             patternUndoStacks.value = {...patternUndoStacks.value, [pattern.id]: [...stack, last]};
             // A fresh edit invalidates whatever redo history existed from an
             // earlier undo - same convention as any standard undo/redo stack.
@@ -1220,7 +1223,11 @@ export default defineComponent({
     };
     const canUndoPattern = (pattern) => (patternUndoStacks.value[pattern.id] || []).length > 0;
     const canRedoPattern = (pattern) => (patternRedoStacks.value[pattern.id] || []).length > 0;
+    const reorderCanUndo = computed(() => canUndoReorder());
+    const reorderCanRedo = computed(() => canRedoReorder());
     const handleUndoPattern = (song, pattern) => {
+      if (tryUndoReorder()) return;
+      if (!pattern) return;
       const stack = patternUndoStacks.value[pattern.id] || [];
       if (!stack.length) return;
       const redoStack = patternRedoStacks.value[pattern.id] || [];
@@ -1230,8 +1237,11 @@ export default defineComponent({
       recalculateFitBaseWidth(song, pattern);
       handleChildChange();
       forceUpdate();
+      settleEdits();
     };
     const handleRedoPattern = (song, pattern) => {
+      if (tryRedoReorder()) return;
+      if (!pattern) return;
       const stack = patternRedoStacks.value[pattern.id] || [];
       if (!stack.length) return;
       const undoStack = patternUndoStacks.value[pattern.id] || [];
@@ -2387,12 +2397,25 @@ export default defineComponent({
         let insertAt = side === 'after' ? targetIndex + 1 : targetIndex;
         if (fromIndex < insertAt) insertAt--;
         if (insertAt === fromIndex) return;
+        const before = song.sequence.slice();
         const [moved] = sequence.splice(fromIndex, 1);
         sequence.splice(insertAt, 0, moved);
         song.sequence = sequence;
         renumberSequenceIds(song);
         handleChildChange();
         forceUpdate();
+        const after = sequence.slice();
+        const restore = (order) => {
+          song.sequence = order.slice();
+          renumberSequenceIds(song);
+          handleChildChange();
+          forceUpdate();
+        };
+        recordReorder({
+          undo: () => restore(before),
+          redo: () => restore(after),
+          isCurrent: () => sameItems(song.sequence, after),
+        });
       },
     });
 
@@ -3910,8 +3933,10 @@ export default defineComponent({
       if (history) {
         const song = activeSong();
         const pattern = song && activePattern(song);
-        if (!pattern) return;
-        if (history === 'undo' ? canUndoPattern(pattern) : canRedoPattern(pattern)) {
+        const can = history === 'undo' ?
+          reorderCanUndo.value || (pattern && canUndoPattern(pattern)) :
+          reorderCanRedo.value || (pattern && canRedoPattern(pattern));
+        if (can) {
           event.preventDefault();
           (history === 'undo' ? handleUndoPattern : handleRedoPattern)(song, pattern);
         }
@@ -3981,7 +4006,7 @@ export default defineComponent({
       activeSongId, activeSong, activeSongArray, setActiveSong, songName, songOptions, handleSongFieldChange,
       handleAddPattern, handleDuplicatePattern, handleDeletePattern, handleStepCountChange,
       handlePatternFieldChange,
-      canUndoPattern, canRedoPattern, handleUndoPattern, handleRedoPattern, UNDO_TITLE, REDO_TITLE,
+      canUndoPattern, canRedoPattern, handleUndoPattern, handleRedoPattern, reorderCanUndo, reorderCanRedo, UNDO_TITLE, REDO_TITLE,
       handleExportPattern, handleImportPattern,
       handleAddTrack, handleDeleteTrack, copiedTrackNotes, handleCopyTrack, handlePasteTrack,
       handleAddSequenceStep, handleRemoveSequenceGroup,

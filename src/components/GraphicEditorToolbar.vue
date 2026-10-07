@@ -26,10 +26,10 @@
           <slot name="extra-tools" />
           <v-divider class="get-inner-divider" vertical />
         </template>
-        <v-btn icon small :title="UNDO_TITLE" :disabled="!activeEditor && !hasPendingQuickColorUndo && !hasPendingCardUndo" @click="handleUndo">
+        <v-btn icon small :title="UNDO_TITLE" :disabled="!activeEditor && !hasPendingQuickColorUndo && !hasPendingCardUndo && !reorderCanUndo" @click="handleUndo">
           <v-icon>mdi-undo</v-icon>
         </v-btn>
-        <v-btn icon small :title="REDO_TITLE" :disabled="!activeEditor" @click="() => activeEditor.redo()">
+        <v-btn icon small :title="REDO_TITLE" :disabled="!activeEditor && !reorderCanRedo" @click="handleRedo">
           <v-icon>mdi-redo</v-icon>
         </v-btn>
         <v-divider class="get-inner-divider" vertical />
@@ -211,6 +211,7 @@ import {tryUndoCardDeletion, usePendingCardDeletion} from '../hooks/card-delete-
 import {usePixelGridOverlayStorage, usePixelGridLabelsStorage} from '../hooks/project';
 import {useMirrorDraw} from '../hooks/pixel-tool';
 import {REDO_TITLE, UNDO_TITLE, undoRedoKind} from '../utils/undo-hotkey';
+import {canRedoReorder, canUndoReorder, settleEdits, tryRedoReorder, tryUndoReorder} from '../hooks/reorder-history';
 
 // The standard Photoshop/Aseprite-style single-letter tool shortcuts -
 // see handleToolHotkey's comment for why these specific letters.
@@ -275,6 +276,12 @@ export default {
     };
   },
   computed: {
+    reorderCanUndo() {
+      return canUndoReorder();
+    },
+    reorderCanRedo() {
+      return canRedoReorder();
+    },
     // Reads the active editor's reactive toggledTool directly (see
     // PixelEditor.vue's comment on why that's a separate string, not
     // literally "editor.tool") - Vue tracks this cross-component property
@@ -370,15 +377,16 @@ export default {
       // button.
       const history = undoRedoKind(event);
       if (history === 'undo') {
-        if (!this.activeEditor && !this.hasPendingQuickColorUndo && !this.hasPendingCardUndo) return;
+        if (!this.activeEditor && !this.hasPendingQuickColorUndo && !this.hasPendingCardUndo &&
+          !this.reorderCanUndo) return;
         event.preventDefault();
         this.handleUndo();
         return;
       }
       if (history === 'redo') {
-        if (!this.activeEditor) return;
+        if (!this.activeEditor && !this.reorderCanRedo) return;
         event.preventDefault();
-        this.activeEditor.redo();
+        this.handleRedo();
         return;
       }
       // Skip the other Ctrl/Cmd/Alt combos entirely (e.g. leaves
@@ -480,7 +488,16 @@ export default {
     handleUndo() {
       if (tryUndoCardDeletion()) return;
       if (tryUndoQuickColorDeletion(this.activeEditor)) return;
-      if (this.activeEditor) this.activeEditor.undo();
+      // A card, frame or background dragged into a new order comes back before older edits.
+      if (tryUndoReorder()) return;
+      if (this.activeEditor) {
+        this.activeEditor.undo();
+        settleEdits();
+      }
+    },
+    handleRedo() {
+      if (tryRedoReorder()) return;
+      if (this.activeEditor) this.activeEditor.redo();
     },
   },
 };

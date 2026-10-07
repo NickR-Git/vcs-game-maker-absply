@@ -83,6 +83,7 @@ import {getDateInfix} from '../utils/date';
 import {loadImageFromFile, openFileDialog} from '../utils/file';
 import {createResizedCanvas} from '../utils/image';
 import {usePixelTool, useMirrorDraw} from '../hooks/pixel-tool';
+import {noteEdit} from '../hooks/reorder-history';
 import {resizePixelMatrixHeight} from '../utils/pixels';
 
 export default {
@@ -601,6 +602,7 @@ export default {
     // cancelStroke.
     handleStrokeStart() {
       if (!this.editor) return;
+      noteEdit();
       // A new gesture ends whatever could still be redone.
       this.rowMoveRedo = [];
       this.strokeStart = {

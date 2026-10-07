@@ -1,6 +1,6 @@
 # VCS Game Maker: everything since 0.50.37
 
-This covers versions 0.50.38 through 0.51.29, grouped by area. The per-version
+This covers versions 0.50.38 through 0.51.30, grouped by area. The per-version
 detail is in `CHANGES_SINCE_0.50.37.txt`.
 
 ## Emulator and TV standard
@@ -24,7 +24,7 @@ detail is in `CHANGES_SINCE_0.50.37.txt`.
   Emulator Settings: TV signal, phosphor, scanlines, gamma, scaling, CPU accuracy, and the full
   screen resolution and scaling. A full screen button sits next to the screenshot button.
 - Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y undo and redo in the graphic editors, Data, Music patterns and
-  Sound FX envelopes.
+  Sound FX envelopes, and they put back cards, frames and rows dragged into a new order.
 
 ## Blocks and code generation
 

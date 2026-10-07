@@ -179,13 +179,15 @@
   </div>
 </template>
 <script>
-import {computed, defineComponent, getCurrentInstance, ref} from '@vue/composition-api';
+import {computed, defineComponent, getCurrentInstance, onBeforeUnmount, onMounted, ref} from '@vue/composition-api';
 import {max} from 'lodash';
 
 import ColorSwatchPicker from '../components/ColorSwatchPicker.vue';
 import ConfirmDeleteMenu from '../components/ConfirmDeleteMenu.vue';
 import TextFontEditor from '../components/TextFontEditor.vue';
 import {useCollapsedIds} from '../hooks/collapse';
+import {recordReorder, sameItems, tryRedoReorder, tryUndoReorder} from '../hooks/reorder-history';
+import {undoRedoKind} from '../utils/undo-hotkey';
 import {CSS_CLASS_DRAGGING} from '../hooks/drag-reorder';
 import {useConfigurationStorage, useTextStringsStorage, useTextColumnsStorage} from '../hooks/project';
 import {DEFAULT_TEXT_JUSTIFY, DEFAULT_TEXT_STRINGS, DEFAULT_TEXT_MAX_DISPLAY_WIDTH,
@@ -407,11 +409,22 @@ export default defineComponent({
         let insertAt = side === 'after' ? index + 1 : index;
         if (from < insertAt) insertAt--;
         if (insertAt === from) return;
-        const items = state.value.textStrings.slice();
+        const before = state.value.textStrings.slice();
+        const items = before.slice();
         const [moved] = items.splice(from, 1);
         items.splice(insertAt, 0, moved);
         state.value.textStrings = items;
         handleChildChange();
+        const after = items.slice();
+        const restore = (order) => {
+          state.value.textStrings = order.slice();
+          handleChildChange();
+        };
+        recordReorder({
+          undo: () => restore(before),
+          redo: () => restore(after),
+          isCurrent: () => sameItems(state.value.textStrings, after),
+        });
       },
     });
 
@@ -451,6 +464,16 @@ export default defineComponent({
       entry.text = String(entry.text || '');
       handleChildChange();
     };
+
+    // Ctrl+Z / Ctrl+Shift+Z (Ctrl+Y) put a reordered card back; nothing else on this tab has an
+    // undo.
+    const handleHistoryHotkey = (event) => {
+      const history = undoRedoKind(event);
+      if (!history) return;
+      if (history === 'undo' ? tryUndoReorder() : tryRedoReorder()) event.preventDefault();
+    };
+    onMounted(() => window.addEventListener('keydown', handleHistoryHotkey));
+    onBeforeUnmount(() => window.removeEventListener('keydown', handleHistoryHotkey));
 
     return {
       selectedCardId, selectCard, deselectCard,

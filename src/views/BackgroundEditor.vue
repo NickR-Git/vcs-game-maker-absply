@@ -321,6 +321,7 @@ import {computed, defineComponent, getCurrentInstance, ref} from '@vue/compositi
 import {max} from 'lodash';
 
 import {useCollapsedIds} from '../hooks/collapse';
+import {recordReorder, sameItems} from '../hooks/reorder-history';
 import {CSS_CLASS_DRAGGING} from '../hooks/drag-reorder';
 import ConfirmDeleteMenu from '../components/ConfirmDeleteMenu.vue';
 import EditorZoom from '../components/EditorZoom.vue';
@@ -669,12 +670,24 @@ export default defineComponent({
         let insertAt = side === 'after' ? index + 1 : index;
         if (from < insertAt) insertAt--;
         if (insertAt === from) return;
-        const items = state.value.backgrounds.slice();
+        const before = state.value.backgrounds.slice();
+        const items = before.slice();
         const [moved] = items.splice(from, 1);
         items.splice(insertAt, 0, moved);
         state.value.backgrounds = items;
         renumberBackgrounds();
         handleChildChange();
+        const after = items.slice();
+        const restore = (order) => {
+          state.value.backgrounds = order.slice();
+          renumberBackgrounds();
+          handleChildChange();
+        };
+        recordReorder({
+          undo: () => restore(before),
+          redo: () => restore(after),
+          isCurrent: () => sameItems(state.value.backgrounds, after),
+        });
       },
     });
 

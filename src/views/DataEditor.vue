@@ -37,7 +37,7 @@
               small
               :title="UNDO_TITLE"
               class="data-flat-icon-btn data-icon-btn-size"
-              :disabled="!selectedTable || !canUndoTable(selectedTable)"
+              :disabled="!(selectedTable && canUndoTable(selectedTable)) && !reorderCanUndo"
               @click="() => handleUndoTable(selectedTable)"
             >
               <v-icon>mdi-undo</v-icon>
@@ -47,7 +47,7 @@
               small
               :title="REDO_TITLE"
               class="data-flat-icon-btn data-icon-btn-size"
-              :disabled="!selectedTable || !canRedoTable(selectedTable)"
+              :disabled="!(selectedTable && canRedoTable(selectedTable)) && !reorderCanRedo"
               @click="() => handleRedoTable(selectedTable)"
             >
               <v-icon>mdi-redo</v-icon>
@@ -350,6 +350,8 @@ import {max} from 'lodash';
 import {saveAs} from 'file-saver';
 
 import {useCollapsedIds} from '../hooks/collapse';
+import {recordReorder, sameItems} from '../hooks/reorder-history';
+import {canRedoReorder, canUndoReorder, noteEdit, settleEdits, tryRedoReorder, tryUndoReorder} from '../hooks/reorder-history';
 import {useDragReorder, CSS_CLASS_DRAGGING} from '../hooks/drag-reorder';
 import {useBackgroundsStorage, useDataTablesStorage, usePlayerAnimationsStorage,
   useSoundEffectsStorage, useSongsStorage, useTextStringsStorage, useTitleScreenStorage,
@@ -562,6 +564,7 @@ export default defineComponent({
           const last = tableLastSnapshot[table.id];
           if (last !== undefined && last !== snapshot) {
             const stack = tableUndoStacks.value[table.id] || [];
+            noteEdit();
             tableUndoStacks.value = {...tableUndoStacks.value, [table.id]: [...stack, last]};
             // A fresh edit invalidates whatever redo history existed from an
             // earlier undo - same convention as any standard undo/redo stack.
@@ -595,15 +598,22 @@ export default defineComponent({
     };
     const canUndoTable = (table) => (tableUndoStacks.value[table.id] || []).length > 0;
     const canRedoTable = (table) => (tableRedoStacks.value[table.id] || []).length > 0;
+    const reorderCanUndo = computed(() => canUndoReorder());
+    const reorderCanRedo = computed(() => canRedoReorder());
     const handleUndoTable = (table) => {
+      if (tryUndoReorder()) return;
+      if (!table) return;
       const stack = tableUndoStacks.value[table.id] || [];
       if (!stack.length) return;
       const redoStack = tableRedoStacks.value[table.id] || [];
       tableRedoStacks.value = {...tableRedoStacks.value, [table.id]: [...redoStack, snapshotTable(table)]};
       tableUndoStacks.value = {...tableUndoStacks.value, [table.id]: stack.slice(0, -1)};
       applyTableSnapshot(table, stack[stack.length - 1]);
+      settleEdits();
     };
     const handleRedoTable = (table) => {
+      if (tryRedoReorder()) return;
+      if (!table) return;
       const stack = tableRedoStacks.value[table.id] || [];
       if (!stack.length) return;
       const undoStack = tableUndoStacks.value[table.id] || [];
@@ -649,8 +659,11 @@ export default defineComponent({
     const handleHistoryHotkey = (event) => {
       const history = undoRedoKind(event);
       const table = selectedTable.value;
-      if (!history || !table) return;
-      if (history === 'undo' ? canUndoTable(table) : canRedoTable(table)) {
+      if (!history) return;
+      const can = history === 'undo' ?
+        reorderCanUndo.value || (table && canUndoTable(table)) :
+        reorderCanRedo.value || (table && canRedoTable(table));
+      if (can) {
         event.preventDefault();
         (history === 'undo' ? handleUndoTable : handleRedoTable)(table);
       }
@@ -1147,6 +1160,11 @@ export default defineComponent({
         let insertAt = side === 'after' ? index + 1 : index;
         if (from.index < insertAt) insertAt--;
         if (insertAt === from.index) return;
+        const valuesBefore = {
+          values: table.values.slice(),
+          valueFormats: table.valueFormats ? table.valueFormats.slice() : null,
+          valueNotes: table.valueNotes ? table.valueNotes.slice() : null,
+        };
         const values = table.values.slice();
         const [moved] = values.splice(from.index, 1);
         values.splice(insertAt, 0, moved);
@@ -1169,6 +1187,22 @@ export default defineComponent({
           table.valueNotes = notes;
         }
         handleChildChange();
+        const valuesAfter = {
+          values: table.values.slice(),
+          valueFormats: table.valueFormats ? table.valueFormats.slice() : null,
+          valueNotes: table.valueNotes ? table.valueNotes.slice() : null,
+        };
+        const restore = (saved) => {
+          Object.keys(saved).forEach((key) => {
+            if (saved[key]) table[key] = saved[key].slice();
+          });
+          handleChildChange();
+        };
+        recordReorder({
+          undo: () => restore(valuesBefore),
+          redo: () => restore(valuesAfter),
+          isCurrent: () => sameItems(table.values, valuesAfter.values),
+        });
       },
     });
 
@@ -1219,7 +1253,7 @@ export default defineComponent({
       handleExportCsv, handleImportCsv,
       tableColumns, handleColumnsInput, handleColumnsChange, handleNotesInput,
       isCollapsed, toggleCollapsed,
-      canUndoTable, canRedoTable, handleUndoTable, handleRedoTable, UNDO_TITLE, REDO_TITLE,
+      canUndoTable, canRedoTable, handleUndoTable, handleRedoTable, reorderCanUndo, reorderCanRedo, UNDO_TITLE, REDO_TITLE,
       maxValues: MAX_DATA_TABLE_VALUES,
       DATA_VALUE_CELL_MIN_PX,
       DATA_VALUES_EXTRA_SLACK_PX,

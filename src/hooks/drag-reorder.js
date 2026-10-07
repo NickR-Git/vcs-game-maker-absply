@@ -1,4 +1,5 @@
 import {ref} from '@vue/composition-api';
+import {recordReorder, sameItems} from './reorder-history';
 
 // Click-and-drag reordering for a list of cards, built to be reusable
 // across any tab that renders one - TextEditor.vue and SoundFXEditor.vue
@@ -104,10 +105,17 @@ export const useDragReorder = (getItems, setItems) => {
       const from = draggedIndex.value;
       reset();
       if (from == null || from === index) return;
-      const items = getItems().slice();
+      const before = getItems().slice();
+      const items = before.slice();
       const [moved] = items.splice(from, 1);
       items.splice(index, 0, moved);
       setItems(items);
+      const after = items.slice();
+      recordReorder({
+        undo: () => setItems(before.slice()),
+        redo: () => setItems(after.slice()),
+        isCurrent: () => sameItems(getItems(), after),
+      });
     },
   });
 
