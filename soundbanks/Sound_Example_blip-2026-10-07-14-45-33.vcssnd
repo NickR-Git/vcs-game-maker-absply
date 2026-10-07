@@ -17,5 +17,5 @@
   "arpeggioRange": 0,
   "priority": 1,
   "color": null,
-  "isInstrument": true
+  "isInstrument": false
 }
