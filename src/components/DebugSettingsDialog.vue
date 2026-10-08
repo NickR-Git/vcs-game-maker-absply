@@ -33,15 +33,24 @@
         </div>
         <div v-for="group in groups" :key="group.title" class="debug-settings-group">
           <div class="debug-settings-group-title">{{ group.title }}</div>
-          <v-checkbox
-            :input-value="allChosen(group)"
-            :indeterminate="someChosen(group)"
-            label="Select all"
-            dense
-            hide-details
-            class="debug-settings-select-all"
-            @change="(checked) => handleToggleGroup(group, checked)"
-          />
+          <div class="debug-settings-select-row">
+            <v-btn
+              x-small
+              text
+              :disabled="allChosen(group)"
+              @click="() => handleToggleGroup(group, true)"
+            >
+              Select all
+            </v-btn>
+            <v-btn
+              x-small
+              text
+              :disabled="!chosenIn(group).length"
+              @click="() => handleToggleGroup(group, false)"
+            >
+              Select none
+            </v-btn>
+          </div>
           <div class="debug-settings-grid">
             <v-checkbox
               v-for="variable in group.variables"
@@ -112,10 +121,6 @@ export default {
     allChosen(group) {
       return group.variables.length > 0 && this.chosenIn(group).length === group.variables.length;
     },
-    someChosen(group) {
-      const count = this.chosenIn(group).length;
-      return count > 0 && count < group.variables.length;
-    },
     handleToggleGroup(group, checked) {
       const names = new Set(group.variables.map((variable) => variable.name));
       const next = this.chosen.filter((name) => !names.has(name));
@@ -150,9 +155,10 @@ export default {
   margin-top: 12px;
 }
 
-.debug-settings-select-all {
-  margin-top: 2px !important;
-  padding-top: 0 !important;
+.debug-settings-select-row {
+  display: flex;
+  gap: 8px;
+  margin: 2px 0 0 -6px;
 }
 
 .debug-settings-grid {
