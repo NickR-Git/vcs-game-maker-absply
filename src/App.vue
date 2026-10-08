@@ -629,6 +629,9 @@ const readStoredErrorHeight = () => {
 // never having been set, means "visible" (the default).
 const readStoredEmulatorVisible = () => localStorage.getItem(EMULATOR_VISIBLE_KEY) !== 'false';
 
+// The name the debug info gives to the player0size byte it reads to tell when the Title Screen Kernel runs.
+const TITLE_KERNEL_WATCH_NAME = '__titleKernelRunning';
+
 export default {
   components: {KeyMappingDialog, EmulatorSettingsDialog, DebugSettingsDialog},
   data: () => ({
@@ -760,7 +763,19 @@ export default {
     // The watched variables' values as table rows, a few to a row: a cell is a name and its value in decimal
     // with hex beside it.
     debugVariableRows() {
-      const variables = (this.debugInfo && this.debugInfo.variables) || [];
+      const reported = (this.debugInfo && this.debugInfo.variables) || [];
+      // The Title Screen Kernel is running while the top bit of player0size is set (see TITLE_KERNEL_LOOP_BIT).
+      const titleRunning = reported.some(([name, value]) => name === TITLE_KERNEL_WATCH_NAME && (value & 128));
+      // A variable the title screen shares a slot with goes by the title screen's name while the kernel runs and
+      // by the game's name the rest of the time.
+      const shown = new Map();
+      reported.filter(([name]) => name !== TITLE_KERNEL_WATCH_NAME).forEach(([name, value]) => {
+        const symbol = this.debugSymbols.find((entry) => entry.name === name) || {};
+        const displayName = titleRunning && symbol.sharedWith && symbol.sharedWith.length ? symbol.sharedWith[0] :
+          !titleRunning && symbol.hostName ? symbol.hostName : name;
+        if (!shown.has(displayName)) shown.set(displayName, value);
+      });
+      const variables = [...shown.entries()];
       if (!variables.length) return [];
       const columns = variables.length > 6 ? 3 : variables.length > 1 ? 2 : 1;
       const cells = variables.map(([name, value]) => ({
@@ -774,7 +789,10 @@ export default {
     // Names picked in the debug settings, with the address the last build gave each.
     debugWatch() {
       const chosen = this.emulatorSettings.debugVariables || [];
-      return this.debugSymbols.filter(({name}) => chosen.includes(name)).map(({name, address}) => ({name, address}));
+      const watch = this.debugSymbols.filter(({name}) => chosen.includes(name)).map(({name, address}) => ({name, address}));
+      // player0size also goes along, to tell when the Title Screen Kernel is running.
+      const titleFlag = this.debugSymbols.find(({name}) => name === 'player0size');
+      return watch.length && titleFlag ? [...watch, {name: TITLE_KERNEL_WATCH_NAME, address: titleFlag.address}] : watch;
     },
     emulatorScaleStyle() {
       return {

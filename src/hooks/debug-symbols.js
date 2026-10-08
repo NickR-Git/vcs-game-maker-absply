@@ -22,14 +22,16 @@ export const setDebugVariables = (value) => {
 export const collectDebugVariables = (variableUsage, symbolmap) => {
   if (!variableUsage || !symbolmap) return [];
   const found = new Map();
-  const add = (name, owner) => {
+  const add = (name, owner, sharing = {}) => {
     if (!name || found.has(name) || symbolmap[name] === undefined) return;
-    found.set(name, {name, address: symbolmap[name], owner});
+    found.set(name, {name, address: symbolmap[name], owner, ...sharing});
   };
   [...(variableUsage.letterAssignments || []), ...(variableUsage.superchipAssignments || [])].forEach((assignment) => {
     const owner = assignment.isUserVariable ? 'user' : 'block';
-    add(assignment.name, owner);
-    (assignment.sharedWith || []).forEach((name) => add(name, 'block'));
+    const sharedWith = assignment.sharedWith || [];
+    // The title screen names that live in this variable's slot while the title screen kernel runs.
+    add(assignment.name, owner, sharedWith.length ? {sharedWith} : {});
+    sharedWith.forEach((name) => add(name, 'block', {hostName: assignment.name}));
   });
   (variableUsage.systemAssignments || []).forEach((assignment) => add(assignment.name, 'system'));
   return [...found.values()];
