@@ -37,7 +37,8 @@
             <v-btn
               small
               depressed
-              :disabled="allChosen(group)"
+              :color="allChosen(group) ? 'primary' : undefined"
+              class="debug-settings-toggle-left"
               @click="() => handleToggleGroup(group, true)"
             >
               Select all
@@ -45,7 +46,8 @@
             <v-btn
               small
               depressed
-              :disabled="!chosenIn(group).length"
+              :color="noneChosen(group) ? 'primary' : undefined"
+              class="debug-settings-toggle-right"
               @click="() => handleToggleGroup(group, false)"
             >
               Select none
@@ -118,6 +120,9 @@ export default {
     chosenIn(group) {
       return group.variables.filter((variable) => this.isChosen(variable.name));
     },
+    noneChosen(group) {
+      return this.chosenIn(group).length === 0;
+    },
     allChosen(group) {
       return group.variables.length > 0 && this.chosenIn(group).length === group.variables.length;
     },
@@ -155,10 +160,22 @@ export default {
   margin-top: 12px;
 }
 
+/* Two buttons joined into one toggle: the one that matches the choices (all of the section on, or none of it)
+   is filled with the primary color. */
 .debug-settings-select-row {
   display: flex;
-  gap: 8px;
   margin: 6px 0 4px;
+}
+
+.debug-settings-toggle-left.v-btn {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.debug-settings-toggle-right.v-btn {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  margin-left: 1px;
 }
 
 .debug-settings-grid {
