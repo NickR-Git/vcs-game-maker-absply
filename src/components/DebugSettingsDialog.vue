@@ -35,16 +35,16 @@
           <div class="debug-settings-group-title">{{ group.title }}</div>
           <div class="debug-settings-select-row">
             <v-btn
-              x-small
-              text
+              small
+              depressed
               :disabled="allChosen(group)"
               @click="() => handleToggleGroup(group, true)"
             >
               Select all
             </v-btn>
             <v-btn
-              x-small
-              text
+              small
+              depressed
               :disabled="!chosenIn(group).length"
               @click="() => handleToggleGroup(group, false)"
             >
@@ -158,7 +158,7 @@ export default {
 .debug-settings-select-row {
   display: flex;
   gap: 8px;
-  margin: 2px 0 0 -6px;
+  margin: 6px 0 4px;
 }
 
 .debug-settings-grid {
