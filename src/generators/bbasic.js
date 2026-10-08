@@ -72,7 +72,7 @@ import {processPlayerAnimationsStorageDefaults, generateRomNoiseChecks, generate
   backgroundColorTableLoVarName, backgroundColorTableHiVarName,
   generateMissileFireChecks, generateBounceStageChecks, reserveMissileFireDevVars, reserveMissileBounceDevVars,
   generateSeekChecks, reserveSeekDevVars, reserveSeekArrivedDevVars,
-  reserveCtrlpfShadowDevVar, generateCtrlpfShadowSetup, missileWidthsVarName, reserveMissileWidthsDevVar, resolveUsedPlayerAnimations,
+  reserveCtrlpfShadowDevVar, generateCtrlpfShadowSetup, missileWidthsVarName, reserveMissileWidthsDevVar, ctrlpfShadowVarName, resolveUsedPlayerAnimations,
   resolvePlayerAnimationFinishedWatches,
   generateInertiaChecks, reserveInertiaDevVars, reserveSpriteScrollDevVars} from './bbasic/sprites';
 import {resolveSeekArrivedWatches} from '../blocks/sprites';
@@ -3744,6 +3744,12 @@ Blockly.BBasic.generateGameEvent = function(eventName,
   // Leaving the Title Screen loop: commongamelogic goes back to preparing the regular screen.
   if (this.titleScreenDrawUsed && ['title_start', 'gameplay_start', 'gameover_start'].includes(eventName)) {
     eventCode = `${TITLE_KERNEL_LOOP_BIT} = 0\n` + eventCode;
+    // The Titlescreen Kernel leaves CTRLPF at the value it needs, so the ball width and playfield priority a
+    // block set earlier are put back from the CTRLPF shadow.
+    if (eventName !== 'title_start' && this.ctrlpfShadowUsed) {
+      const shadowVar = this.nameDB_.getName(ctrlpfShadowVarName(), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+      eventCode = `CTRLPF = ${shadowVar}\n` + eventCode;
+    }
   }
   // Title screen start turns the kernel back on after "End title screen" turned it off.
   if (this.titleEndUsed && eventName === 'title_start') {

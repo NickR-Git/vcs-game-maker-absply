@@ -1,6 +1,6 @@
 # VCS Game Maker: everything since 0.50.37
 
-This covers versions 0.50.38 through 0.51.35, grouped by area. The per-version
+This covers versions 0.50.38 through 0.51.36, grouped by area. The per-version
 detail is in `CHANGES_SINCE_0.50.37.txt`.
 
 ## Emulator and TV standard
@@ -63,7 +63,8 @@ detail is in `CHANGES_SINCE_0.50.37.txt`.
 - **Title screen to gameplay:** a project with no block that sets or changes a sprite's position starts gameplay
   with the sprites at the positions a new project begins with.
 - **Sprites:** setting a player's animation no longer changes a missile's width; missile widths are kept in a
-  byte that only projects setting a missile width use.
+  byte that only projects setting a missile width use. Ball width and playfield priority set before the title
+  screen are put back when it ends.
 - **Sprites and data:** a Visibility option in the Player get block, a Switch block mode that runs once each
   time a switch is turned on, and blocks for the size of a data table.
 - **Sprites:** "Set fired speed" block, a "Width/quantity" choice in the Player get block, and

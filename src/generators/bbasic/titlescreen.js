@@ -9,7 +9,7 @@ import {TITLE_SCREEN_KERNEL_TYPES, MAX_KERNEL_COPIES_PER_TYPE,
   titleCardBoxPf2VarName, titlePlayerIndexVarName, titlePlayerFrameVarName, titleFrameBox} from '../../blocks/titlescreen';
 import {useTitleScreenStorage, usePlayerAnimationsStorage,
   useConfigurationStorage} from '../../hooks/project';
-import {processPlayerAnimationsStorageDefaults} from './sprites';
+import {processPlayerAnimationsStorageDefaults, ctrlpfShadowVarName} from './sprites';
 import {clampFrameDuration} from '../../utils/duration';
 import {flagPoolVar, flagPoolBit} from './flag-pool';
 import {resolveScoreDigitBytes} from '../../utils/score-font';
@@ -1294,9 +1294,14 @@ export default (Blockly) => {
     if (Blockly.BBasic.currentEventName !== 'title_update') {
       return 'rem "End title screen" only works inside "Title screen update"\n';
     }
+    // The kernel leaves CTRLPF at the value it needs: the ball width and playfield priority a block set
+    // are put back from the CTRLPF shadow.
+    const shadowVar = Blockly.BBasic.ctrlpfShadowUsed ? Blockly.BBasic.nameDB_.getName(
+        ctrlpfShadowVarName(), Blockly.Names.DEVELOPER_VARIABLE_TYPE) : null;
     return `${titleKernelEndedVar()}{${titleKernelEndedBit()}} = 1\n` +
       'missile0height = 0\n' +
       'missile1height = 0\n' +
+      (shadowVar ? `CTRLPF = ${shadowVar}\n` : '') +
       'goto title_update_begin\n';
   };
 

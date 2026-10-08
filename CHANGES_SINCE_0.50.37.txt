@@ -951,3 +951,10 @@ Setting a player's animation no longer changes a missile's width
 - Player set animation to (and Player animation change) no longer changes the width of the missile. The
   animation's loop and finished flags shared two bits with the missile width, so each changed the other.
   Missile widths are now kept in a separate byte, only used by projects that set a missile width.
+
+=== 0.51.36 ===
+Ball width and playfield priority survive the title screen
+
+- The Titlescreen Kernel leaves the CTRLPF register at the value it needs, so a ball width or playfield
+  priority set before the title screen was lost. Gameplay start, Gameover start and End title screen now
+  put them back.
