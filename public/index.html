@@ -41,10 +41,34 @@
       // cushion. This also bounds the queue of scheduled nodes.
       const GOPHER2600_AUDIO_MAX_LAG_SECONDS = 0.15;
       const GOPHER2600_AUDIO_CUSHION_SECONDS = 0.04;
+      // The Sound and Music tabs' DIM switch and percentage (app-wide preferences, see
+      // src/hooks/project.js): with DIM on, the emulator plays at that percentage of full volume.
+      // Read from localStorage (a change is heard within a quarter of a second, no rebuild needed).
+      let gopher2600DimGain = 1;
+      let gopher2600DimReadAt = 0;
+      const gopher2600CurrentDimGain = () => {
+        const now = performance.now();
+        if (now - gopher2600DimReadAt > 250) {
+          gopher2600DimReadAt = now;
+          try {
+            const on = window.localStorage.getItem('vcs-game-maker.dimSoundFx') === 'true';
+            const parsed = parseFloat(window.localStorage.getItem('vcs-game-maker.dimSoundFxPercent'));
+            const percent = Number.isFinite(parsed) ? parsed : 25;
+            gopher2600DimGain = on ? Math.max(0, Math.min(100, percent)) / 100 : 1;
+          } catch (error) {
+            gopher2600DimGain = 1;
+          }
+        }
+        return gopher2600DimGain;
+      };
       window.playGopher2600AudioChunk = function(sampleRate, samples) {
         if (!gopher2600AudioCtx) {
           gopher2600AudioCtx = new (window.AudioContext || window.webkitAudioContext)({latencyHint: 'interactive'});
           gopher2600AudioNextStart = gopher2600AudioCtx.currentTime + GOPHER2600_AUDIO_CUSHION_SECONDS;
+        }
+        const dimGain = gopher2600CurrentDimGain();
+        if (dimGain !== 1) {
+          for (let i = 0; i < samples.length; i++) samples[i] *= dimGain;
         }
         if (gopher2600AudioCtx.state === 'suspended') {
           gopher2600AudioCtx.resume();
@@ -144,7 +168,13 @@
       let gopher2600KeyMapping = [];
       const gopher2600KeypadMode = {left: false, right: false};
 
-      const gopher2600Canvas = () => document.getElementById('gopher2600-screen');
+      // The canvas element is kept here for good: if the page's component tree is rebuilt, the
+      // element can leave the document with the old container, and looking it up by id would
+      // then find nothing, so nothing could draw to it or put it back (App.vue's
+      // attachEmulator re-attaches window.gopher2600ScreenElement).
+      const gopher2600ScreenElement = document.getElementById('gopher2600-screen');
+      window.gopher2600ScreenElement = gopher2600ScreenElement;
+      const gopher2600Canvas = () => document.getElementById('gopher2600-screen') || gopher2600ScreenElement;
       // The picture is always opaque, so the canvas is created without an alpha
       // channel: the browser can then skip blending it with the page behind it.
       // The options only count on the first getContext call, so this is made

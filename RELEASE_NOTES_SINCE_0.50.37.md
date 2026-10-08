@@ -1,6 +1,6 @@
 # VCS Game Maker: everything since 0.50.37
 
-This covers versions 0.50.38 through 0.51.30, grouped by area. The per-version
+This covers versions 0.50.38 through 0.51.31, grouped by area. The per-version
 detail is in `CHANGES_SINCE_0.50.37.txt`.
 
 ## Emulator and TV standard
@@ -25,6 +25,7 @@ detail is in `CHANGES_SINCE_0.50.37.txt`.
   screen resolution and scaling. A full screen button sits next to the screenshot button.
 - Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y undo and redo in the graphic editors, Data, Music patterns and
   Sound FX envelopes, and they put back cards, frames and rows dragged into a new order.
+- The emulator's volume follows the Sound and Music DIM setting while it plays.
 
 ## Blocks and code generation
 
@@ -47,6 +48,14 @@ detail is in `CHANGES_SINCE_0.50.37.txt`.
 - **Fixes:** blocks failing to load or drag after opening a project, Blockly
   undo wiping all blocks, copy/paste errors, blocks undersized after an undo,
   and the grid snap toggle.
+- **Title screen (new blocks):** end the title screen and carry on as the game, recolor a
+  graphic, jump a graphic to a frame (hold it, then loop or play once), set and reset the
+  background color, and switch the picture background on or off and recolor it. Player sprites
+  cards play their animation by themselves.
+- **Sprites:** "Set fired speed" block, a "Width/quantity" choice in the Player get block, and
+  16-direction angles that lean now move at the right speed along the right path.
+- **Scrolling text:** one speed and one pause shared by every message are built in as numbers
+  and take no variables. Title screen variables share slots with game-only variables.
 
 ## Graphic editors (Sprites, Background, Title, Score, Text)
 
@@ -58,6 +67,11 @@ detail is in `CHANGES_SINCE_0.50.37.txt`.
 - Quick colors and frame import on the Title tab, and a per-card Test preview.
 - On the Sprites tab, export/import/Aseprite icons sit left of undo/redo.
 - Fixes for pixel aspect ratios, stray preview pixels and disabled-button looks.
+- **Title tab:** each frame of a 48-wide graphic can have a different picture background, with a preview
+  on the canvas; graphics use the emulator's proportions; screens and graphics can be imported,
+  exported and duplicated. Animation Duration fields cannot go below 1.
+- Color swatches look the same everywhere, including the block color picker, and row color
+  changes can be undone.
 
 ## Music and Sound
 
@@ -95,6 +109,8 @@ detail is in `CHANGES_SINCE_0.50.37.txt`.
 - A pinned toolbar matching the graphic editor toolbar, with a Project Settings
   button, and the tab remembers which view you were on.
 - Fixed `.vcsgm` files dropping Title screen pages and graphics.
+- Save with "Increment on Save" on writes a new file with the next version number each time,
+  asking for the folder once per session.
 
 ## Options, themes and layout
 

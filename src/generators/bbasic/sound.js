@@ -1,7 +1,6 @@
 'use strict';
 
-import {useConfigurationStorage, useDimSoundFxPercentStorage, useDimSoundFxStorage} from '../../hooks/project';
-import {DEFAULT_DIM_PERCENT, dimVolume} from './soundfx';
+import {useConfigurationStorage} from '../../hooks/project';
 
 export default (Blockly) => {
   Blockly.BBasic[`simple_sound_set`] = function(block) {
@@ -31,8 +30,7 @@ export default (Blockly) => {
     // picked.
     // App-wide preference (see useDimSoundFxStorage's  comment in
     // hooks/project.js), not part of this project's  saved configuration.
-    const effectiveAudv = useDimSoundFxStorage().value ?
-      dimVolume(audv, useDimSoundFxPercentStorage(DEFAULT_DIM_PERCENT).value) : audv;
+    const effectiveAudv = audv;
 
     const code = `AUDV${channel}=0\n` +
       `AUDC${channel}=${audc}\n` +

@@ -2,11 +2,11 @@
 
 import {ref} from '@vue/composition-api';
 
-// Undo and redo for dragging cards (and rows, chips, frames) into a new order, shared by every
-// tab that has such a list. Each reorder is recorded with a way to put the previous order back
-// and a way to redo it; the Undo and Redo buttons and shortcuts of the tab being shown try this
-// first (see GraphicEditorToolbar.vue, DataEditor.vue, MusicEditor.vue, SoundFXEditor.vue and
-// TextEditor.vue).
+// Undo and redo for dragging cards (and rows, chips, frames) into a new order, and for edits that
+// keep no history in the editor itself (a row's color), shared by every tab that has them. Each
+// change is recorded with a way to put the previous state back and a way to redo it; the Undo and
+// Redo buttons and shortcuts of the tab being shown try this first (see GraphicEditorToolbar.vue,
+// DataEditor.vue, MusicEditor.vue, SoundFXEditor.vue and TextEditor.vue).
 //
 // A reorder only counts on the tab (route) it was made on, and only while the list still holds
 // the order that reorder produced: if cards were added or deleted since, the entry is dropped
@@ -20,6 +20,7 @@ let undoEntries = [];
 let redoEntries = [];
 let counter = 0;
 let lastEdit = 0;
+const COALESCE_MS = 700;
 const version = ref(0);
 const currentRoute = () => window.location.hash.split('?')[0];
 const route = ref(currentRoute());
@@ -48,13 +49,28 @@ export const canRedoReorder = () => {
 
 /**
  * Records a reorder that has just been made.
- * @param {{undo: function(), redo: function(), isCurrent: function(): boolean}} entry undo puts the
+ * @param {{undo: function(), redo: function(), isCurrent: function(): boolean, key: (*|undefined)}} entry undo puts the
  *     previous order back, redo puts the new one back, and isCurrent says whether the list still
- *     holds the order this reorder produced.
+ *     holds the order this reorder produced. Entries with the same key, recorded within a
+ *     moment of each other, merge into one step.
  */
 export const recordReorder = (entry) => {
   const here = currentRoute();
-  undoEntries.push({...entry, route: here, stamp: ++counter});
+  const now = Date.now();
+  // Changes to the same thing that follow each other quickly (painting a run of row colors) are
+  // one step: the earlier one keeps its undo and takes the later one's redo.
+  const last = undoEntries[undoEntries.length - 1];
+  if (entry.key !== undefined && last && last.route === here && last.key === entry.key &&
+      now - last.time < COALESCE_MS) {
+    last.redo = entry.redo;
+    last.isCurrent = entry.isCurrent;
+    last.time = now;
+    last.stamp = ++counter;
+    redoEntries = redoEntries.filter((other) => other.route !== here);
+    changed();
+    return;
+  }
+  undoEntries.push({...entry, route: here, stamp: ++counter, time: now});
   if (undoEntries.length > 50) undoEntries.shift();
   redoEntries = redoEntries.filter((other) => other.route !== here);
   changed();

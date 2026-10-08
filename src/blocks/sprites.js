@@ -549,6 +549,11 @@ const buildCombinedPlayerVarBlocks = ({icon, colour}) => {
               // or generator special-case, just another plain get-only
               // option resolving straight to the real kernel symbol.
               [HEIGHT_ICON + ' Height', `${name}height`],
+              // The width/quantity code (0-7) "Player set width/quantity" writes into
+              // the low 3 bits of the size variable: 0 is one copy, 5 double size,
+              // 7 quad size, the rest are 2 or 3 copies. It is not a variable,
+              // so the generator masks it out of the size variable.
+              [HEIGHT_ICON + ' Width/quantity', `__${name}size_w_`],
               [COLOR_ICON + ' Color', `${name}realcolor`],
               [ANIMATION_ICON + ' Animation', `${name}animation`],
               [MIRROR_ICON + ' Horizontal flip', `__${name}size_3_`],
@@ -1863,6 +1868,32 @@ Blockly.Blocks['sprite_fire_angle_get'] = {
       'happens to get the angle the object was travelling at - before a "Bounce" block runs, which ' +
       'turns it around. It plugs straight into the "Find playfield pixel" block\'s direction and ' +
       'into a Fire block\'s angle. Only meaningful for an object a Fire block launched.');
+  },
+};
+
+// Changes how fast an object a Fire block launched moves, while it is moving (the Fire block
+// sets the speed it starts at).
+Blockly.Blocks['sprite_fire_speed_set'] = {
+  init: function() {
+    this.appendValueInput('SPEED')
+        .setCheck('Number')
+        .appendField(`${MISSILE_ICON} Set fired`)
+        .appendField(new Blockly.FieldDropdown(FIRE_OBJECT_OPTIONS), 'MISSILE')
+        .appendField('speed to');
+    this.setInputsInline(true);
+    this.setPreviousStatement(true, null);
+    this.setNextStatement(true, null);
+    const colourFor = (value) => (value === 'ball' ? '#ff8800' : value === '1' ? 'blue' : 'red');
+    const objectField = this.getField('MISSILE');
+    this.setColour(colourFor(objectField.getValue()));
+    objectField.setValidator((newValue) => {
+      this.setColour(colourFor(newValue));
+      return newValue;
+    });
+    this.setTooltip('Changes the speed, in pixels per frame (0 to 7), of the chosen missile or ball ' +
+      'that a "Fire" block launched. It takes effect on the next frame and keeps the direction. 0 ' +
+      'holds it still without cancelling the Fire (set the speed back to move it again; "Stop ' +
+      'fired" cancels it). Has no effect on an object no "Fire" block launches.');
   },
 };
 

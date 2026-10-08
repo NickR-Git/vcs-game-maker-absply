@@ -298,14 +298,10 @@ export const useProjectIncludeDateInFilenameStorage = () =>
 export const useStellaPathStorage = () => useLocalStorage('vcs-game-maker.stellaPath');
 
 // Same "standing app preference, not a project setting" reasoning as the
-// others above - a real reported correction. Unlike those, DIM also gets
-// read by the real bBasic generators (generators/bbasic/music.js,
-// soundfx.js, sound.js) and baked into the compiled ROM's  audio
-// behavior - moving it here means a saved .vcsgm project no longer carries
-// its  DIM setting; opening it elsewhere (or after changing this
-// yourself) compiles using whoever's local app-wide preference is current,
-// not whatever the project was originally authored/tested with. Confirmed
-// as the intended tradeoff (asked directly) rather than an oversight.
+// others above - a real reported correction. DIM scales the previews on the Sound and Music tabs
+// and the emulator's output (public/index.html reads this same key), live, without a rebuild.
+// The compiled ROM always keeps the full volume, so a saved project does not carry a DIM
+// setting and a saved ROM is not quieter because of it.
 export const useDimSoundFxStorage = () =>
   useBooleanAppSetting('vcs-game-maker.dimSoundFx');
 

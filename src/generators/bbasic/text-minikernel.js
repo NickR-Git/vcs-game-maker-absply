@@ -11,7 +11,7 @@ import {bankSuffixedTableName} from '../../blocks/data';
 import {getNamedScrollLayout, registerFreeTypedScrollMessage, buildTextScrollSetupLines,
   trackTextByIdScrollUsage, textScrollFarEndVarName,
   textScrollBaseVarName, textScrollStateVarName,
-  textScrollPauseDurationVarName, textScrollTimerVarName,
+  textScrollPauseOperand, textScrollTimerVarName,
   TEXT_SCROLL_DIR_MASK} from './text-scroll';
 import {getStaticMessageLayout, staticMessageRegionEnd, splitMessageLines} from './text-minikernel-layout';
 
@@ -895,7 +895,7 @@ export default (Blockly) => {
       Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
     const base = resolveVar(textScrollBaseVarName());
     const timer = resolveVar(textScrollTimerVarName());
-    const pauseDuration = resolveVar(textScrollPauseDurationVarName());
+    const pauseDuration = textScrollPauseOperand(resolveVar).value;
     const state = resolveVar(textScrollStateVarName());
     const action = block.getFieldValue('ACTION');
     // Snaps back to the message's  start (TextIndex = base, its

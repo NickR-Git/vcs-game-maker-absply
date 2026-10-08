@@ -1,18 +1,17 @@
 'use strict';
 
 import {findSoundEffectById, processSoundEffectsStorageDefaults} from '../../blocks/soundfx';
-import {useConfigurationStorage, useDimSoundFxPercentStorage, useDimSoundFxStorage,
+import {useConfigurationStorage,
   useSoundEffectsStorage} from '../../hooks/project';
 import {buildEnvelopeCurve, clampEnvelopeStages} from '../../utils/envelope';
 
-// The DIM toggle's default percentage, used until the user picks their
+// The DIM toggle's default percentage, used until the user picks a value
 // on the slider next to it.
 export const DEFAULT_DIM_PERCENT = 25;
 
-// AUDV is write-only hardware (the TIA has no way to read it back), so
-// dimming can't be a per-frame runtime override the way muteAllAudio is
-// (see generateMuteAudio in generators/bbasic.js) - it has to be baked into
-// each sound effect's  AUDV value at compile time instead, here.
+// A sound's volume at the DIM percentage. The Sound and Music tabs' previews use it; the
+// emulator scales its output by the same percentage (public/index.html's
+// playGopher2600AudioChunk), and the compiled ROM always keeps the full volume.
 export const dimVolume = (audv, percent) =>
   Math.round(Number(audv) * (Number(percent) / 100));
 
@@ -226,8 +225,7 @@ export default (Blockly) => {
       envelopeReleaseStart, envelopeSustainLength, envelopeRelease} = soundEffect;
     // App-wide preference (see useDimSoundFxStorage's  comment), not part
     // of this project's  saved configuration.
-    const effectiveAudv = useDimSoundFxStorage().value ?
-      dimVolume(audv, useDimSoundFxPercentStorage(DEFAULT_DIM_PERCENT).value) : audv;
+    const effectiveAudv = audv;
 
     // Every soundfx_play - envelope-enabled or not - has to (re)set its
     // channel's  envelope-config nibble (and its  attack/decay

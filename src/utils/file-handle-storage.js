@@ -14,6 +14,8 @@
 const DB_NAME = 'vcs-game-maker';
 const STORE_NAME = 'file-handles';
 const HANDLE_KEY = 'active-project';
+// The folder the active project was last saved into (see Project.vue's handleSaveProject).
+const DIR_KEY = 'active-project-dir';
 
 const openHandleDb = () => new Promise((resolve, reject) => {
   const request = indexedDB.open(DB_NAME, 1);
@@ -28,14 +30,14 @@ const openHandleDb = () => new Promise((resolve, reject) => {
 // handleNewProject - a new project has nothing to save back to, and
 // shouldn't leave the PREVIOUS project's handle sitting around to be
 // silently restored into it on the next reload).
-export const persistActiveFileHandle = async (handle) => {
+const persistHandle = async (handle, key) => {
   try {
     const db = await openHandleDb();
     const tx = db.transaction(STORE_NAME, 'readwrite');
     if (handle) {
-      tx.objectStore(STORE_NAME).put(handle, HANDLE_KEY);
+      tx.objectStore(STORE_NAME).put(handle, key);
     } else {
-      tx.objectStore(STORE_NAME).delete(HANDLE_KEY);
+      tx.objectStore(STORE_NAME).delete(key);
     }
     await new Promise((resolve, reject) => {
       tx.oncomplete = resolve;
@@ -46,11 +48,14 @@ export const persistActiveFileHandle = async (handle) => {
   }
 };
 
-export const loadPersistedFileHandle = async () => {
+export const persistActiveFileHandle = (handle) => persistHandle(handle, HANDLE_KEY);
+export const persistActiveDirHandle = (handle) => persistHandle(handle, DIR_KEY);
+
+const loadHandle = async (key) => {
   try {
     const db = await openHandleDb();
     const tx = db.transaction(STORE_NAME, 'readonly');
-    const request = tx.objectStore(STORE_NAME).get(HANDLE_KEY);
+    const request = tx.objectStore(STORE_NAME).get(key);
     return await new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result || null);
       request.onerror = () => reject(request.error);
@@ -60,6 +65,9 @@ export const loadPersistedFileHandle = async () => {
     return null;
   }
 };
+
+export const loadPersistedFileHandle = () => loadHandle(HANDLE_KEY);
+export const loadPersistedDirHandle = () => loadHandle(DIR_KEY);
 
 // A handle restored from a PRIOR session (queryPermission) - or even one
 // from THIS session that was never actually granted write access yet

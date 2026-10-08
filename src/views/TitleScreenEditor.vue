@@ -147,6 +147,24 @@
                 </v-card-text>
               </v-card>
             </v-menu>
+            <v-divider class="get-inner-divider" vertical />
+            <v-btn
+              icon
+              small
+              title="Export the selected title screen to a .vcstitle file"
+              :disabled="!exportableScreen"
+              @click="handleExportTitleScreen"
+            >
+              <v-icon :size="16">mdi-application-export</v-icon>
+            </v-btn>
+            <v-btn
+              icon
+              small
+              title="Import a title screen from a .vcstitle file (added as a new title screen)"
+              @click="handleImportTitleScreen"
+            >
+              <v-icon :size="16">mdi-application-import</v-icon>
+            </v-btn>
           </template>
           <template v-slot:below-tools>
             <quick-color-palette v-model="selectedQuickColor" :active-editor="effectiveFrameEditor" />
@@ -209,6 +227,24 @@
 
                   <div class="titlescreen-corner-toolbar">
                     <v-btn
+                      :title="canDuplicateScreen(screen) ? 'Duplicate this title screen, with all its cards' :
+                        'Duplicate this title screen (not enough copies of its card kinds are left)'"
+                      icon
+                      small
+                      class="titlescreen-icon-btn-size"
+                      :disabled="!canDuplicateScreen(screen)"
+                      @click.stop="() => handleDuplicateScreen(screen)"
+                    >
+                      <v-icon>mdi-content-duplicate</v-icon>
+                    </v-btn>
+                    <confirm-delete-menu
+                      v-if="state.screens.length > 1"
+                      title="Delete this title screen?"
+                      activator-title="Delete this title screen"
+                      icon-btn-class="titlescreen-icon-btn-size"
+                      @confirm="handleDeleteScreen(screen)"
+                    />
+                    <v-btn
                       :title="testingScreenId === screen.id ? 'Building...' :
                         buildInProgress ? 'Another build is already running - try again once it finishes' :
                         'Test this title screen in the emulator'"
@@ -221,13 +257,6 @@
                     >
                       <v-icon>mdi-play</v-icon>
                     </v-btn>
-                    <confirm-delete-menu
-                      v-if="state.screens.length > 1"
-                      title="Delete this title screen?"
-                      activator-title="Delete this title screen"
-                      icon-btn-class="titlescreen-icon-btn-size"
-                      @confirm="handleDeleteScreen(screen)"
-                    />
                   </div>
                 </v-list-item-title>
 
@@ -306,6 +335,18 @@
                                   </v-card-text>
                                 </v-card>
                               </v-menu>
+
+                              <v-btn
+                                :title="canAddCardType(card.type) ? 'Duplicate this card' :
+                                  'Duplicate this card (no copies of this kind of card are left)'"
+                                icon
+                                small
+                                class="titlescreen-icon-btn-size"
+                                :disabled="!canAddCardType(card.type)"
+                                @click.stop="() => handleDuplicateCard(screen, card)"
+                              >
+                                <v-icon>mdi-content-duplicate</v-icon>
+                              </v-btn>
 
                               <confirm-delete-menu
                                 title="Delete this card?"
@@ -409,6 +450,17 @@
                                 Plays back automatically (each frame's Duration is in real frame ticks,
                                 same as a Player sprite animation) - no trigger block needed.
                               </p>
+                              <v-text-field
+                                class="titlescreen-scroll-window-field"
+                                label="Window height (0 = no scrolling)"
+                                title="How many rows show at once - leave at 0 (or at/above one frame's full height) to show the whole current frame with no scrolling. Once set smaller, use the Set title screen scroll position block (Actions tab) to scroll within whichever frame is currently showing."
+                                v-model.number="card.scrollWindow"
+                                type="number"
+                                min="0"
+                                :max="cardFrameHeight(card)"
+                                hide-details
+                                @change="handleChildChange"
+                              />
                               <div class="titlescreen-frame-list">
                                 <div
                                   v-for="(frame, frameIndex) in card.frames"
@@ -429,7 +481,9 @@
                                       v-model.number="frame.duration"
                                       hide-details
                                       type="number"
-                                      @change="handleChildChange"
+                                      min="1"
+                                      step="1"
+                                      @change="() => handleFrameDurationChange(frame)"
                                     />
                                     <pixel-editor
                                       :ref="pixelEditorRefKey(screen, card, frame)"
@@ -439,6 +493,7 @@
                                       v-model="frame.pixels"
                                       :fgColor="editorFgColor(card)"
                                       :rowColors="editorRowColors(card, frame)"
+                                      :columnBackdrop="cardBackdrop(screen, card, frame)"
                                       :showClearButton="true"
                                       :showGrid="showPixelGrid"
                                       :name="`titlescreen-${screen.id}-${card.id}`"
@@ -465,6 +520,28 @@
                                           :activeQuickColor="selectedQuickColor"
                                           @input="(colors) => handleSetCardColor(card, colors[0])"
                                         />
+                                      </template>
+                                      <template v-if="cardWidth(card) === 48" v-slot:below-sidebar>
+                                        <playfield-color-strip
+                                          class="titlescreen-frame-box-color"
+                                          :value="[frameBoxColor(screen, card, frame)]"
+                                          :quickColors="quickColorPalette"
+                                          :activeQuickColor="selectedQuickColor"
+                                          @input="(colors) => handleSetFrameBoxColor(screen, card, frame, colors[0])"
+                                        />
+                                      </template>
+                                      <template v-if="cardWidth(card) === 48" v-slot:below>
+                                        <div class="titlescreen-frame-box-cells">
+                                          <button
+                                            v-for="cell in frameBoxCells(screen, card, frame)"
+                                            :key="cell.index"
+                                            type="button"
+                                            class="titlescreen-frame-box-cell"
+                                            :style="{backgroundColor: cell.color}"
+                                            :title="`${cell.on ? 'Drawn in the picture background color' : 'Drawn in the page color'} - click to switch`"
+                                            @click="() => handleToggleFrameBoxCell(screen, card, frame, cell)"
+                                          />
+                                        </div>
                                       </template>
                                       <template v-slot:toolbar-end>
                                         <v-btn
@@ -516,17 +593,23 @@
                                 </div>
                               </div>
 
-                              <v-text-field
-                                class="titlescreen-scroll-window-field"
-                                label="Window height (0 = no scrolling)"
-                                title="How many rows show at once - leave at 0 (or at/above one frame's full height) to show the whole current frame with no scrolling. Once set smaller, use the Set title screen scroll position block (Actions tab) to scroll within whichever frame is currently showing."
-                                v-model.number="card.scrollWindow"
-                                type="number"
-                                min="0"
-                                :max="cardFrameHeight(card)"
-                                hide-details
-                                @change="handleChildChange"
-                              />
+
+                              <div v-if="showPictureBackgroundControls && cardWidth(card) === 48" class="titlescreen-box">
+                                <div class="titlescreen-box-heading">Picture background</div>
+                                <p class="v-messages theme--light v-messages__message titlescreen-player-hint">
+                                  Colors the area behind the picture, separately for each frame: the swatch under the
+                                  color bar sets its color, and the blocks under the graphic switch the color on (dark)
+                                  or off behind the picture. The right half of the screen mirrors the left.
+                                </p>
+                                <div class="titlescreen-box-row">
+                                  <v-btn small text title="Switch on exactly the blocks behind the picture, in every frame" @click="() => handleFitBox(screen, card)">
+                                    Fit all frames to picture
+                                  </v-btn>
+                                  <v-btn small text title="Switch every block off, in every frame" @click="() => handleClearBox(screen, card)">
+                                    Clear all frames
+                                  </v-btn>
+                                </div>
+                              </div>
                             </template>
                           </div>
                         </v-card>
@@ -595,7 +678,9 @@ import {chunk, max} from 'lodash';
 import {colorByteToCss} from '../utils/palette';
 import {resizePixelMatrixHeight, scaleRowColors} from '../utils/pixels';
 import {rowColorsForMove} from '../utils/row-color-move';
-import {loadImageFromFile, openFileDialogMultiple, sortImportedAnimationFrameFiles} from '../utils/file';
+import {saveAs} from 'file-saver';
+import {getDateInfix} from '../utils/date';
+import {loadImageFromFile, openFileDialog, openFileDialogMultiple, sortImportedAnimationFrameFiles} from '../utils/file';
 import {createCroppedResizedCanvas, createResizedCanvas} from '../utils/image';
 import {parseAsepriteSheet} from '../utils/aseprite';
 import {escapeHtml} from '../utils/build-error';
@@ -611,6 +696,7 @@ import QuickColorPalette from '../components/QuickColorPalette.vue';
 import {useCollapsedIds} from '../hooks/collapse';
 import {recordCardDeletion} from '../hooks/card-delete-undo';
 import {useDragReorder} from '../hooks/drag-reorder';
+import {recordRowColorsChange} from '../utils/row-color-history';
 import {useTitleScreenStorage, useErrorStorage, usePixelGridOverlayStorage,
   usePlayerAnimationsStorage, useColorPaletteStorage} from '../hooks/project';
 import {useEditorZoom, ZOOM_LEVELS} from '../hooks/zoom';
@@ -623,9 +709,11 @@ import {useEditorZoom, ZOOM_LEVELS} from '../hooks/zoom';
 // without scrolling.
 const TITLESCREEN_ZOOM_LEVELS = [0.25, ...ZOOM_LEVELS];
 import {buildTitleScreenPreviewRom, useBuildInProgress} from '../hooks/rom';
+import {clampFrameDuration} from '../utils/duration';
 import {DEFAULT_ROW_COLOR, clearRowColors} from '../blocks/background';
 import {TITLE_SCREEN_KERNEL_TYPES, MAX_KERNEL_COPIES_PER_TYPE, MAX_PLAYER_CARDS, MAX_SCORE_CARDS,
-  blankTitleScreenPixels, processTitleScreenStorageDefaults, cardFrameHeight} from '../blocks/titlescreen';
+  blankTitleScreenPixels, migrateCardFrames, processTitleScreenStorageDefaults, cardFrameHeight,
+  titleFrameBox} from '../blocks/titlescreen';
 import {processPlayerAnimationsStorageDefaults} from '../generators/bbasic/sprites';
 
 // Same "module-scope ref, not per-instance state" reasoning as
@@ -670,6 +758,12 @@ export default defineComponent({
       state.value = state.value;
     };
 
+    // A frame lasts at least one video frame, however many are typed in.
+    const handleFrameDurationChange = (frame) => {
+      frame.duration = clampFrameDuration(frame.duration);
+      handleChildChange();
+    };
+
     // Which screen's preview build is currently running, if any - drives
     // the Play button's :loading state (see the template) so it's clear a
     // click actually did something during however long the compile takes,
@@ -702,6 +796,29 @@ export default defineComponent({
       instance.proxy.$forceUpdate();
     };
 
+    // Whether the kernel has enough copies of each kind of card left (it has a fixed number
+    // across every screen) for another screen with the same cards.
+    const canDuplicateScreen = (screen) => [...new Set(screen.cards.map((card) => card.type))]
+        .filter((type) => type !== 'space')
+        .every((type) => countOfType(type) + screen.cards.filter((card) => card.type === type).length <=
+          maxCopiesForType(type));
+
+    // A copy of a title screen (its name with " copy", background color and every card with its
+    // frames) placed right after it, under a new id. Card ids only have to be unique within their
+    // screen, so they stay as they are.
+    const handleDuplicateScreen = (screen) => {
+      if (!canDuplicateScreen(screen)) return;
+      const index = state.value.screens.findIndex(({id}) => id === screen.id);
+      const copy = JSON.parse(JSON.stringify(screen));
+      copy.id = getMaxId(state.value.screens) + 1;
+      copy.name = `${screen.name || 'Title screen'} copy`;
+      const screens = state.value.screens.slice();
+      screens.splice(index + 1, 0, copy);
+      state.value.screens = screens;
+      handleChildChange();
+      instance.proxy.$forceUpdate();
+    };
+
     const handleDeleteScreen = (screen) => {
       if (state.value.screens.length <= 1) return;
       state.value.screens = state.value.screens.filter(({id}) => id !== screen.id);
@@ -718,19 +835,16 @@ export default defineComponent({
     // consistent, legible scale.
     const TITLESCREEN_PIXEL_SCALE = 14;
     const editorWidth = (card) => `${Math.round(cardWidth(card) * TITLESCREEN_PIXEL_SCALE * zoom.value)}px`;
-    // A 48x2/96x2 card's rows are 2 scanlines tall on real hardware, which
-    // is already close enough to a TIA color clock's width to render as
-    // roughly square (the plain width/height ratio below). A 48x1 card's
-    // rows are only 1 scanline tall - half that - so without a correction
-    // its preview renders each pixel with the SAME (square) proportions as
-    // 48x2, making a 48x1 card's actual half-height pixels invisible in the
-    // editor. Matches BackgroundEditor.vue's (11/24) real-hardware
-    // pixel-proportion correction, which the same single-scanline-per-row
-    // case there also needs.
+    // On the emulator's screen a TIA color clock is 160 wide and the picture about 212 lines tall
+    // at 4:3, so one source pixel (one clock wide) is about 1.77 times as wide as one scanline is
+    // tall. A 48x2/96x2 card's rows are 2 scanlines tall, a 48x1 card's rows 1 scanline, so a pixel
+    // is 1.77 / (scanlines per row) as wide as it is tall: a bit narrower than square for x2 cards,
+    // wider than square for 48x1.
+    const CLOCK_TO_SCANLINE_RATIO = 4 / 3 * 212 / 160;
     const cardAspectRatio = (card, rowCount) => {
       const isDoubleLine = !!(TITLE_SCREEN_KERNEL_TYPES[card.type] || {}).doubleLine;
       const ratio = cardWidth(card) / (rowCount || 1);
-      return isDoubleLine ? ratio : ratio * (11 / 24);
+      return ratio * CLOCK_TO_SCANLINE_RATIO / (isDoubleLine ? 2 : 1);
     };
     const cardHasRowColors = (card) => !!(TITLE_SCREEN_KERNEL_TYPES[card.type] || {}).hasRowColors;
     const cardTypeLabel = (card) => {
@@ -848,6 +962,21 @@ export default defineComponent({
       ];
     };
 
+    // A copy of a card (every frame, with its pixels, row colors and durations) placed right after
+    // it, under a new id that is unique within the screen. The kernel has a fixed number of
+    // copies of each kind of card, so it is only offered while one is left.
+    const handleDuplicateCard = (screen, card) => {
+      if (!canAddCardType(card.type)) return;
+      const index = screen.cards.findIndex(({id}) => id === card.id);
+      const copy = JSON.parse(JSON.stringify(card));
+      copy.id = getMaxId(screen.cards) + 1;
+      const cards = screen.cards.slice();
+      cards.splice(index + 1, 0, copy);
+      screen.cards = cards;
+      handleChildChange();
+      instance.proxy.$forceUpdate();
+    };
+
     const handleDeleteCard = (screen, card) => {
       const index = screen.cards.findIndex(({id}) => id === card.id);
       screen.cards = screen.cards.filter(({id}) => id !== card.id);
@@ -870,6 +999,70 @@ export default defineComponent({
       screen.backgroundColor = color;
       handleChildChange();
     };
+
+    // The box behind a 48-wide picture (the kernel's per-image background color and PF1/PF2
+    // playfield bytes): each playfield block that is on is drawn in the box color, the rest of the
+    // row in the page's color. Left to right the 16 blocks the kernel controls are PF1's eight
+    // (bit 7 first) and PF2's eight (bit 0 first), mirrored on the right half; the picture
+    // covers the last six, and the two PF2 blocks before them lie just outside it.
+    // The "Picture background" section under the frames (its text and its "Fit all frames to picture" and "Clear all
+    // frames" buttons) is switched off for now; the swatch and blocks under each graphic stay.
+    const showPictureBackgroundControls = false;
+    const pageColorOf = (screen) => Number(screen.backgroundColor) || 0;
+    const frameBoxColor = (screen, card, frame) => titleFrameBox(card, frame, pageColorOf(screen)).background;
+    // The 12 blocks behind the 48-pixel picture, left to right: PF2 bits 2-7 for the left half, then the same
+    // six mirrored for the right half. Blocks that mirror each other switch together.
+    const boxBitOfColumnBlock = (index) => 2 + (index < 6 ? index : 11 - index);
+    const frameBoxCells = (screen, card, frame) => {
+      const box = titleFrameBox(card, frame, pageColorOf(screen));
+      const css = colorByteToCss(box.background);
+      const page = colorByteToCss(pageColorOf(screen));
+      return Array.from({length: 12}, (_, index) => {
+        const on = !!((box.pf2 >> boxBitOfColumnBlock(index)) & 1);
+        return {index, on, bit: boxBitOfColumnBlock(index), color: on ? css : page};
+      });
+    };
+    // Writes all of a frame's picture background values, so it no longer follows the graphic's.
+    const setFrameBox = (screen, card, frame, changes) => {
+      const box = {...titleFrameBox(card, frame, pageColorOf(screen)), ...changes};
+      frame.pf1 = box.pf1;
+      frame.pf2 = box.pf2;
+      frame.background = box.background;
+      handleChildChange();
+      instance.proxy.$forceUpdate();
+    };
+    const handleSetFrameBoxColor = (screen, card, frame, color) => setFrameBox(screen, card, frame, {background: color});
+    const handleToggleFrameBoxCell = (screen, card, frame, cell) => {
+      const box = titleFrameBox(card, frame, pageColorOf(screen));
+      setFrameBox(screen, card, frame, {pf2: (box.pf2 ^ (1 << cell.bit)) & 0xff});
+    };
+    // What shows where the picture is off, per column: the page's background color, or the picture
+    // background color where the block is switched on.
+    const cardBackdrop = (screen, card, frame) => {
+      const width = cardWidth(card);
+      const page = colorByteToCss(pageColorOf(screen));
+      if (width !== 48) return new Array(width).fill(page);
+      const cells = frameBoxCells(screen, card, frame);
+      return Array.from({length: width}, (_, column) => {
+        // The blocks run left to right under the picture, 4 pixels each.
+        return cells[Math.floor(column / 4)].color;
+      });
+    };
+    const setAllFramesBox = (screen, card, pf2) => {
+      card.pf1 = 0;
+      card.pf2 = pf2;
+      card.frames.forEach((frame) => {
+        frame.pf1 = 0;
+        frame.pf2 = pf2;
+        if (frame.background === undefined || frame.background === null) {
+          frame.background = titleFrameBox(card, frame, pageColorOf(screen)).background;
+        }
+      });
+      handleChildChange();
+      instance.proxy.$forceUpdate();
+    };
+    const handleFitBox = (screen, card) => setAllFramesBox(screen, card, 0xfc);
+    const handleClearBox = (screen, card) => setAllFramesBox(screen, card, 0);
 
     const handleSetCardColor = (card, color) => {
       card.color = color;
@@ -895,6 +1088,14 @@ export default defineComponent({
       } else {
         card.color = 0x0f;
       }
+      // The picture background colors go back to the page's color (the blocks that are on stay on).
+      if (cardWidth(card) === 48) {
+        delete card.background;
+        card.frames.forEach((frame) => {
+          delete frame.background;
+        });
+        instance.proxy.$forceUpdate();
+      }
       handleChildChange();
     };
 
@@ -918,9 +1119,14 @@ export default defineComponent({
       handleChildChange();
     };
 
-    const handleRowColorsInput = (frame, colors) => {
+    const setRowColors = (frame, colors) => {
       frame.rowColors = colors;
       handleChildChange();
+    };
+    // A change made by the user (the color strip, Clear, Paste) can be undone; moving selected
+    // pixels takes the row colors along through the pixel editor's history instead.
+    const handleRowColorsInput = (frame, colors) => {
+      recordRowColorsChange(frame, setRowColors, colors);
     };
 
     // Moving selected pixels with the Move tool takes the colors of their rows along
@@ -928,7 +1134,7 @@ export default defineComponent({
     const handleMoveRows = (card, frame, move) => {
       if (!cardHasRowColors(card)) return;
       const colors = rowColorsForMove(frame, move);
-      if (colors) handleRowColorsInput(frame, colors);
+      if (colors) setRowColors(frame, colors);
     };
 
     // Same shape as PlayerEditor.vue's handleAddFrame - prefills the new
@@ -1026,6 +1232,61 @@ export default defineComponent({
               handleChildChange();
               instance.proxy.$forceUpdate();
             });
+      });
+    };
+
+    // The title screen the toolbar's export button saves: the selected one, or the only one.
+    const exportableScreen = computed(() => state.value.screens.find(({id}) => id === selectedScreenId.value) ||
+      (state.value.screens.length === 1 ? state.value.screens[0] : null));
+
+    // Saves a title screen (its name, background color and every card with its frames) as a
+    // .vcstitle file. The id is left out: an imported screen gets a new one in the project it
+    // lands in.
+    const handleExportTitleScreen = () => {
+      const screen = exportableScreen.value;
+      if (!screen) return;
+      // eslint-disable-next-line no-unused-vars
+      const {id, ...screenData} = screen;
+      const blob = new Blob([JSON.stringify({type: 'VCS Game Maker Title Screen', screen: screenData}, null, 2)],
+          {type: 'application/json'});
+      const filename = (screen.name || `title-screen-${screen.id}`).replace(/[^A-Za-z0-9]+/g, '_');
+      saveAs(blob, `Title_${filename}-${getDateInfix()}.vcstitle`);
+    };
+
+    // Adds the title screen in a .vcstitle file as a new screen at the end of the list. The
+    // kernel has a fixed number of each kind of card across every screen, so a file with more
+    // cards than are left is refused with a message instead of producing a project that
+    // cannot build.
+    const handleImportTitleScreen = () => {
+      openFileDialog('.vcstitle,.json').then((file) => file.text()).then((text) => {
+        const data = JSON.parse(text);
+        const source = data && (data.screen || (Array.isArray(data.screens) && data.screens[0]));
+        if (!source || !Array.isArray(source.cards)) {
+          throw new Error('the file does not contain a title screen');
+        }
+        const known = ['space', 'score', 'player', ...Object.keys(TITLE_SCREEN_KERNEL_TYPES)];
+        const cards = source.cards.map(migrateCardFrames);
+        const unknown = cards.find((card) => !known.includes(card.type));
+        if (unknown) throw new Error(`it has a card of an unknown kind (${escapeHtml(String(unknown.type))})`);
+        const kinds = [...new Set(cards.map((card) => card.type))].filter((type) => type !== 'space');
+        const over = kinds.find((type) =>
+          countOfType(type) + cards.filter((card) => card.type === type).length > maxCopiesForType(type));
+        if (over) {
+          throw new Error(`there are not enough "${over}" cards left in the project for the ${
+            cards.filter((card) => card.type === over).length} it has`);
+        }
+        const newScreen = {
+          id: getMaxId(state.value.screens) + 1,
+          name: source.name || 'Imported title screen',
+          backgroundColor: Number(source.backgroundColor) || 0,
+          cards,
+        };
+        state.value.screens.push(newScreen);
+        handleChildChange();
+        instance.proxy.$forceUpdate();
+      }).catch((e) => {
+        if (e && e.message === 'No file selected') return;
+        errorStorage.value = `Import title screen: ${e && e.message ? e.message : e}.`;
       });
     };
 
@@ -1337,15 +1598,18 @@ export default defineComponent({
     };
 
     return {
-      state, handleChildChange,
+      state, handleChildChange, handleFrameDurationChange,
       quickColorPalette, selectedQuickColor,
-      handleAddScreen, handleDeleteScreen,
+      handleAddScreen, handleDeleteScreen, handleDuplicateScreen, canDuplicateScreen,
       isScreenCollapsed, toggleScreenCollapsed,
       testingScreenId, buildInProgress, handleTestTitleScreen,
       screenDragAttrs, screenDragCardClass, screenDragHandleListeners, screenDragTargetListeners,
       cardWidth, editorWidth, cardAspectRatio, cardHasRowColors, editorRowColors, editorFgColor, cardTypeLabel,
       addCardOptions, canAddCardType, maxCopies, maxCopiesForType, playerAnimationOptions,
-      handleAddCard, handleDeleteCard,
+      handleAddCard, handleDeleteCard, handleDuplicateCard,
+      showPictureBackgroundControls, frameBoxColor, frameBoxCells, handleSetFrameBoxColor, handleToggleFrameBoxCell, cardBackdrop, handleFitBox,
+      handleClearBox,
+      exportableScreen, handleExportTitleScreen, handleImportTitleScreen,
       handleSetBackgroundColor, handleSetCardColor, handleClearCardColors,
       handleFramePixelsInput, handleRowColorsInput, handleMoveRows, cardFrameHeight,
       handleAddFrame, handleDeleteFrame,
@@ -1753,7 +2017,7 @@ export default defineComponent({
    border... looks like it's being cut off on the left... the first card in
    every row"). 2px matches the outline width exactly. */
 .titlescreen-card-body {
-  margin-top: 34px;
+  margin-top: 26px;
   padding: 2px;
   overflow-x: auto;
   overflow-y: hidden;
@@ -1788,6 +2052,55 @@ export default defineComponent({
 
 .titlescreen-player-hint {
   margin-bottom: 8px;
+}
+
+.titlescreen-box {
+  margin-top: 28px;
+}
+
+.titlescreen-box-heading {
+  font-size: 14px;
+  margin-bottom: 14px;
+}
+
+.titlescreen-box-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+}
+
+/* Under a frame's canvas, in the same style as the row color bar beside it: a swatch under the bar and one
+   block per 4 pixels of the picture, lined up with the canvas. */
+.titlescreen-frame-box-color {
+  height: 22px;
+  margin-top: 4px;
+}
+
+.titlescreen-frame-box-cells {
+  display: flex;
+  height: 22px;
+  margin-top: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.4);
+}
+
+.titlescreen-frame-box-cell {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  border-right: 1px solid rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+}
+
+.titlescreen-frame-box-cell:last-child {
+  border-right: none;
+}
+
+.titlescreen-frame-box-cell:hover {
+  outline: 2px solid #1976d2;
+  outline-offset: -2px;
 }
 
 .add-titlescreen-card-buttom {
@@ -1862,7 +2175,11 @@ export default defineComponent({
 }
 
 .titlescreen-scroll-window-field {
-  max-width: 260px;
-  margin-top: 8px;
+  max-width: 320px;
+  margin-top: 0;
+  /* Room for the floating label, which is cut off at the top without it (most visible in Expert mode, with the
+     description text above hidden). */
+  padding-top: 12px;
+  margin-bottom: 12px;
 }
 </style>

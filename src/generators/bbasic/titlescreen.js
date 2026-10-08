@@ -3,10 +3,14 @@
 import {TITLE_SCREEN_KERNEL_TYPES, MAX_KERNEL_COPIES_PER_TYPE,
   processTitleScreenStorageDefaults, isCardAnimated, cardFrameHeight,
   titleCardFrameCounterVarName, titleCardScrollOffsetVarName,
-  titleCardIndexVarName, titleCardScrollEdgeFlagsVarName, TITLE_SCROLL_EDGE_BITS} from '../../blocks/titlescreen';
+  titleCardIndexVarName, titleCardScrollEdgeFlagsVarName, TITLE_SCROLL_EDGE_BITS,
+  titleCardColorVarName, TITLE_BG_COLOR_VAR_NAME, titleCardBoxColorVarName, titleCardBoxPf1VarName,
+  titleCardBoxPf2VarName, titlePlayerIndexVarName, titlePlayerFrameVarName, titleFrameBox} from '../../blocks/titlescreen';
 import {useTitleScreenStorage, usePlayerAnimationsStorage,
   useConfigurationStorage} from '../../hooks/project';
 import {processPlayerAnimationsStorageDefaults} from './sprites';
+import {clampFrameDuration} from '../../utils/duration';
+import {flagPoolVar, flagPoolBit} from './flag-pool';
 import {resolveScoreDigitBytes} from '../../utils/score-font';
 import {tvColorByte} from '../../utils/palette';
 
@@ -46,7 +50,7 @@ const toColorHexByte = (n) => toHexByte(tvColorByte(n & 0xff));
 // card.scrollWindow's  comment in blocks/titlescreen.js for the runtime
 // scroll-offset byte this also declares in that case (bmp_${key}_index,
 // read directly by the kernel's per-copy asm via "ifconst").
-const buildCardDataAsm = (card, key, typeInfo, ref, Blockly) => {
+const buildCardDataAsm = (card, key, typeInfo, ref, Blockly, pageColor) => {
   const {blockCount, doubleLine, hasRowColors} = typeInfo;
   const frames = card.frames && card.frames.length ? card.frames :
     [{pixels: [new Array(typeInfo.width).fill(0)]}];
@@ -166,23 +170,41 @@ const buildCardDataAsm = (card, key, typeInfo, ref, Blockly) => {
     // 48x1 only - a single fixed color for the whole card (every frame,
     // not per-frame - see cardFrameHeight's comment in
     // blocks/titlescreen.js for why), no per-row list.
-    lines.push(
-        `bmp_${key}_color`,
-        `\t.byte ${toColorHexByte(card.color || 0)}`,
-    );
+    if ((Blockly.BBasic.titleCardColorRefs || new Set()).has(ref)) {
+      // A "Set title screen graphic color" block changes it: the kernel reads a RAM byte
+      // instead of a ROM one, filled with the Title tab's color by Title screen start.
+      const colorVar = Blockly.BBasic.nameDB_.getName(
+          titleCardColorVarName(ref), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+      lines.push(`bmp_${key}_color = ${colorVar}`);
+    } else {
+      lines.push(
+          `bmp_${key}_color`,
+          `\t.byte ${toColorHexByte(card.color || 0)}`,
+      );
+    }
   }
 
   // Only the 48-wide kernels support a playfield background box behind the
   // image (see the kernel doc's  Example 5) - 96x2 has no PF1/PF2/
   // background fields at all.
-  if (typeInfo.width === 48) {
+  const firstBox = titleFrameBox(card, card.frames && card.frames[0], pageColor);
+  if (typeInfo.width === 48 && (Blockly.BBasic.titleBoxRefs || new Set()).has(ref)) {
+    // A box block changes it while the title screen runs: RAM bytes, filled by Title screen start.
+    const varName = (canonical) => Blockly.BBasic.nameDB_.getName(canonical, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+    lines.push(
+        `bmp_${key}_PF1 = ${varName(titleCardBoxPf1VarName(ref))}`,
+        `bmp_${key}_PF2 = ${varName(titleCardBoxPf2VarName(ref))}`,
+        `bmp_${key}_background = ${varName(titleCardBoxColorVarName(ref))}`,
+    );
+  } else if (typeInfo.width === 48) {
     lines.push(
         `bmp_${key}_PF1`,
-        `\tBYTE ${toBinaryByte(card.pf1 || 0)}`,
+        `\tBYTE ${toBinaryByte(firstBox.pf1)}`,
         `bmp_${key}_PF2`,
-        `\tBYTE ${toBinaryByte(card.pf2 || 0)}`,
+        `\tBYTE ${toBinaryByte(firstBox.pf2)}`,
         `bmp_${key}_background`,
-        `\tBYTE ${toColorHexByte(card.background || 0)}`,
+        // Unless the card has a box color, the row stays in the page's background color.
+        `\tBYTE ${toColorHexByte(firstBox.background)}`,
     );
   }
 
@@ -198,7 +220,7 @@ const buildCardDataAsm = (card, key, typeInfo, ref, Blockly) => {
   }
 
   return {code: lines.join('\n'), frameHeight, frameCount: frames.length,
-    frameDurations: frames.map((f) => f.duration || 1), frameOffsets};
+    frameDurations: frames.map((f) => clampFrameDuration(f.duration)), frameOffsets};
 };
 
 // Resolves a "player" card's  player0Animation/player1Animation field
@@ -210,7 +232,7 @@ const buildCardDataAsm = (card, key, typeInfo, ref, Blockly) => {
 // of position or color, so a slot nobody configured is always safe to leave
 // wherever the game happens to have last positioned that player.
 const resolvePlayerSlotFrames = (animationIndex) => {
-  const blank = {height: 1, frames: [[new Array(8).fill(0)]], hasRowColors: false};
+  const blank = {height: 1, frames: [[{pixels: new Array(8).fill(0)}]], hasRowColors: false, durations: [1]};
   if (animationIndex === undefined || animationIndex === null || animationIndex === '') return blank;
   const player = processPlayerAnimationsStorageDefaults(usePlayerAnimationsStorage());
   const animation = player.animations[Number(animationIndex)];
@@ -234,7 +256,23 @@ const resolvePlayerSlotFrames = (animationIndex) => {
     }
     return rows;
   });
-  return {height, frames, hasRowColors};
+  return {height, frames, hasRowColors,
+    durations: animation.frames.map((frame) => clampFrameDuration(frame.duration))};
+};
+
+// The Player sprites card's two players as the build sees them: the height of a frame, how many frames the
+// chosen animation has and how long each lasts, or null for a project with no Player sprites card. An
+// animation with several frames plays by itself (see generateTitlePlayerChecks).
+export const resolveTitlePlayerSlots = () => {
+  const {screens} = processTitleScreenStorageDefaults(useTitleScreenStorage());
+  const card = screens.flatMap((screen) => screen.cards || []).find((c) => c.type === 'player');
+  if (!card) return null;
+  const slots = {};
+  [0, 1].forEach((playerIndex) => {
+    const slot = resolvePlayerSlotFrames(playerIndex === 0 ? card.player0Animation : card.player1Animation);
+    slots[playerIndex] = {height: slot.height, frameCount: slot.frames.length, durations: slot.durations};
+  });
+  return slots;
 };
 
 // The "player" minikernel's  data block - see public/bb19/titlescreen/
@@ -251,7 +289,7 @@ const resolvePlayerSlotFrames = (animationIndex) => {
 // selection (bmp_playerN_index) just offsets to a different frame's
 // height-row block, which independently follows this same bottom-to-top
 // convention.
-const buildPlayerDataAsm = (card) => {
+const buildPlayerDataAsm = (card, Blockly) => {
   const windowHeight = Math.max(1, Math.round(Number(card.windowHeight) || 50));
   const kernelLines = Number(card.kernelLines) === 2 ? 2 : 1;
   const lines = [
@@ -271,6 +309,12 @@ const buildPlayerDataAsm = (card) => {
     const fallbackColor = rawFallbackColor != null ? rawFallbackColor : 0x0e;
     const {height, frames, hasRowColors} = resolvePlayerSlotFrames(animationIndex);
     heights[playerIndex] = height;
+    // The kernel adds bmp_playerN_index to the frame's address when it exists: a RAM byte that the
+    // checks (or the "Set title screen player sprite frame" block) write.
+    if ((Blockly.BBasic.titlePlayerIndexUsed || [])[playerIndex]) {
+      lines.push(`bmp_player${playerIndex}_index = ${Blockly.BBasic.nameDB_.getName(
+          titlePlayerIndexVarName(playerIndex), Blockly.Names.DEVELOPER_VARIABLE_TYPE)}`);
+    }
     lines.push(`bmp_player${playerIndex}_height = ${height}`, `bmp_player${playerIndex}`);
     frames.forEach((rows) => {
       [...rows].reverse().forEach((row) => lines.push(`\tBYTE ${toBinaryByte(packRowToBytes(row.pixels, 1)[0])}`));
@@ -373,6 +417,8 @@ export const estimateTitleScreenGraphicsBytes = (storage) => {
 // since every reference to it (layout line, data block, #ifconst guard) is
 // regenerated together every compile, never stored.
 const assignKernelSlots = (screens, Blockly) => {
+  // Lines Title screen start runs first: each runtime color back to the Title tab's color.
+  Blockly.BBasic.titleScreenStartLines = [];
   const slotByType = {};
   const usedKernelKeys = new Set();
   const dataBlocks = [];
@@ -424,7 +470,7 @@ const assignKernelSlots = (screens, Blockly) => {
         if (hasPlayerCard) return;
         hasPlayerCard = true;
         layoutLines.push(' draw_player');
-        const {code, heights} = buildPlayerDataAsm(card);
+        const {code, heights} = buildPlayerDataAsm(card, Blockly);
         dataBlocks.push(code);
         playerHeights = heights;
         cardSlotsByRef[`${screen.id}:${card.id}`] = 'player';
@@ -452,11 +498,26 @@ const assignKernelSlots = (screens, Blockly) => {
       layoutLines.push(` draw_${key}`);
       const ref = `${screen.id}:${card.id}`;
       const {code, frameHeight, frameCount, frameDurations, frameOffsets} =
-        buildCardDataAsm(card, key, typeInfo, ref, Blockly);
+        buildCardDataAsm(card, key, typeInfo, ref, Blockly, Number(screen.backgroundColor) || 0);
       dataBlocks.push(code);
+      if (typeInfo.width === 48 && (Blockly.BBasic.titleBoxRefs || new Set()).has(ref)) {
+        const varName = (canonical) => Blockly.BBasic.nameDB_.getName(canonical, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+        const startBox = titleFrameBox(card, card.frames && card.frames[0], Number(screen.backgroundColor) || 0);
+        Blockly.BBasic.titleScreenStartLines.push(
+            `${varName(titleCardBoxPf1VarName(ref))} = ${startBox.pf1}`,
+            `${varName(titleCardBoxPf2VarName(ref))} = ${startBox.pf2}`,
+            `${varName(titleCardBoxColorVarName(ref))} = ${toColorHexByte(startBox.background)}`);
+      }
+      if (!typeInfo.doubleLine && (Blockly.BBasic.titleCardColorRefs || new Set()).has(ref)) {
+        const colorVar = Blockly.BBasic.nameDB_.getName(
+            titleCardColorVarName(ref), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+        Blockly.BBasic.titleScreenStartLines.push(`${colorVar} = ${toColorHexByte(card.color || 0)}`);
+      }
       cardSlotsByRef[ref] = key;
       if (isCardAnimated(card)) {
-        cardAnimationByRef[ref] = {key, frameHeight, frameCount, frameDurations, frameOffsets};
+        const pageColor = Number(screen.backgroundColor) || 0;
+        cardAnimationByRef[ref] = {key, frameHeight, frameCount, frameDurations, frameOffsets,
+          frameBoxes: card.frames.map((frame) => titleFrameBox(card, frame, pageColor))};
       }
     });
 
@@ -496,7 +557,7 @@ const assignKernelSlots = (screens, Blockly) => {
 // the SAME per-copy kernel files - 48x1_X_kernel.asm's  position48 calls
 // via plain same-bank "jsr" - being reachable from multiple different
 // banks, which they can't be without their  bank-switch trampolines).
-const buildDriverAsm = (selectedIdVarName, screenPlans, usedKernelKeys, hasPlayerCard, hasScoreCard) => {
+const buildDriverAsm = (selectedIdVarName, screenPlans, usedKernelKeys, hasPlayerCard, hasScoreCard, bgVarName) => {
   const lines = ['asm'];
 
   lines.push(
@@ -574,7 +635,9 @@ const buildDriverAsm = (selectedIdVarName, screenPlans, usedKernelKeys, hasPlaye
       );
     }
     lines.push(
-        `\tlda #${toColorHexByte(plan.backgroundColor)}`,
+        // With "Set title screen background color" in the project the color comes from a
+        // variable (set by every Draw title screen block, see titlescreen_draw).
+        bgVarName ? `\tlda ${bgVarName}` : `\tlda #${toColorHexByte(plan.backgroundColor)}`,
         '\tsta titlescreencolor',
         '\tsta COLUBK',
         `\t${plan.layoutMacroName}`,
@@ -742,8 +805,18 @@ const generateTitleScreenAnimationChecks = (Blockly, cardAnimationByRef) => {
     const counterVar = resolveVar(titleCardFrameCounterVarName(ref));
     const totalDuration = frameDurations.reduce((sum, duration) => sum + duration, 0) || frameDurations.length;
     const scrollTerm = scrollTargetRefs.has(ref) ? ` + ${resolveVar(titleCardScrollOffsetVarName(ref))}` : '';
+    // While a "Set title screen graphic frame" block holds the graphic, its frame counter stands still.
+    const holdRefs = Blockly.BBasic.titleCardHoldRefs || [];
+    const holdIndex = holdRefs.indexOf(ref);
+    const tick = holdIndex === -1 ? ` ${counterVar} = ${counterVar} + 1` :
+      ` if !${titleCardHoldVar()}{${titleCardHoldBit(holdIndex)}} then ${counterVar} = ${counterVar} + 1`;
+    // After "play once" the counter stays on the last frame instead of starting again.
+    const onceIndex = (Blockly.BBasic.titleCardOnceRefs || []).indexOf(ref);
+    const stopOnLast = onceIndex === -1 ? [] :
+      [` if ${counterVar} >= ${totalDuration} && ${titleCardOnceVar()}{${titleCardOnceBit(onceIndex)}} then ${counterVar} = ${totalDuration - 1}`];
     const lines = [
-      ` ${counterVar} = ${counterVar} + 1`,
+      tick,
+      ...stopOnLast,
       ` if ${counterVar} >= ${totalDuration} then ${counterVar} = 0`,
       ` bmp_${key}_index = ${frameOffsets[0]}${scrollTerm}`,
     ];
@@ -753,11 +826,80 @@ const generateTitleScreenAnimationChecks = (Blockly, cardAnimationByRef) => {
       if (frameIndex === frameDurations.length - 1) return;
       lines.push(` if ${counterVar} >= ${cumulative} then bmp_${key}_index = ${frameOffsets[frameIndex + 1]}${scrollTerm}`);
     });
+    // A picture background that differs between the frames is written when a frame starts (so a block that
+    // changes it in between lasts until the next frame).
+    if ((Blockly.BBasic.titleFrameBoxRefs || new Set()).has(ref)) {
+      const {frameBoxes} = cardAnimationByRef[ref];
+      [['pf1', titleCardBoxPf1VarName, (value) => value], ['pf2', titleCardBoxPf2VarName, (value) => value],
+        ['background', titleCardBoxColorVarName, toColorHexByte]].forEach(([field, varNameOf, format]) => {
+        if (frameBoxes.every((box) => box[field] === frameBoxes[0][field])) return;
+        const boxVar = resolveVar(varNameOf(ref));
+        let start = 0;
+        frameDurations.forEach((frameDuration, frameIndex) => {
+          lines.push(` if ${counterVar} = ${start} then ${boxVar} = ${format(frameBoxes[frameIndex][field])}`);
+          start += frameDuration;
+        });
+      });
+    }
+    return lines.join('\n');
+  }).join('\n\n') + '\n';
+};
+
+// Each Player sprites animation with more than one frame plays by itself: the same duration counter the
+// picture cards use picks the frame, and bmp_playerN_index is its byte offset (frame * the frame's height).
+const generateTitlePlayerChecks = (Blockly) => {
+  const slots = Blockly.BBasic.titlePlayerSlots;
+  if (!slots) return '';
+  const resolveVar = (canonicalName) =>
+    Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+  return [0, 1].filter((playerIndex) => slots[playerIndex].frameCount > 1).map((playerIndex) => {
+    const {height, durations} = slots[playerIndex];
+    const counterVar = resolveVar(titlePlayerFrameVarName(playerIndex));
+    const indexVar = resolveVar(titlePlayerIndexVarName(playerIndex));
+    const total = durations.reduce((sum, duration) => sum + duration, 0);
+    const stopOnLast = slots[playerIndex].once ?
+      [` if ${counterVar} >= ${total} && ${titlePlayerOnceVar()}{${titlePlayerOnceBit(playerIndex)}} then ${counterVar} = ${total - 1}`] : [];
+    const lines = [
+      ` ${counterVar} = ${counterVar} + 1`,
+      ...stopOnLast,
+      ` if ${counterVar} >= ${total} then ${counterVar} = 0`,
+      ` ${indexVar} = 0`,
+    ];
+    let cumulative = 0;
+    durations.forEach((duration, frameIndex) => {
+      cumulative += duration;
+      if (frameIndex === durations.length - 1) return;
+      lines.push(` if ${counterVar} >= ${cumulative} then ${indexVar} = ${(frameIndex + 1) * height}`);
+    });
     return lines.join('\n');
   }).join('\n\n') + '\n';
 };
 
 export const TITLE_SCREEN_SUBROUTINE_NAME = '_titlescreen_system';
+
+// One bit that says "End title screen" has run: from then on Title screen update draws the regular
+// game screen instead of the kernel's. Set by the block, cleared by Title screen start.
+export const TITLE_KERNEL_ENDED_FAMILY = 'titleKernelEnded';
+export const titleKernelEndedVar = () => flagPoolVar(TITLE_KERNEL_ENDED_FAMILY);
+export const titleKernelEndedBit = () => flagPoolBit(TITLE_KERNEL_ENDED_FAMILY, 0);
+
+// One bit per graphic that a "Set title screen graphic frame" block can hold on a frame: while it
+// is set the graphic's frame counter stands still (see generateTitleScreenAnimationChecks).
+export const TITLE_CARD_HOLD_FAMILY = 'titleCardHold';
+export const titleCardHoldVar = () => flagPoolVar(TITLE_CARD_HOLD_FAMILY);
+export const titleCardHoldBit = (index) => flagPoolBit(TITLE_CARD_HOLD_FAMILY, index);
+// One bit per graphic, and one per Player sprite, that a block has set to "play once": its frame counter
+// stops on the last frame instead of wrapping (see generateTitleScreenAnimationChecks).
+export const TITLE_CARD_ONCE_FAMILY = 'titleCardOnce';
+export const titleCardOnceVar = () => flagPoolVar(TITLE_CARD_ONCE_FAMILY);
+export const titleCardOnceBit = (index) => flagPoolBit(TITLE_CARD_ONCE_FAMILY, index);
+export const TITLE_PLAYER_ONCE_FAMILY = 'titlePlayerOnce';
+export const titlePlayerOnceVar = () => flagPoolVar(TITLE_PLAYER_ONCE_FAMILY);
+export const titlePlayerOnceBit = (playerIndex) => flagPoolBit(TITLE_PLAYER_ONCE_FAMILY, Number(playerIndex));
+// One bit that says "Set title screen background color" is in effect.
+export const TITLE_BG_OVERRIDE_FAMILY = 'titleBgOverride';
+export const titleBgOverrideVar = () => flagPoolVar(TITLE_BG_OVERRIDE_FAMILY);
+export const titleBgOverrideBit = () => flagPoolBit(TITLE_BG_OVERRIDE_FAMILY, 0);
 
 // Called from bbasic.js's  init(), right after reserveDevVar hands out
 // selectedIdVarName - same timing/reasoning as generators/bbasic/input.js's
@@ -794,7 +936,8 @@ export const registerTitleScreenSubroutine = (Blockly, {selectedIdVarName}) => {
   // before any generator needs to resolve it" timing as every dev var
   // pre-scan in this codebase) - see reserveDevVar's call site there for
   // titleCardFrameCounterVarName/titleCardScrollOffsetVarName.
-  Blockly.BBasic.titleScreenAnimationChecks = generateTitleScreenAnimationChecks(Blockly, cardAnimationByRef);
+  Blockly.BBasic.titleScreenAnimationChecks = generateTitleScreenAnimationChecks(Blockly, cardAnimationByRef) +
+    generateTitlePlayerChecks(Blockly);
   // Read back by "Set title screen scroll position" (see titlescreen_scroll_set
   // below) - an animated card's index is owned by the per-frame check just
   // built above (frame base + scroll offset, recombined every frame), so
@@ -815,7 +958,9 @@ export const registerTitleScreenSubroutine = (Blockly, {selectedIdVarName}) => {
     ' include "dpcfix.asm"\n' +
     screenPlans.map((plan) => ` include "titlescreen_layout_${plan.id}.asm"\n`).join('') +
     '@end\n' +
-    buildDriverAsm(selectedIdVarName, screenPlans, usedKernelKeys, hasPlayerCard, hasScoreCard);
+    buildDriverAsm(selectedIdVarName, screenPlans, usedKernelKeys, hasPlayerCard, hasScoreCard,
+        Blockly.BBasic.titleBgUsed ?
+          Blockly.BBasic.nameDB_.getName(TITLE_BG_COLOR_VAR_NAME, Blockly.Names.DEVELOPER_VARIABLE_TYPE) : null);
 };
 
 export default (Blockly) => {
@@ -834,7 +979,115 @@ export default (Blockly) => {
         Blockly.BBasic.getCurrentBank(), Blockly.BBasic.getSubroutineBank(TITLE_SCREEN_SUBROUTINE_NAME));
     // With a single page there is no page number variable to set (see bbasic.js).
     const selectPage = selectedIdVarName ? `${selectedIdVarName} = ${screenId}\n` : '';
-    return `${selectPage} gosub ${TITLE_SCREEN_SUBROUTINE_NAME}${suffix}\n`;
+    let draw = `${selectPage} gosub ${TITLE_SCREEN_SUBROUTINE_NAME}${suffix}\n`;
+    if (Blockly.BBasic.titleBgUsed) {
+      // The driver draws the background color in this variable: the page's color, unless "Set
+      // title screen background color" has taken over.
+      const screen = processTitleScreenStorageDefaults(useTitleScreenStorage())
+          .screens.find(({id}) => String(id) === String(screenId));
+      const bgVar = Blockly.BBasic.nameDB_.getName(TITLE_BG_COLOR_VAR_NAME, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+      draw = `if !${titleBgOverrideVar()}{${titleBgOverrideBit()}} then ${bgVar} = ` +
+        `${toColorHexByte((screen && Number(screen.backgroundColor)) || 0)}\n` + draw;
+    }
+    // After "End title screen" the kernel is off and this block does nothing.
+    if (!Blockly.BBasic.titleEndUsed) return draw;
+    const skipLabel = `_titledraw_${Blockly.BBasic.blockNumbers.next('titledraw')}_skip`;
+    return `if ${titleKernelEndedVar()}{${titleKernelEndedBit()}} then goto ${skipLabel}\n${draw}@ ${skipLabel}\n`;
+  };
+
+  Blockly.BBasic['titlescreen_card_color_set'] = function(block) {
+    const ref = block.getFieldValue('CARD');
+    if (!ref || !(Blockly.BBasic.titleCardColorRefs || new Set()).has(ref)) {
+      return 'rem No single-color title screen graphic selected\n';
+    }
+    const value = Blockly.BBasic.valueToCode(block, 'VALUE', Blockly.BBasic.ORDER_ASSIGNMENT) || '0';
+    const colorVar = Blockly.BBasic.nameDB_.getName(titleCardColorVarName(ref), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+    return `${colorVar} = ${value}\n`;
+  };
+
+  // Jumps the graphic's frame counter to where the chosen frame starts (so the animation checks, which
+  // work out the frame from the counter, show it from the next pass on), and holds it there on request.
+  const boxVar = (canonical) => Blockly.BBasic.nameDB_.getName(canonical, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+  const boxRefFor = (block) => {
+    const ref = block.getFieldValue('CARD');
+    return ref && (Blockly.BBasic.titleBoxRefs || new Set()).has(ref) ? ref : null;
+  };
+
+  Blockly.BBasic['titlescreen_box_set'] = function(block) {
+    const ref = boxRefFor(block);
+    if (!ref) return 'rem No 48-wide title screen graphic selected\n';
+    const mode = block.getFieldValue('MODE');
+    // The sixteen blocks the kernel controls: PF1 bit 7 is the leftmost, PF2 bit 0 the ninth; the picture is
+    // behind the last six.
+    const [pf1, pf2] = mode === 'full' ? [255, 255] : mode === 'off' ? [0, 0] : [0, 252];
+    return `${boxVar(titleCardBoxPf1VarName(ref))} = ${pf1}\n${boxVar(titleCardBoxPf2VarName(ref))} = ${pf2}\n`;
+  };
+
+  Blockly.BBasic['titlescreen_box_color_set'] = function(block) {
+    const ref = boxRefFor(block);
+    if (!ref) return 'rem No 48-wide title screen graphic selected\n';
+    const value = Blockly.BBasic.valueToCode(block, 'VALUE', Blockly.BBasic.ORDER_ASSIGNMENT) || '0';
+    return `${boxVar(titleCardBoxColorVarName(ref))} = ${value}\n`;
+  };
+
+  Blockly.BBasic['titlescreen_card_frame_set'] = function(block) {
+    const ref = block.getFieldValue('CARD');
+    const animation = ref && Blockly.BBasic.titleScreenCardAnimations && Blockly.BBasic.titleScreenCardAnimations[ref];
+    if (!animation) return 'rem No title screen graphic with several frames selected\n';
+    const hold = block.getFieldValue('HOLD') === 'TRUE';
+    const holdIndex = (Blockly.BBasic.titleCardHoldRefs || []).indexOf(ref);
+    const counterVar = Blockly.BBasic.nameDB_.getName(
+        titleCardFrameCounterVarName(ref), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+    const durations = animation.frameDurations;
+    const total = durations.reduce((sum, duration) => sum + duration, 0) || durations.length;
+    // Where each frame starts. Without a hold the counter goes up before the frame is chosen, so
+    // it is set one tick early (the first frame wraps from the end).
+    const starts = durations.map((_, index) => durations.slice(0, index).reduce((sum, d) => sum + d, 0));
+    const counterFor = (index) => (hold ? starts[index] : (starts[index] + total - 1) % total);
+    const value = Blockly.BBasic.valueToCode(block, 'VALUE', Blockly.BBasic.ORDER_ASSIGNMENT) || '0';
+    const lines = [];
+    const literal = /^\s*\d+\s*$/.test(value) ? Number(value) : null;
+    if (literal !== null) {
+      lines.push(`${counterVar} = ${counterFor(Math.min(literal, durations.length - 1))}`);
+    } else {
+      lines.push(`temp1 = ${value}`, `if temp1 >= ${durations.length} then temp1 = ${durations.length - 1}`);
+      durations.forEach((_, index) => lines.push(`if temp1 = ${index} then ${counterVar} = ${counterFor(index)}`));
+    }
+    if (holdIndex !== -1) {
+      lines.push(`${titleCardHoldVar()}{${titleCardHoldBit(holdIndex)}} = ${hold ? 1 : 0}`);
+    }
+    const onceIndex = (Blockly.BBasic.titleCardOnceRefs || []).indexOf(ref);
+    if (onceIndex !== -1) {
+      const once = !hold && block.getFieldValue('PLAYBACK') === 'once';
+      lines.push(`${titleCardOnceVar()}{${titleCardOnceBit(onceIndex)}} = ${once ? 1 : 0}`);
+    }
+    return lines.join('\n') + '\n';
+  };
+
+  Blockly.BBasic['titlescreen_bg_set'] = function(block) {
+    if (!Blockly.BBasic.titleBgUsed) return 'rem No title screen background color to set\n';
+    const value = Blockly.BBasic.valueToCode(block, 'VALUE', Blockly.BBasic.ORDER_ASSIGNMENT) || '0';
+    const bgVar = Blockly.BBasic.nameDB_.getName(TITLE_BG_COLOR_VAR_NAME, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+    return `${bgVar} = ${value}\n${titleBgOverrideVar()}{${titleBgOverrideBit()}} = 1\n`;
+  };
+
+  Blockly.BBasic['titlescreen_bg_reset'] = function(block) {
+    if (!Blockly.BBasic.titleBgUsed) return 'rem No title screen background color to reset\n';
+    return `${titleBgOverrideVar()}{${titleBgOverrideBit()}} = 0\n`;
+  };
+
+  // Stops the kernel and goes back to the top of Title screen update, which from then on draws the
+  // regular game screen (see generateGameLoopEvent). The documentation asks for the missile
+  // heights to be zeroed when leaving the Titlescreen Kernel, which uses the missile registers.
+  Blockly.BBasic['titlescreen_end'] = function(block) {
+    if (!Blockly.BBasic.titleEndUsed) return 'rem No title screen kernel to end\n';
+    if (Blockly.BBasic.currentEventName !== 'title_update') {
+      return 'rem "End title screen" only works inside "Title screen update"\n';
+    }
+    return `${titleKernelEndedVar()}{${titleKernelEndedBit()}} = 1\n` +
+      'missile0height = 0\n' +
+      'missile1height = 0\n' +
+      'goto title_update_begin\n';
   };
 
   Blockly.BBasic['titlescreen_scroll_set'] = function(block) {
@@ -933,6 +1186,26 @@ export default (Blockly) => {
     // rem fallback as titlescreen_scroll_set's "nothing to reference"
     // guard above.
     if (!height) return 'rem No title screen player sprite configured\n';
+    const slot = Blockly.BBasic.titlePlayerSlots && Blockly.BBasic.titlePlayerSlots[playerIndex];
+    if (slot && slot.frameCount > 1) {
+      // The animation plays by itself: jump its counter to where the frame starts, and it carries on from
+      // there (the counter goes up before the frame is chosen, so it is set one tick early).
+      const counterVar = Blockly.BBasic.nameDB_.getName(
+          titlePlayerFrameVarName(playerIndex), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+      const total = slot.durations.reduce((sum, duration) => sum + duration, 0);
+      const counterFor = (index) =>
+        (slot.durations.slice(0, index).reduce((sum, duration) => sum + duration, 0) + total - 1) % total;
+      const number = Blockly.BBasic.valueToCode(block, 'VALUE', Blockly.BBasic.ORDER_ASSIGNMENT) || '0';
+      const literal = /^\s*\d+\s*$/.test(number) ? Number(number) : null;
+      const onceLines = slot.once ?
+        [`${titlePlayerOnceVar()}{${titlePlayerOnceBit(playerIndex)}} = ${block.getFieldValue('PLAYBACK') === 'once' ? 1 : 0}`] : [];
+      if (literal !== null) {
+        return [`${counterVar} = ${counterFor(Math.min(literal, slot.frameCount - 1))}`, ...onceLines].join('\n') + '\n';
+      }
+      return [`temp1 = ${number}`, `if temp1 >= ${slot.frameCount} then temp1 = ${slot.frameCount - 1}`,
+        ...slot.durations.map((_, index) => `if temp1 = ${index} then ${counterVar} = ${counterFor(index)}`),
+        ...onceLines].join('\n') + '\n';
+    }
     const value = Blockly.BBasic.valueToCode(block, 'VALUE', Blockly.BBasic.ORDER_MULTIPLICATION) || '0';
     // bmp_playerN_index is a raw byte offset into the flattened frame array
     // (see resolvePlayerSlotFrames'  comment), height rows apart per
@@ -941,6 +1214,8 @@ export default (Blockly) => {
     // generated source itself (a variable times a compile-time constant),
     // not at runtime in JS, letting VALUE be any expression (a literal,
     // variable, or computed frame number).
-    return `bmp_player${playerIndex}_index = ${value} * ${height}\n`;
+    const indexVar = Blockly.BBasic.nameDB_.getName(
+        titlePlayerIndexVarName(playerIndex), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+    return `${indexVar} = ${value} * ${height}\n`;
   };
 };

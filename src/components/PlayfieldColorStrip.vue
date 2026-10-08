@@ -163,28 +163,27 @@ export default {
 
 .palette-grid {
   display: grid;
-  grid-template-columns: repeat(8, 18px);
-  gap: 1px;
+  grid-template-columns: repeat(8, 28px);
+  gap: 0;
 }
 
 .quick-palette-divider {
   margin: 4px 0;
 }
 
+/* The same swatch the color blocks' picker shows (see App.vue's .fieldGridDropDownContainer
+   rules): 28 pixel squares with no gap, the selected one marked with a black inset frame. */
 .palette-swatch {
-  width: 18px;
-  height: 18px;
+  width: 28px;
+  height: 28px;
   cursor: pointer;
 }
 
 .palette-swatch:hover {
-  outline: 2px solid #1976d2;
-  outline-offset: -2px;
+  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.45);
 }
 
 .palette-swatch.selected {
-  outline: 2px solid #ffffff;
-  outline-offset: -2px;
-  box-shadow: 0 0 0 1px #000;
+  box-shadow: inset 0 0 0 2px #000;
 }
 </style>

@@ -113,6 +113,21 @@ export const titleCardScrollOffsetVarName = (ref) => `titleCardScroll_${sanitize
 // animated (cycles frames) OR merely scrolling (windowHeight < height, see
 // buildCardDataAsm) with just one frame.
 export const titleCardIndexVarName = (ref) => `titleCardIndex_${sanitizeCardRef(ref)}`;
+// A single-color (48x1) graphic's color as a real RAM byte, for the "Set title screen graphic
+// color" block: bmp_KEY_color (see buildCardDataAsm) is aliased to it instead of a ROM byte.
+export const titleCardColorVarName = (ref) => `titleCardColor_${sanitizeCardRef(ref)}`;
+// The title screen player sprites' frame (bmp_playerN_index, a raw byte offset - see buildPlayerDataAsm) and,
+// for an animation with several frames that plays by itself, its duration counter.
+export const titlePlayerIndexVarName = (playerIndex) => `titlePlayerIndex${playerIndex}`;
+export const titlePlayerFrameVarName = (playerIndex) => `titlePlayerFrame${playerIndex}`;
+// The box behind a 48-wide graphic as RAM bytes, for the box blocks: bmp_KEY_background, bmp_KEY_PF1 and
+// bmp_KEY_PF2 (see buildCardDataAsm) are aliased to them instead of ROM bytes.
+export const titleCardBoxColorVarName = (ref) => `titleCardBoxColor_${sanitizeCardRef(ref)}`;
+export const titleCardBoxPf1VarName = (ref) => `titleCardBoxPf1_${sanitizeCardRef(ref)}`;
+export const titleCardBoxPf2VarName = (ref) => `titleCardBoxPf2_${sanitizeCardRef(ref)}`;
+// The title screen's background color while "Set title screen background color" overrides the
+// page's: the kernel driver reads it (see buildDriverAsm).
+export const TITLE_BG_COLOR_VAR_NAME = 'titleScreenBgColor';
 // One byte per scrolling card watched by a "When title screen scroll reaches"
 // block: bit 0 = the top was just reached, bit 1 = the bottom was. Set by
 // "Scroll title screen graphic" when it stops at an edge, cleared by the watch.
@@ -165,6 +180,34 @@ export const resolveAnimatedTitleScreenCardRefs = () => {
   return refs;
 };
 
+// The picture background (box) a frame of a 48-wide graphic shows: the blocks of the playfield that are switched
+// on (pf1 and pf2) and their color. Values set on the frame win over the graphic's, which win over the defaults (no
+// blocks on, the page's color).
+const firstSet = (...values) => values.find((value) => value !== undefined && value !== null);
+export const titleFrameBox = (card, frame, pageColor) => ({
+  pf1: firstSet(frame && frame.pf1, card.pf1, 0),
+  pf2: firstSet(frame && frame.pf2, card.pf2, 0),
+  background: firstSet(frame && frame.background, card.background, pageColor),
+});
+
+// Every animated 48-wide graphic whose frames do not all have the same picture background, as
+// "screenId:cardId" refs: those need the background written as the animation moves from frame to frame.
+export const resolveFrameBoxCardRefs = () => {
+  const {screens} = processTitleScreenStorageDefaults(useTitleScreenStorage());
+  const refs = [];
+  screens.forEach((screen) => {
+    const pageColor = Number(screen.backgroundColor) || 0;
+    (screen.cards || []).forEach((card) => {
+      if (!isCardAnimated(card) || (TITLE_SCREEN_KERNEL_TYPES[card.type] || {}).width !== 48) return;
+      const boxes = card.frames.map((frame) => titleFrameBox(card, frame, pageColor));
+      const same = boxes.every((box) => box.pf1 === boxes[0].pf1 && box.pf2 === boxes[0].pf2 &&
+        box.background === boxes[0].background);
+      if (!same) refs.push(`${screen.id}:${card.id}`);
+    });
+  });
+  return refs;
+};
+
 // Every card needing a bmp_KEY_index at all - animated (cycles frames) OR
 // merely scrolling with just one frame (windowHeight < height) - see
 // titleCardIndexVarName's comment for why this has to be a real dev var
@@ -190,7 +233,7 @@ export const resolveTitleScreenCardsNeedingIndexRefs = () => {
 // cards pass through untouched. Idempotent (a card that already has
 // `frames` is returned as-is), so this is safe to run on every load, not
 // just once.
-const migrateCardFrames = (card) => {
+export const migrateCardFrames = (card) => {
   if (Array.isArray(card.frames) || !TITLE_SCREEN_KERNEL_TYPES[card.type]) return card;
   const {pixels, rowColors, ...rest} = card;
   return {
@@ -294,6 +337,160 @@ Blockly.Blocks['titlescreen_draw'] = {
     this.setColour(TITLESCREEN_COLOR);
     this.setTooltip('Draws the chosen Title Screen tab page to the TV. Call this ' +
       'repeatedly (e.g. every frame of "Title screen update") for as long as you want it shown.');
+  },
+};
+
+// Stops the Titlescreen Kernel from inside "Title screen update" and carries on with the regular
+// game screen, without leaving the event (see generateGameLoopEvent in generators/bbasic.js).
+Blockly.Blocks['titlescreen_end'] = {
+  init: function() {
+    this.appendDummyInput()
+        .appendField(`${TITLE_ICON} End title screen`);
+    this.setPreviousStatement(true, null);
+    this.setColour(TITLESCREEN_COLOR);
+    this.setTooltip('Stops the Title Screen Kernel and shows the regular game screen from the next ' +
+      'frame on, while staying in "Title screen update": the rest of the event keeps running every ' +
+      'frame, drawn the way gameplay is. Blocks after this one are skipped for the current frame, ' +
+      '"Draw title screen" blocks do nothing once it has run, and "Title screen start" turns the ' +
+      'kernel back on. Only works inside "Title screen update".');
+  },
+};
+
+// The graphics (cards with pictures) of every title screen that pass the test, as dropdown
+// options valued "screenId:cardId" (a card's id is only unique within its screen).
+const buildCardOptions = (isWanted, emptyLabel) => () => {
+  try {
+    const {screens} = processTitleScreenStorageDefaults(useTitleScreenStorage());
+    const options = [];
+    screens.forEach((screen) => {
+      (screen.cards || []).forEach((card) => {
+        if (!isWanted(card)) return;
+        const screenLabel = screen.name || `Title Screen ${screen.id}`;
+        options.push([`${screenLabel} → ${card.type} (ID:${card.id})`, `${screen.id}:${card.id}`]);
+      });
+    });
+    return options.length ? options : [[emptyLabel, '']];
+  } catch (e) {
+    console.error('Failed to list title screen graphics', e);
+    return [['Error', '']];
+  }
+};
+const buildBoxCardOptions = buildCardOptions(
+    (card) => (TITLE_SCREEN_KERNEL_TYPES[card.type] || {}).width === 48, 'No 48-wide graphics');
+const buildColorCardOptions = buildCardOptions((card) => card.type === '48x1', 'No single-color (48x1) graphics');
+const buildFrameCardOptions = buildCardOptions((card) => isCardAnimated(card), 'No graphics with more than one frame');
+
+// Changes a single-color (48x1) graphic's color while the title screen runs.
+Blockly.Blocks['titlescreen_card_color_set'] = {
+  init: function() {
+    this.appendValueInput('VALUE')
+        .setCheck('Number')
+        .appendField(`${TITLE_ICON} Set title screen graphic`)
+        .appendField(new Blockly.FieldDropdown(buildColorCardOptions), 'CARD')
+        .appendField('color to');
+    this.setInputsInline(true);
+    this.setPreviousStatement(true, null);
+    this.setNextStatement(true, null);
+    this.setColour(TITLESCREEN_COLOR);
+    this.setTooltip('Changes the color of a single-color (48x1) Title Screen graphic while the title ' +
+      'screen is showing, for text that blinks or cycles colors. "Title screen start" sets it back to ' +
+      'the color chosen on the Title tab. Graphics with a color for every row (48x2, 96x2) keep ' +
+      'the colors drawn on the Title tab.');
+  },
+};
+
+// The box behind a 48-wide graphic (the Title tab's "Box behind the picture"), changed while the title
+// screen runs.
+Blockly.Blocks['titlescreen_box_set'] = {
+  init: function() {
+    this.appendDummyInput()
+        .appendField(`${TITLE_ICON} Set title screen graphic`)
+        .appendField(new Blockly.FieldDropdown(buildBoxCardOptions), 'CARD')
+        .appendField('picture background to')
+        .appendField(new Blockly.FieldDropdown([
+          ['behind the picture', 'fit'], ['off', 'off'], ['the full width', 'full']]), 'MODE');
+    this.setInputsInline(true);
+    this.setPreviousStatement(true, null);
+    this.setNextStatement(true, null);
+    this.setColour(TITLESCREEN_COLOR);
+    this.setTooltip('Shows or hides the colored area behind a 48-wide Title Screen graphic (the Title tab\'s ' +
+      '"Picture background"): right behind the picture, off, or across the screen. "Title screen ' +
+      'start" sets it back to what the Title tab says. Use "Set title screen graphic picture background ' +
+      'color" for its color.');
+  },
+};
+
+Blockly.Blocks['titlescreen_box_color_set'] = {
+  init: function() {
+    this.appendValueInput('VALUE')
+        .setCheck('Number')
+        .appendField(`${TITLE_ICON} Set title screen graphic`)
+        .appendField(new Blockly.FieldDropdown(buildBoxCardOptions), 'CARD')
+        .appendField('picture background color to');
+    this.setInputsInline(true);
+    this.setPreviousStatement(true, null);
+    this.setNextStatement(true, null);
+    this.setColour(TITLESCREEN_COLOR);
+    this.setTooltip('Changes the color of the area behind a 48-wide Title Screen graphic while the title ' +
+      'screen is showing. It only shows where the picture background is switched on (see "Set title ' +
+      'screen graphic picture background to", or the Title tab). "Title screen start" sets it back to ' +
+      'the Title tab\'s color.');
+  },
+};
+
+// What an animation does after the frame a block sets it to: go round again, or stop on the last frame.
+const PLAYBACK_OPTIONS = [['loop', 'loop'], ['play once', 'once']];
+
+// Jumps a graphic with several frames to one of them.
+Blockly.Blocks['titlescreen_card_frame_set'] = {
+  init: function() {
+    this.appendValueInput('VALUE')
+        .setCheck('Number')
+        .appendField(`${TITLE_ICON} Set title screen graphic`)
+        .appendField(new Blockly.FieldDropdown(buildFrameCardOptions), 'CARD')
+        .appendField('to frame');
+    this.appendDummyInput()
+        .appendField('hold it')
+        .appendField(new Blockly.FieldCheckbox('FALSE'), 'HOLD')
+        .appendField('then')
+        .appendField(new Blockly.FieldDropdown(PLAYBACK_OPTIONS), 'PLAYBACK');
+    this.setInputsInline(true);
+    this.setPreviousStatement(true, null);
+    this.setNextStatement(true, null);
+    this.setColour(TITLESCREEN_COLOR);
+    this.setTooltip('Jumps a Title Screen graphic with more than one frame to the chosen frame (0 is ' +
+      'the first). With "hold it" off the graphic goes on playing from that frame; with it on the ' +
+      'graphic stays on that frame, until another block of this kind with "hold it" off sets it ' +
+      'going again or "Title screen start" runs. "Then" says what happens after the chosen frame: ' +
+      '"loop" keeps playing round and round, "play once" plays to the last frame and stays there.');
+  },
+};
+
+// Overrides the background color of the title screen page being drawn.
+Blockly.Blocks['titlescreen_bg_set'] = {
+  init: function() {
+    this.appendValueInput('VALUE')
+        .setCheck('Number')
+        .appendField(`${TITLE_ICON} Set title screen background color to`);
+    this.setInputsInline(true);
+    this.setPreviousStatement(true, null);
+    this.setNextStatement(true, null);
+    this.setColour(TITLESCREEN_COLOR);
+    this.setTooltip('Changes the background color of the title screen while it is showing, for every ' +
+      'page, instead of the color chosen for the page on the Title tab (for fades and flashes). ' +
+      '"Reset title screen background color" and "Title screen start" go back to the page colors.');
+  },
+};
+
+Blockly.Blocks['titlescreen_bg_reset'] = {
+  init: function() {
+    this.appendDummyInput()
+        .appendField(`${TITLE_ICON} Reset title screen background color`);
+    this.setPreviousStatement(true, null);
+    this.setNextStatement(true, null);
+    this.setColour(TITLESCREEN_COLOR);
+    this.setTooltip('Goes back to the background color chosen for each page on the Title tab, after ' +
+      '"Set title screen background color".');
   },
 };
 
@@ -409,12 +606,18 @@ Blockly.Blocks['titlescreen_player_frame_set'] = {
         .appendField(`${TITLE_ICON} Set title screen player`)
         .appendField(new Blockly.FieldDropdown([['0', '0'], ['1', '1']]), 'PLAYER')
         .appendField('sprite frame to');
+    this.appendDummyInput()
+        .appendField('then')
+        .appendField(new Blockly.FieldDropdown(PLAYBACK_OPTIONS), 'PLAYBACK');
     this.setInputsInline(true);
     this.setPreviousStatement(true, null);
     this.setNextStatement(true, null);
     this.setColour(TITLESCREEN_COLOR);
-    this.setTooltip('Changes which frame of the chosen Player 0/1 animation the Title tab\'s ' +
-      'player sprite minikernel shows (0 = the first frame). Position it with the normal ' +
+    this.setTooltip('Jumps the player sprite of the Title tab to a frame of its chosen Player 0/1 animation ' +
+      '(0 = the first frame). An animation with several frames plays by itself on the title screen, using ' +
+      'the duration of each frame; this block only moves it to a frame, and it carries on from there: ' +
+      '"loop" keeps playing round and round, "play once" plays to the last frame and stays there. ' +
+      'An animation with one frame stays where it is. Position it with the normal ' +
       '"Player 0/1 set X/Y" blocks - the title screen sprite is the same hardware sprite, just ' +
       'drawn by the title screen kernel instead of the normal game kernel while a title screen ' +
       'is being shown.');

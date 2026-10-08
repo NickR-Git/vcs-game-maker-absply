@@ -948,7 +948,8 @@ export default {
       // Falls back to the remembered element: if the canvas was ever removed
       // from the page along with a re-rendered container, it can't be found
       // by id any more but is still there to put back.
-      const screen = document.getElementById('gopher2600-screen') || this.emulatorScreenEl;
+      const screen = document.getElementById('gopher2600-screen') || this.emulatorScreenEl ||
+        window.gopher2600ScreenElement;
       if (!container || !screen) return;
       this.emulatorScreenEl = screen;
       container.appendChild(screen);
@@ -963,7 +964,8 @@ export default {
     // repairs whichever is off. Logs what it found so a repeat can be traced.
     checkEmulatorCanvas() {
       const container = document.getElementById('gopher2600-target-container');
-      const screen = document.getElementById('gopher2600-screen') || this.emulatorScreenEl;
+      const screen = document.getElementById('gopher2600-screen') || this.emulatorScreenEl ||
+        window.gopher2600ScreenElement;
       if (!container || !screen || !container.clientWidth || document.hidden) return;
       const problems = [];
       if (screen.parentElement !== container) problems.push('canvas not in its container');

@@ -871,3 +871,32 @@ Undo for reordering, sound multi-select, Blockly sizing
   selected sound to a separate file.
 - Blocks are measured again after the font loads, so they are no longer the wrong size after a
   page reload.
+
+=== 0.51.31 ===
+Title screen blocks and automatic playback, picture background per frame, Save with a new version, fire speed
+
+- Title screen: new blocks to end the title screen from inside Title screen update and carry on as the
+  game, to recolor a graphic, to jump a graphic to a frame (with "hold it", and "then loop" or "then
+  play once"), to set the background color and put it back, and to switch the picture background (the
+  colored area behind a 48-wide graphic) on or off and recolor it. Title screen start puts all of
+  these back to what the Title tab says.
+- Title screen: Player sprites cards play their animation by themselves, using each frame's Duration;
+  "Set title screen player sprite frame" jumps to a frame and has the same loop and play once choice.
+  A Player sprites card with an empty animation slot no longer fails the build.
+- Title screen variables share slots with variables only used while the game runs, and the game
+  variables are cleared when the game starts.
+- Title tab: each frame of a 48-wide graphic can have a different picture background, set with a swatch and a row
+  of blocks under the graphic, and the canvas previews it. Clear colors also resets it. Graphics are drawn
+  in the proportions the emulator uses, "Window height" sits above the graphic, a graphic or a whole title
+  screen can be imported, exported and duplicated, and the play button is the rightmost icon of the card row.
+- Animation Duration fields (Player sprites and Title graphics) cannot go below 1.
+- Sprites: "Set fired speed" block; "Width/quantity" choice in the Player get block; 16-direction
+  angles that lean move at the right speed and follow the right path, also when "Check playfield while
+  moving" is on; the flip getter reads the right value.
+- Scrolling text: when every message uses the same speed and the same pause, they are built in as
+  numbers and take no variables.
+- Emulator volume follows the Sound and Music DIM setting while playing.
+- Save with "Increment on Save" on writes a new file with the next version number each time and asks for
+  the folder once per session.
+- Color swatches look the same in every editor and in the block color picker.
+- Changing row colors can be undone and redone.

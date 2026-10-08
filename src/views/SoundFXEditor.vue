@@ -1018,10 +1018,9 @@ export default defineComponent({
     };
 
     const handlePlaySoundEffect = (soundEffect) => {
-      // Matches what actually plays in the compiled ROM (see soundfx_play in
-      // generators/bbasic/soundfx.js) - previewing at the un-dimmed volume
-      // while DIM is on would make the preview lie about what the game
-      // actually sounds like.
+      // Matches how loud the emulator plays it with DIM on (it scales its output by the same
+      // percentage) - previewing at the un-dimmed volume would make the preview lie about what
+      // the game sounds like in the emulator.
       const audv = dimSoundFx.value ?
         dimVolume(soundEffect.audv, dimSoundFxPercent.value) : soundEffect.audv;
       previewSoundEffect({...soundEffect, audv});

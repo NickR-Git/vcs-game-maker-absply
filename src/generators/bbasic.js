@@ -41,10 +41,16 @@ import {canonicalDistanceVarName, distancePointVarName} from '../utils/distance'
 import {superchipRwFreeCount, pfRowDivisorFor} from '../utils/playfield-coords';
 import {bbTvSetting} from '../utils/tv-standard';
 import {keypadKeyVarName} from '../utils/keypad';
-import {registerTitleScreenSubroutine} from './bbasic/titlescreen';
-import {resolveAnimatedTitleScreenCardRefs, titleCardFrameCounterVarName, processTitleScreenStorageDefaults,
+import {clampFrameDuration} from '../utils/duration';
+import {registerTitleScreenSubroutine, resolveTitlePlayerSlots, TITLE_KERNEL_ENDED_FAMILY, titleKernelEndedVar,
+  titleKernelEndedBit, TITLE_CARD_HOLD_FAMILY, titleCardHoldVar, TITLE_BG_OVERRIDE_FAMILY,
+  titleBgOverrideVar, titleBgOverrideBit, titleCardHoldBit, TITLE_CARD_ONCE_FAMILY, titleCardOnceVar,
+  titleCardOnceBit, TITLE_PLAYER_ONCE_FAMILY, titlePlayerOnceVar, titlePlayerOnceBit} from './bbasic/titlescreen';
+import {resolveAnimatedTitleScreenCardRefs, resolveFrameBoxCardRefs, titleCardFrameCounterVarName, processTitleScreenStorageDefaults,
   titleCardScrollOffsetVarName, resolveTitleScreenCardsNeedingIndexRefs,
-  titleCardIndexVarName, titleCardScrollEdgeFlagsVarName} from '../blocks/titlescreen';
+  titleCardIndexVarName, titleCardScrollEdgeFlagsVarName, titleCardColorVarName,
+  TITLE_BG_COLOR_VAR_NAME, titleCardBoxColorVarName, titleCardBoxPf1VarName,
+  titleCardBoxPf2VarName, titlePlayerIndexVarName, titlePlayerFrameVarName} from '../blocks/titlescreen';
 import {registerKeypadPollSubroutine, generateJoystickDirection8Table,
   reserveJoystickDirection8DevVars, generateJoystickDirection8Checks,
   reserveJoystickButtonDevVars, reserveJoystickDoubleTapDevVars,
@@ -69,7 +75,8 @@ import {resolveProjectMusic, MUSIC_PLAY_RESET_NAME, MUSIC_PLAY_BY_ID_NAME,
   musicPlayByIdArgVarName, musicPlaySongResetName,
   registerMusicPlayResetSubroutine, resolveMusicEventFlags,
   resolveNotePlayedInstruments, reserveMusicDevVars} from './bbasic/music';
-import {reserveTextScrollDevVars, generateTextScrollAdvance, generateTextOffsetTables} from './bbasic/text-scroll';
+import {reserveTextScrollDevVars, generateTextScrollAdvance, generateTextOffsetTables, resolveTextScrollConstants,
+  setTextScrollConstants} from './bbasic/text-scroll';
 import {generateTextStaticOffsetTables, generateTextRow2OffsetsTable, textLinesBaseVarName, textLinesMaxVarName,
   textRow2ColorVarName, textScrollCursorColorVarName, textEndIconColorVarName} from './bbasic/text-minikernel';
 
@@ -426,6 +433,10 @@ Blockly.BBasic.init = function(workspace) {
   const TEXT_SCROLL_BLOCK_TYPES = ['text_minikernel_show_named_scroll', 'text_minikernel_show_scroll',
     'text_minikernel_show_by_id_scroll', 'text_minikernel_scroll_control', 'text_minikernel_scroll_at'];
   this.textScrollUsed = workspace.getAllBlocks(false).some((block) => TEXT_SCROLL_BLOCK_TYPES.includes(block.type));
+  // When every scrolling message uses the same speed and the same pause, those are compiled in as numbers
+  // instead of kept in two variables.
+  this.textScrollConstants = resolveTextScrollConstants(workspace);
+  setTextScrollConstants(this.textScrollConstants);
 
   // Same early block-type pre-scan reasoning as textScrollUsed just above,
   // for "Scroll text lines up/down"'s  _textLinesBase/_textLinesMax dev
@@ -620,6 +631,10 @@ Blockly.BBasic.init = function(workspace) {
   // speed is a constant, so no variable is needed to hold it.
   this.missileFireConstSpeed = new Map();
   ['missile0', 'missile1', 'ball'].forEach((name) => {
+    // A "Set fired speed" block changes it while the object moves, so it needs its variable.
+    if (workspace.getAllBlocks(false).some((block) =>
+      block.type === 'sprite_fire_speed_set' && block.isEnabled() &&
+      block.getFieldValue('MISSILE') === fireObjectFieldValue(name))) return;
     const blocks = workspace.getAllBlocks(false).filter((block) =>
       block.type === 'sprite_missile_fire' && block.isEnabled() &&
       block.getFieldValue('MISSILE') === fireObjectFieldValue(name));
@@ -916,6 +931,42 @@ Blockly.BBasic.init = function(workspace) {
   // titleScreenSelectedIdVarName's  reservation further down), same
   // pattern as keypad0Used/keypad1Used just above.
   this.titleScreenDrawUsed = workspace.getAllBlocks(false).some((block) => block.type === 'titlescreen_draw');
+  // Which title screen graphics the color and frame blocks target, and whether the background color block is
+  // used: they only matter when the kernel is in use at all.
+  const enabledBlocks = (type) => workspace.getAllBlocks(false).filter((block) => block.type === type && block.isEnabled());
+  const targets = (type) => enabledBlocks(type).map((block) => block.getFieldValue('CARD')).filter(Boolean);
+  this.titleCardColorRefs = new Set(this.titleScreenDrawUsed ? targets('titlescreen_card_color_set') : []);
+  // The Player sprites card's players: one that plays several frames by itself needs a frame counter, and
+  // one that plays by itself or is set by a block needs a byte for the kernel's bmp_playerN_index.
+  this.titlePlayerSlots = this.titleScreenDrawUsed ? resolveTitlePlayerSlots() : null;
+  const playerFrameBlocks = workspace.getAllBlocks(false).filter((block) =>
+    block.type === 'titlescreen_player_frame_set' && block.isEnabled());
+  this.titlePlayerIndexUsed = [0, 1].map((playerIndex) => !!this.titlePlayerSlots &&
+    (this.titlePlayerSlots[playerIndex].frameCount > 1 ||
+     playerFrameBlocks.some((block) => Number(block.getFieldValue('PLAYER')) === playerIndex)));
+  // Graphics whose frames have different picture backgrounds need those bytes in RAM as well.
+  this.titleFrameBoxRefs = new Set(this.titleScreenDrawUsed ? resolveFrameBoxCardRefs() : []);
+  this.titleBoxRefs = new Set(this.titleScreenDrawUsed ? [...targets('titlescreen_box_set'),
+    ...targets('titlescreen_box_color_set'), ...this.titleFrameBoxRefs] : []);
+  this.titleCardHoldRefs = this.titleScreenDrawUsed ? [...new Set(enabledBlocks('titlescreen_card_frame_set')
+      .filter((block) => block.getFieldValue('HOLD') === 'TRUE')
+      .map((block) => block.getFieldValue('CARD')).filter(Boolean))] : [];
+  // Graphics and Player sprites that a block sets to "play once" need a bit that stops their frame counter.
+  this.titleCardOnceRefs = this.titleScreenDrawUsed ? [...new Set(enabledBlocks('titlescreen_card_frame_set')
+      .filter((block) => block.getFieldValue('PLAYBACK') === 'once')
+      .map((block) => block.getFieldValue('CARD')).filter(Boolean))] : [];
+  if (this.titlePlayerSlots) {
+    [0, 1].forEach((playerIndex) => {
+      this.titlePlayerSlots[playerIndex].once = this.titlePlayerSlots[playerIndex].frameCount > 1 &&
+        playerFrameBlocks.some((block) => Number(block.getFieldValue('PLAYER')) === playerIndex &&
+          block.getFieldValue('PLAYBACK') === 'once');
+    });
+  }
+  this.titleBgUsed = this.titleScreenDrawUsed &&
+    (enabledBlocks('titlescreen_bg_set').length > 0 || enabledBlocks('titlescreen_bg_reset').length > 0);
+  // "End title screen" needs its flag bit only when the kernel is in use at all.
+  this.titleEndUsed = this.titleScreenDrawUsed &&
+    workspace.getAllBlocks(false).some((block) => block.type === 'titlescreen_end' && block.isEnabled());
 
   // Same idea, for "Joystick N direction (8-way)" getter blocks (see
   // joyDir8ResultVarName's  comment in generators/bbasic/input.js for why
@@ -1337,6 +1388,18 @@ Blockly.BBasic.init = function(workspace) {
   const reserveDevVar = (canonicalName, type = Blockly.Names.DEVELOPER_VARIABLE_TYPE, description) =>
     routeDevVar(this.nameDB_.getName(canonicalName, type), description);
 
+  // The Title Screen's variables (see the reservations further down) only matter while the title
+  // screen runs, which never overlaps the gameplay loop, so each one shares the slot of a variable
+  // that only gameplay uses instead of taking a slot just for itself (see findGameplayOnlyVariables).
+  // They are named here and given their slot after the user variables have theirs.
+  const pendingTitleVars = [];
+  const reserveTitleDevVar = (canonicalName, type, description) => {
+    const name = this.nameDB_.getName(canonicalName, type || Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+    if (description && !(name in this.devVarDescriptions)) this.devVarDescriptions[name] = description;
+    if (!pendingTitleVars.includes(name)) pendingTitleVars.push(name);
+    return name;
+  };
+
   // Superchip RAM's  separate read/write pool (r000-r127/w000-w127 - see
   // superchipRwFreeCount's  comment in utils/playfield-coords.js) - a
   // completely different, unrelated pool from superchipVars/defvars above
@@ -1481,7 +1544,7 @@ Blockly.BBasic.init = function(workspace) {
     // draws the only page there is without reading it (see buildDriverAsm in
     // generators/bbasic/titlescreen.js), so a project with one page skips the variable.
     if (processTitleScreenStorageDefaults(useTitleScreenStorage()).screens.length > 1) {
-      this.titleScreenSelectedIdVarName = reserveDevVar(
+      this.titleScreenSelectedIdVarName = reserveTitleDevVar(
           'titleScreenSelectedId', undefined, 'Which Title Screen page to draw next');
     }
 
@@ -1505,14 +1568,14 @@ Blockly.BBasic.init = function(workspace) {
         .map((block) => `${block.getFieldValue('CARD')}|${block.getFieldValue('EDGE')}`));
     new Set([...this.titleScrollEdgeWatches].map((watch) => watch.split('|')[0])).forEach((ref) => {
       if (!ref) return;
-      reserveDevVar(titleCardScrollEdgeFlagsVarName(ref), undefined,
+      reserveTitleDevVar(titleCardScrollEdgeFlagsVarName(ref), undefined,
           'bit 0 = title screen scroll reached the top, bit 1 = reached the bottom');
     });
     resolveAnimatedTitleScreenCardRefs().forEach((ref) => {
-      reserveDevVar(titleCardFrameCounterVarName(ref), undefined,
+      reserveTitleDevVar(titleCardFrameCounterVarName(ref), undefined,
           'title screen card animation: duration-tick counter');
       if (this.titleScreenScrollTargetRefs.has(ref)) {
-        reserveDevVar(titleCardScrollOffsetVarName(ref), undefined,
+        reserveTitleDevVar(titleCardScrollOffsetVarName(ref), undefined,
             'title screen card animation: scroll offset within the current frame');
       }
     });
@@ -1522,9 +1585,32 @@ Blockly.BBasic.init = function(workspace) {
     // titleCardIndexVarName's comment. Reserved by ref, same timing
     // reasoning as the counter/scroll-offset vars just above.
     resolveTitleScreenCardsNeedingIndexRefs().forEach((ref) => {
-      reserveDevVar(titleCardIndexVarName(ref), undefined,
+      reserveTitleDevVar(titleCardIndexVarName(ref), undefined,
           'title screen card: bmp_KEY_index storage (frame/scroll offset)');
     });
+    this.titleCardColorRefs.forEach((ref) => {
+      reserveTitleDevVar(titleCardColorVarName(ref), undefined,
+          'title screen graphic: its color ("Set title screen graphic color" block)');
+    });
+    [0, 1].forEach((playerIndex) => {
+      if (this.titlePlayerIndexUsed[playerIndex]) {
+        reserveTitleDevVar(titlePlayerIndexVarName(playerIndex), undefined,
+            `title screen Player ${playerIndex} sprite: its frame (bmp_player${playerIndex}_index)`);
+      }
+      if (this.titlePlayerSlots && this.titlePlayerSlots[playerIndex].frameCount > 1) {
+        reserveTitleDevVar(titlePlayerFrameVarName(playerIndex), undefined,
+            `title screen Player ${playerIndex} sprite: duration-tick counter`);
+      }
+    });
+    this.titleBoxRefs.forEach((ref) => {
+      reserveTitleDevVar(titleCardBoxPf1VarName(ref), undefined, 'title screen picture background: playfield blocks 1-8 (PF1)');
+      reserveTitleDevVar(titleCardBoxPf2VarName(ref), undefined, 'title screen picture background: playfield blocks 9-16 (PF2)');
+      reserveTitleDevVar(titleCardBoxColorVarName(ref), undefined, 'title screen picture background: its color');
+    });
+    if (this.titleBgUsed) {
+      reserveTitleDevVar(TITLE_BG_COLOR_VAR_NAME, undefined,
+          'title screen: the background color the kernel draws ("Set title screen background color" block)');
+    }
   }
 
   // Same bucket again, for "Background get pixel" blocks'  X/Y scratch
@@ -1649,7 +1735,7 @@ Blockly.BBasic.init = function(workspace) {
   // scoreBkColorNeedsOwnVar just above. Gated on textScrollUsed, not plain
   // textMinikernelUsed - a project using only plain, static "Show text"
   // blocks needs none of these.
-  reserveTextScrollDevVars(reserveDevVar, this.textScrollUsed);
+  reserveTextScrollDevVars(reserveDevVar, this.textScrollUsed, this.textScrollConstants);
 
   // Same bucket again, for "Scroll text lines up/down"'s  valid-range
   // tracking (see setTextLinesRangeCode's  comment in generators/bbasic/
@@ -1705,7 +1791,27 @@ Blockly.BBasic.init = function(workspace) {
     {family: SPRITE_SCROLL_FLAGS_FAMILY, bits: ownBits(this.spriteScrollUsedFor, spriteOwnBit)},
     {family: INERTIA_ACCEL_FLAGS_FAMILY, bits: ownBits(this.inertiaAccelUsedFor, spriteOwnBit)},
     {family: INERTIA_DECEL_FLAGS_FAMILY, bits: ownBits(this.inertiaDecelUsedFor, spriteOwnBit)},
+    {family: TITLE_KERNEL_ENDED_FAMILY, bits: this.titleEndUsed ? [0] : []},
+    {family: TITLE_CARD_HOLD_FAMILY, bits: this.titleCardHoldRefs.map((_, index) => index)},
+    {family: TITLE_CARD_ONCE_FAMILY, bits: this.titleCardOnceRefs.map((_, index) => index)},
+    {family: TITLE_PLAYER_ONCE_FAMILY, bits: [0, 1].filter((i) => this.titlePlayerSlots && this.titlePlayerSlots[i].once)},
+    {family: TITLE_BG_OVERRIDE_FAMILY, bits: this.titleBgUsed ? [0] : []},
   ]);
+  if (this.titleCardOnceRefs.length) {
+    reserveDevVar(titleCardOnceVar(), undefined, 'title screen graphics set to play once by "Set title screen graphic frame"');
+  }
+  if (this.titlePlayerSlots && [0, 1].some((i) => this.titlePlayerSlots[i].once)) {
+    reserveDevVar(titlePlayerOnceVar(), undefined, 'title screen Player sprites set to play once');
+  }
+  if (this.titleCardHoldRefs.length) {
+    reserveDevVar(titleCardHoldVar(), undefined, 'title screen graphics held on a frame by "Set title screen graphic frame"');
+  }
+  if (this.titleBgUsed) {
+    reserveDevVar(titleBgOverrideVar(), undefined, 'title screen: "Set title screen background color" is in effect');
+  }
+  if (this.titleEndUsed) {
+    reserveDevVar(titleKernelEndedVar(), undefined, 'Title screen update: "End title screen" has stopped the kernel');
+  }
 
   reserveRomNoiseDevVars(reserveDevVar, this.romNoiseUsedFor);
 
@@ -2031,9 +2137,22 @@ Blockly.BBasic.init = function(workspace) {
   // not something the user themselves created on the Variables tab.
   const variables = Blockly.Variables.allUsedVarModels(workspace);
   this.userVarNames = new Set();
+  const userVarNameById = {};
   for (let i = 0; i < variables.length; i++) {
-    this.userVarNames.add(reserveDevVar(variables[i].getId(), Blockly.VARIABLE_CATEGORY_NAME));
+    const userVarName = reserveDevVar(variables[i].getId(), Blockly.VARIABLE_CATEGORY_NAME);
+    this.userVarNames.add(userVarName);
+    userVarNameById[variables[i].getId()] = userVarName;
   }
+
+  // Each Title Screen variable takes the slot of a variable only gameplay uses; the ones left over
+  // (more title variables than such variables) take a slot just for themselves after all.
+  this.titleSharedSlots = [];
+  const shareable = findGameplayOnlyVariables(workspace, variables).map((id) => userVarNameById[id]);
+  pendingTitleVars.forEach((titleVar) => {
+    const target = shareable.shift();
+    if (target) this.titleSharedSlots.push({titleVar, target});
+    else routeDevVar(titleVar);
+  });
 
   // Add the run-once flag bytes computed above, after user variables so an
   // unrelated change in how many "Run once" blocks a project uses never
@@ -2127,6 +2246,23 @@ Blockly.BBasic.init = function(workspace) {
     this.runOnceByteLetters = this.runOnceByteLetters.concat(
         runOnceByteNames.slice(runOnceSuperchipCount)
             .map((_, i) => availableLetters[runOnceDefvarsStart + i]));
+  }
+  // The shared Title Screen variables: another name for the very same slot as their gameplay
+  // variable. generateGameEvent zeroes the shared slots when the title screen starts and when
+  // gameplay starts, since each side finds the other's leftovers there.
+  if (this.titleSharedSlots.length) {
+    const slotOf = (name) => {
+      const letterIndex = defvars.indexOf(name);
+      if (letterIndex !== -1) return availableLetters[letterIndex];
+      return `var${SUPERCHIP_VAR_START + this.superchipVars.indexOf(name)}`;
+    };
+    const aliasDims = this.titleSharedSlots.map(({titleVar, target}) => {
+      const description = this.devVarDescriptions[titleVar];
+      return `  dim ${titleVar} = ${slotOf(target)}  ; shares a slot with ${target}` +
+        (description ? ` (${description})` : '');
+    }).join('\n');
+    this.definitions_['variables'] = (this.definitions_['variables'] ? this.definitions_['variables'] + '\n' : '') +
+      aliasDims;
   }
 
   this.blockNumbers = {
@@ -2919,6 +3055,13 @@ Blockly.BBasic.finish = function(code) {
   // frame heights/durations), which only exists in that function's
   // scope. Empty string when no Title Screen card is actually animated.
   const generatedTitleScreenAnimationChecks = Blockly.BBasic.titleScreenAnimationChecks || '';
+  // The Title Screen loop (see generateGameLoopEvent) runs the first half of commongamelogic, which
+  // tracks the project's state: the frame counter, joystick presses and taps, sounds, music,
+  // fades and text scrolling. The second half only prepares the regular screen for drawscreen,
+  // which the Titlescreen Kernel replaces, so the loop marks itself with the unused top bit of
+  // player0size and the subroutine returns before that half while the bit is set.
+  const generatedTitleKernelSkip = this.titleScreenDrawUsed ?
+    ` if !${TITLE_KERNEL_LOOP_BIT} then goto commongamelogicdraw\n return\ncommongamelogicdraw\n` : '';
   const generatedRainbowColorGraphics = generateRainbowColorGraphics(Blockly);
   const generatedRainbowColorChecks = generateRainbowColorChecks(Blockly);
   const generatedMissileFireChecks = generateMissileFireChecks(Blockly) + generateBounceStageChecks(Blockly);
@@ -3053,7 +3196,7 @@ Blockly.BBasic.finish = function(code) {
     generatedEnvelopeChecks, hasSoundHandling, hasFadeRoutines,
     generatedBackgroundFadeChecks, generatedMusicChecks, generatedDistanceChecks, generatedDistancePointChecks,
     generatedJoystickDirection8Checks, generatedJoystickButtonChecks, generatedJoystickDoubleTapChecks,
-    generatedTextScrollAdvance, generatedScoreBkColorAsm, generatedRunOnceEdgeReset,
+    generatedTextScrollAdvance, generatedTitleKernelSkip, generatedScoreBkColorAsm, generatedRunOnceEdgeReset,
     generatedKeypadPollCall, generatedKeypadSetup, generatedCtrlpfShadowSetup, generatedBackgroundFadeSetup});
 };
 
@@ -3421,13 +3564,73 @@ Blockly.BBasic.getGameEvent = function(eventName, code) {
   return eventCode;
 };
 
+// Title Screen variables only exist while the title screen runs. The variables that gameplay uses
+// and the title screen never touches can share their slots, so the project needs fewer slots. A
+// variable counts as gameplay-only when it is used by no block of the events that run before or
+// around the title screen (System start, Title screen start/update), nor of any other stack that
+// has a title screen block, nor of a function or subroutine (which could be called from there).
+// Nothing is shared at all when a title screen block sits outside those events (it would then
+// write the shared slots during gameplay).
+const TITLE_PHASE_EVENTS = ['system_start', 'title_start', 'title_update'];
+// Set while the Title Screen loop runs (see generatedTitleKernelSkip). Bit 7 of player0size is
+// not used by NUSIZ0 or anything else.
+const TITLE_KERNEL_LOOP_BIT = 'player0size{7}';
+const findGameplayOnlyVariables = (workspace, variables) => {
+  const used = new Set(variables.map((variable) => variable.getId()));
+  const excluded = new Set();
+  let titleBlockOutside = false;
+  workspace.getTopBlocks(false).forEach((top) => {
+    const blocks = top.getDescendants(false);
+    const isTitlePhase = top.type === 'event_block' && TITLE_PHASE_EVENTS.includes(top.getFieldValue('EVENT'));
+    const hasTitleBlock = blocks.some((block) => block.type.startsWith('titlescreen_'));
+    const isRoutine = top.type === 'function_define' || top.type === 'subroutine_define';
+    if (hasTitleBlock && !isTitlePhase && !(top.type === 'event_block' &&
+        ['gameover_start', 'gameover_update'].includes(top.getFieldValue('EVENT')))) {
+      titleBlockOutside = true;
+    }
+    if (isTitlePhase || hasTitleBlock || isRoutine) {
+      blocks.forEach((block) => block.getVars().forEach((id) => excluded.add(id)));
+    }
+  });
+  if (titleBlockOutside) return [];
+  return [...used].filter((id) => !excluded.has(id));
+};
+
 Blockly.BBasic.addGameEvent = function(eventName, code) {
   this.getGameEvent(eventName).push(code);
 };
 
 Blockly.BBasic.generateGameEvent = function(eventName,
     codeGenerator = (eventName, eventCode) => eventCode.join('\n\n')) {
-  const eventCode = codeGenerator(eventName, this.getGameEvent(eventName));
+  let eventCode = codeGenerator(eventName, this.getGameEvent(eventName));
+  // Title screen start sets the title screen's runtime state back to what the Title tab says: the colors
+  // of the graphics that blocks can recolor, the held frames and the background color override.
+  if (this.titleScreenDrawUsed && eventName === 'title_start') {
+    const resets = [
+      ...this.titleCardHoldRefs.map((ref, index) => `${titleCardHoldVar()}{${titleCardHoldBit(index)}} = 0`),
+      ...this.titleCardOnceRefs.map((ref, index) => `${titleCardOnceVar()}{${titleCardOnceBit(index)}} = 0`),
+      ...[0, 1].filter((i) => this.titlePlayerSlots && this.titlePlayerSlots[i].once)
+          .map((i) => `${titlePlayerOnceVar()}{${titlePlayerOnceBit(i)}} = 0`),
+      ...(this.titleBgUsed ? [`${titleBgOverrideVar()}{${titleBgOverrideBit()}} = 0`] : []),
+      ...(this.titleScreenStartLines || []),
+    ];
+    if (resets.length) eventCode = resets.join('\n') + '\n' + eventCode;
+  }
+  // Leaving the Title Screen loop: commongamelogic goes back to preparing the regular screen.
+  if (this.titleScreenDrawUsed && ['title_start', 'gameplay_start', 'gameover_start'].includes(eventName)) {
+    eventCode = `${TITLE_KERNEL_LOOP_BIT} = 0\n` + eventCode;
+  }
+  // Title screen start turns the kernel back on after "End title screen" turned it off.
+  if (this.titleEndUsed && eventName === 'title_start') {
+    eventCode = `${titleKernelEndedVar()}{${titleKernelEndedBit()}} = 0\n` + eventCode;
+  }
+  // Title Screen variables share their slots with gameplay variables, so each side starts with the
+  // slots cleared (the same zeros the variables have at power-on).
+  if (this.titleSharedSlots && this.titleSharedSlots.length &&
+      (eventName === 'title_start' || eventName === 'gameplay_start')) {
+    const names = this.titleSharedSlots.map((shared) => (eventName === 'title_start' ? shared.titleVar : shared.target));
+    eventCode = names.map((name) => `${name} = 0`).join('\n') + '\n' + eventCode;
+  }
   return this.normalizeIndents([
     'rem **************************************************************************',
     `rem Event: ${eventName}.`,
@@ -3460,8 +3663,9 @@ Blockly.BBasic.generateGameLoopEvent = function(eventName) {
     // overscan routine. drawscreen() is bB's separate full-frame
     // routine, so calling both every iteration draws two competing frames
     // per loop, visibly flickering between the regular game screen and the
-    // title screen - already skipped below. commongamelogic ALSO has to be
-    // skipped, not just drawscreen: it unconditionally restores
+    // title screen - already skipped below. The second half of commongamelogic ALSO has to be
+    // skipped, not just drawscreen (the first half, the project's state tracking, still runs - see
+    // generatedTitleKernelSkip): it unconditionally restores
     // COLUP0/1/COLUPF/COLUBK/NUSIZ0/1 and redraws the current background/
     // animations - all prep for the drawscreen() call that no longer
     // happens here, and confirmed as a real visible bug by itself: since
@@ -3485,8 +3689,21 @@ Blockly.BBasic.generateGameLoopEvent = function(eventName) {
     // scanline bug this skip exists to avoid.
     const titleScreenAnimationChecks = usesTitleScreenKernel ?
       (Blockly.BBasic.titleScreenAnimationChecks || '') : '';
+    // With "End title screen" in the project the loop has two ways to draw: the kernel's, and once
+    // that block has run, the regular game screen's, so the rest of the event goes on as gameplay.
+    const hasEnd = usesTitleScreenKernel && this.titleEndUsed;
+    const kernelLoopTop = [`${TITLE_KERNEL_LOOP_BIT} = 1`, `gosub commongamelogic${suffix}`, titleScreenAnimationChecks];
     return [
-      ...(usesTitleScreenKernel ? [titleScreenAnimationChecks] : [`gosub commongamelogic${suffix}`, 'drawscreen']),
+      ...(hasEnd ? [
+        `if ${titleKernelEndedVar()}{${titleKernelEndedBit()}} then goto _titleupdate_ended`,
+        ...kernelLoopTop,
+        'goto _titleupdate_body',
+        '@_titleupdate_ended',
+        `${TITLE_KERNEL_LOOP_BIT} = 0`,
+        `gosub commongamelogic${suffix}`,
+        'drawscreen',
+        '@_titleupdate_body',
+      ] : usesTitleScreenKernel ? kernelLoopTop : [`gosub commongamelogic${suffix}`, 'drawscreen']),
       innerCode,
       `goto ${eventName}_begin`,
     ].join('\n');
@@ -4960,7 +5177,7 @@ Blockly.BBasic.generateAnimations = function() {
     }
 
     const animationLabel = `${name}animation${animationIndex}`;
-    const totalDuration = sumBy(animation.frames, (frame) => frame.duration || 0);
+    const totalDuration = sumBy(animation.frames, (frame) => clampFrameDuration(frame.duration));
 
     // Two frames with pixel-for-pixel identical bitmaps (e.g. a walk cycle
     // that returns to its  starting pose) don't need to store that
@@ -4980,7 +5197,7 @@ Blockly.BBasic.generateAnimations = function() {
     const pixelKeyToGraphicLabel = new Map();
     let frameLimit = 0;
     const stateMachine = animation.frames.map((frame, frameIndex) => {
-      frameLimit += frame.duration || 0;
+      frameLimit += clampFrameDuration(frame.duration);
       const endLabel = `${animationLabel}frame${frameIndex}End`;
       const skipCondition = `  if ${name}frame > ${frameLimit} then goto ${endLabel}\n`;
       const pixelKey = frame.pixels.map((row) => row.join('')).join('|');

@@ -322,6 +322,7 @@ import {max} from 'lodash';
 
 import {useCollapsedIds} from '../hooks/collapse';
 import {recordReorder, sameItems} from '../hooks/reorder-history';
+import {recordRowColorsChange} from '../utils/row-color-history';
 import {CSS_CLASS_DRAGGING} from '../hooks/drag-reorder';
 import ConfirmDeleteMenu from '../components/ConfirmDeleteMenu.vue';
 import EditorZoom from '../components/EditorZoom.vue';
@@ -691,7 +692,7 @@ export default defineComponent({
       },
     });
 
-    const handleRowColorsInput = (background, colors) => {
+    const setRowColors = (background, colors) => {
       background.rowColors = colors;
       handleChildChange();
       // The editors hold their  display state, so persisting isn't enough to
@@ -699,13 +700,18 @@ export default defineComponent({
       // updated row colors and recolors its canvas.
       instance.proxy.$forceUpdate();
     };
+    // A change made by the user (the color strip, Clear, Paste) can be undone; moving selected
+    // pixels takes the row colors along through the pixel editor's history instead.
+    const handleRowColorsInput = (background, colors) => {
+      recordRowColorsChange(background, setRowColors, colors);
+    };
 
     // Moving selected pixels with the Move tool takes the colors of their rows along
     // (PixelEditor.vue's 'move-rows' event - see utils/row-color-move.js).
     const handleMoveRows = (background, move) => {
       if (!pfColorsEnabled.value) return;
       const colors = rowColorsForMove(background, move);
-      if (colors) handleRowColorsInput(background, colors);
+      if (colors) setRowColors(background, colors);
     };
 
     // Clearing a graphic (PixelEditor.vue's "clear" event, separate from

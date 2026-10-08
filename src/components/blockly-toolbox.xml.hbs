@@ -180,6 +180,7 @@
     </category>
     <category name="Title" colour="rgb(103, 58, 183)">
         <block type="titlescreen_draw"></block>
+        <block type="titlescreen_end"></block>
         <block type="titlescreen_scroll_set">
             <value name="VALUE">
                 <shadow type="math_number">
@@ -195,6 +196,36 @@
             </value>
         </block>
         <block type="titlescreen_scroll_edge_reached"></block>
+        <block type="titlescreen_card_color_set">
+            <value name="VALUE">
+                <shadow type="color_get">
+                    <field name="COLOR">14</field>
+                </shadow>
+            </value>
+        </block>
+        <block type="titlescreen_card_frame_set">
+            <value name="VALUE">
+                <shadow type="math_number">
+                    <field name="NUM">0</field>
+                </shadow>
+            </value>
+        </block>
+        <block type="titlescreen_box_set"></block>
+        <block type="titlescreen_box_color_set">
+            <value name="VALUE">
+                <shadow type="color_get">
+                    <field name="COLOR">70</field>
+                </shadow>
+            </value>
+        </block>
+        <block type="titlescreen_bg_set">
+            <value name="VALUE">
+                <shadow type="color_get">
+                    <field name="COLOR">0</field>
+                </shadow>
+            </value>
+        </block>
+        <block type="titlescreen_bg_reset"></block>
         <block type="titlescreen_player_frame_set">
             <value name="VALUE">
                 <shadow type="math_number">
@@ -469,6 +500,13 @@
         </block>
 
         <block type="object_fire_stop"></block>
+        <block type="sprite_fire_speed_set">
+            <value name="SPEED">
+                <shadow type="math_number">
+                    <field name="NUM">1</field>
+                </shadow>
+            </value>
+        </block>
         <block type="sprite_fire_angle_get"></block>
 
         <block type="object_seek_to">

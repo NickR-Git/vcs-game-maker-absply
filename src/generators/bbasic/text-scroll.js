@@ -93,17 +93,66 @@ export const TEXT_SCROLL_DIR_MASK = '$04';
 // bit packed in above it - see textScrollStateVarName's  comment.
 export const TEXT_SCROLL_STATE_MASK = '$03';
 
-export const reserveTextScrollDevVars = (reserveDevVar, textMinikernelUsed) => {
+export const DEFAULT_TEXT_SCROLL_SPEED = 20;
+export const DEFAULT_TEXT_SCROLL_PAUSE = 30;
+
+const constantOf = (block, input, fallback) => {
+  const target = block.getInputTargetBlock(input);
+  if (!target) return fallback;
+  const value = target.type === 'math_number' ? Number(target.getFieldValue('NUM')) : NaN;
+  return Number.isInteger(value) && value >= 0 && value <= 255 ? value : null;
+};
+
+/**
+ * The scroll speed and pause every message of the project is shown with, when they are all the same
+ * fixed number: those two then need no variable (the number is compiled in instead). A value is null
+ * when blocks disagree or one of them uses a calculated value.
+ * @param {!Blockly.Workspace} workspace
+ * @return {{speed: ?number, pause: ?number}}
+ */
+export const resolveTextScrollConstants = (workspace) => {
+  const speeds = new Set();
+  const pauses = new Set();
+  workspace.getAllBlocks(false).filter((block) => block.isEnabled()).forEach((block) => {
+    if (block.getInput('SCROLL_SPEED')) {
+      speeds.add(constantOf(block, 'SCROLL_SPEED', DEFAULT_TEXT_SCROLL_SPEED));
+      pauses.add(constantOf(block, 'SCROLL_PAUSE', DEFAULT_TEXT_SCROLL_PAUSE));
+    } else if (block.type === 'text_minikernel_show' && isScrollable(block.getFieldValue('TEXT'))) {
+      // Free-typed text longer than the display width scrolls with the defaults.
+      speeds.add(DEFAULT_TEXT_SCROLL_SPEED);
+      pauses.add(DEFAULT_TEXT_SCROLL_PAUSE);
+    }
+  });
+  const only = (values, fallback) => (values.size === 0 ? fallback : (values.size === 1 ? [...values][0] : null));
+  return {speed: only(speeds, DEFAULT_TEXT_SCROLL_SPEED), pause: only(pauses, DEFAULT_TEXT_SCROLL_PAUSE)};
+};
+
+export const reserveTextScrollDevVars = (reserveDevVar, textMinikernelUsed, constants = {}) => {
   if (!textMinikernelUsed) return;
   [
     [textScrollBaseVarName(), 'scrolling text: TextIndex at the message\'s start'],
     [textScrollFarEndVarName(), 'scrolling text: TextIndex at the message\'s end'],
     [textScrollTimerVarName(), 'scrolling text: frames left before the next step'],
-    [textScrollSpeedVarName(), 'scrolling text: frames per step'],
-    [textScrollPauseDurationVarName(), 'scrolling text: frames to hold at each end'],
+    ...(constants.speed === null || constants.speed === undefined ?
+      [[textScrollSpeedVarName(), 'scrolling text: frames per step']] : []),
+    ...(constants.pause === null || constants.pause === undefined ?
+      [[textScrollPauseDurationVarName(), 'scrolling text: frames to hold at each end']] : []),
     [textScrollStateVarName(), 'scrolling text: playing/paused/cleared + direction bit'],
   ].forEach(([name, description]) => reserveDevVar(name, undefined, description));
 };
+
+// The numbers found by resolveTextScrollConstants for the project being built (set at the start of each
+// build); a null one is read from its variable.
+let fixedConstants = {speed: null, pause: null};
+export const setTextScrollConstants = (constants) => {
+  fixedConstants = constants;
+};
+const operand = (fixed, varName, resolveVar) =>
+  (fixed === null || fixed === undefined ? {value: resolveVar(varName), fixed: false} : {value: String(fixed), fixed: true});
+// How the speed and pause are read: the compiled-in number when the project has just one, else the variable.
+export const textScrollSpeedOperand = (resolveVar) => operand(fixedConstants.speed, textScrollSpeedVarName(), resolveVar);
+export const textScrollPauseOperand = (resolveVar) =>
+  operand(fixedConstants.pause, textScrollPauseDurationVarName(), resolveVar);
 
 // Whether a message needs the scrolling append-region path at all, rather
 // than the plain static row every shorter message uses. Compared against
@@ -373,8 +422,8 @@ export const buildTextScrollSetupLines = (
     // "Show text with ID"), which a second, redundant read would only cost
     // cycles on for no benefit.
     `${farEnd()} = ${base()} + ${maxOffsetExpr}`,
-    `${speed()} = ${speedCode}`,
-    `${pauseDuration()} = ${pauseCode}`,
+    ...(textScrollSpeedOperand(resolveVar).fixed ? [] : [`${speed()} = ${speedCode}`]),
+    ...(textScrollPauseOperand(resolveVar).fixed ? [] : [`${pauseDuration()} = ${pauseCode}`]),
   ];
 };
 
@@ -397,8 +446,10 @@ export const generateTextScrollAdvance = (Blockly) => {
   const base = resolveVar(textScrollBaseVarName());
   const farEnd = resolveVar(textScrollFarEndVarName());
   const timer = resolveVar(textScrollTimerVarName());
-  const speed = resolveVar(textScrollSpeedVarName());
-  const pauseDuration = resolveVar(textScrollPauseDurationVarName());
+  const speedOperand = textScrollSpeedOperand(resolveVar);
+  const pauseOperand = textScrollPauseOperand(resolveVar);
+  const speed = speedOperand.fixed ? '#' + speedOperand.value : speedOperand.value;
+  const pauseDuration = pauseOperand.fixed ? '#' + pauseOperand.value : pauseOperand.value;
   const state = resolveVar(textScrollStateVarName());
   // Spliced directly into bbasic.bb.hbs's commongamelogic, bypassing
   // Blockly.BBasic.normalizeIndents() the same way generateBackgroundFadeChecks/

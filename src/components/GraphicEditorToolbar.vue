@@ -584,7 +584,9 @@ export default {
   gap: 4px;
 }
 
-.get-inner-divider {
+/* Deep, so the dividers a screen puts into the extra-tools slot (rendered with that screen's
+   scope, not this component's) get the same spacing as the ones above. */
+.get-tools >>> .get-inner-divider {
   margin: 0;
 }
 

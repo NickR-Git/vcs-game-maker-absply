@@ -6,12 +6,12 @@ import {findSongById, processSongsStorageDefaults, DEFAULT_PATTERN_STEPS, LENGTH
 import {functionCallDiscardVarName} from '../../blocks/function';
 import {processSoundEffectsStorageDefaults, DEFAULT_ARPEGGIO_DIVISION, DEFAULT_NOISE_PRIORITY} from '../../blocks/soundfx';
 import {MAX_DATA_TABLE_VALUES} from '../../blocks/data';
-import {useConfigurationStorage, useDimSoundFxPercentStorage, useDimSoundFxStorage,
+import {useConfigurationStorage,
   useSoundEffectsStorage, useSongsStorage, loadMutedMusicTrackIds, loadSoloedMusicTrackIds,
   isMusicTrackMuted} from '../../hooks/project';
 import {effectiveTempo} from '../../utils/music-playback';
 import {audcHasTunableNotes, noteAudv} from '../../utils/music-notes';
-import {DEFAULT_DIM_PERCENT, dimVolume, registerEnvelopeConfig, NO_ENVELOPE_SENTINEL,
+import {registerEnvelopeConfig, NO_ENVELOPE_SENTINEL,
   getEnvelopeConfigs} from './soundfx';
 
 const FRAMES_PER_SECOND = 60; // NTSC - matches "set tv ntsc" in bbasic.bb.hbs
@@ -904,9 +904,7 @@ const flattenPatternEvents = (song, pattern, channels, soundEffects, config = {}
       // App-wide preference (see useDimSoundFxStorage's  comment in
       // hooks/project.js), not part of this project's  saved
       // configuration.
-      const audv = useDimSoundFxStorage().value ?
-        dimVolume(noteAudv(note, soundEffect), useDimSoundFxPercentStorage(DEFAULT_DIM_PERCENT).value) :
-        noteAudv(note, soundEffect);
+      const audv = noteAudv(note, soundEffect);
       notesByChannel[channel].push({
         startUnits: note.step,
         lengthUnits: note.length,

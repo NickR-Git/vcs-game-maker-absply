@@ -442,7 +442,8 @@ import {useLastLoadedRomBytes, useLastBuildScreenshot} from '../hooks/rom-status
 import {buildRom} from '../hooks/rom';
 import {captureEmulatorScreenshot} from '../utils/emulator-screenshot';
 import {matrixToPlayfield, playfieldToMatrix} from '../utils/pixels';
-import {persistActiveFileHandle, loadPersistedFileHandle, ensureWritePermission, persistActiveFilePath, loadPersistedFilePath} from '../utils/file-handle-storage';
+import {persistActiveFileHandle, loadPersistedFileHandle, persistActiveDirHandle, loadPersistedDirHandle,
+  ensureWritePermission, persistActiveFilePath, loadPersistedFilePath} from '../utils/file-handle-storage';
 import {examplesState} from '../hooks/examples';
 import {soundBanksState} from '../hooks/soundbanks';
 import {processSoundEffectsStorageDefaults} from '../blocks/soundfx';
@@ -469,6 +470,26 @@ const SUPPORTS_FILE_SYSTEM_ACCESS =
   typeof window !== 'undefined' &&
   typeof window.showSaveFilePicker === 'function' &&
   typeof window.showOpenFilePicker === 'function';
+
+// Set when Save with auto-increment has no folder to write new versions into (see saveAsNextVersion).
+// Both are kept for the browser tab's session, so a page reload does not bring the dialog back.
+const sessionFlag = (key) => {
+  try {
+    return window.sessionStorage.getItem(key) === '1';
+  } catch (e) {
+    return false;
+  }
+};
+const setSessionFlag = (key) => {
+  try {
+    window.sessionStorage.setItem(key, '1');
+  } catch (e) {
+    // Without session storage the flag only lasts until the page is reloaded.
+  }
+};
+let incrementSaveToDownloads = sessionFlag('vcs-game-maker.incrementSaveToDownloads');
+// Set once the folder dialog has been shown (see saveAsNextVersion).
+let projectFolderAsked = sessionFlag('vcs-game-maker.projectFolderAsked');
 
 // window.electronAPI only exists inside the desktop build's preload script
 // (see preload.js) - never true in a browser. Checked BEFORE
@@ -515,6 +536,8 @@ export default defineComponent({
       // even with the exact same project still open, since a
       // FileSystemFileHandle used to live in memory only.
       activeFileHandle: null,
+      // The folder the project is saved into, for the auto-incrementing Save (see handleSaveProject).
+      activeDirHandle: null,
       // The Electron build's  equivalent of activeFileHandle above - a
       // plain absolute path (see background.js's project:save-as/
       // project:open handlers) rather than a FileSystemFileHandle, since
@@ -614,6 +637,13 @@ export default defineComponent({
           if (permission !== 'denied') data.activeFileHandle = handle;
         } catch (e) {
           console.error('Error while checking permission for the restored project file handle', e);
+        }
+        // The project's folder too, so Save with auto-increment keeps writing new versions beside it.
+        try {
+          const folder = await loadPersistedDirHandle();
+          if (folder && (await folder.queryPermission({mode: 'readwrite'})) !== 'denied') data.activeDirHandle = folder;
+        } catch (e) {
+          console.error('Error while restoring the project folder handle', e);
         }
       });
     }
@@ -895,6 +925,8 @@ export default defineComponent({
             await writable.write(projectYaml);
             await writable.close();
             this.data.activeFileHandle = handle;
+            this.data.activeDirHandle = null;
+            persistActiveDirHandle(null);
             // So "Save" keeps working as "Save" after a reload too - see
             // utils/file-handle-storage.js's  comment.
             persistActiveFileHandle(handle);
@@ -938,22 +970,40 @@ export default defineComponent({
           await this.handleSaveProjectAs();
           return;
         }
+        // With auto-increment on, every save is a new file beside the last one, under the new
+        // version's name - nothing is overwritten and nothing is asked.
+        let targetPath = this.data.activeFilePath;
         if (this.projectAutoIncrementVersion) {
           this.projectVersion = this.incrementVersion(this.projectVersion);
+          const folderEnd = Math.max(targetPath.lastIndexOf('/'), targetPath.lastIndexOf('\\'));
+          targetPath = targetPath.slice(0, folderEnd + 1) + this.buildSaveFilename();
         }
         await this.ensureEmulatorScreenshot();
         const projectYaml = this.buildProjectYaml();
-        const ok = await window.electronAPI.saveProject(this.data.activeFilePath, projectYaml);
+        const ok = await window.electronAPI.saveProject(targetPath, projectYaml);
         if (!ok) {
           console.error('Could not save the project file.');
           return;
         }
-        appendCompileLog(`Game saved to ${this.data.activeFilePath}`, 'stage');
+        this.data.activeFilePath = targetPath;
+        persistActiveFilePath(targetPath);
+        appendCompileLog(`Game saved to ${targetPath}`, 'stage');
         return;
       }
 
+      // With no folder to write into, every save goes to the downloads with its new name; the first
+      // save of a session still needs the Save As dialog to get a place for the project.
+      if (this.projectAutoIncrementVersion && SUPPORTS_FILE_SYSTEM_ACCESS && incrementSaveToDownloads) {
+        await this.saveAsNextVersion();
+        return;
+      }
       if (!SUPPORTS_FILE_SYSTEM_ACCESS || !this.data.activeFileHandle) {
         await this.handleSaveProjectAs();
+        return;
+      }
+
+      if (this.projectAutoIncrementVersion) {
+        await this.saveAsNextVersion();
         return;
       }
       // A handle restored from a previous session (see the onMounted
@@ -965,48 +1015,77 @@ export default defineComponent({
         console.error('Write permission for the active project file was denied.');
         return;
       }
-      if (this.projectAutoIncrementVersion) {
-        this.projectVersion = this.incrementVersion(this.projectVersion);
-        // "Save" (unlike "Save As") writes straight back to the SAME handle
-        // with no picker - createWritable() below always writes under
-        // whatever name that handle already has, so without this, the
-        // version bumped above silently stopped matching the on-disk
-        // filename after the very first save (confirmed as the actual
-        // report: only Save As/the first save ever produced a correctly
-        // versioned name). FileSystemHandle.move() (Chrome 110+) renames a
-        // handle IN PLACE, keeping it valid for every later Save/Save As
-        // call the same way - not universally supported yet, so this is
-        // deliberately best-effort: on a browser/handle without it, the
-        // save below still succeeds, just under the old filename, same as
-        // before this existed.
-        if (typeof this.data.activeFileHandle.move === 'function') {
-          try {
-            await this.data.activeFileHandle.move(this.buildSaveFilename());
-            // Without this, IndexedDB kept holding whichever handle was
-            // persisted at the very first save/open - never updated after
-            // any later rename. Harmless as long as the SAME mount of this
-            // component just keeps reusing its  in-memory
-            // data.activeFileHandle (the live, just-renamed object) - but
-            // this app destroys/recreates this component on navigation (see
-            // hooks/collapse.js's  comment on that same lifecycle), and
-            // the onMounted restore below always reloads from IndexedDB, so
-            // navigating away and back before the next save silently swapped
-            // back in the STALE, pre-rename handle - confirmed as the actual
-            // reported bug ("save a few times with increment on, turn it
-            // off, save again" landed back on an old filename, not the
-            // latest one).
-            persistActiveFileHandle(this.data.activeFileHandle);
-          } catch (e) {
-            console.error('Could not rename the project file to match its auto-incremented version', e);
-          }
-        }
-      }
       await this.ensureEmulatorScreenshot();
       const projectYaml = this.buildProjectYaml();
       const writable = await this.data.activeFileHandle.createWritable();
       await writable.write(projectYaml);
       await writable.close();
       appendCompileLog(`Game saved to ${this.data.activeFileHandle.name}`, 'stage');
+    },
+
+    // Save with "auto-increment version" on, in a browser: a new file under the next version's name
+    // instead of writing over the last one, without asking each time. A browser can only create a
+    // file next to another with the user's permission for that folder, which is asked for once
+    // (the picker opens in the project file's folder) and remembered after that. When there is no
+    // such folder - the picker was cancelled, or Chrome does not allow the folder (it refuses
+    // Documents, Desktop and Downloads themselves) - every later save of the session goes straight
+    // to the browser's downloads with the new name, rather than opening a dialog each time.
+    async saveAsNextVersion() {
+      let folder = null;
+      if (!incrementSaveToDownloads) {
+        // The folder first: opening the picker needs this click's permission, which would be gone
+        // after the screenshot below.
+        folder = this.data.activeDirHandle;
+        if (folder) {
+          try {
+            if (!(await ensureWritePermission(folder))) folder = null;
+          } catch (e) {
+            folder = null;
+          }
+        }
+        // The folder dialog opens at most once per page load, whatever happens: a refusal, a
+        // cancel or a folder that stops being writable later all end in downloads, never in the
+        // dialog again.
+        if (!folder && !projectFolderAsked) {
+          projectFolderAsked = true;
+          setSessionFlag('vcs-game-maker.projectFolderAsked');
+          try {
+            folder = await window.showDirectoryPicker({id: 'vcs-game-maker-project', mode: 'readwrite',
+              startIn: this.data.activeFileHandle});
+            this.data.activeDirHandle = folder;
+            persistActiveDirHandle(folder);
+          } catch (e) {
+            if (!(e && e.name === 'AbortError')) console.error('Could not get the project folder', e);
+            folder = null;
+          }
+        }
+        if (!folder) {
+          incrementSaveToDownloads = true;
+          setSessionFlag('vcs-game-maker.incrementSaveToDownloads');
+        }
+      }
+      this.projectVersion = this.incrementVersion(this.projectVersion);
+      const filename = this.buildSaveFilename();
+      await this.ensureEmulatorScreenshot();
+      const projectYaml = this.buildProjectYaml();
+      if (folder) {
+        try {
+          const handle = await folder.getFileHandle(filename, {create: true});
+          const writable = await handle.createWritable();
+          await writable.write(projectYaml);
+          await writable.close();
+          this.data.activeFileHandle = handle;
+          persistActiveFileHandle(handle);
+          appendCompileLog(`Game saved to ${handle.name}`, 'stage');
+          return;
+        } catch (e) {
+          console.error('Error while saving the project as a new version', e);
+          incrementSaveToDownloads = true;
+          setSessionFlag('vcs-game-maker.incrementSaveToDownloads');
+        }
+      }
+      saveAs(new Blob([projectYaml], {type: 'text/yaml'}), filename);
+      appendCompileLog(`Game saved to ${filename}`, 'stage');
     },
 
     // "Open Project" - on a browser that supports it, uses the same File
@@ -1071,6 +1150,8 @@ export default defineComponent({
             return;
           }
           this.data.activeFileHandle = handle;
+          this.data.activeDirHandle = null;
+          persistActiveDirHandle(null);
           persistActiveFileHandle(handle);
           this.loadProjectFromFile(file);
           return;
@@ -1353,7 +1434,7 @@ export default defineComponent({
       const dimPercent = useDimSoundFxPercentStorage(DEFAULT_DIM_PERCENT).value;
       let startMs = 0;
       sounds.forEach((sound) => {
-        // The volume the compiled game would play it at with DIM on (see the Sound tab).
+        // The volume the emulator plays it at with DIM on (see the Sound tab).
         const audv = dimOn ? dimVolume(sound.audv, dimPercent) : sound.audv;
         this.soundBankPreviewTimers.push(window.setTimeout(() => previewSoundEffect({...sound, audv}), startMs));
         startMs += (Math.max(0, Number(sound.duration) || 0) / 60) * 1000 + 250;
@@ -1411,6 +1492,8 @@ export default defineComponent({
         return;
       }
       this.data.activeFileHandle = null;
+      this.data.activeDirHandle = null;
+      persistActiveDirHandle(null);
       persistActiveFileHandle(null);
       this.data.activeFilePath = null;
       persistActiveFilePath(null);
@@ -1434,6 +1517,8 @@ export default defineComponent({
       // clears the persisted copy too, or a later reload would restore
       // the old project's handle right back onto this new, unrelated one.
       this.data.activeFileHandle = null;
+      this.data.activeDirHandle = null;
+      persistActiveDirHandle(null);
       persistActiveFileHandle(null);
       // The Electron build's  equivalent of the above - see
       // data.activeFilePath's  comment in setup().

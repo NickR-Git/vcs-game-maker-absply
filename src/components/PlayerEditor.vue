@@ -313,7 +313,9 @@
                         v-model.number="frame.duration"
                         hide-details
                         type="number"
-                        @change="handleChildChange"
+                        min="1"
+                        step="1"
+                        @change="() => handleFrameDurationChange(frame)"
                       />
                       <pixel-editor
                         :ref="pixelEditorRefKey(animation, frame)"
@@ -447,6 +449,7 @@ import PlayfieldColorStrip from '../components/PlayfieldColorStrip.vue';
 import QuickColorPalette from '../components/QuickColorPalette.vue';
 import {useCollapsedIds} from '../hooks/collapse';
 import {useDragReorder} from '../hooks/drag-reorder';
+import {recordRowColorsChange} from '../utils/row-color-history';
 import {DEFAULT_ROW_COLOR, clearRowColors} from '../blocks/background';
 import {DEFAULT_SPRITES, processPlayerAnimationsStorageDefaults} from '../generators/bbasic/sprites';
 import {useColorPaletteStorage, useConfigurationStorage, useErrorStorage, usePixelGridOverlayStorage} from '../hooks/project';
@@ -462,6 +465,7 @@ import {loadImageFromFile, openFileDialogMultiple, sortImportedAnimationFrameFil
 import {createCroppedResizedCanvas, createResizedCanvas} from '../utils/image';
 import {parseAsepriteSheet} from '../utils/aseprite';
 import {escapeHtml} from '../utils/build-error';
+import {clampFrameDuration} from '../utils/duration';
 
 // Width of one frame editor at 100% zoom. The container is normally sized by
 // its  contents, so this pins it before the zoom factor is applied.
@@ -713,6 +717,12 @@ export default defineComponent({
 
     const handleChildChange = () => {
       state.value = state.value;
+    };
+
+    // A frame lasts at least one video frame, however many are typed in.
+    const handleFrameDurationChange = (frame) => {
+      frame.duration = clampFrameDuration(frame.duration);
+      handleChildChange();
     };
 
     // The card the shared "Set height" tool actually acts on - null (and the
@@ -1147,7 +1157,7 @@ export default defineComponent({
     };
 
     // Same reasoning/mechanism as BackgroundEditor's  handleRowColorsInput.
-    const handleRowColorsInput = (frame, colors) => {
+    const setRowColors = (frame, colors) => {
       frame.rowColors = colors;
       handleChildChange();
       // The pixel editor holds its  display state, so persisting isn't
@@ -1155,13 +1165,18 @@ export default defineComponent({
       // updated row colors and recolors its canvas.
       instance.proxy.$forceUpdate();
     };
+    // A change made by the user (the color strip, Clear, Paste) can be undone; moving selected
+    // pixels takes the row colors along through the pixel editor's history instead.
+    const handleRowColorsInput = (frame, colors) => {
+      recordRowColorsChange(frame, setRowColors, colors);
+    };
 
     // Moving selected pixels with the Move tool takes the colors of their rows along
     // (PixelEditor.vue's 'move-rows' event - see utils/row-color-move.js).
     const handleMoveRows = (frame, move) => {
       if (!spriteColorsEnabled.value) return;
       const colors = rowColorsForMove(frame, move);
-      if (colors) handleRowColorsInput(frame, colors);
+      if (colors) setRowColors(frame, colors);
     };
 
     // Clearing a frame (PixelEditor.vue's "clear" event, separate from
@@ -1227,7 +1242,7 @@ export default defineComponent({
     };
 
     return {selectedCardId, selectCard, deselectCard,
-      state, handleChildChange,
+      state, handleChildChange, handleFrameDurationChange,
       handleAddFrame, handleDeleteFrame,
       handleImportAnimationFrames, replaceFramesOnImport, importMenuOpenAnimationId,
       handleImportAsepriteSheet, asepriteReplaceAnimations, asepriteImportMenuOpen,

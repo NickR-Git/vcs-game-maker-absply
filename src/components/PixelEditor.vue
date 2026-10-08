@@ -30,10 +30,25 @@
             @mousemove="(e) => { handleMouse(e); handleHover(e); }"
           />
           <canvas
+            v-if="columnBackdrop"
+            ref="backdropOverlay"
+            class="editor-canvas backdrop-canvas"
+          />
+          <canvas
             v-if="showGrid || selection || polygonPreview || hoverCell"
             ref="gridOverlay"
             class="grid-overlay-canvas"
           />
+        </div>
+      </div>
+      <!-- A row under the canvas, lined up with it: "below" sits under the canvas, "below-sidebar" under the
+           sidebar beside it. -->
+      <div v-if="$slots.below" class="editor-with-sidebar editor-below">
+        <div v-if="$slots['below-sidebar']" class="editor-sidebar">
+          <slot name="below-sidebar" />
+        </div>
+        <div class="proportion-wrapper">
+          <slot name="below" />
         </div>
       </div>
     </v-card-text>
@@ -119,6 +134,9 @@ export default {
     // frame has no room to render it legibly and no matching "X" concept
     // worth calling out cell by cell.
     showCellIds: {type: Boolean, default: false},
+    // One CSS color per column, drawn over the cells that are off (a preview of what shows behind
+    // the picture, such as the Title tab's picture background); null leaves the cells as they are.
+    columnBackdrop: {type: Array, default: null},
   },
   data() {
     return {
@@ -201,11 +219,16 @@ export default {
     window.isMatrixEqual = isMatrixEqual;
 
     if (this.showGrid || this.selection || this.polygonPreview || this.hoverCell) this.setupGridOverlay();
+    this.setupBackdrop();
   },
   beforeDestroy() {
     this.teardownGridOverlay();
+    if (this.backdropObserver) this.backdropObserver.disconnect();
   },
   watch: {
+    columnBackdrop() {
+      this.$nextTick(() => this.setupBackdrop());
+    },
     mirrorKey() {
       if (this.hoverCell && this.gridResizeObserver) this.$nextTick(() => this.drawGridOverlay());
     },
@@ -388,6 +411,55 @@ export default {
       this.gridResizeObserver = new ResizeObserver(() => this.drawGridOverlay());
       this.gridResizeObserver.observe(canvas);
       this.drawGridOverlay();
+    },
+
+    setupBackdrop() {
+      if (this.backdropObserver) {
+        this.backdropObserver.disconnect();
+        this.backdropObserver = null;
+      }
+      const canvas = this.$refs.backdropOverlay;
+      if (!canvas) return;
+      this.backdropObserver = new ResizeObserver(() => this.drawBackdrop());
+      this.backdropObserver.observe(canvas);
+      this.drawBackdrop();
+    },
+
+    // Paints each off cell in its column's backdrop color, on a canvas above the drawing.
+    scheduleBackdrop() {
+      if (this.backdropFrame) return;
+      this.backdropFrame = requestAnimationFrame(() => {
+        this.backdropFrame = 0;
+        this.drawBackdrop();
+      });
+    },
+
+    drawBackdrop() {
+      const canvas = this.$refs.backdropOverlay;
+      if (!canvas || !this.editor) return;
+      const dpr = window.devicePixelRatio || 1;
+      const cssWidth = canvas.clientWidth;
+      const cssHeight = canvas.clientHeight;
+      if (!cssWidth || !cssHeight) return;
+      canvas.width = Math.round(cssWidth * dpr);
+      canvas.height = Math.round(cssHeight * dpr);
+      const ctx = canvas.getContext('2d');
+      // Drawn in device pixels, so every cell edge lands on a whole pixel (a scaled context would blend
+      // neighbouring cells along their edges).
+      const cellWidth = canvas.width / this.width;
+      const cellHeight = canvas.height / this.editor.height;
+      // The whole picture is repainted here (off cells in their backdrop color, the others as they are),
+      // so the drawing underneath, scaled a little differently, can't show through between cells.
+      this.editor.pixels.forEach((px) => {
+        if (!px.color || px.y < 0 || px.y >= this.editor.height) return;
+        const off = px.color === this.bgColor;
+        const color = (off && this.columnBackdrop && this.columnBackdrop[px.x]) || px.color;
+        ctx.fillStyle = color;
+        // Edges rounded to whole pixels, so neighbouring cells meet without gaps or overlap.
+        const left = Math.round(px.x * cellWidth);
+        const top = Math.round(px.y * cellHeight);
+        ctx.fillRect(left, top, Math.round((px.x + 1) * cellWidth) - left, Math.round((px.y + 1) * cellHeight) - top);
+      });
     },
 
     teardownGridOverlay() {
@@ -898,7 +970,9 @@ export default {
         const {width, height} = this.editor;
         const inside = pixels.filter((pixel) =>
           pixel.x >= 0 && pixel.y >= 0 && pixel.x < width && pixel.y < height);
-        return set(this.mirrorPixels(inside, logToHistory), logToHistory);
+        const result = set(this.mirrorPixels(inside, logToHistory), logToHistory);
+        if (this.columnBackdrop) this.scheduleBackdrop();
+        return result;
       };
       // Not logged to the history: this is loading the image, not an edit, and as
       // an entry it made Undo (once the strokes were undone, or on its own)
@@ -1120,6 +1194,14 @@ export default {
    so no border (would double up with .editor-canvas's) and no
    pointer-events (drawing/erasing has to keep reaching the real canvas
    underneath, not get intercepted by this purely visual layer). */
+.backdrop-canvas {
+  /* Same box as the drawing canvas (including its border), so cells line up exactly. */
+  pointer-events: none;
+  border-color: transparent;
+  width: 100%;
+  height: 100%;
+}
+
 .grid-overlay-canvas {
   position: absolute;
   top: 0;
