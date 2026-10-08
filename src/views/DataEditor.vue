@@ -150,6 +150,7 @@
                   <confirm-delete-menu
                     v-if="state.dataTables.length > 1"
                     title="Delete this table?"
+                    :selected="table.id === selectedCardId"
                     activator-title="Delete this table"
                     icon-btn-class="data-icon-btn-size"
                     @confirm="handleDeleteTable(table)"

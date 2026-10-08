@@ -180,10 +180,10 @@
             <v-icon>mdi-reflect-vertical</v-icon>
           </v-btn>
         </v-btn-toggle>
-        <v-btn icon small title="Flip horizontally (Shift+H)" :disabled="!activeEditor" @click="() => activeEditor.flipHorizontal()">
+        <v-btn icon small title="Flip horizontally (Shift+H) - only the selected pixels when a selection is active" :disabled="!activeEditor" @click="() => activeEditor.flipHorizontal()">
           <v-icon>mdi-flip-horizontal</v-icon>
         </v-btn>
-        <v-btn icon small title="Flip vertically (Shift+V)" :disabled="!activeEditor" @click="() => activeEditor.flipVertical()">
+        <v-btn icon small title="Flip vertically (Shift+V) - only the selected pixels when a selection is active" :disabled="!activeEditor" @click="() => activeEditor.flipVertical()">
           <v-icon>mdi-flip-vertical</v-icon>
         </v-btn>
         <template v-if="!importExportFirst">
@@ -298,10 +298,12 @@ export default {
     },
     bleedStyle() {
       return {
-        marginLeft: `-${this.bleed}px`,
-        marginRight: `-${this.bleed}px`,
-        paddingLeft: `${this.bleed}px`,
-        paddingRight: `${this.bleed}px`,
+        'marginLeft': `-${this.bleed}px`,
+        'marginRight': `-${this.bleed}px`,
+        'paddingLeft': `${this.bleed}px`,
+        'paddingRight': `${this.bleed}px`,
+        // Lets what sits inside the toolbar (the Quick colors divider) reach the same full width.
+        '--toolbar-bleed': `${this.bleed}px`,
       };
     },
     // Whether the Undo button below has a quick color deletion it could
@@ -428,8 +430,11 @@ export default {
       }
 
       // Delete/Backspace clears the pixels inside the current marquee
-      // selection (a no-op with nothing selected).
+      // selection. With nothing selected, Delete is left alone, so it can open the
+      // confirmation for deleting the selected card or frame (see hooks/delete-shortcut.js).
       if (key === 'Delete' || key === 'Backspace') {
+        const hasSelection = this.activeEditor.selection && this.activeEditor.selection.size;
+        if (key === 'Delete' && !hasSelection) return;
         event.preventDefault();
         this.activeEditor.deleteSelection();
         return;

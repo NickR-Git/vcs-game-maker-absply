@@ -22,6 +22,10 @@ export const EMULATOR_SETTINGS_DEFAULTS = {
   // 0 to 1: how dark the gaps between scanlines are.
   scanlines: 0,
   gamma: 1,
+  // Whether the debug numbers (registers, scanlines, cycles) show over the picture (6502.ts only).
+  debugOverlay: false,
+  // The names of the variables whose values the debug info shows.
+  debugVariables: [],
   // 'none' (sharp pixels), 'bilinear' (smooth) or 'qis' (quasi-integer scaling).
   scalingMode: 'none',
   // The tallest picture, in pixels, that full screen renders when effects are on: 'native' (the

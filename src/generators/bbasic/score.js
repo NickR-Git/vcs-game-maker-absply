@@ -220,6 +220,15 @@ export default (Blockly) => {
     return `score = score ${operator} ${argument0}\n`;
   };
 
+  // Points the score code at the table of the chosen font: both tables are in one page of ROM (see
+  // buildScoreFontOverride), so only the low byte of the address changes.
+  Blockly.BBasic[`score_font_set`] = function(block) {
+    if (!Blockly.BBasic.scoreFontsEnabled) return 'rem No secondary score font chosen on the Score tab\n';
+    const label = block.getFieldValue('FONT') === 'secondary' ? 'scorefontsecondary' : 'scoretable';
+    const fontLow = Blockly.BBasic.nameDB_.getName('scorefontlow', Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+    return ['asm', `lda #<${label}`, `sta ${fontLow}`, '@end'].join('\n') + '\n';
+  };
+
   Blockly.BBasic[`score_color_get`] = function(block) {
     // Score's color getter.
     const code = 'scorecolor';

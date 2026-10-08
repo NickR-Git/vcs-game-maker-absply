@@ -290,11 +290,38 @@
               <v-icon>mdi-camera-outline</v-icon>
             </v-btn>
             <v-divider class="emulator-toolbar-divider" vertical />
+            <v-btn
+              v-if="emulatorSettings.backend === 'stellerator'"
+              icon
+              small
+              class="emulator-flat-icon-btn emulator-debug-btn"
+              :class="{'emulator-debug-btn-on': emulatorSettings.debugOverlay}"
+              :title="emulatorSettings.debugOverlay ? 'Hide the debug info over the emulator screen' : 'Show debug info (registers, program counter, scanlines, CPU cycles) over the emulator screen'"
+              @click="handleToggleDebugOverlay"
+            >
+              <v-icon>mdi-bug-outline</v-icon>
+            </v-btn>
+            <debug-settings-dialog v-if="emulatorSettings.backend === 'stellerator'"></debug-settings-dialog>
             <key-mapping-dialog></key-mapping-dialog>
             <emulator-settings-dialog></emulator-settings-dialog>
           </div>
         </div>
-        <div id="gopher2600-target-container" :style="emulatorScaleStyle"></div>
+        <div id="gopher2600-target-container" :style="emulatorScaleStyle">
+          <div
+            v-if="emulatorSettings.backend === 'stellerator' && emulatorSettings.debugOverlay && debugInfo"
+            class="emulator-debug-overlay"
+          >
+            <pre>{{ debugText }}</pre>
+            <table v-if="debugVariableRows.length" class="emulator-debug-table">
+              <tr v-for="(row, rowIndex) in debugVariableRows" :key="rowIndex">
+                <template v-for="(cell, cellIndex) in row">
+                  <td :key="`n${cellIndex}`" class="emulator-debug-name">{{ cell.name }}</td>
+                  <td :key="`v${cellIndex}`" class="emulator-debug-value">{{ cell.text }}</td>
+                </template>
+              </tr>
+            </table>
+          </div>
+        </div>
         <div class="panel-switches-row mt-2">
           <v-btn
             small
@@ -423,13 +450,17 @@
           <div v-if="romBlockVariableAssignments.length" class="rom-capacity-summary"><strong>Required by blocks:</strong></div>
           <div v-if="romBlockVariableAssignments.length" class="rom-capacity-variables">
             <div v-for="assignment in romBlockVariableAssignments" :key="assignment.slot">
-              <strong>{{ assignment.slot }}:</strong> {{ assignment.name }}
+              <strong>{{ assignment.slot }}:</strong> {{ assignment.name }}<span
+                v-if="assignment.sharedWith && assignment.sharedWith.length"
+              >{{ ' / ' + assignment.sharedWith.join(' / ') }}</span>
             </div>
           </div>
           <div v-if="romUserVariableAssignments.length" class="rom-capacity-summary"><strong>User defined:</strong></div>
           <div v-if="romUserVariableAssignments.length" class="rom-capacity-variables">
             <div v-for="assignment in romUserVariableAssignments" :key="assignment.slot">
-              <strong>{{ assignment.slot }}:</strong> {{ assignment.name }}
+              <strong>{{ assignment.slot }}:</strong> {{ assignment.name }}<span
+                v-if="assignment.sharedWith && assignment.sharedWith.length"
+              >{{ ' / ' + assignment.sharedWith.join(' / ') }}</span>
             </div>
           </div>
           <div v-if="romCapacityBanks.length" class="rom-capacity-detail">
@@ -519,6 +550,7 @@ import {useCompileLog, useConfigurationStorage, useDarkModeStorage, useDesaturat
 import {buildRom, useRomCapacity, useRomOutdated, useHasCompiledRom, useCompiledRomBytes,
   useBuildInProgress} from './hooks/rom';
 import {safeWithGopher2600} from './hooks/emulator';
+import {useEmulatorSettings, saveEmulatorSettings} from './hooks/emulator-settings';
 import {escapeHtml} from './utils/build-error';
 import {captureEmulatorScreenshot} from './utils/emulator-screenshot';
 import {sanitizeForFilename} from './utils/file';
@@ -528,6 +560,8 @@ import {startTapHold} from './hooks/tap-hold';
 import {syncSoundBanks} from './hooks/soundbanks';
 import KeyMappingDialog from './components/KeyMappingDialog.vue';
 import EmulatorSettingsDialog from './components/EmulatorSettingsDialog.vue';
+import DebugSettingsDialog from './components/DebugSettingsDialog.vue';
+import {useDebugVariables} from './hooks/debug-symbols';
 import pkg from '../package.json';
 const {productName, version} = pkg;
 
@@ -596,13 +630,14 @@ const readStoredErrorHeight = () => {
 const readStoredEmulatorVisible = () => localStorage.getItem(EMULATOR_VISIBLE_KEY) !== 'false';
 
 export default {
-  components: {KeyMappingDialog, EmulatorSettingsDialog},
+  components: {KeyMappingDialog, EmulatorSettingsDialog, DebugSettingsDialog},
   data: () => ({
     drawer: null,
     emulatorWidth: readStoredWidth(),
     emulatorVisible: readStoredEmulatorVisible(),
     emulatorScale: 1,
     emulatorHeight: null,
+    debugInfo: null,
     resizing: false,
     errorHeight: readStoredErrorHeight(),
     resizingError: false,
@@ -620,6 +655,7 @@ export default {
     const errorStorage = useErrorStorage();
     console.info('Text', version);
     return {
+      emulatorSettings: useEmulatorSettings(), debugSymbols: useDebugVariables(),
       errorStorage, errorBannerHighlight: useErrorBannerHighlight(),
       compileLog: useCompileLog(), romOutdated: useRomOutdated(), romCapacity: useRomCapacity(),
       hasCompiledRom: useHasCompiledRom(), compiledRomBytes: useCompiledRomBytes(),
@@ -645,6 +681,8 @@ export default {
     this.$vuetify.theme.dark = this.darkMode;
     window.addEventListener('resize', this.handleWindowResize);
     window.addEventListener('gopher2600-ready', this.handleGopher2600Ready);
+    window.addEventListener('emulator-debug', this.handleEmulatorDebug);
+    this.sendDebugWatch();
     this.emulatorWatchdogTimer = window.setInterval(this.checkEmulatorCanvas, EMULATOR_WATCHDOG_INTERVAL);
   },
   beforeDestroy() {
@@ -654,6 +692,7 @@ export default {
     window.clearInterval(this.emulatorWatchdogTimer);
     window.removeEventListener('resize', this.handleWindowResize);
     window.removeEventListener('gopher2600-ready', this.handleGopher2600Ready);
+    window.removeEventListener('emulator-debug', this.handleEmulatorDebug);
     if (this.emulatorResizeObserver) {
       this.emulatorResizeObserver.disconnect();
       this.emulatorResizeObserver = null;
@@ -703,6 +742,39 @@ export default {
     // since a plain web build has no way to launch a local program at all.
     isElectron() {
       return !!window.electronAPI;
+    },
+    debugText() {
+      const info = this.debugInfo;
+      if (!info) return '';
+      const hex = (value, digits) => value.toString(16).toUpperCase().padStart(digits, '0');
+      // P is shown as the flag letters that are set (N V - B D I Z C).
+      const flagLetters = [[128, 'N'], [64, 'V'], [16, 'B'], [8, 'D'], [4, 'I'], [2, 'Z'], [1, 'C']]
+          .map(([bit, letter]) => (info.flags & bit ? letter : '.')).join('');
+      return `PC $${hex(info.pc, 4)}  A $${hex(info.a, 2)}  X $${hex(info.x, 2)}  Y $${hex(info.y, 2)}` +
+        `  S $${hex(info.s, 2)}  ${flagLetters}\n` +
+        `Scanlines ${info.scanlines}  Frame ${info.frame}\n` +
+        (info.busyCycles === null ?
+          `CPU cycles/frame ${info.cpuCycles}` :
+          `CPU busy ${info.busyCycles} of ${info.cpuCycles} cycles/frame`);
+    },
+    // The watched variables' values as table rows, a few to a row: a cell is a name and its value in decimal
+    // with hex beside it.
+    debugVariableRows() {
+      const variables = (this.debugInfo && this.debugInfo.variables) || [];
+      if (!variables.length) return [];
+      const columns = variables.length > 6 ? 3 : variables.length > 1 ? 2 : 1;
+      const cells = variables.map(([name, value]) => ({
+        name,
+        text: `${value} ($${value.toString(16).toUpperCase().padStart(2, '0')})`,
+      }));
+      const rows = [];
+      for (let i = 0; i < cells.length; i += columns) rows.push(cells.slice(i, i + columns));
+      return rows;
+    },
+    // Names picked in the debug settings, with the address the last build gave each.
+    debugWatch() {
+      const chosen = this.emulatorSettings.debugVariables || [];
+      return this.debugSymbols.filter(({name}) => chosen.includes(name)).map(({name, address}) => ({name, address}));
     },
     emulatorScaleStyle() {
       return {
@@ -843,6 +915,10 @@ export default {
     },
   },
   watch: {
+    // The addresses come from the last build, so a new build or a new choice sends the list again.
+    debugWatch() {
+      this.sendDebugWatch();
+    },
     // The Options tab's adaptive frame skipping, passed on to the emulator whenever it changes.
     'adaptiveFrameSkipStorage'() {
       this.applyAdaptiveFrameSkip();
@@ -933,6 +1009,8 @@ export default {
       const parts = groups
           .filter(([, names]) => names.length)
           .map(([label, names]) => ({label, names: names.join(', ')}));
+      // First in its bank's list, ahead of everything else in it.
+      if (contents.titleScreenKernel) parts.unshift({label: 'Title Screen Kernel', names: ''});
       if (contents.textMinikernel) parts.push({label: 'Text Minikernel', names: ''});
       if (contents.bankOverhead) parts.push({label: 'Bank switching overhead', names: ''});
       return parts;
@@ -943,6 +1021,18 @@ export default {
     // placed by an external library - no retry-until-it-exists dance needed,
     // just move it into this component's container once and start
     // observing its size.
+    sendDebugWatch() {
+      safeWithGopher2600((gopher2600) => {
+        if (typeof gopher2600.setDebugWatch === 'function') gopher2600.setDebugWatch(this.debugWatch);
+      });
+    },
+    handleToggleDebugOverlay() {
+      this.debugInfo = null;
+      saveEmulatorSettings({...this.emulatorSettings, debugOverlay: !this.emulatorSettings.debugOverlay});
+    },
+    handleEmulatorDebug(event) {
+      if (this.emulatorSettings.debugOverlay) this.debugInfo = event.detail;
+    },
     attachEmulator() {
       const container = document.getElementById('gopher2600-target-container');
       // Falls back to the remembered element: if the canvas was ever removed
@@ -2233,6 +2323,22 @@ html {
   border-radius: 8px !important;
 }
 
+/* The dropdown is attached to the page body, outside the app root that carries the theme classes, so the
+   themes are found from the body: the color picker takes the same colors as the popup cards (Subdued
+   Palette, Dark Mode, and both together). */
+body:has(#inspire.desaturate-app-colors) .blocklyDropDownDiv:has(.fieldGridDropDownContainer) {
+  background-color: #e9e9e9 !important;
+}
+
+body:has(#inspire.dark-mode) .blocklyDropDownDiv:has(.fieldGridDropDownContainer) {
+  background-color: #000 !important;
+  border: 1px solid rgba(255, 255, 255, 0.24) !important;
+}
+
+body:has(#inspire.dark-mode.desaturate-app-colors) .blocklyDropDownDiv:has(.fieldGridDropDownContainer) {
+  background-color: #2a2a2a !important;
+}
+
 /* @blockly/field-grid-dropdown's  default 7px grid-gap between cells -
    with the border/padding shrink below already making each cell mostly
    just its swatch, that gap read as a wide, oddly deliberate-looking
@@ -2281,6 +2387,12 @@ html {
   box-shadow: inset 0 0 0 2px #000 !important;
 }
 
+/* A white frame instead in Dark Mode, where the popup is dark (the dropdown sits outside the app root, so the
+   theme is found from the body). */
+body:has(#inspire.dark-mode) .fieldGridDropDownContainer.blocklyMenu .blocklyMenuItemSelected {
+  box-shadow: inset 0 0 0 2px #fff !important;
+}
+
 /* Vuetify's  hint/error text under a field (e.g. the description under
    the "Enable Superchip RAM..." switch on the Options tab) - default
    line-height (12px, exactly matching its 12px font-size, i.e. no
@@ -2317,6 +2429,7 @@ html {
 }
 
 #gopher2600-target-container {
+  position: relative;
   overflow: hidden;
   /* This sits inside .emulator-drawer-inner's flex column, at a fixed
      JS-computed height (see App.vue's updateEmulatorScale) - without
@@ -2333,6 +2446,62 @@ html {
      shrink at all.
   */
   flex-shrink: 0;
+}
+
+/* The debug info sits over the top left of the picture. */
+.emulator-debug-overlay {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  z-index: 2;
+  margin: 0;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font: 11px/1.3 monospace;
+  pointer-events: none;
+  white-space: pre;
+}
+
+.emulator-debug-overlay pre {
+  margin: 0;
+  font: inherit;
+}
+
+.emulator-debug-table {
+  margin-top: 4px;
+  border-collapse: collapse;
+}
+
+.emulator-debug-table td {
+  padding: 0 6px 0 0;
+  white-space: pre;
+}
+
+.emulator-debug-table .emulator-debug-name {
+  opacity: 0.75;
+}
+
+.emulator-debug-table .emulator-debug-value {
+  padding-right: 14px;
+  text-align: right;
+}
+
+.emulator-debug-table tr td:last-child {
+  padding-right: 0;
+}
+
+/* Switched on: the blue the graphic editor toolbar's active tool has, at rest and on hover. The
+   extra class beats the dim-at-rest and hover rules above and the dark-mode ones. */
+.v-application .emulator-toolbar-row .emulator-flat-icon-btn.emulator-debug-btn-on.v-btn .v-icon,
+.v-application .emulator-toolbar-row .emulator-flat-icon-btn.emulator-debug-btn-on.v-btn:hover .v-icon {
+  color: var(--v-primary-base, #1976d2) !important;
+}
+
+.dark-mode.v-application .emulator-toolbar-row .emulator-flat-icon-btn.emulator-debug-btn-on.v-btn .v-icon,
+.dark-mode.v-application .emulator-toolbar-row .emulator-flat-icon-btn.emulator-debug-btn-on.v-btn:hover .v-icon {
+  color: var(--v-primary-lighten1, #2196f3) !important;
 }
 
 /* Full screen: the container fills the display (the browser sets that) and the canvas, which
@@ -2642,6 +2811,35 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
   --editor-icon-rest-color: rgba(255, 255, 255, 0.5);
 }
 
+/* The colors-only copy/paste buttons in a frame's corner (Sprites and Title Screen tabs) look
+   and react like the copy/paste buttons in the frame's toolbar: no box, a muted icon that
+   darkens on hover and shrinks a little while pressed, and dimmed when disabled. */
+.copy-paste-color-btn.v-btn {
+  background-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.copy-paste-color-btn.v-btn::before {
+  display: none;
+}
+
+.copy-paste-color-btn.v-btn .v-icon {
+  color: var(--editor-icon-rest-color, rgba(0, 0, 0, 0.38)) !important;
+  transition: color 0.15s ease, transform 0.08s ease;
+}
+
+.copy-paste-color-btn.v-btn:not(.v-btn--disabled):hover .v-icon {
+  color: rgba(0, 0, 0, 0.87) !important;
+}
+
+.copy-paste-color-btn.v-btn:not(.v-btn--disabled):active .v-icon {
+  transform: scale(0.82);
+}
+
+.dark-mode.v-application .copy-paste-color-btn.v-btn:not(.v-btn--disabled):hover .v-icon {
+  color: #fff !important;
+}
+
 /* Icon buttons: dim at rest, bright on hover, dimmer still when disabled. */
 .dark-mode.v-application .emulator-toolbar-row .emulator-flat-icon-btn.v-btn .v-icon,
 .dark-mode.v-application .get-tools .v-btn .v-icon,
@@ -2713,6 +2911,56 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
 .dark-mode.v-application .music-flat-icon-btn.v-btn.music-icon-btn-active .v-icon,
 .dark-mode.v-application .soundfx-arpeggio-btn.v-btn.soundfx-arpeggio-btn-active .v-icon {
   color: var(--v-primary-lighten1, #2196f3) !important;
+}
+
+/* The text buttons at the bottom of a popup (Cancel, Close, Clear...) and the emulator pane's Refresh,
+   Select and Reset buttons share one look: small, the theme's plain button background and text color,
+   no primary-blue text (hard to see in dark mode and with Subdued Colors). */
+.v-card__actions .v-btn.v-btn--text:not(.v-btn--icon),
+.emulator-select-button.v-btn,
+.emulator-reset-button.v-btn,
+.emulator-refresh-button.v-btn {
+  height: 28px;
+  min-width: 50px;
+  padding: 0 12.4px !important;
+  font-size: 0.75rem;
+  box-shadow: none !important;
+  background-color: #f5f5f5 !important;
+  color: rgba(0, 0, 0, 0.87) !important;
+  caret-color: rgba(0, 0, 0, 0.87) !important;
+}
+
+.v-card__actions .v-btn.v-btn--text.v-btn--disabled:not(.v-btn--icon),
+.emulator-select-button.v-btn.v-btn--disabled,
+.emulator-reset-button.v-btn.v-btn--disabled,
+.emulator-refresh-button.v-btn.v-btn--disabled {
+  background-color: rgba(0, 0, 0, 0.12) !important;
+  color: rgba(0, 0, 0, 0.26) !important;
+}
+
+.dark-mode .v-card__actions .v-btn.v-btn--text:not(.v-btn--icon),
+.dark-mode .emulator-select-button.v-btn,
+.dark-mode .emulator-reset-button.v-btn,
+.dark-mode .emulator-refresh-button.v-btn {
+  background-color: #272727 !important;
+  color: #fff !important;
+  caret-color: #fff !important;
+}
+
+.dark-mode .v-card__actions .v-btn.v-btn--text.v-btn--disabled:not(.v-btn--icon),
+.dark-mode .emulator-select-button.v-btn.v-btn--disabled,
+.dark-mode .emulator-reset-button.v-btn.v-btn--disabled,
+.dark-mode .emulator-refresh-button.v-btn.v-btn--disabled {
+  background-color: rgba(255, 255, 255, 0.12) !important;
+  color: rgba(255, 255, 255, 0.3) !important;
+}
+
+/* Subdued Colors mutes every filled button the same way (see the rules for .v-btn--has-bg above). */
+.desaturate-app-colors .v-card__actions .v-btn.v-btn--text:not(.v-btn--icon),
+.desaturate-app-colors .emulator-select-button.v-btn,
+.desaturate-app-colors .emulator-reset-button.v-btn,
+.desaturate-app-colors .emulator-refresh-button.v-btn {
+  filter: saturate(50%) brightness(0.85);
 }
 
 /* Active icons keep the blue on hover too. */
@@ -3654,6 +3902,7 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
    real reported mismatch. One explicit, shared hover background instead of
    relying on that per-button overlay math, so all four always match
    exactly regardless of each button's resting text color. */
+.v-card__actions .v-btn.v-btn--text:not(.v-btn--icon):not(.v-btn--disabled):hover,
 .reset-to-defaults-btn.v-btn:hover,
 .emulator-refresh-button.v-btn:hover,
 .palette-clear-btn.v-btn:hover,
@@ -3665,12 +3914,25 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
 /* Same explicit-hover-color reasoning as just above, darker to match Soft
    Colors' darker background tiers (see the app-wide
    .desaturate-app-colors rules) - overrides the plain-theme value above. */
+.desaturate-app-colors .v-card__actions .v-btn.v-btn--text:not(.v-btn--icon):not(.v-btn--disabled):hover,
 .desaturate-app-colors .reset-to-defaults-btn.v-btn:hover,
 .desaturate-app-colors .emulator-refresh-button.v-btn:hover,
 .desaturate-app-colors .palette-clear-btn.v-btn:hover,
 .desaturate-app-colors .emulator-select-button.v-btn:hover,
 .desaturate-app-colors .emulator-reset-button.v-btn:hover {
   background-color: #d0d0d0 !important;
+}
+
+/* The dark theme's hover for the same buttons (the light greys above would wash out the white text). */
+.dark-mode .v-card__actions .v-btn.v-btn--text:not(.v-btn--icon):not(.v-btn--disabled):hover,
+.dark-mode .emulator-refresh-button.v-btn:hover,
+.dark-mode .emulator-select-button.v-btn:hover,
+.dark-mode .emulator-reset-button.v-btn:hover,
+.dark-mode.desaturate-app-colors .v-card__actions .v-btn.v-btn--text:not(.v-btn--icon):not(.v-btn--disabled):hover,
+.dark-mode.desaturate-app-colors .emulator-refresh-button.v-btn:hover,
+.dark-mode.desaturate-app-colors .emulator-select-button.v-btn:hover,
+.dark-mode.desaturate-app-colors .emulator-reset-button.v-btn:hover {
+  background-color: #3a3a3a !important;
 }
 
 .actions-item,

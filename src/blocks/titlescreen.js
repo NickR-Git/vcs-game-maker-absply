@@ -113,6 +113,74 @@ export const titleCardScrollOffsetVarName = (ref) => `titleCardScroll_${sanitize
 // animated (cycles frames) OR merely scrolling (windowHeight < height, see
 // buildCardDataAsm) with just one frame.
 export const titleCardIndexVarName = (ref) => `titleCardIndex_${sanitizeCardRef(ref)}`;
+// A frame offset for the row color list alone, for an animation whose frames repeat the same picture under
+// different colors (see titleCardColorSplit): the picture is stored once and bmp_KEY_colorindex
+// (aliased to this byte) picks the color list, while bmp_KEY_index picks the picture.
+export const titleCardColorIndexVarName = (ref) => `titleCardColorIndex_${sanitizeCardRef(ref)}`;
+
+// Every frame of a card padded or cut to the first frame's height (frames must all be the same
+// height), as its picture rows and, for the types that have them, its row colors.
+export const padTitleCardFrames = (card, typeInfo) => {
+  const frames = card.frames && card.frames.length ? card.frames :
+    [{pixels: [new Array(typeInfo.width).fill(0)]}];
+  const frameHeight = (frames[0].pixels && frames[0].pixels.length) || 1;
+  const paddedFrames = frames.map((frame) => {
+    const framePixels = frame.pixels || [];
+    const pixelRows = Array.from({length: frameHeight}, (_, i) => framePixels[i] || new Array(typeInfo.width).fill(0));
+    const frameColors = frame.rowColors || [];
+    const colorRows = typeInfo.hasRowColors ?
+      Array.from({length: frameHeight}, (_, i) => frameColors[i] ?? 0) : null;
+    return {pixelRows, colorRows};
+  });
+  return {frames, frameHeight, paddedFrames};
+};
+
+// How a card keeps its pictures and its row color lists apart ('' when it doesn't, 'offset' or 'page'): only the 48-wide two-line
+// kernels can (96x2 reads colors with the same row counter as the picture), and only when the
+// animation repeats a picture under different colors, so the picture takes less ROM stored once.
+// Everything else stores each frame whole, as before.
+export const titleCardColorSplit = (card) => {
+  const typeInfo = TITLE_SCREEN_KERNEL_TYPES[card.type];
+  if (!typeInfo || typeInfo.width !== 48 || !typeInfo.hasRowColors || !isCardAnimated(card)) return '';
+  const {frameHeight, paddedFrames} = padTitleCardFrames(card, typeInfo);
+  const colorLists = new Set(paddedFrames.map(({colorRows}) => JSON.stringify(colorRows)));
+  const pictures = new Set(paddedFrames.map(({pixelRows}) => JSON.stringify(pixelRows)));
+  const whole = new Set(paddedFrames.map(({pixelRows, colorRows}) => JSON.stringify([pixelRows, colorRows])));
+  if (pictures.size >= whole.size) return '';
+  // The color list's frame offset is one byte, so with the lists stacked, the last one has to start within
+  // the first 256 rows. Past that, the lists are stacked a page at a time and a second byte picks the page
+  // (which can't also scroll: the scroll offset needs the offset byte).
+  if ((colorLists.size - 1) * frameHeight <= 255) return 'offset';
+  const scrollWindow = Number(card.scrollWindow) || 0;
+  return scrollWindow > 0 && scrollWindow < frameHeight ? '' : 'page';
+};
+
+// The page of the color lists, for a graphic with more lists than fit in a page ('page' in titleCardColorSplit).
+export const titleCardColorPageVarName = (ref) => `titleCardColorPage_${sanitizeCardRef(ref)}`;
+
+// Every card whose color lists are stacked a page at a time, as "screenId:cardId" refs.
+export const resolveColorPageCardRefs = () => {
+  const {screens} = processTitleScreenStorageDefaults(useTitleScreenStorage());
+  const refs = [];
+  screens.forEach((screen) => {
+    (screen.cards || []).forEach((card) => {
+      if (titleCardColorSplit(card) === 'page') refs.push(`${screen.id}:${card.id}`);
+    });
+  });
+  return refs;
+};
+
+// Every card that keeps its colors apart, as "screenId:cardId" refs.
+export const resolveColorSplitCardRefs = () => {
+  const {screens} = processTitleScreenStorageDefaults(useTitleScreenStorage());
+  const refs = [];
+  screens.forEach((screen) => {
+    (screen.cards || []).forEach((card) => {
+      if (titleCardColorSplit(card)) refs.push(`${screen.id}:${card.id}`);
+    });
+  });
+  return refs;
+};
 // A single-color (48x1) graphic's color as a real RAM byte, for the "Set title screen graphic
 // color" block: bmp_KEY_color (see buildCardDataAsm) is aliased to it instead of a ROM byte.
 export const titleCardColorVarName = (ref) => `titleCardColor_${sanitizeCardRef(ref)}`;
@@ -166,6 +234,13 @@ export const titleScreenAnyPageOverRowBudget = (storage) => {
   return screens.some((screen) => titleScreenPageWeightedRows(screen) > TITLE_SCREEN_PAGE_ROW_BUDGET);
 };
 
+// Every card that exists, of any type, across every screen, as "screenId:cardId" refs: what a block's
+// graphic choice has to match for it to still refer to something (a deleted graphic leaves its blocks behind).
+export const resolveAllTitleScreenCardRefs = () => {
+  const {screens} = processTitleScreenStorageDefaults(useTitleScreenStorage());
+  return screens.flatMap((screen) => (screen.cards || []).map((card) => `${screen.id}:${card.id}`));
+};
+
 // Every animated card, across every screen, as "screenId:cardId" refs - see
 // titleCardFrameCounterVarName's comment for why this is resolved by
 // ref rather than waiting for kernel slot assignment.
@@ -203,6 +278,18 @@ export const resolveFrameBoxCardRefs = () => {
       const same = boxes.every((box) => box.pf1 === boxes[0].pf1 && box.pf2 === boxes[0].pf2 &&
         box.background === boxes[0].background);
       if (!same) refs.push(`${screen.id}:${card.id}`);
+    });
+  });
+  return refs;
+};
+
+// The animated graphics whose "Play animation once" switch is on (see TitleScreenEditor.vue).
+export const resolvePlayOnceCardRefs = () => {
+  const {screens} = processTitleScreenStorageDefaults(useTitleScreenStorage());
+  const refs = [];
+  screens.forEach((screen) => {
+    (screen.cards || []).forEach((card) => {
+      if (card.playOnce && isCardAnimated(card)) refs.push(`${screen.id}:${card.id}`);
     });
   });
   return refs;
@@ -466,6 +553,26 @@ Blockly.Blocks['titlescreen_card_frame_set'] = {
   },
 };
 
+// Starts a graphic's animation from its beginning (or, in reverse, from its last frame).
+Blockly.Blocks['titlescreen_card_animate'] = {
+  init: function() {
+    this.appendDummyInput()
+        .appendField(`${TITLE_ICON} Animate title screen graphic`)
+        .appendField(new Blockly.FieldDropdown(buildFrameCardOptions), 'CARD')
+        .appendField(new Blockly.FieldDropdown([['forward', 'forward'], ['in reverse', 'reverse']]), 'DIRECTION')
+        .appendField('then')
+        .appendField(new Blockly.FieldDropdown(PLAYBACK_OPTIONS), 'PLAYBACK');
+    this.setInputsInline(true);
+    this.setPreviousStatement(true, null);
+    this.setNextStatement(true, null);
+    this.setColour(TITLESCREEN_COLOR);
+    this.setTooltip('Starts the animation of a Title Screen graphic with more than one frame from the ' +
+      'beginning: forward from the first frame, or in reverse from the last one, and releases it if ' +
+      'a "Set title screen graphic to frame" block was holding it. "Then" says what happens at the end: ' +
+      '"loop" goes round again, "play once" stays on the last frame reached (the first frame, in reverse).');
+  },
+};
+
 // Overrides the background color of the title screen page being drawn.
 Blockly.Blocks['titlescreen_bg_set'] = {
   init: function() {
@@ -568,6 +675,23 @@ Blockly.Blocks['titlescreen_scroll_by'] = {
       'edge" on, scrolling halts when the top of the graphic reaches the top of its window, or the ' +
       'bottom of the graphic reaches the bottom of its window. With more than one animation frame, ' +
       'the edge is that of the frame currently showing.');
+  },
+};
+
+// Runs its blocks each time a title screen graphic's animation reaches its end (every time round when it
+// loops, once when it plays once), the way "When animation finishes" does for a sprite.
+Blockly.Blocks['titlescreen_animation_finished'] = {
+  init: function() {
+    this.appendDummyInput()
+        .appendField(`${TITLE_ICON} When title screen graphic`)
+        .appendField(new Blockly.FieldDropdown(buildFrameCardOptions), 'CARD')
+        .appendField('animation finishes');
+    this.appendStatementInput('DO');
+    this.setPreviousStatement(true);
+    this.setNextStatement(true);
+    this.setColour(TITLESCREEN_COLOR);
+    this.setTooltip('Runs the connected blocks once each time a Title Screen graphic with more than one ' +
+      'frame finishes its animation: every time round when it loops, once when it plays once.');
   },
 };
 

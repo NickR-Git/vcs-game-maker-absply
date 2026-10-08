@@ -101,6 +101,7 @@
                 <confirm-delete-menu
                   v-if="state.textStrings.length > 1"
                   title="Delete this message?"
+                  :selected="entry.id === selectedCardId"
                   activator-title="Delete this message"
                   icon-btn-class="text-delete-btn text-icon-btn-size"
                   absolute

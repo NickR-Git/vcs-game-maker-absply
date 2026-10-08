@@ -311,15 +311,8 @@ export const missileFireFracVarName = (index) => `missileFireFrac${index}`;
 // byte: the low nibble is the main axis's leftover and the high nibble the other axis's, and the
 // slot is the index of the byte (missileFireFracVarName).
 export const missileFireFracSlots = (usedFor, used16, usedPfCheck, usedThrottle, constSpeed) => {
-  const slots = new Map();
-  ['missile0', 'missile1', 'ball'].forEach((name) => {
-    if (!usedFor || !usedFor.has(name) || !used16 || !used16.has(name)) return;
-    const fixedSpeed = !!(constSpeed && constSpeed.has(name));
-    const throttled = !!(usedThrottle && usedThrottle.has(name));
-    if (fixedSpeed && !throttled) return;
-    slots.set(name, slots.size);
-  });
-  return slots;
+  // The halfway directions move whole pixels every frame now, so nothing is kept between frames.
+  return new Map();
 };
 
 // sprite_*_seek_to's  dev vars (see its  trigger generator and
@@ -1128,8 +1121,6 @@ export const generateMissileFireChecks = (Blockly) => {
   if (!used || !used.size) return '';
   const usedPfCheck = Blockly.BBasic.missileFirePfCheckUsedFor || new Set();
   const used16 = Blockly.BBasic.missileFire16UsedFor;
-  const fracSlots = missileFireFracSlots(used, used16, usedPfCheck, Blockly.BBasic.missileFireThrottleUsedFor,
-      Blockly.BBasic.missileFireConstSpeed);
   const resolveVar = (canonicalName) =>
     Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
   const resolveRW = (canonicalName) => Blockly.BBasic.superchipRwPairs[canonicalName];
@@ -1148,7 +1139,6 @@ export const generateMissileFireChecks = (Blockly) => {
     const throttled = !!throttlePair;
     const is16 = used16 && used16.has(name);
     const pfChecked = usedPfCheck.has(name);
-    const fracSlot = fracSlots.get(name);
     // Every "if dirVar = N then ..." line only ever conditions the ONE
     // statement right after "then" (see this function's long-standing
     // comment further down) - a step whose (x, y) pair has BOTH a nonzero x
@@ -1194,66 +1184,24 @@ export const generateMissileFireChecks = (Blockly) => {
       // direction is a halfway one.
       if (pfChecked) leanLines.push(` temp3 = ${speedVar}`);
       leanLines.push(` if !${dirVar}{0} then goto ${leanDone}`);
-      // A fixed speed that is not throttled: the extra sixteenths come from the frame counter. Its
-      // low four bits in reverse order spread the extras evenly: a share of n sixteenths is one
-      // extra pixel on the n frames where the reversed number is below n.
-      const bitrevLabel = `_missilefire_${name}_bitrev`;
-      const bitrevGo = `_missilefire_${name}_bitrevgo`;
-      const sixteenthSteps = (target, sixteenths, phase) => {
-        const steps = [` ${target} = ${sixteenths >> 4}`];
-        if (sixteenths & 15) steps.push(` if ${phase} < ${sixteenths & 15} then ${target} = ${target} + 1`);
-        return steps;
-      };
-      if (!fracSlot && fracSlot !== 0) {
-        const sixteenths = leanSixteenths(constSpeed);
-        leanLines.push(
-            ' asm',
-            '       lda framecounter',
-            '       and #15',
-            '       tax',
-            `       lda ${bitrevLabel},x`,
-            `       jmp ${bitrevGo}`,
-            bitrevLabel,
-            '       .byte 0,8,4,12,2,10,6,14,1,9,5,13,3,11,7,15',
-            bitrevGo,
-            '       sta temp5',
-            'end',
-            // The other axis uses the counter half a cycle later, so the two do not extra together.
-            ` temp6 = temp5 + 8`,
-            ` temp6 = temp6 & 15`,
-            ...sixteenthSteps('temp3', sixteenths.main, 'temp5'),
-            ...sixteenthSteps('temp4', sixteenths.other, 'temp6'));
+      // A halfway direction moves at the same total speed as a diagonal (speed * 1.41), 22.5 degrees from
+      // its main axis: the main axis at speed * 1.31 and the other at speed * 0.54. Whole pixels every
+      // frame, with the fractions spread over four frames: with k the frame count's low two bits times 4,
+      // main = (21 * speed + k) / 16 and other = (9 * speed + k) / 16 (a speed of 1 gives 1, 1, 1, 2 and
+      // 0, 0, 1, 1: close to 1.31 and 0.54, and different from a diagonal).
+      leanLines.push(
+          ' temp5 = framecounter & 3',
+          ' temp5 = temp5 * 4');
+      if (constSpeed !== undefined) {
+        leanLines.push(` temp3 = ${21 * constSpeed}`, ` temp4 = ${9 * constSpeed}`);
       } else {
-        const pool = resolveRW(missileFireFracVarName(fracSlot));
-        if (constSpeed !== undefined) {
-          const sixteenths = leanSixteenths(constSpeed);
-          leanLines.push(` temp3 = ${sixteenths.main}`, ` temp4 = ${sixteenths.other}`);
-        } else {
-          // 21 and 8.5 sixteenths per unit of speed, close to 20.9 and 8.66.
-          leanLines.push(
-              ` temp3 = ${speedVar} * 16`,
-              ` temp5 = ${speedVar} * 4`,
-              ` temp3 = temp3 + temp5`,
-              ` temp3 = temp3 + ${speedVar}`,
-              ` temp4 = ${speedVar} * 8`,
-              ` temp5 = ${speedVar} / 2`,
-              ` temp4 = temp4 + temp5`);
-        }
-        // The leftover sixteenths from the frames before are added in, and what is left over
-        // afterward is kept: temp5 the saved byte, temp6 the main axis's part of it.
-        leanLines.push(
-            ` temp5 = ${pool.read}`,
-            ` temp6 = temp5 & 15`,
-            ` temp3 = temp3 + temp6`,
-            ` temp6 = temp3 & 15`,
-            ` temp3 = temp3 / 16`,
-            ` temp5 = temp5 / 16`,
-            ` temp4 = temp4 + temp5`,
-            ` temp5 = temp4 & 15`,
-            ` temp4 = temp4 / 16`,
-            ` temp5 = temp5 * 16`,
-            ` ${pool.write} = temp5 | temp6`);
+        leanLines.push(` temp3 = ${speedVar} * 21`, ` temp4 = ${speedVar} * 9`);
       }
+      leanLines.push(
+          ' temp3 = temp3 + temp5',
+          ' temp3 = temp3 / 16',
+          ' temp4 = temp4 + temp5',
+          ' temp4 = temp4 / 16');
       leanLines.push(leanDone);
     }
     const throttleContinueLabel = `_missilefire_${name}_throttlecontinue`;
@@ -1825,6 +1773,12 @@ export default (Blockly) => {
       // The width/quantity option reads the low 3 bits of the size variable.
       const widthOf = /^__(player[01])size_w_$/.exec(block.getFieldValue('VAR') || '');
       if (widthOf) return [`(${widthOf[1]}size & 7)`, Blockly.BBasic.ORDER_ATOMIC];
+      // Visibility: a hidden player is on frame 255, so frame / 255 is 1 for hidden and 0 for shown.
+      const visibleOf = /^__(player[01])visible_$/.exec(block.getFieldValue('VAR') || '');
+      if (visibleOf) {
+        Blockly.BBasic.usesDivMul = true;
+        return [`(1 - ${visibleOf[1]}frame / 255)`, Blockly.BBasic.ORDER_ATOMIC];
+      }
       // Horizontal flip is bit 3 of the size variable.
       const flipOf = /^__(player[01])size_3_$/.exec(block.getFieldValue('VAR') || '');
       if (flipOf) return [`((${flipOf[1]}size & 8) / 8)`, Blockly.BBasic.ORDER_ATOMIC];

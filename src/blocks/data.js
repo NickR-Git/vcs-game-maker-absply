@@ -106,6 +106,35 @@ Blockly.Blocks['data_get_element'] = {
   },
 };
 
+// The number of values in a data table. The count is known when the project is built, so the
+// block compiles to a plain number: no ROM, no variable and no table read.
+Blockly.Blocks['data_table_size'] = {
+  init: function() {
+    this.appendDummyInput()
+        .appendField(`${DATA_ICON} Size of data table`)
+        .appendField(new Blockly.FieldDropdown(buildDataTableOptions), 'TABLE');
+    this.setOutput(true, 'Number');
+    this.setColour(DATA_COLOR);
+    this.setTooltip('The number of values in a data table set up on the Data tab. ' +
+      'Its last index is one less than this.');
+  },
+};
+
+// The same size, for a table chosen by its ID number (a plain number, or any value worked out while the
+// game runs).
+Blockly.Blocks['data_table_size_by_id'] = {
+  init: function() {
+    this.appendValueInput('TABLE_ID')
+        .setCheck('Number')
+        .appendField(`${DATA_ICON} Size of data table ID`);
+    this.setInputsInline(true);
+    this.setOutput(true, 'Number');
+    this.setColour(DATA_COLOR);
+    this.setTooltip('The number of values in a data table, chosen by its ID number (see the ID badge on ' +
+      'its card on the Data tab). A table with 256 values reports 255 when the ID is not a plain number.');
+  },
+};
+
 // Same table lookup as data_get_element above, just chosen by its ID number
 // (see the ID badge shown on each table card on the Data tab) instead of
 // picking it from a name dropdown - lets a project with many similarly-

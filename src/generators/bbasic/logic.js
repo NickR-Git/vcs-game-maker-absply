@@ -16,6 +16,21 @@ goog.provide('Blockly.BBasic.logic');
 goog.require('Blockly.BBasic');
 */
 
+import {joyButtonLastPressFramesVarName} from './input';
+
+// The joysticks whose "Fire tapped" a condition block contains.
+const tappedJoysticksIn = (condition) => {
+  const found = new Set();
+  if (!condition) return found;
+  condition.getDescendants(false).forEach((child) => {
+    if (child.type !== 'input_joystick_fire_pattern') return;
+    const mode = child.getFieldValue('MODE');
+    if (mode === 'HOLD' || mode === 'RELEASED' || mode === 'DOUBLE_TAP') return;
+    found.add(`joy${child.getFieldValue('JOYSTICK') === '1' ? '1' : '0'}`);
+  });
+  return found;
+};
+
 // Splits a condition at every top-level occurrence of a separator (one that is
 // not inside parentheses or braces), e.g. "a > 1 && b" at "&&".
 const splitTopLevel = (text, separator) => {
@@ -165,6 +180,13 @@ export default (Blockly) => {
           lines.push(`@ ${bodyLabel}`);
         }
       }
+      // The tap has been acted on: clear the joystick's press timer so the same tap cannot trigger
+      // again, e.g. when this branch changes the game state and the new state's code looks at it.
+      tappedJoysticksIn(block.getInputTargetBlock(`IF${n}`)).forEach((joy) => {
+        if (finalCondition === 'true') return;
+        lines.push(`  ${Blockly.BBasic.nameDB_.getName(joyButtonLastPressFramesVarName(joy),
+            Blockly.Names.DEVELOPER_VARIABLE_TYPE)} = 0`);
+      });
       if (branchCode) lines.push(branchCode);
       if (jumpsOverRest && !alwaysTaken) lines.push(`goto ${endLabel}`);
     }

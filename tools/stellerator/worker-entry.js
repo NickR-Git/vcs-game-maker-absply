@@ -41,6 +41,11 @@ const SLICE_CLOCKS = 228 * 2;
 const MAX_SLICES_PER_FRAME = 400;
 
 const state = {
+  debug: false,
+  debugWatch: [],
+  debugLastCpuCycles: 0,
+  debugLastBusyCycles: 0,
+  busyCycles: 0,
   board: null,
   rom: null,
   tvSpec: 'NTSC',
@@ -119,11 +124,56 @@ const createBoard = async () => {
   board.setAudioEnabled(true);
   board.reset();
   state.board = board;
+  state.busyCycles = 0;
+  state.debugLastBusyCycles = 0;
+  state.debugLastCpuCycles = 0;
+  if (state.debug) installCycleCounter();
   state.frames = 0;
   state.accumulator = 0;
   state.lastTimestamp = null;
   state.framePeriod = pal ? 20 : 1000 / 60;
   applyPanel();
+};
+
+// Counts the CPU cycles in which the 6507 actually ran, as opposed to the ones it spent halted by
+// WSYNC (waiting for the end of a scanline). 6502.ts calls the CPU's cycle() once per CPU cycle, so
+// wrapping it on this board is enough; the wrapper only exists while the overlay is on. With
+// "Instruction" accuracy a call runs a whole instruction, so the count is only exact in "Cycle exact".
+const installCycleCounter = () => {
+  const cpu = state.board && state.board.getCpu();
+  if (!cpu || cpu.__cycleCounter) return;
+  const cycle = cpu.cycle.bind(cpu);
+  cpu.cycle = () => {
+    if (!cpu.isHalt()) state.busyCycles++;
+    return cycle();
+  };
+  cpu.__cycleCounter = true;
+};
+
+// The debug overlay's numbers (App.vue shows them): registers, the program counter, and how long the
+// frame was, in scanlines and CPU cycles. Only sent while the overlay is on.
+const postDebug = () => {
+  const board = state.board;
+  if (!state.debug || !board) return;
+  const cpu = board.getCpu();
+  const {a, x, y, s, flags} = cpu.state;
+  const cpuCycles = board._cpuCycles;
+  post({
+    type: 'debug',
+    pc: cpu.getLastInstructionPointer(),
+    a, x, y, s, flags,
+    scanlines: board.getVideoOutput().getHeight(),
+    cpuCycles: cpuCycles - state.debugLastCpuCycles,
+    busyCycles: state.cpuAccuracy === 'instruction' ? null : state.busyCycles - state.debugLastBusyCycles,
+    frame: state.frames,
+    variables: state.debugWatch.map(({name, address}) => {
+      // Superchip RAM is written at $1000-$107F and read back from $1080-$10FF.
+      const readAddress = (address & 0x1F80) === 0x1000 ? address + 0x80 : address;
+      return [name, board.getBus().peek(readAddress)];
+    }),
+  });
+  state.debugLastCpuCycles = cpuCycles;
+  state.debugLastBusyCycles = state.busyCycles;
 };
 
 const postFrame = () => {
@@ -183,6 +233,7 @@ const runTick = (timestamp) => {
   if (ran) {
     postFrame();
     postAudio();
+    postDebug();
   }
 };
 
@@ -268,6 +319,15 @@ const handle = async (message) => {
       handleKey(message.code, message.down);
       break;
     case 'setting':
+      if (message.name === 'debugWatch') {
+        state.debugWatch = Array.isArray(message.value) ? message.value : [];
+      }
+      if (message.name === 'debugOverlay') {
+        state.debug = !!message.value;
+        state.debugLastCpuCycles = state.board ? state.board._cpuCycles : 0;
+        state.debugLastBusyCycles = state.busyCycles;
+        if (state.debug) installCycleCounter();
+      }
       if (message.name === 'cpuAccuracy' && message.value !== state.cpuAccuracy) {
         state.cpuAccuracy = message.value === 'instruction' ? 'instruction' : 'cycle';
         if (state.rom) await createBoard();

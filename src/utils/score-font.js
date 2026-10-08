@@ -278,6 +278,22 @@ export const editedScoreFontDigits = (font) => {
   }
 };
 
+/**
+ * The secondary score font a build uses, or null when it has none. The secondary font is stored as
+ * "" (none), "default" (the default font) or a font name; only the plain 8-row fonts can be paired,
+ * since the score row's height is fixed when the ROM is built.
+ * @param {string} primary The primary font.
+ * @param {string} stored The stored secondary choice.
+ * @return {?string} The font, "" being the default font, or null.
+ */
+export const secondaryScoreFontName = (primary, stored) => {
+  if (!stored) return null;
+  const font = stored === 'default' ? '' : stored;
+  const isSquish = (name) => name === SQUISH_SCORE_FONT || name === SQUISH_CUSTOM_SCORE_FONT;
+  if (isSquish(primary) || isSquish(font)) return null;
+  return font;
+};
+
 export const scoreFontIsEdited = (font) => !!editedScoreFontDigits(font);
 
 // An edited font's rows as the score_graphics.asm table wants them (8 per digit; Squish's 5
@@ -429,10 +445,13 @@ const buildSquishScoreFontOverride = async (digits) => {
  * toolchain, since score_graphics.asm always holds the digits inline.
  * @param {string} font Font name, "custom", "SQUISH_CUSTOM", or a falsy
  *     value for the default.
+ * @param {string=} secondaryFont The stored secondary font choice (see secondaryScoreFontName), whose ten
+ *     digits are written right below the primary table so the two share one page.
  * @return {!Promise<?string>} The override content, or null to use the
  *     stock score_graphics.asm unmodified.
  */
-export const buildScoreFontOverride = async (font) => {
+export const buildScoreFontOverride = async (font, secondaryFont) => {
+  const secondary = secondaryScoreFontName(font, secondaryFont);
   if (font === SQUISH_CUSTOM_SCORE_FONT) {
     return buildSquishScoreFontOverride(customSquishFontBytes());
   }
@@ -444,8 +463,10 @@ export const buildScoreFontOverride = async (font) => {
     return edited ? buildSquishScoreFontOverride(edited) : null;
   }
 
-  const digits = font === CUSTOM_SCORE_FONT ?
-    customFontBytes() : (editedFontBytes(font) || (font && SCORE_FONTS[font]));
+  // With a secondary font the table is always written out, also for the default font.
+  let digits = font === CUSTOM_SCORE_FONT ?
+    customFontBytes() : (editedFontBytes(font) || (font && SCORE_FONTS[font]) ||
+      (secondary !== null ? DEFAULT_SCORE_FONT : null));
   // Presets (SCORE_FONTS) are still exactly DECIMAL_DIGIT_COUNT*DIGIT_HEIGHT
   // bytes (80) - only 10 real digits, same as they've always been (see
   // generators/score-fonts.js's  comment) - only CUSTOM can actually be
@@ -510,13 +531,28 @@ export const buildScoreFontOverride = async (font) => {
   // tracking. Confirmed directly this way: the exact same isolated,
   // minimal 8k project this shift's earlier "ORG . - N"/"RORG . - N"
   // attempts both failed on now compiles cleanly.
-  const extraBytes = digits.length - decimalByteCount;
+  // The secondary font (only its ten digits) is written right below the primary one, so both lie in the same
+  // page of ROM with no padding: the score code keeps the page of `scoretable` and only changes the low byte
+  // (see scorefontlow in std_overscan.asm). The table's start moves earlier by what the secondary needs.
+  const secondaryDigits = secondary === null ? null : resolveScoreDigitBytes(secondary);
+  // Both fonts share one page, and only 116 bytes lie below the table's stock start - not enough for the 48
+  // extra-glyph bytes plus a whole second font - so a paired primary font keeps just its ten digits.
+  if (secondaryDigits && digits.length > decimalByteCount) digits = digits.slice(0, decimalByteCount);
+  const extraBytes = digits.length - decimalByteCount + (secondaryDigits ? secondaryDigits.length : 0);
   const header = pristine.slice(0, headerEnd - DIGITS_START.length);
   const shiftedHeader = extraBytes > 0 ?
     header.replace(/^(\s*R?ORG\s+.+)$/gm, `$1-${extraBytes}`) : header;
 
+  const secondaryBlock = secondaryDigits ?
+    'scorefontsecondary\n' + secondaryDigits.map((byte) => '       .byte ' + byte).join('\n') + '\n\n' : '';
+  // Both fonts must be in one page: a table that crosses a page boundary would read the wrong bytes.
+  const pageCheck = secondaryDigits ?
+    '\n if (>scorefontsecondary) != (>scoretable)\n   echo "The two score fonts do not fit in one page of ROM."\n   err\n endif\n' : '';
+
   return shiftedHeader +
+    secondaryBlock +
     pristine.slice(headerEnd - DIGITS_START.length, headerEnd) + '\n\n' +
     digits.map((byte) => '       .byte ' + byte).join('\n') + '\n' +
+    pageCheck +
     pristine.slice(footerStart);
 };

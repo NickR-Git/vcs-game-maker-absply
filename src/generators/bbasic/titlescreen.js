@@ -3,7 +3,8 @@
 import {TITLE_SCREEN_KERNEL_TYPES, MAX_KERNEL_COPIES_PER_TYPE,
   processTitleScreenStorageDefaults, isCardAnimated, cardFrameHeight,
   titleCardFrameCounterVarName, titleCardScrollOffsetVarName,
-  titleCardIndexVarName, titleCardScrollEdgeFlagsVarName, TITLE_SCROLL_EDGE_BITS,
+  titleCardIndexVarName, titleCardColorIndexVarName, titleCardColorPageVarName, padTitleCardFrames, titleCardColorSplit,
+  titleCardScrollEdgeFlagsVarName, TITLE_SCROLL_EDGE_BITS,
   titleCardColorVarName, TITLE_BG_COLOR_VAR_NAME, titleCardBoxColorVarName, titleCardBoxPf1VarName,
   titleCardBoxPf2VarName, titlePlayerIndexVarName, titlePlayerFrameVarName, titleFrameBox} from '../../blocks/titlescreen';
 import {useTitleScreenStorage, usePlayerAnimationsStorage,
@@ -52,25 +53,9 @@ const toColorHexByte = (n) => toHexByte(tvColorByte(n & 0xff));
 // read directly by the kernel's per-copy asm via "ifconst").
 const buildCardDataAsm = (card, key, typeInfo, ref, Blockly, pageColor) => {
   const {blockCount, doubleLine, hasRowColors} = typeInfo;
-  const frames = card.frames && card.frames.length ? card.frames :
-    [{pixels: [new Array(typeInfo.width).fill(0)]}];
-  const frameHeight = (frames[0].pixels && frames[0].pixels.length) || 1;
-  // Every frame is padded/truncated to the FIRST frame's  height (same
-  // "frames must be a uniform height" convention buildPlayerDataAsm/
-  // resolvePlayerSlotFrames below already enforce) - the editor's
-  // "Resize all frames" tool is the only way frames ever change height, so
-  // this only ever actually trims/pads a hand-edited/imported project file
-  // that skipped that tool. Computed per-frame (not flattened yet) so the
-  // dedup pass right below can compare frames by exactly what would be
-  // written to ROM.
-  const paddedFrames = frames.map((frame) => {
-    const framePixels = frame.pixels || [];
-    const pixelRows = Array.from({length: frameHeight}, (_, i) => framePixels[i] || new Array(typeInfo.width).fill(0));
-    const frameColors = frame.rowColors || [];
-    const colorRows = hasRowColors ?
-      Array.from({length: frameHeight}, (_, i) => frameColors[i] ?? 0) : null;
-    return {pixelRows, colorRows};
-  });
+  const {frames, frameHeight, paddedFrames} = padTitleCardFrames(card, typeInfo);
+  // Frames are all the first frame's height (padTitleCardFrames pads or cuts them); the dedup pass right below
+  // compares frames by exactly what would be written to ROM.
   // Animation frames are frequently repeated (a held pose, a blank/off
   // frame reused between "on" frames, a bounce that revisits an earlier
   // frame) - an identical frame (same pixels, and same row colors for
@@ -81,17 +66,39 @@ const buildCardDataAsm = (card, key, typeInfo, ref, Blockly, pageColor) => {
   // each repeat. Purely a ROM-size optimization - the kernel has no idea
   // some frame numbers alias to the same physical rows, it just draws
   // whichever bmp_${key}_index it's handed.
+  const colorSplit = titleCardColorSplit(card);
+  // A card that repeats a picture under different colors stores each picture once and each color list once
+  // (see titleCardColorSplit); the others store a frame whole.
+  const uniquePictures = [];
+  const uniqueColors = [];
   const uniqueFrames = [];
-  const frameOffsets = paddedFrames.map((frame) => {
-    const contentKey = JSON.stringify(frame.pixelRows) + '|' + JSON.stringify(frame.colorRows);
-    let physicalSlot = uniqueFrames.findIndex((existing) => existing.contentKey === contentKey);
+  const slotFor = (list, contentKey, frame) => {
+    let physicalSlot = list.findIndex((existing) => existing.contentKey === contentKey);
     if (physicalSlot === -1) {
-      physicalSlot = uniqueFrames.length;
-      uniqueFrames.push({...frame, contentKey});
+      physicalSlot = list.length;
+      list.push({...frame, contentKey});
     }
     return physicalSlot * frameHeight;
-  });
-  const rows = uniqueFrames.flatMap((frame) => frame.pixelRows);
+  };
+  const frameOffsets = paddedFrames.map((frame) => colorSplit ?
+    slotFor(uniquePictures, JSON.stringify(frame.pixelRows), frame) :
+    slotFor(uniqueFrames, JSON.stringify(frame.pixelRows) + '|' + JSON.stringify(frame.colorRows), frame));
+  // With more color lists than fit in the first 256 rows ('page'), the lists are stacked a page at a time as
+  // many as fit: a list is found by its page number and its offset within that page.
+  const colorsPerPage = colorSplit === 'page' ? Math.max(1, Math.floor(255 / frameHeight)) : 0;
+  const colorSlots = colorSplit ?
+    paddedFrames.map((frame) => slotFor(uniqueColors, JSON.stringify(frame.colorRows), frame) / frameHeight) : null;
+  const colorOffsets = colorSlots ?
+    colorSlots.map((slot) => (colorSplit === 'page' ? slot % colorsPerPage : slot) * frameHeight) : null;
+  const colorPages = colorSplit === 'page' ? colorSlots.map((slot) => Math.floor(slot / colorsPerPage)) : null;
+  const pictureFrames = colorSplit ? uniquePictures : uniqueFrames;
+  // The frame offsets are stored in one byte, so a frame can't start past row 255.
+  if (Math.max(...frameOffsets, ...(colorOffsets || [0])) > 255) {
+    throw new Error(`A ${typeInfo.width}x${typeInfo.doubleLine ? 2 : 1} title screen graphic has too many different ` +
+      `frames: its ${frameHeight} rows per frame would need a frame to start past row 255. Use shorter frames or ` +
+      'fewer different frames (the page ' + ref.split(':')[0] + ' graphic with id ' + ref.split(':')[1] + ').');
+  }
+  const rows = pictureFrames.flatMap((frame) => frame.pixelRows);
   const height = rows.length;
   const scrollWindow = Number(card.scrollWindow) || 0;
   const windowHeight = (scrollWindow > 0 && scrollWindow < frameHeight) ? scrollWindow : frameHeight;
@@ -145,6 +152,17 @@ const buildCardDataAsm = (card, key, typeInfo, ref, Blockly, pageColor) => {
         titleCardIndexVarName(ref), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
     lines.push(`bmp_${key}_index = ${indexVar}`);
   }
+  if (colorSplit) {
+    // The row colors have a frame offset and table length separate from the picture's (see titleCardColorSplit).
+    const colorIndexVar = Blockly.BBasic.nameDB_.getName(
+        titleCardColorIndexVarName(ref), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+    lines.push(`bmp_${key}_colorheight = ${(colorSplit === 'page' ? colorsPerPage : uniqueColors.length) * frameHeight}`,
+        `bmp_${key}_colorindex = ${colorIndexVar}`);
+    if (colorSplit === 'page') {
+      lines.push(`bmp_${key}_colorpage = ${Blockly.BBasic.nameDB_.getName(
+          titleCardColorPageVarName(ref), Blockly.Names.DEVELOPER_VARIABLE_TYPE)}`);
+    }
+  }
 
   if (hasRowColors) {
     // The color list is read bottom-to-top by the kernel (see e.g.
@@ -154,16 +172,44 @@ const buildCardDataAsm = (card, key, typeInfo, ref, Blockly, pageColor) => {
     // above, one frame's rowColors (padded/truncated to frameHeight,
     // same as pixels) right after the previous frame's.
     // Already padded/truncated and deduplicated - see uniqueFrames above.
-    const rowColors = uniqueFrames.flatMap((frame) => frame.colorRows);
-    lines.push(
-        `   if >. != >[.+(bmp_${key}_height)]`,
-        '      align 256',
-        '   endif',
-        ' BYTE 0 ; leave this here!',
-        '',
-        `bmp_${key}_colors`,
-        ...[...rowColors].reverse().map((color) => `\tBYTE ${toColorHexByte(color)}`),
-    );
+    // A graphic whose color lists are exactly those stored for an earlier graphic (the same bytes in the same
+    // layout) uses that table: its "colors" is another name for the earlier one.
+    const colorTables = Blockly.BBasic.titleColorTables || (Blockly.BBasic.titleColorTables = new Map());
+    const colorSignature = JSON.stringify([colorSplit, colorsPerPage, frameHeight,
+      (colorSplit ? uniqueColors : uniqueFrames).map((frame) => frame.colorRows)]);
+    const colorOwner = colorTables.get(colorSignature);
+    if (colorOwner) {
+      lines.push(`bmp_${key}_colors = bmp_${colorOwner}_colors`);
+    } else {
+      colorTables.set(colorSignature, key);
+      if (colorSplit === 'page') {
+        // The lists are stacked as many to a page as fit, each page starting on a page boundary so the rows the
+        // kernel reads never cross one; the kernel finds a list by the page's number and the list's offset within
+        // it. A last page with fewer lists leaves its bottom empty (the lists sit at the top, as in the others).
+        for (let first = 0, pageNumber = 0; first < uniqueColors.length; first += colorsPerPage, pageNumber++) {
+          const pageLists = uniqueColors.slice(first, first + colorsPerPage);
+          const stack = [...pageLists.flatMap((frame) => frame.colorRows)].reverse();
+          const empty = new Array((colorsPerPage - pageLists.length) * frameHeight).fill(0);
+          lines.push(
+              '   align 256',
+              ' BYTE 0 ; leave this here!',
+              ...(pageNumber === 0 ? ['', `bmp_${key}_colors`] : ['']),
+              ...[...empty, ...stack].map((color) => `\tBYTE ${toColorHexByte(color)}`),
+          );
+        }
+      } else {
+        const rowColors = (colorSplit ? uniqueColors : uniqueFrames).flatMap((frame) => frame.colorRows);
+        lines.push(
+            `   if >. != >[.+(bmp_${key}_${colorSplit ? 'colorheight' : 'height'})]`,
+            '      align 256',
+            '   endif',
+            ' BYTE 0 ; leave this here!',
+            '',
+            `bmp_${key}_colors`,
+            ...[...rowColors].reverse().map((color) => `\tBYTE ${toColorHexByte(color)}`),
+        );
+      }
+    }
   }
 
   if (!doubleLine) {
@@ -208,7 +254,20 @@ const buildCardDataAsm = (card, key, typeInfo, ref, Blockly, pageColor) => {
     );
   }
 
-  for (let b = 0; b < blockCount; b++) {
+  // A graphic whose picture is exactly one stored for an earlier graphic (the same rows, the same height) reuses
+  // those bytes: its tables are other names for the earlier ones, so only its row colors take ROM.
+  const pictureTables = Blockly.BBasic.titlePictureTables || (Blockly.BBasic.titlePictureTables = new Map());
+  const pictureSignature = JSON.stringify(blockRows);
+  const pictureOwner = pictureTables.get(pictureSignature);
+  if (pictureOwner) {
+    for (let b = 0; b < blockCount; b++) {
+      const name = String(b).padStart(2, '0');
+      lines.push(`bmp_${key}_${name} = bmp_${pictureOwner}_${name}`);
+    }
+  } else {
+    pictureTables.set(pictureSignature, key);
+  }
+  for (let b = 0; !pictureOwner && b < blockCount; b++) {
     lines.push(
         `   if >. != >[.+bmp_${key}_height]`,
         '\talign 256',
@@ -220,7 +279,7 @@ const buildCardDataAsm = (card, key, typeInfo, ref, Blockly, pageColor) => {
   }
 
   return {code: lines.join('\n'), frameHeight, frameCount: frames.length,
-    frameDurations: frames.map((f) => clampFrameDuration(f.duration)), frameOffsets};
+    frameDurations: frames.map((f) => clampFrameDuration(f.duration)), frameOffsets, colorOffsets, colorPages, colorSplit};
 };
 
 // Resolves a "player" card's  player0Animation/player1Animation field
@@ -422,6 +481,9 @@ const assignKernelSlots = (screens, Blockly) => {
   const slotByType = {};
   const usedKernelKeys = new Set();
   const dataBlocks = [];
+  // Which graphic stores each distinct picture (see buildCardDataAsm).
+  Blockly.BBasic.titlePictureTables = new Map();
+  Blockly.BBasic.titleColorTables = new Map();
   // One entry per screen: {id, backgroundColor, layoutMacroName, layoutLines}.
   const screenPlans = [];
   // The "player" minikernel is a project-wide singleton (see
@@ -473,6 +535,16 @@ const assignKernelSlots = (screens, Blockly) => {
         const {code, heights} = buildPlayerDataAsm(card, Blockly);
         dataBlocks.push(code);
         playerHeights = heights;
+        // Both sprites start on screen, side by side and centered in the card's window, until the project
+        // positions them with the Player X/Y blocks (the vertical value counts scanlines from the window's bottom,
+        // so a sprite as tall as the window sits at its height).
+        const windowHeight = Math.max(1, Math.round(Number(card.windowHeight) || 50));
+        [0, 1].forEach((playerIndex) => {
+          const spriteHeight = Math.min(heights[playerIndex], windowHeight);
+          const y = spriteHeight + Math.floor((windowHeight - spriteHeight) / 2);
+          Blockly.BBasic.titleScreenStartLines.push(
+              `player${playerIndex}x = ${playerIndex === 0 ? 64 : 92}`, `player${playerIndex}y = ${y}`);
+        });
         cardSlotsByRef[`${screen.id}:${card.id}`] = 'player';
         return;
       }
@@ -497,7 +569,7 @@ const assignKernelSlots = (screens, Blockly) => {
       usedKernelKeys.add(key);
       layoutLines.push(` draw_${key}`);
       const ref = `${screen.id}:${card.id}`;
-      const {code, frameHeight, frameCount, frameDurations, frameOffsets} =
+      const {code, frameHeight, frameCount, frameDurations, frameOffsets, colorOffsets, colorPages, colorSplit} =
         buildCardDataAsm(card, key, typeInfo, ref, Blockly, Number(screen.backgroundColor) || 0);
       dataBlocks.push(code);
       if (typeInfo.width === 48 && (Blockly.BBasic.titleBoxRefs || new Set()).has(ref)) {
@@ -514,9 +586,20 @@ const assignKernelSlots = (screens, Blockly) => {
         Blockly.BBasic.titleScreenStartLines.push(`${colorVar} = ${toColorHexByte(card.color || 0)}`);
       }
       cardSlotsByRef[ref] = key;
+      // "Play animation once": the title screen starts with the graphic's once bit set and its frame counter at
+      // the first frame, so every visit plays it through once.
+      const startOnceIndex = card.playOnce && isCardAnimated(card) ?
+        (Blockly.BBasic.titleCardOnceRefs || []).indexOf(ref) : -1;
+      if (startOnceIndex !== -1) {
+        Blockly.BBasic.titleScreenStartLines.push(
+            `${titleCardOnceVar()}{${titleCardOnceBit(startOnceIndex)}} = 1`,
+            `${Blockly.BBasic.nameDB_.getName(titleCardFrameCounterVarName(ref),
+                Blockly.Names.DEVELOPER_VARIABLE_TYPE)} = 0`);
+      }
       if (isCardAnimated(card)) {
         const pageColor = Number(screen.backgroundColor) || 0;
-        cardAnimationByRef[ref] = {key, frameHeight, frameCount, frameDurations, frameOffsets,
+        cardAnimationByRef[ref] = {key, frameHeight, frameCount, frameDurations, frameOffsets, colorOffsets, colorPages,
+          colorSplit,
           frameBoxes: card.frames.map((frame) => titleFrameBox(card, frame, pageColor))};
       }
     });
@@ -801,30 +884,86 @@ const generateTitleScreenAnimationChecks = (Blockly, cardAnimationByRef) => {
     // writing a frame NUMBER (temp1) and multiplying by frameHeight
     // afterward, which would only ever reach a frame's offset, never a
     // duplicate's shared one.
-    const {key, frameDurations, frameOffsets} = cardAnimationByRef[ref];
+    const {key, frameDurations, frameOffsets, colorOffsets, colorPages, colorSplit} = cardAnimationByRef[ref];
+    // A graphic whose color lists are stacked a page at a time (titleCardColorSplit) also writes the list's page.
     const counterVar = resolveVar(titleCardFrameCounterVarName(ref));
     const totalDuration = frameDurations.reduce((sum, duration) => sum + duration, 0) || frameDurations.length;
+    // The frame counter is one byte, so every frame's duration added together has to fit in it.
+    if (totalDuration > 255) {
+      const [pageId, cardId] = ref.split(':');
+      throw new Error(`The title screen graphic with id ${cardId} on page ${pageId} plays for ${totalDuration} ticks ` +
+        'in all (the Duration of every frame added up), but an animation can last at most 255. ' +
+        'Shorten the Duration of one or more of its frames.');
+    }
     const scrollTerm = scrollTargetRefs.has(ref) ? ` + ${resolveVar(titleCardScrollOffsetVarName(ref))}` : '';
+    const colorScrollTerm = colorSplit === 'page' ? '' : scrollTerm;
     // While a "Set title screen graphic frame" block holds the graphic, its frame counter stands still.
     const holdRefs = Blockly.BBasic.titleCardHoldRefs || [];
     const holdIndex = holdRefs.indexOf(ref);
-    const tick = holdIndex === -1 ? ` ${counterVar} = ${counterVar} + 1` :
-      ` if !${titleCardHoldVar()}{${titleCardHoldBit(holdIndex)}} then ${counterVar} = ${counterVar} + 1`;
+    // With several pages a graphic's counter only runs while its page is the one drawn: otherwise a graphic
+    // on a page that is not showing yet plays (or, set to play once, finishes) before anyone sees it.
+    const selectedVar = Blockly.BBasic.titleScreenSelectedIdVarName;
+    const conditions = [
+      selectedVar ? `${selectedVar} = ${ref.split(':')[0]}` : '',
+      holdIndex === -1 ? '' : `!${titleCardHoldVar()}{${titleCardHoldBit(holdIndex)}}`,
+    ].filter(Boolean);
+    // A graphic an "Animate ... in reverse" block can play backwards counts down while its reverse bit is set.
+    const reverseIndex = (Blockly.BBasic.titleCardReverseRefs || []).indexOf(ref);
+    const reverseBit = reverseIndex === -1 ? '' : `${titleCardReverseVar()}{${titleCardReverseBit(reverseIndex)}}`;
+    const forwardConditions = [...conditions, reverseBit ? `!${reverseBit}` : ''].filter(Boolean);
+    const tick = forwardConditions.length ? ` if ${forwardConditions.join(' && ')} then ${counterVar} = ${counterVar} + 1` :
+      ` ${counterVar} = ${counterVar} + 1`;
+    const notReverse = reverseBit ? ` && !${reverseBit}` : '';
     // After "play once" the counter stays on the last frame instead of starting again.
     const onceIndex = (Blockly.BBasic.titleCardOnceRefs || []).indexOf(ref);
     const stopOnLast = onceIndex === -1 ? [] :
-      [` if ${counterVar} >= ${totalDuration} && ${titleCardOnceVar()}{${titleCardOnceBit(onceIndex)}} then ${counterVar} = ${totalDuration - 1}`];
+      [` if ${counterVar} >= ${totalDuration} && ${titleCardOnceVar()}{${titleCardOnceBit(onceIndex)}}${notReverse} then ${counterVar} = ${totalDuration - 1}`];
+    // A block watching for the animation to finish: the first time the counter runs off the end, until it is
+    // back at the start.
+    const finishedIndex = (Blockly.BBasic.titleCardFinishedRefs || []).indexOf(ref);
+    const finishedFlag = finishedIndex === -1 ? '' : `${titleCardFinishedVar()}{${titleCardFinishedBit(finishedIndex)}}`;
+    const finishedLatch = finishedIndex === -1 ? '' : `${titleCardFinishedVar()}{${titleCardFinishedLatchBit(finishedIndex)}}`;
+    const detectFinish = finishedIndex === -1 ? [] : [
+      ` if ${counterVar} >= ${totalDuration} && !${finishedLatch}${notReverse} then ${finishedFlag} = 1`,
+      ` if ${counterVar} >= ${totalDuration}${notReverse} then ${finishedLatch} = 1`,
+    ];
+    // Counting down: at the first frame the animation has finished; a loop goes round to the last frame again,
+    // a graphic that plays once stays where it is.
+    const reverseConditions = reverseBit ? [...conditions, reverseBit] : [];
+    const onceBit = onceIndex === -1 ? '' : `${titleCardOnceVar()}{${titleCardOnceBit(onceIndex)}}`;
+    const reverseLines = !reverseBit ? [] : [
+      ...(finishedIndex === -1 ? [] : [
+        ` if ${[...reverseConditions, `${counterVar} = 0`, `!${finishedLatch}`].join(' && ')} then ${finishedFlag} = 1`,
+        ` if ${[...reverseConditions, `${counterVar} = 0`].join(' && ')} then ${finishedLatch} = 1`,
+      ]),
+      ` if ${[...reverseConditions, `${counterVar} = 0`, onceBit ? `!${onceBit}` : ''].filter(Boolean).join(' && ')} then ${counterVar} = ${totalDuration}`,
+      ` if ${[...reverseConditions, `${counterVar} > 0`].join(' && ')} then ${counterVar} = ${counterVar} - 1`,
+      ...(finishedIndex === -1 ? [] : [
+        ` if ${reverseBit} && ${counterVar} >= ${totalDuration - 1} then ${finishedLatch} = 0`]),
+    ];
     const lines = [
       tick,
+      ...detectFinish,
       ...stopOnLast,
-      ` if ${counterVar} >= ${totalDuration} then ${counterVar} = 0`,
+      ...reverseLines,
+      ` if ${counterVar} >= ${totalDuration}${notReverse} then ${counterVar} = 0`,
+      ...(finishedIndex === -1 ? [] : [` if ${counterVar} = 0${notReverse} then ${finishedLatch} = 0`]),
       ` bmp_${key}_index = ${frameOffsets[0]}${scrollTerm}`,
+      // A card that keeps its colors apart (titleCardColorSplit) moves a second offset along with the picture's.
+      ...(colorOffsets ? [` bmp_${key}_colorindex = ${colorOffsets[0]}${colorScrollTerm}`] : []),
+      ...(colorPages ? [` bmp_${key}_colorpage = ${colorPages[0]}`] : []),
     ];
     let cumulative = 0;
     frameDurations.forEach((duration, frameIndex) => {
       cumulative += duration;
       if (frameIndex === frameDurations.length - 1) return;
       lines.push(` if ${counterVar} >= ${cumulative} then bmp_${key}_index = ${frameOffsets[frameIndex + 1]}${scrollTerm}`);
+      if (colorOffsets) {
+        lines.push(` if ${counterVar} >= ${cumulative} then bmp_${key}_colorindex = ${colorOffsets[frameIndex + 1]}${colorScrollTerm}`);
+        if (colorPages) {
+          lines.push(` if ${counterVar} >= ${cumulative} then bmp_${key}_colorpage = ${colorPages[frameIndex + 1]}`);
+        }
+      }
     });
     // A picture background that differs between the frames is written when a frame starts (so a block that
     // changes it in between lasts until the next frame).
@@ -893,6 +1032,25 @@ export const titleCardHoldBit = (index) => flagPoolBit(TITLE_CARD_HOLD_FAMILY, i
 export const TITLE_CARD_ONCE_FAMILY = 'titleCardOnce';
 export const titleCardOnceVar = () => flagPoolVar(TITLE_CARD_ONCE_FAMILY);
 export const titleCardOnceBit = (index) => flagPoolBit(TITLE_CARD_ONCE_FAMILY, index);
+// Two bits per graphic a "When title screen graphic animation finishes" block watches: the first says it
+// finished (cleared by the block), the second keeps a graphic that plays once from finishing again and again
+// while it rests on its last frame (cleared when the counter is back at the start).
+// One bit per graphic an "Animate ... in reverse" block can play backwards: while it is set, the frame
+// counter counts down instead of up.
+export const TITLE_CARD_REVERSE_FAMILY = 'titleCardReverse';
+export const titleCardReverseVar = () => flagPoolVar(TITLE_CARD_REVERSE_FAMILY);
+export const titleCardReverseBit = (index) => flagPoolBit(TITLE_CARD_REVERSE_FAMILY, index);
+// Two bits per "Animate title screen graphic" block, so it acts as a trigger: the block starts the animation
+// when it runs after a frame in which it did not, not on every frame an "if" around it stays true. The first
+// bit says it ran this frame, the second that it ran in the frame before.
+export const TITLE_ANIMATE_FAMILY = 'titleAnimateTrigger';
+export const titleAnimateVar = () => flagPoolVar(TITLE_ANIMATE_FAMILY);
+export const titleAnimateRanBit = (index) => flagPoolBit(TITLE_ANIMATE_FAMILY, index * 2);
+export const titleAnimatePreviousBit = (index) => flagPoolBit(TITLE_ANIMATE_FAMILY, index * 2 + 1);
+export const TITLE_CARD_FINISHED_FAMILY = 'titleCardFinished';
+export const titleCardFinishedVar = () => flagPoolVar(TITLE_CARD_FINISHED_FAMILY);
+export const titleCardFinishedBit = (index) => flagPoolBit(TITLE_CARD_FINISHED_FAMILY, index * 2);
+export const titleCardFinishedLatchBit = (index) => flagPoolBit(TITLE_CARD_FINISHED_FAMILY, index * 2 + 1);
 export const TITLE_PLAYER_ONCE_FAMILY = 'titlePlayerOnce';
 export const titlePlayerOnceVar = () => flagPoolVar(TITLE_PLAYER_ONCE_FAMILY);
 export const titlePlayerOnceBit = (playerIndex) => flagPoolBit(TITLE_PLAYER_ONCE_FAMILY, Number(playerIndex));
@@ -916,6 +1074,7 @@ export const registerTitleScreenSubroutine = (Blockly, {selectedIdVarName}) => {
     hasPlayerCard, playerHeights, hasScoreCard} = assignKernelSlots(titleScreen.screens, Blockly);
 
   Blockly.BBasic.titleScreenUsedKernelKeys = usedKernelKeys;
+  Blockly.BBasic.titleScreenHasScoreCard = hasScoreCard;
   // Read back by the "Set title screen scroll position" block's
   // generator (see titlescreen_scroll_set below) - it only knows the
   // screen+card the user picked, not which physical kernel copy that
@@ -936,8 +1095,15 @@ export const registerTitleScreenSubroutine = (Blockly, {selectedIdVarName}) => {
   // before any generator needs to resolve it" timing as every dev var
   // pre-scan in this codebase) - see reserveDevVar's call site there for
   // titleCardFrameCounterVarName/titleCardScrollOffsetVarName.
-  Blockly.BBasic.titleScreenAnimationChecks = generateTitleScreenAnimationChecks(Blockly, cardAnimationByRef) +
-    generateTitlePlayerChecks(Blockly);
+  // At the start of every frame, what each "Animate title screen graphic" block did last frame becomes
+  // "the frame before" and the block starts again as one that has not run.
+  const animateTriggerResets = (Blockly.BBasic.titleAnimateBlockIds || []).map((id, index) => [
+    ` ${titleAnimateVar()}{${titleAnimatePreviousBit(index)}} = 0`,
+    ` if ${titleAnimateVar()}{${titleAnimateRanBit(index)}} then ${titleAnimateVar()}{${titleAnimatePreviousBit(index)}} = 1`,
+    ` ${titleAnimateVar()}{${titleAnimateRanBit(index)}} = 0`,
+  ].join('\n')).join('\n') + ((Blockly.BBasic.titleAnimateBlockIds || []).length ? '\n' : '');
+  Blockly.BBasic.titleScreenAnimationChecks = animateTriggerResets +
+    generateTitleScreenAnimationChecks(Blockly, cardAnimationByRef) + generateTitlePlayerChecks(Blockly);
   // Read back by "Set title screen scroll position" (see titlescreen_scroll_set
   // below) - an animated card's index is owned by the per-frame check just
   // built above (frame base + scroll offset, recombined every frame), so
@@ -1056,11 +1222,55 @@ export default (Blockly) => {
     if (holdIndex !== -1) {
       lines.push(`${titleCardHoldVar()}{${titleCardHoldBit(holdIndex)}} = ${hold ? 1 : 0}`);
     }
+    // Jumping to a frame plays on forward again, if an "Animate ... in reverse" block had it going backwards.
+    const reverseIndex = (Blockly.BBasic.titleCardReverseRefs || []).indexOf(ref);
+    if (reverseIndex !== -1) lines.push(`${titleCardReverseVar()}{${titleCardReverseBit(reverseIndex)}} = 0`);
     const onceIndex = (Blockly.BBasic.titleCardOnceRefs || []).indexOf(ref);
     if (onceIndex !== -1) {
       const once = !hold && block.getFieldValue('PLAYBACK') === 'once';
       lines.push(`${titleCardOnceVar()}{${titleCardOnceBit(onceIndex)}} = ${once ? 1 : 0}`);
     }
+    return lines.join('\n') + '\n';
+  };
+
+  // Starts a graphic's animation again from the beginning (or from the last frame, in reverse): the frame counter
+  // is put one tick before the start, since it moves before the frame is chosen.
+  Blockly.BBasic['titlescreen_card_animate'] = function(block) {
+    const ref = block.getFieldValue('CARD');
+    const animation = ref && Blockly.BBasic.titleScreenCardAnimations && Blockly.BBasic.titleScreenCardAnimations[ref];
+    if (!animation) return 'rem No title screen graphic with several frames selected\n';
+    const reverse = block.getFieldValue('DIRECTION') === 'reverse';
+    const counterVar = Blockly.BBasic.nameDB_.getName(
+        titleCardFrameCounterVarName(ref), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+    const durations = animation.frameDurations;
+    const total = durations.reduce((sum, duration) => sum + duration, 0) || durations.length;
+    // A trigger: it starts the animation only when it runs after a frame in which it did not, so an "if" that
+    // stays true does not start it over every frame, and the animation goes on after the "if" turns false.
+    const triggerIndex = (Blockly.BBasic.titleAnimateBlockIds || []).indexOf(block.id);
+    const skipLabel = `_titleanimate_${Blockly.BBasic.blockNumbers.next()}_end`;
+    const lines = [
+      ...(triggerIndex === -1 ? [] : [
+        `${titleAnimateVar()}{${titleAnimateRanBit(triggerIndex)}} = 1`,
+        `if ${titleAnimateVar()}{${titleAnimatePreviousBit(triggerIndex)}} then goto ${skipLabel}`,
+      ]),
+      `${counterVar} = ${reverse ? total : total - 1}`];
+    const holdIndex = (Blockly.BBasic.titleCardHoldRefs || []).indexOf(ref);
+    if (holdIndex !== -1) lines.push(`${titleCardHoldVar()}{${titleCardHoldBit(holdIndex)}} = 0`);
+    const onceIndex = (Blockly.BBasic.titleCardOnceRefs || []).indexOf(ref);
+    if (onceIndex !== -1) {
+      lines.push(`${titleCardOnceVar()}{${titleCardOnceBit(onceIndex)}} = ${block.getFieldValue('PLAYBACK') === 'once' ? 1 : 0}`);
+    }
+    const reverseIndex = (Blockly.BBasic.titleCardReverseRefs || []).indexOf(ref);
+    if (reverseIndex !== -1) {
+      lines.push(`${titleCardReverseVar()}{${titleCardReverseBit(reverseIndex)}} = ${reverse ? 1 : 0}`);
+    }
+    // Starting at the end of the count does not count as finishing.
+    const finishedIndex = (Blockly.BBasic.titleCardFinishedRefs || []).indexOf(ref);
+    if (finishedIndex !== -1) {
+      lines.push(`${titleCardFinishedVar()}{${titleCardFinishedBit(finishedIndex)}} = 0`,
+          `${titleCardFinishedVar()}{${titleCardFinishedLatchBit(finishedIndex)}} = 1`);
+    }
+    if (triggerIndex !== -1) lines.push(`@ ${skipLabel}`);
     return lines.join('\n') + '\n';
   };
 
@@ -1170,6 +1380,22 @@ export default (Blockly) => {
     const flag = `${Blockly.BBasic.nameDB_.getName(titleCardScrollEdgeFlagsVarName(ref),
         Blockly.Names.DEVELOPER_VARIABLE_TYPE)}{${TITLE_SCROLL_EDGE_BITS[edge]}}`;
     const labelEnd = `_titlescrolledge_${Blockly.BBasic.blockNumbers.next()}_end`;
+    return '\n' + [
+      `if !${flag} then goto ${labelEnd}`,
+      `${flag} = 0`,
+      code,
+      `@ ${labelEnd}`,
+    ].join('\n') + '\n';
+  };
+
+  // Runs once each time a graphic's animation finishes (see detectFinish in generateTitleScreenAnimationChecks).
+  Blockly.BBasic['titlescreen_animation_finished'] = function(block) {
+    const ref = block.getFieldValue('CARD');
+    const index = (Blockly.BBasic.titleCardFinishedRefs || []).indexOf(ref);
+    if (!ref || index === -1) return '';
+    const code = Blockly.BBasic.statementToCode(block, 'DO').trim();
+    const flag = `${titleCardFinishedVar()}{${titleCardFinishedBit(index)}}`;
+    const labelEnd = `_titleanimfin_${Blockly.BBasic.blockNumbers.next()}_end`;
     return '\n' + [
       `if !${flag} then goto ${labelEnd}`,
       `${flag} = 0`,

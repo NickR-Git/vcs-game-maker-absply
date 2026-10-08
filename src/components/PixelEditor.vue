@@ -1075,10 +1075,11 @@ export default {
       this.$emit('input', pixels);
     },
 
-    // Mirrors every row left-to-right - a plain pixel-matrix edit like any
-    // drawing stroke (real history entry, real 'input' emit), not a
-    // separate "transform" concept.
+    // Mirrors the picture (or just the selected pixels, when a marquee is active) left-to-right: a plain
+    // pixel-matrix edit like any drawing stroke (real history entry, real 'input' emit), not a separate
+    // "transform" concept.
     flipHorizontal() {
+      if (this.flipSelection(true)) return;
       const pixels = this.getPixels().map((row) => [...row].reverse());
       this.setPixels(pixels);
       this.$emit('input', pixels);
@@ -1090,9 +1091,41 @@ export default {
     // that's driven by row position on the actual hardware playfield, not
     // by whatever's currently drawn there.
     flipVertical() {
+      if (this.flipSelection(false)) return;
       const pixels = [...this.getPixels()].reverse();
       this.setPixels(pixels);
       this.$emit('input', pixels);
+    },
+
+    // With a selection, flips only the selected pixels, within the box that surrounds the selection, and
+    // the selection flips with them. Pixels that are not selected stay as they are, except where a flipped
+    // pixel lands on them.
+    // @return {boolean} Whether there was a selection to flip.
+    flipSelection(horizontal) {
+      if (!this.selection || !this.selection.size) return false;
+      const pixels = this.getPixels();
+      const cells = [...this.selection].map((key) => key.split(',').map(Number))
+          .filter(([x, y]) => pixels[y] && x >= 0 && x < pixels[y].length);
+      if (!cells.length) return false;
+      const minX = Math.min(...cells.map(([x]) => x));
+      const maxX = Math.max(...cells.map(([x]) => x));
+      const minY = Math.min(...cells.map(([, y]) => y));
+      const maxY = Math.max(...cells.map(([, y]) => y));
+      const target = ([x, y]) => (horizontal ? [minX + maxX - x, y] : [x, minY + maxY - y]);
+      const values = cells.map(([x, y]) => pixels[y][x]);
+      cells.forEach(([x, y]) => {
+        pixels[y][x] = 0;
+      });
+      const flipped = new Set();
+      cells.forEach((cell, index) => {
+        const [x, y] = target(cell);
+        flipped.add(`${x},${y}`);
+        if (pixels[y] && x >= 0 && x < pixels[y].length) pixels[y][x] = values[index];
+      });
+      this.setPixels(pixels);
+      this.selection = flipped;
+      this.$emit('input', pixels);
+      return true;
     },
 
     handleClear() {

@@ -141,7 +141,13 @@
                   </v-btn>
                   <v-switch
                     v-model="replaceFramesOnImport"
-                    label="Replace existing frames"
+                    label="Replace frames"
+                    hide-details
+                  />
+                  <v-switch
+                    v-model="keepColorsOnImport"
+                    label="Keep row and box colors"
+                    :disabled="!replaceFramesOnImport"
                     hide-details
                   />
                 </v-card-text>
@@ -161,6 +167,7 @@
               icon
               small
               title="Import a title screen from a .vcstitle file (added as a new title screen)"
+              :disabled="!exportableScreen"
               @click="handleImportTitleScreen"
             >
               <v-icon :size="16">mdi-application-import</v-icon>
@@ -231,7 +238,7 @@
                         'Duplicate this title screen (not enough copies of its card kinds are left)'"
                       icon
                       small
-                      class="titlescreen-icon-btn-size"
+                      class="import-icon-btn titlescreen-icon-btn-size"
                       :disabled="!canDuplicateScreen(screen)"
                       @click.stop="() => handleDuplicateScreen(screen)"
                     >
@@ -240,6 +247,7 @@
                     <confirm-delete-menu
                       v-if="state.screens.length > 1"
                       title="Delete this title screen?"
+                      :selected="screen.id === selectedScreenId"
                       activator-title="Delete this title screen"
                       icon-btn-class="titlescreen-icon-btn-size"
                       @confirm="handleDeleteScreen(screen)"
@@ -272,9 +280,9 @@
                           outlined
                           :ripple="false"
                           class="titlescreen-card"
-                          :class="[cardDragCardClass(screen, index), {'titlescreen-card-selected': card.id === selectedCardId}]"
+                          :class="[cardDragCardClass(screen, index), {'titlescreen-card-selected': card.id === selectedCardId && screen.id === selectedCardScreenId}]"
                           v-on="cardDragTargetListeners(screen, index)"
-                          @click.stop="selectCard(card.id)"
+                          @click.stop="selectCard(card.id, screen.id)"
                         >
                           <div
                             class="titlescreen-drag-handle"
@@ -329,7 +337,13 @@
                                     </v-btn>
                                     <v-switch
                                       v-model="replaceFramesOnImport"
-                                      label="Replace existing frames"
+                                      label="Replace frames"
+                                      hide-details
+                                    />
+                                    <v-switch
+                                      v-model="keepColorsOnImport"
+                                      label="Keep row and box colors"
+                                      :disabled="!replaceFramesOnImport"
                                       hide-details
                                     />
                                   </v-card-text>
@@ -341,7 +355,7 @@
                                   'Duplicate this card (no copies of this kind of card are left)'"
                                 icon
                                 small
-                                class="titlescreen-icon-btn-size"
+                                class="import-icon-btn titlescreen-icon-btn-size"
                                 :disabled="!canAddCardType(card.type)"
                                 @click.stop="() => handleDuplicateCard(screen, card)"
                               >
@@ -350,6 +364,8 @@
 
                               <confirm-delete-menu
                                 title="Delete this card?"
+                                :selected="card.id === selectedCardId && screen.id === selectedCardScreenId"
+                                :select-priority="1"
                                 activator-title="Delete this card"
                                 icon-btn-class="titlescreen-icon-btn-size"
                                 @confirm="handleDeleteCard(screen, card)"
@@ -461,20 +477,42 @@
                                 hide-details
                                 @change="handleChildChange"
                               />
+                              <v-switch
+                                v-if="card.frames.length > 1"
+                                v-model="card.playOnce"
+                                label="Play animation once"
+                                title="Off: the animation loops. On: it plays through once and stays on its last frame (Set title screen graphic frame blocks can still change it)."
+                                hide-details
+                                class="titlescreen-play-once-switch"
+                                @change="handleChildChange"
+                              />
                               <div class="titlescreen-frame-list">
                                 <div
                                   v-for="(frame, frameIndex) in card.frames"
                                   :key="frame.id"
                                   class="pixel-editor-parent-container"
+                                  :class="frameDrag(screen, card).dragCardClass(frameIndex)"
+                                  v-on="frameDrag(screen, card).dragTargetListeners(frameIndex)"
                                 >
                                   <div
                                     class="pixel-editor-container"
+                                    :draggable="armedFrameKey === frameKey(card, frame)"
+                                    v-on="frameHandleListeners(screen, card, frameIndex)"
+                                    @mousedown="(event) => armFrameDrag(event, card, frame)"
+                                    @mouseup="armedFrameKey = null"
                                     :class="{
-                                      'pixel-editor-container-active': frameHighlightState(card, frame) === 'blue',
-                                      'pixel-editor-container-active-grey': frameHighlightState(card, frame) === 'grey',
+                                      'pixel-editor-container-active': frameHighlightState(screen, card, frame) === 'blue',
+                                      'pixel-editor-container-active-grey': frameHighlightState(screen, card, frame) === 'grey',
                                     }"
                                     :style="{width: editorWidth(card), maxWidth: editorWidth(card)}"
                                   >
+                                    <div
+                                      v-if="card.frames.length > 1"
+                                      class="frame-drag-handle"
+                                      title="Drag anywhere on the frame except the drawing, fields and buttons to reorder it"
+                                    >
+                                      <v-icon small>mdi-drag-horizontal-variant</v-icon>
+                                    </div>
                                     <v-text-field
                                       v-if="card.frames.length > 1"
                                       label="Duration"
@@ -503,7 +541,7 @@
                                       @clear="() => handleClearCardColors(card)"
                                       @clear-colors="() => handleClearCardColors(card)"
                                       @move-rows="(move) => handleMoveRows(card, frame, move)"
-                                      @activate="(editorInstance) => setActiveFrame(editorInstance, card.id, frame.id)"
+                                      @activate="(editorInstance) => setActiveFrame(editorInstance, card.id, frame.id, screen.id)"
                                     >
                                       <template v-if="cardHasRowColors(card)" v-slot:sidebar>
                                         <playfield-color-strip
@@ -567,9 +605,34 @@
                                       <template v-slot:badge>
                                         <div class="frame-number-badge">ID:{{ frameIndex + 1 }}</div>
                                         <div class="frame-corner-toolbar">
+                                          <v-btn
+                                            v-if="cardHasRowColors(card)"
+                                            icon
+                                            small
+                                            title="Copy this frame's row colors only"
+                                            class="titlescreen-icon-btn-size copy-paste-color-btn"
+                                            @click="() => handleCopyRowColors(frame)"
+                                          >
+                                            <v-icon>mdi-content-copy</v-icon>
+                                            <span class="copy-paste-color-badge">C</span>
+                                          </v-btn>
+                                          <v-btn
+                                            v-if="cardHasRowColors(card)"
+                                            icon
+                                            small
+                                            :disabled="!copiedFrameRowColors"
+                                            title="Paste copied row colors only onto this frame"
+                                            class="titlescreen-icon-btn-size copy-paste-color-btn"
+                                            @click="() => handlePasteRowColors(frame)"
+                                          >
+                                            <v-icon>mdi-content-paste</v-icon>
+                                            <span class="copy-paste-color-badge">C</span>
+                                          </v-btn>
                                           <confirm-delete-menu
                                             v-if="card.frames.length > 1"
                                             title="Delete this frame?"
+                                            :selected="frameHighlightState(screen, card, frame) === 'blue'"
+                                            :select-priority="2"
                                             activator-title="Delete this frame"
                                             icon-btn-class="titlescreen-icon-btn-size"
                                             @confirm="handleDeleteFrame(card, frame)"
@@ -676,7 +739,7 @@ import {computed, defineComponent, getCurrentInstance, ref} from '@vue/compositi
 import {chunk, max} from 'lodash';
 
 import {colorByteToCss} from '../utils/palette';
-import {resizePixelMatrixHeight, scaleRowColors} from '../utils/pixels';
+import {resizePixelMatrixHeight, scaleRowColors, carryOverFrameColors} from '../utils/pixels';
 import {rowColorsForMove} from '../utils/row-color-move';
 import {saveAs} from 'file-saver';
 import {getDateInfix} from '../utils/date';
@@ -722,6 +785,8 @@ import {processPlayerAnimationsStorageDefaults} from '../generators/bbasic/sprit
 // recreated on navigation - see hooks/collapse.js's comment on that
 // lifecycle).
 const copiedFrameData = ref(null);
+// The same for one frame's row colors alone (the "C" copy/paste pair).
+const copiedFrameRowColors = ref(null);
 
 export default defineComponent({
   name: 'TitleScreenEditor',
@@ -1144,18 +1209,27 @@ export default defineComponent({
     const handleAddFrame = (card) => {
       const frames = card.frames;
       const maxId = getMaxId(frames);
-      const previousFrame = frames[frames.length - 1];
+      // With a frame selected in this graphic, the new frame is a copy of that one (duration included),
+      // placed right after it; otherwise it copies the last frame and goes at the end.
+      const cardScreen = findScreenForCard(card);
+      const selectedIndex = cardScreen ? frames.findIndex((frame) => isFrameActive(cardScreen, card, frame)) : -1;
+      const previousFrame = selectedIndex >= 0 ? frames[selectedIndex] : frames[frames.length - 1];
       const pixels = previousFrame ?
         structuredClone(previousFrame.pixels) :
         blankTitleScreenPixels(cardWidth(card));
       const newFrame = {
         id: maxId + 1,
-        duration: 10,
+        duration: selectedIndex >= 0 ? previousFrame.duration : 10,
         pixels,
         ...(previousFrame && previousFrame.rowColors ?
           {rowColors: structuredClone(previousFrame.rowColors)} : {}),
+        // The picture background box (blocks and color) too.
+        ...Object.fromEntries(['pf1', 'pf2', 'background']
+            .filter((field) => previousFrame && previousFrame[field] !== undefined)
+            .map((field) => [field, previousFrame[field]])),
       };
-      card.frames.push(newFrame);
+      if (selectedIndex >= 0) frames.splice(selectedIndex + 1, 0, newFrame);
+      else frames.push(newFrame);
       handleChildChange();
       instance.proxy.$forceUpdate();
     };
@@ -1167,6 +1241,9 @@ export default defineComponent({
     // the shared replaceFramesOnImport toggle: there's only ever one import happening at a
     // time, so a single shared toggle is simpler than tracking it per card.
     const replaceFramesOnImport = ref(false);
+    // With "Replace frames" on, whether the new frames keep the row colors and picture background box of the
+    // frames they replace.
+    const keepColorsOnImport = ref(false);
 
     // Which card's "Import card frames" popover is currently open, by
     // "screenId:cardId" ref (null when none is) - same reasoning as
@@ -1228,16 +1305,17 @@ export default defineComponent({
                 pixels,
                 ...(cardHasRowColors(card) ? {rowColors: pixels.map(() => DEFAULT_ROW_COLOR)} : {}),
               }));
-              card.frames = [...keptFrames, ...newFrames];
+              card.frames = [...keptFrames,
+                ...(replaceFramesOnImport.value && keepColorsOnImport.value ?
+                  carryOverFrameColors(card.frames, newFrames) : newFrames)];
               handleChildChange();
               instance.proxy.$forceUpdate();
             });
       });
     };
 
-    // The title screen the toolbar's export button saves: the selected one, or the only one.
-    const exportableScreen = computed(() => state.value.screens.find(({id}) => id === selectedScreenId.value) ||
-      (state.value.screens.length === 1 ? state.value.screens[0] : null));
+    // The title screen the toolbar's export and import buttons work with: the selected one (they are greyed out with none selected).
+    const exportableScreen = computed(() => state.value.screens.find(({id}) => id === selectedScreenId.value) || null);
 
     // Saves a title screen (its name, background color and every card with its frames) as a
     // .vcstitle file. The id is left out: an imported screen gets a new one in the project it
@@ -1365,7 +1443,9 @@ export default defineComponent({
                 ...(cardHasRowColors(card) ? {rowColors: pixels.map(() => DEFAULT_ROW_COLOR)} : {}),
               };
             });
-            card.frames = [...keptFrames, ...newFrames];
+            card.frames = [...keptFrames,
+              ...(replaceFramesOnImport.value && keepColorsOnImport.value ?
+                carryOverFrameColors(card.frames, newFrames) : newFrames)];
             handleChildChange();
             instance.proxy.$forceUpdate();
           });
@@ -1379,14 +1459,31 @@ export default defineComponent({
       instance.proxy.$forceUpdate();
     };
 
+    // Copies/pastes a frame's whole row-color list without its image. A list of another length is
+    // padded or cut to the target frame's height.
+    const handleCopyRowColors = (frame) => {
+      copiedFrameRowColors.value = structuredClone(frame.rowColors || []);
+    };
+    const handlePasteRowColors = (frame) => {
+      if (!copiedFrameRowColors.value) return;
+      const height = frame.pixels.length;
+      const colors = Array.from({length: height}, (_, i) => copiedFrameRowColors.value[i] ?? DEFAULT_ROW_COLOR);
+      handleRowColorsInput(frame, colors);
+    };
+
     // "Standard" copy/paste - a frame's whole image, plus its row colors too
     // (unconditionally, unlike PlayerEditor.vue's version, which gates
     // that on a project-wide toggle - there's no equivalent toggle here,
     // hasRowColors is just a fixed property of the card's type).
+    // The picture background box (its blocks and its color) belongs to the frame too: set on the frame
+    // itself when it was changed from the graphic's, so those values go along.
+    const FRAME_BOX_FIELDS = ['pf1', 'pf2', 'background'];
     const handleCopyFrame = (frame) => {
       copiedFrameData.value = {
         pixels: structuredClone(frame.pixels),
         ...(frame.rowColors ? {rowColors: structuredClone(frame.rowColors)} : {}),
+        box: Object.fromEntries(FRAME_BOX_FIELDS.filter((field) => frame[field] !== undefined)
+            .map((field) => [field, frame[field]])),
       };
     };
     const handlePasteFrame = (card, frame) => {
@@ -1395,6 +1492,11 @@ export default defineComponent({
       if (cardHasRowColors(card) && copiedFrameData.value.rowColors) {
         frame.rowColors = structuredClone(copiedFrameData.value.rowColors);
       }
+      const copiedBox = copiedFrameData.value.box || {};
+      FRAME_BOX_FIELDS.forEach((field) => {
+        if (copiedBox[field] !== undefined) frame[field] = copiedBox[field];
+        else delete frame[field];
+      });
       handleChildChange();
       instance.proxy.$forceUpdate();
     };
@@ -1450,14 +1552,71 @@ export default defineComponent({
     const cardDragHandleListeners = (screen, index) => cardDragReorderFor(screen).dragHandleListeners(index);
     const cardDragTargetListeners = (screen, index) => cardDragReorderFor(screen).dragTargetListeners(index);
 
+    // Frame reordering: one drag-reorder instance per graphic (made on first use), dropping a frame onto
+    // another moves it there. Frame ids stay as they are.
+    const frameDragByCard = new Map();
+    const frameDrag = (screen, card) => {
+      const cardKey = `${screen.id}:${card.id}`;
+      if (!frameDragByCard.has(cardKey)) {
+        // Looked up again on every drop: the stored state can be rebuilt between renders.
+        const currentCard = () => (state.value.screens.find(({id}) => id === screen.id) || screen)
+            .cards.find(({id}) => id === card.id) || card;
+        frameDragByCard.set(cardKey, useDragReorder(
+            () => currentCard().frames,
+            (items) => {
+              currentCard().frames = items;
+              handleChildChange();
+            },
+        ));
+      }
+      return frameDragByCard.get(cardKey);
+    };
+    // Any part of a frame that isn't the drawing, a field or a button starts a drag: the frame only becomes
+    // draggable while the mouse is pressed on such a part.
+    const FRAME_DRAG_BLOCKED = 'canvas, input, textarea, select, button, a, .v-input, .v-btn, .playfield-color-strip';
+    const armedFrameKey = ref(null);
+    const frameKey = (card, frame) => `${card.id}:${frame.id}`;
+    const armFrameDrag = (event, card, frame) => {
+      armedFrameKey.value = event.button === 0 && card.frames.length > 1 && !event.target.closest(FRAME_DRAG_BLOCKED) ?
+        frameKey(card, frame) : null;
+    };
+    const frameHandleListeners = (screen, card, frameIndex) => {
+      const listeners = frameDrag(screen, card).dragHandleListeners(frameIndex);
+      return {
+        dragend: (event) => {
+          armedFrameKey.value = null;
+          listeners.dragend(event);
+        },
+        dragstart: (event) => {
+          if (!armedFrameKey.value) return;
+          listeners.dragstart(event);
+          const frameBox = event.currentTarget;
+          if (frameBox && event.dataTransfer.setDragImage) {
+            const box = frameBox.getBoundingClientRect();
+            event.dataTransfer.setDragImage(frameBox, event.clientX - box.left, event.clientY - box.top);
+          }
+        },
+      };
+    };
+
     // Purely a visual "which card am I looking at" marker, plain local
     // component state - same reasoning/shape as every other tab's
     // selectCard/deselectCard (see e.g. MusicEditor.vue's  comment).
     // Screens get their  separate selection (a page and a graphic card
     // are never the same thing to have "selected" at once).
     const selectedCardId = ref(null);
-    const selectCard = (id) => {
+    // Card ids are only unique within their page, so a selected card is its id and its page's id.
+    const selectedCardScreenId = ref(null);
+    const selectCard = (id, screenId) => {
       selectedCardId.value = id;
+      selectedCardScreenId.value = screenId;
+      // Another card's frame no longer counts as the one being edited (its outline goes with it).
+      if (activeCardId.value !== id || activeScreenId.value !== screenId) {
+        activeFrameEditor.value = null;
+        activeCardId.value = null;
+        activeFrameId.value = null;
+        activeScreenId.value = null;
+      }
     };
     const selectedScreenId = ref(null);
     const selectScreen = (id) => {
@@ -1465,6 +1624,7 @@ export default defineComponent({
     };
     const deselectCard = () => {
       selectedCardId.value = null;
+      selectedCardScreenId.value = null;
       selectedScreenId.value = null;
     };
 
@@ -1481,6 +1641,7 @@ export default defineComponent({
     // (player/score/space), which has no frames to resize at all.
     const selectedGraphicCard = computed(() => {
       for (const screen of state.value.screens) {
+        if (screen.id !== selectedCardScreenId.value) continue;
         const card = screen.cards.find((c) => c.id === selectedCardId.value);
         if (card) return card.frames ? card : null;
       }
@@ -1507,20 +1668,23 @@ export default defineComponent({
     const activeFrameEditor = ref(null);
     const activeCardId = ref(null);
     const activeFrameId = ref(null);
-    const setActiveFrame = (editorInstance, cardId, frameId) => {
+    const activeScreenId = ref(null);
+    const setActiveFrame = (editorInstance, cardId, frameId, screenId) => {
       activeFrameEditor.value = editorInstance;
+      activeScreenId.value = screenId;
       activeCardId.value = cardId;
       activeFrameId.value = frameId;
     };
-    const isFrameActive = (card, frame) =>
-      activeCardId.value === card.id && activeFrameId.value === frame.id;
+    const isFrameActive = (screen, card, frame) =>
+      activeScreenId.value === screen.id && activeCardId.value === card.id && activeFrameId.value === frame.id;
 
     // Same "blue while the frame's card is actually selected, grey once
     // deselected but still what the toolbar acts on" reasoning as
     // PlayerEditor.vue's frameHighlightState.
-    const frameHighlightState = (card, frame) => {
-      if (!isFrameActive(card, frame)) return null;
-      return selectedGraphicCard.value && selectedGraphicCard.value.id === card.id ? 'blue' : 'grey';
+    const frameHighlightState = (screen, card, frame) => {
+      if (!isFrameActive(screen, card, frame)) return null;
+      return selectedGraphicCard.value && selectedGraphicCard.value.id === card.id &&
+        selectedCardScreenId.value === screen.id ? 'blue' : 'grey';
     };
 
     // Unique per screen+card+frame (card ids are only unique WITHIN their
@@ -1548,7 +1712,8 @@ export default defineComponent({
     // per-card tool in this app already treats it. Same reasoning/shape as
     // PlayerEditor.vue's effectiveFrameEditor.
     const effectiveFrameEditor = computed(() => {
-      if (activeFrameEditor.value && selectedGraphicCard.value && activeCardId.value === selectedGraphicCard.value.id) {
+      if (activeFrameEditor.value && selectedGraphicCard.value && activeCardId.value === selectedGraphicCard.value.id &&
+          activeScreenId.value === selectedCardScreenId.value) {
         return activeFrameEditor.value;
       }
       if (selectedGraphicCard.value && selectedGraphicCard.value.frames.length) {
@@ -1613,13 +1778,15 @@ export default defineComponent({
       handleSetBackgroundColor, handleSetCardColor, handleClearCardColors,
       handleFramePixelsInput, handleRowColorsInput, handleMoveRows, cardFrameHeight,
       handleAddFrame, handleDeleteFrame,
-      handleImportCardFrames, replaceFramesOnImport, importMenuOpenCardRef,
+      frameDrag, armedFrameKey, frameKey, armFrameDrag, frameHandleListeners,
+      handleImportCardFrames, replaceFramesOnImport, keepColorsOnImport, importMenuOpenCardRef,
       handleImportAsepriteCardFrames, asepriteImportMenuOpen,
       handleCopyFrame, handlePasteFrame, copiedFrameData,
+      copiedFrameRowColors, handleCopyRowColors, handlePasteRowColors,
       isCollapsed, toggleCollapsed, cardCollapseKey,
       cardDragAttrs, cardDragCardClass, cardDragHandleListeners, cardDragTargetListeners,
       showPixelGrid, zoom, titlescreenZoomLevels: TITLESCREEN_ZOOM_LEVELS,
-      selectedCardId, selectCard,
+      selectedCardId, selectedCardScreenId, selectCard,
       selectedScreenId, selectScreen,
       deselectCard,
       selectedGraphicCard, activeFrameEditor, setActiveFrame, isFrameActive, frameHighlightState,
@@ -1958,7 +2125,7 @@ export default defineComponent({
    width/margin alone) is what guarantees the button lines up flush with
    this element's left/right padding. */
 .import-frames-menu {
-  width: 220px;
+  width: 300px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -1972,7 +2139,7 @@ export default defineComponent({
    image..." is longer than "Choose images..." and was getting clipped/
    wrapped at that width. */
 .import-aseprite-menu {
-  width: 280px;
+  width: 300px;
 }
 
 /* Comes right after .titlescreen-screen-title-row, which already clears
@@ -2021,6 +2188,12 @@ export default defineComponent({
   padding: 2px;
   overflow-x: auto;
   overflow-y: hidden;
+}
+
+/* With the description text hidden (Expert mode) the first field sits straight under the ID badge: no need for the
+   room the hint paragraph leaves there. */
+.hide-description-text .titlescreen-card-body {
+  margin-top: 16px;
 }
 
 .titlescreen-card-list {
@@ -2121,6 +2294,58 @@ export default defineComponent({
   margin-right: 16px;
 }
 
+/* Same small "C" badge as PlayerEditor.vue's colors-only copy/paste buttons. */
+.copy-paste-color-btn {
+  position: relative;
+}
+
+.copy-paste-color-badge {
+  position: absolute;
+  bottom: 3px;
+  right: -2px;
+  font-size: 8px;
+  font-weight: bold;
+  line-height: 1;
+  padding: 0 1px;
+  border-radius: 2px;
+  background: white;
+  color: rgba(0, 0, 0, 0.7);
+  pointer-events: none;
+}
+
+/* Frames sit side by side, so the drop mark is a bar on the near side of the frame dragged over. */
+.pixel-editor-parent-container.drag-reorder-over {
+  border-top: none !important;
+  border-left: 3px solid var(--v-primary-base, #1976d2) !important;
+}
+
+.pixel-editor-parent-container.drag-reorder-over.drag-reorder-over-after {
+  border-left: none !important;
+  border-right: 3px solid var(--v-primary-base, #1976d2) !important;
+}
+
+/* A strip across the top of a frame to grab for reordering. */
+.frame-drag-handle {
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px 4px 0 0;
+  cursor: grab;
+}
+
+.frame-drag-handle .v-icon {
+  color: rgba(128, 128, 128, 0.8);
+}
+
+.frame-drag-handle:hover {
+  background-color: rgba(128, 128, 128, 0.18);
+}
+
+.frame-drag-handle:active {
+  cursor: grabbing;
+}
+
 /* Same reasoning/placement as PlayerEditor.vue's .add-frame-list-item -
    sits inline after the last frame, vertically centered against the frame
    cards' height via vertical-align (rather than the list item's default
@@ -2180,6 +2405,14 @@ export default defineComponent({
   /* Room for the floating label, which is cut off at the top without it (most visible in Expert mode, with the
      description text above hidden). */
   padding-top: 12px;
+  margin-bottom: 12px;
+}
+
+/* Room on the left for the switch's round highlight, which the card would otherwise clip. */
+.titlescreen-play-once-switch {
+  margin-top: 0;
+  margin-left: 8px;
+  padding-top: 0;
   margin-bottom: 12px;
 }
 </style>

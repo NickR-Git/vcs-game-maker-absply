@@ -1,6 +1,6 @@
 # VCS Game Maker: everything since 0.50.37
 
-This covers versions 0.50.38 through 0.51.31, grouped by area. The per-version
+This covers versions 0.50.38 through 0.51.32, grouped by area. The per-version
 detail is in `CHANGES_SINCE_0.50.37.txt`.
 
 ## Emulator and TV standard
@@ -26,6 +26,9 @@ detail is in `CHANGES_SINCE_0.50.37.txt`.
 - Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y undo and redo in the graphic editors, Data, Music patterns and
   Sound FX envelopes, and they put back cards, frames and rows dragged into a new order.
 - The emulator's volume follows the Sound and Music DIM setting while it plays.
+- A debug overlay for the 6502.ts emulator shows registers, the program counter, scanlines, CPU busy
+  cycles and a table of chosen variable values; a Debug Info popup picks the variables and the choice is
+  saved with the project. The emulator and its sound stop while a ROM compiles.
 
 ## Blocks and code generation
 
@@ -51,7 +54,11 @@ detail is in `CHANGES_SINCE_0.50.37.txt`.
 - **Title screen (new blocks):** end the title screen and carry on as the game, recolor a
   graphic, jump a graphic to a frame (hold it, then loop or play once), set and reset the
   background color, and switch the picture background on or off and recolor it. Player sprites
-  cards play their animation by themselves.
+  cards play their animation by themselves. Newer: an "Animate title screen graphic" block (forward or in
+  reverse, loop or play once, acting as a trigger), a "When title screen graphic animation finishes" block,
+  and a "Play animation once" switch on each graphic.
+- **Sprites and data:** a Visibility option in the Player get block, a Switch block mode that runs once each
+  time a switch is turned on, and blocks for the size of a data table.
 - **Sprites:** "Set fired speed" block, a "Width/quantity" choice in the Player get block, and
   16-direction angles that lean now move at the right speed along the right path.
 - **Scrolling text:** one speed and one pause shared by every message are built in as numbers
@@ -72,6 +79,9 @@ detail is in `CHANGES_SINCE_0.50.37.txt`.
   exported and duplicated. Animation Duration fields cannot go below 1.
 - Color swatches look the same everywhere, including the block color picker, and row color
   changes can be undone.
+- Title graphics store less in ROM: a picture repeated under different row colors, identical pictures and
+  identical color lists are stored once. Frames can be dragged into a new order, copy their picture
+  background, and the import popups can keep row and box colors when replacing frames.
 
 ## Music and Sound
 

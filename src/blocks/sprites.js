@@ -558,14 +558,19 @@ const buildCombinedPlayerVarBlocks = ({icon, colour}) => {
               [ANIMATION_ICON + ' Animation', `${name}animation`],
               [MIRROR_ICON + ' Horizontal flip', `__${name}size_3_`],
               [FRAME_ICON + ' Frame', `${name}frame`],
+              // 1 while the player is shown, 0 while Visibility has hidden it (a hidden player
+              // is on frame 255). Not a variable, so the generator works it out from the frame.
+              [VISIBILITY_ICON + ' Visibility', `__${name}visible_`],
             ];
           },
         },
       ],
-      'output': 'Number',
+      // Also fits the true/false sockets of the Logic blocks: Visibility reads as true or false there.
+      'output': ['Number', 'Boolean'],
       colour,
       'extensions': ['sprite_player_field_sync'],
-      'tooltip': 'Reads information about whichever player is selected.',
+      'tooltip': 'Reads information about whichever player is selected. Visibility is 1 while the ' +
+        'player is shown and 0 while it is hidden.',
     },
     // Block for the setter.
     {

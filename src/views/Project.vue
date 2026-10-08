@@ -382,7 +382,10 @@
                 readonly
               />
               <div v-else class="example-website">
-                <div class="example-website-label">Website</div>
+                <label
+                  class="v-label example-website-label"
+                  :class="$vuetify.theme.dark ? 'theme--dark' : 'theme--light'"
+                >Website</label>
                 <a
                   :href="exampleWebsiteUrl(data.selectedExample)"
                   :title="data.selectedExample.website"
@@ -439,12 +442,13 @@ import {sanitizeForFilename} from '../utils/file';
 import {resetMusicEditorActiveState} from '../hooks/music-editor-state';
 import {clearEmulatorRom} from '../hooks/emulator';
 import {useLastLoadedRomBytes, useLastBuildScreenshot} from '../hooks/rom-status';
-import {buildRom} from '../hooks/rom';
 import {captureEmulatorScreenshot} from '../utils/emulator-screenshot';
 import {matrixToPlayfield, playfieldToMatrix} from '../utils/pixels';
 import {persistActiveFileHandle, loadPersistedFileHandle, persistActiveDirHandle, loadPersistedDirHandle,
   ensureWritePermission, persistActiveFilePath, loadPersistedFilePath} from '../utils/file-handle-storage';
 import {examplesState} from '../hooks/examples';
+import {useDebugVariables, setDebugVariables} from '../hooks/debug-symbols';
+import {useEmulatorSettings, saveEmulatorSettings} from '../hooks/emulator-settings';
 import {soundBanksState} from '../hooks/soundbanks';
 import {processSoundEffectsStorageDefaults} from '../blocks/soundfx';
 import {buildSoundBankImportEntries, importSoundBankEntries, soundEffectsInBankFile} from '../utils/sound-bank';
@@ -471,25 +475,11 @@ const SUPPORTS_FILE_SYSTEM_ACCESS =
   typeof window.showSaveFilePicker === 'function' &&
   typeof window.showOpenFilePicker === 'function';
 
-// Set when Save with auto-increment has no folder to write new versions into (see saveAsNextVersion).
-// Both are kept for the browser tab's session, so a page reload does not bring the dialog back.
-const sessionFlag = (key) => {
-  try {
-    return window.sessionStorage.getItem(key) === '1';
-  } catch (e) {
-    return false;
-  }
-};
-const setSessionFlag = (key) => {
-  try {
-    window.sessionStorage.setItem(key, '1');
-  } catch (e) {
-    // Without session storage the flag only lasts until the page is reloaded.
-  }
-};
-let incrementSaveToDownloads = sessionFlag('vcs-game-maker.incrementSaveToDownloads');
+// Set when Save with auto-increment has no folder to write new versions into (see saveAsNextVersion); both
+// last until the page is reloaded, when the folder is offered again.
+let incrementSaveToDownloads = false;
 // Set once the folder dialog has been shown (see saveAsNextVersion).
-let projectFolderAsked = sessionFlag('vcs-game-maker.projectFolderAsked');
+let projectFolderAsked = false;
 
 // window.electronAPI only exists inside the desktop build's preload script
 // (see preload.js) - never true in a browser. Checked BEFORE
@@ -579,6 +569,8 @@ export default defineComponent({
     const titleScreenStorage = useTitleScreenStorage();
     // The Quick colors shortlist shared by the graphic editors - saved with the project.
     const colorPaletteStorage = useColorPaletteStorage();
+    const debugVariablesStorage = useDebugVariables();
+    const emulatorSettingsStorage = useEmulatorSettings();
 
     // Kept directly on the same configuration bag every other project-wide
     // setting already lives in (scoreBkColor, textBkColor, etc. - see
@@ -677,7 +669,8 @@ export default defineComponent({
     return {data, router, showExamples, showSoundBanks, isToolbarScrolled, examples: examplesState, soundBanks: soundBanksState,
       soundBankFilterItems, filteredSoundBanks, backgroundsStorage, playerAnimationsStorage,
       workspaceStorage, configurationStorage, scoreFontStorage, squishCustomScoreFontStorage, scoreFontEditsStorage, dataTablesStorage,
-      textStringsStorage, textFontStorage, soundEffectsStorage, songsStorage, titleScreenStorage, colorPaletteStorage, projectTitle,
+      textStringsStorage, textFontStorage, soundEffectsStorage, songsStorage, titleScreenStorage, colorPaletteStorage,
+      debugVariablesStorage, emulatorSettingsStorage, projectTitle,
       projectDescription, projectDeveloper, projectVersion, projectAutoIncrementVersion, projectIncludeDateInFilename,
       projectWebsite, projectEmail};
   },
@@ -692,22 +685,6 @@ export default defineComponent({
       const lastNum = parseInt(parts[lastIndex], 10);
       parts[lastIndex] = String(Number.isFinite(lastNum) ? lastNum + 1 : 0);
       return parts.join('.');
-    },
-
-    // A saved project always carries a screenshot. With no ROM showing in the
-    // emulator there is no picture to take, so the project is built and given
-    // a moment to run first. A failed build just means no screenshot: saving
-    // is never blocked by it.
-    async ensureEmulatorScreenshot() {
-      if (useLastBuildScreenshot().value) return;
-      if (useLastLoadedRomBytes().value && captureEmulatorScreenshot()) return;
-      try {
-        await buildRom();
-      } catch (e) {
-        console.error('Could not build a ROM for the project screenshot', e);
-        return;
-      }
-      await new Promise((resolve) => window.setTimeout(resolve, 1500));
     },
 
     // Shared by handleSaveProjectAs and handleSaveProject - builds the same
@@ -829,6 +806,10 @@ export default defineComponent({
         'songs': this.songsStorage,
         // The Quick colors shortlist (color bytes, in order) shown above the graphic editors.
         'quick-colors': this.colorPaletteStorage || undefined,
+        // The variables the emulator's debug info shows, and the list of variables (with their addresses) from the
+        // last build that the Debug Info dialog picks from, so both are there again when the project is opened.
+        'debug-variables': (this.emulatorSettingsStorage.debugVariables || []).length || this.debugVariablesStorage.length ?
+          {chosen: this.emulatorSettingsStorage.debugVariables || [], list: this.debugVariablesStorage} : undefined,
       });
 
       return projectYaml;
@@ -879,7 +860,6 @@ export default defineComponent({
       // longer allowed (the click's permission to open one has expired).
       let projectYaml = null;
       const prepareProjectYaml = async () => {
-        await this.ensureEmulatorScreenshot();
         projectYaml = this.buildProjectYaml();
       };
 
@@ -978,7 +958,6 @@ export default defineComponent({
           const folderEnd = Math.max(targetPath.lastIndexOf('/'), targetPath.lastIndexOf('\\'));
           targetPath = targetPath.slice(0, folderEnd + 1) + this.buildSaveFilename();
         }
-        await this.ensureEmulatorScreenshot();
         const projectYaml = this.buildProjectYaml();
         const ok = await window.electronAPI.saveProject(targetPath, projectYaml);
         if (!ok) {
@@ -1015,7 +994,6 @@ export default defineComponent({
         console.error('Write permission for the active project file was denied.');
         return;
       }
-      await this.ensureEmulatorScreenshot();
       const projectYaml = this.buildProjectYaml();
       const writable = await this.data.activeFileHandle.createWritable();
       await writable.write(projectYaml);
@@ -1032,9 +1010,9 @@ export default defineComponent({
     // to the browser's downloads with the new name, rather than opening a dialog each time.
     async saveAsNextVersion() {
       let folder = null;
-      if (!incrementSaveToDownloads) {
-        // The folder first: opening the picker needs this click's permission, which would be gone
-        // after the screenshot below.
+      {
+        // The remembered folder is always tried first, even after an earlier save of this session went
+        // to the downloads: its permission may only need a click to be confirmed again.
         folder = this.data.activeDirHandle;
         if (folder) {
           try {
@@ -1043,12 +1021,12 @@ export default defineComponent({
             folder = null;
           }
         }
+        if (folder) incrementSaveToDownloads = false;
         // The folder dialog opens at most once per page load, whatever happens: a refusal, a
         // cancel or a folder that stops being writable later all end in downloads, never in the
         // dialog again.
-        if (!folder && !projectFolderAsked) {
+        if (!folder && !projectFolderAsked && !incrementSaveToDownloads) {
           projectFolderAsked = true;
-          setSessionFlag('vcs-game-maker.projectFolderAsked');
           try {
             folder = await window.showDirectoryPicker({id: 'vcs-game-maker-project', mode: 'readwrite',
               startIn: this.data.activeFileHandle});
@@ -1060,13 +1038,13 @@ export default defineComponent({
           }
         }
         if (!folder) {
+          appendCompileLog(`Saving each new version to the browser's downloads, since no folder for the project was chosen. ` +
+            `Pick a folder inside Documents (not Documents itself) next time to keep saving there without the browser asking.`, 'stage');
           incrementSaveToDownloads = true;
-          setSessionFlag('vcs-game-maker.incrementSaveToDownloads');
         }
       }
       this.projectVersion = this.incrementVersion(this.projectVersion);
       const filename = this.buildSaveFilename();
-      await this.ensureEmulatorScreenshot();
       const projectYaml = this.buildProjectYaml();
       if (folder) {
         try {
@@ -1081,7 +1059,6 @@ export default defineComponent({
         } catch (e) {
           console.error('Error while saving the project as a new version', e);
           incrementSaveToDownloads = true;
-          setSessionFlag('vcs-game-maker.incrementSaveToDownloads');
         }
       }
       saveAs(new Blob([projectYaml], {type: 'text/yaml'}), filename);
@@ -1346,6 +1323,15 @@ export default defineComponent({
       if (Array.isArray(project['quick-colors'])) {
         this.colorPaletteStorage = project['quick-colors'];
       }
+
+      // A file saved before this existed has none: the current choice and list are cleared, since they
+      // belong to another project's build.
+      const debug = project['debug-variables'];
+      setDebugVariables(debug && Array.isArray(debug.list) ? debug.list : []);
+      saveEmulatorSettings({
+        ...this.emulatorSettingsStorage,
+        debugVariables: debug && Array.isArray(debug.chosen) ? debug.chosen : [],
+      });
 
       if (project['data-tables']) {
         this.dataTablesStorage = project['data-tables'];
@@ -1761,13 +1747,14 @@ export default defineComponent({
   align-items: center;
   justify-content: center;
   background-color: #000;
-  aspect-ratio: 320 / 220;
+  aspect-ratio: 4 / 3;
 }
 
 .example-screenshot {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  /* Shown in the 4:3 shape of the emulator, whatever size the stored picture is. */
+  object-fit: fill;
   image-rendering: pixelated;
 }
 
@@ -1872,12 +1859,13 @@ export default defineComponent({
   position: relative;
 }
 
-.example-website-label {
+.example-website .example-website-label {
   position: absolute;
   top: 4px;
+  left: 0;
   font-size: 12px;
   line-height: 12px;
-  color: rgba(0, 0, 0, 0.6);
+  /* The colour comes from Vuetify's .v-label rules, shared with the other fields' labels. */
 }
 
 .example-website a {

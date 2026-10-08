@@ -196,6 +196,7 @@
             </value>
         </block>
         <block type="titlescreen_scroll_edge_reached"></block>
+        <block type="titlescreen_animation_finished"></block>
         <block type="titlescreen_card_color_set">
             <value name="VALUE">
                 <shadow type="color_get">
@@ -203,6 +204,7 @@
                 </shadow>
             </value>
         </block>
+        <block type="titlescreen_card_animate"></block>
         <block type="titlescreen_card_frame_set">
             <value name="VALUE">
                 <shadow type="math_number">
@@ -826,6 +828,8 @@
             </value>
         </block>
 
+        <block type="score_font_set"></block>
+
         <block type="score_color_get"></block>
         <block type="score_color_set">
             <value name="VALUE">
@@ -1025,6 +1029,14 @@
         <block type="text_minikernel_clear"></block>
     </category>
     <category name="Data" colour="rgb(121, 85, 72)">
+        <block type="data_table_size"></block>
+        <block type="data_table_size_by_id">
+            <value name="TABLE_ID">
+                <shadow type="math_number">
+                    <field name="NUM">1</field>
+                </shadow>
+            </value>
+        </block>
         <block type="data_get_element">
             <value name="INDEX">
                 <shadow type="math_number">

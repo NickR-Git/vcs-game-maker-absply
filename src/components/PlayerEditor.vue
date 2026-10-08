@@ -254,6 +254,12 @@
                             label="Replace frames"
                             hide-details
                           />
+                          <v-switch
+                            v-model="keepColorsOnImport"
+                            label="Keep row colors"
+                            :disabled="!replaceFramesOnImport"
+                            hide-details
+                          />
                         </v-card-text>
                       </v-card>
                     </v-menu>
@@ -274,6 +280,7 @@
                     <confirm-delete-menu
                       v-if="state.animations.length > 1"
                       title="Delete this animation?"
+                      :selected="animation.id === selectedCardId"
                       activator-title="Delete this animation"
                       icon-btn-class="player-icon-btn-size"
                       @confirm="handleDeleteAnimation(animation)"
@@ -393,6 +400,8 @@
                             <confirm-delete-menu
                               v-if="animation.frames.length > 1"
                               title="Delete this frame?"
+                              :selected="frameHighlightState(animation, frame) === 'blue'"
+                              :select-priority="2"
                               activator-title="Delete this frame"
                               icon-btn-class="player-icon-btn-size"
                               @confirm="handleDeleteFrame(animation, frame)"
@@ -459,7 +468,7 @@ import {useEditorZoom, ZOOM_LEVELS} from '../hooks/zoom';
 // The Sprites tab zooms out further than the other tabs, down to 25%.
 const PLAYER_ZOOM_LEVELS = [0.25, ...ZOOM_LEVELS];
 import {colorByteToCss} from '../utils/palette';
-import {playfieldToMatrix, resizePixelMatrixHeight, scaleRowColors} from '../utils/pixels';
+import {playfieldToMatrix, resizePixelMatrixHeight, scaleRowColors, carryOverFrameColors} from '../utils/pixels';
 import {rowColorsForMove} from '../utils/row-color-move';
 import {loadImageFromFile, openFileDialogMultiple, sortImportedAnimationFrameFiles} from '../utils/file';
 import {createCroppedResizedCanvas, createResizedCanvas} from '../utils/image';
@@ -884,6 +893,8 @@ export default defineComponent({
     // import happening at a time, so a single shared preference is simpler
     // than tracking it per animation card for no real benefit.
     const replaceFramesOnImport = ref(false);
+    // With "Replace frames" on, whether the new frames keep the row colors of the frames they replace.
+    const keepColorsOnImport = ref(false);
 
     // Which animation's "Import animation frames" popover is currently
     // open, by id (null when none is) - drives the menu's :value/@input
@@ -941,7 +952,10 @@ export default defineComponent({
             .then((pixelMatrices) => {
               const keptFrames = replaceFramesOnImport.value ? [] : animation.frames;
               let nextId = getMaxId(keptFrames) + 1;
-              const newFrames = pixelMatrices.map((pixels) => ({id: nextId++, duration: 10, pixels}));
+              let newFrames = pixelMatrices.map((pixels) => ({id: nextId++, duration: 10, pixels}));
+              if (replaceFramesOnImport.value && keepColorsOnImport.value) {
+                newFrames = carryOverFrameColors(animation.frames, newFrames);
+              }
               animation.frames = [...keptFrames, ...newFrames];
               handleChildChange();
               instance.proxy.$forceUpdate();
@@ -1244,7 +1258,7 @@ export default defineComponent({
     return {selectedCardId, selectCard, deselectCard,
       state, handleChildChange, handleFrameDurationChange,
       handleAddFrame, handleDeleteFrame,
-      handleImportAnimationFrames, replaceFramesOnImport, importMenuOpenAnimationId,
+      handleImportAnimationFrames, replaceFramesOnImport, keepColorsOnImport, importMenuOpenAnimationId,
       handleImportAsepriteSheet, asepriteReplaceAnimations, asepriteImportMenuOpen,
       handleAddAnimation, handleDeleteAnimation, handleDuplicateAnimation, handleSetPreviewScale,
       testingId, buildInProgress, handleTestAnimation,
@@ -1561,7 +1575,7 @@ export default defineComponent({
    gap (not a margin-top on the button) is what spaces the two elements
    apart now, so it stays correct however they're ordered. */
 .import-animation-menu {
-  width: 220px;
+  width: 300px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -1582,7 +1596,7 @@ export default defineComponent({
    image..." is longer than that menu's "Choose images..." and was
    getting clipped/wrapped at that width. */
 .import-aseprite-menu {
-  width: 280px;
+  width: 300px;
 }
 
 /* Holds every frame-level corner button (copy/paste frame, copy/paste

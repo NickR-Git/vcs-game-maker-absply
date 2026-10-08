@@ -407,16 +407,22 @@ Blockly.defineBlocksWithJsonArray([
   // Block for console switch getter.
   {
     'type': 'input_console_switch_get',
-    'message0': `${CONSOLE_SWITCH_ICON} Switch %1`,
+    'message0': `${CONSOLE_SWITCH_ICON} Switch %1 %2`,
     'args0': [
       {
         'type': 'field_dropdown',
         'name': 'SWITCH',
         'options': CONSOLE_SWITCH_OPTIONS,
       },
+      {
+        'type': 'field_dropdown',
+        'name': 'MODE',
+        'options': [['is on', 'HELD'], ['was just switched on', 'ONCE']],
+      },
     ],
     'output': 'Boolean',
     'colour': 'purple',
-    'tooltip': 'Reads status of the console switches',
+    'tooltip': 'Reads status of the console switches. "is on" stays true while the switch is held; ' +
+      '"was just switched on" is true for one frame each time it is switched on.',
   },
 ]);

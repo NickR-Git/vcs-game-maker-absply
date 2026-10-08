@@ -9,9 +9,13 @@
       <template v-slot:activator="{ on, attrs }">
         <div
           class="row-swatch"
-          :class="{'row-swatch-armed': activeQuickColor != null}"
+          :class="{'row-swatch-armed': activeQuickColor != null, 'row-swatch-fill': fillMode}"
           :style="{backgroundColor: cssColor(colorByte)}"
-          :title="activeQuickColor != null ?
+          :title="fillMode ?
+            (activeQuickColor != null ?
+              `Click to fill the rows around row ${rowIndex + 1} that have its color with the selected quick color` :
+              `Click to pick a color that fills the rows around row ${rowIndex + 1} that have its color`) :
+            activeQuickColor != null ?
             `Click to fill row ${rowIndex + 1} with the selected quick color, or drag across rows to paint several at once` :
             `Row ${rowIndex + 1} color — click to change, or drag across rows to copy this row's color onto them`"
           v-bind="attrs"
@@ -51,6 +55,7 @@
 </template>
 <script>
 import {NTSC_COLORS, PALETTE_COLUMNS, colorByteToCss, colorByteToBBasic} from '../utils/palette';
+import {usePixelTool} from '../hooks/pixel-tool';
 
 export default {
   name: 'PlayfieldColorStrip',
@@ -69,6 +74,13 @@ export default {
     // instead of opening the row's  popup - a faster paint-bucket-style
     // workflow than picking from the popup every single row.
     activeQuickColor: {type: Number, default: null},
+  },
+  computed: {
+    // With the graphic editor's Fill tool selected, picking a color for a row fills the whole run of
+    // neighboring rows that have the same color, like Fill does on the picture.
+    fillMode() {
+      return usePixelTool().value === 'fill';
+    },
   },
   data() {
     return {
@@ -106,10 +118,22 @@ export default {
     },
     handlePick(rowIndex, colorByte) {
       const next = this.value.slice();
-      next[rowIndex] = colorByte;
+      if (this.fillMode) {
+        const target = this.value[rowIndex];
+        if (target === colorByte) return;
+        let first = rowIndex;
+        let last = rowIndex;
+        while (first > 0 && this.value[first - 1] === target) first--;
+        while (last < this.value.length - 1 && this.value[last + 1] === target) last++;
+        for (let row = first; row <= last; row++) next[row] = colorByte;
+      } else {
+        next[rowIndex] = colorByte;
+      }
       this.$emit('input', next);
     },
     handleDragStart(rowIndex, colorByte) {
+      // Fill is a click: a drag across rows doesn't paint them one by one.
+      if (this.fillMode) return;
       this.isDragPainting = true;
       this.dragColor = this.activeQuickColor != null ? this.activeQuickColor : colorByte;
     },
@@ -155,6 +179,11 @@ export default {
    "apply, don't pick" behavior. */
 .row-swatch-armed {
   cursor: cell;
+}
+
+/* The Fill tool is selected: the same paint bucket cursor the picture's Fill tool has. */
+.row-swatch.row-swatch-fill {
+  cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><path fill='white' stroke='black' stroke-width='1' d='M19,11.5C19,11.5 17,13.67 17,15A2,2 0 0,0 19,17A2,2 0 0,0 21,15C21,13.67 19,11.5 19,11.5M5.21,10L10,5.21L14.79,10M16.56,8.94L7.62,0L6.21,1.41L8.59,3.79L3.44,8.94C2.85,9.5 2.85,10.47 3.44,11.06L8.94,16.56C9.23,16.85 9.62,17 10,17C10.38,17 10.77,16.85 11.06,16.56L16.56,11.06C17.15,10.47 17.15,9.5 16.56,8.94Z'/></svg>") 4 20, crosshair;
 }
 
 .palette-card {

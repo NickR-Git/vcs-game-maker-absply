@@ -263,6 +263,33 @@ const registerDataBitDispatchCallWrapper = (Blockly) => {
   return wrapperName;
 };
 
+// The sizes of the tables for a size-of-table block whose table id is only known while the game runs: a
+// function that returns the size of the table whose id it is given. The sizes are constants, so the tables
+// themselves do not have to be in ROM for it.
+const DATA_SIZE_DISPATCH_FUNCTION_CANONICAL_NAME = '_dataSizeDispatch';
+const registerDataSizeDispatchCallWrapper = (Blockly) => {
+  const name = Blockly.BBasic.nameDB_.getName(
+      DATA_SIZE_DISPATCH_FUNCTION_CANONICAL_NAME, Blockly.PROCEDURE_CATEGORY_NAME);
+  const wrapperName = Blockly.BBasic.nameDB_.getName('_call_dataSizeDispatch', Blockly.PROCEDURE_CATEGORY_NAME);
+  if (Blockly.BBasic.subroutines[wrapperName]) return wrapperName;
+  const data = processDataTablesStorageDefaults(useDataTablesStorage());
+  const lines = [];
+  (data.dataTables || []).filter((table) => table.values && table.values.length).forEach((table, i) => {
+    const label = `_datasizedispatch_${i}`;
+    lines.push(
+        ` if temp1 <> ${table.id} then goto ${label}`,
+        // A byte holds at most 255, so a table of 256 values reports 255.
+        ` return ${Math.min(255, table.values.length)}`,
+        `@${label}`);
+  });
+  Blockly.BBasic.functions[name] = lines.join('\n');
+  const arg1 = Blockly.BBasic.superchipRwPairs[dataDispatchArg1VarName()];
+  const result = Blockly.BBasic.superchipRwPairs[functionCallDiscardVarName()];
+  Blockly.BBasic.subroutines[wrapperName] = `${result.write} = ${name}(${arg1.read})`;
+  Blockly.BBasic.functionCallWrapperNames.add(wrapperName);
+  return wrapperName;
+};
+
 export default (Blockly) => {
   // data_get_element_by_id/data_get_bit_by_id's  TABLE_ID is a plain
   // Number value SOCKET (see its  comment in blocks/data.js), not a
@@ -300,6 +327,32 @@ export default (Blockly) => {
     // which already provide grouping, so it never needs extra parens.
     const index = Blockly.BBasic.valueToCode(block, 'INDEX', Blockly.BBasic.ORDER_NONE) || '0';
     return `${name}[${index}]`;
+  };
+
+  Blockly.BBasic['data_table_size'] = function(block) {
+    const table = findDataTableById(block.getFieldValue('TABLE'));
+    const size = table && Array.isArray(table.values) ? table.values.length : 0;
+    return [String(size), Blockly.BBasic.ORDER_ATOMIC];
+  };
+
+  // The size of a table chosen by its id: a plain number when the id is a literal, otherwise looked up
+  // while the game runs (registerDataSizeDispatchCallWrapper above).
+  Blockly.BBasic['data_table_size_by_id'] = function(block) {
+    const literalId = resolveTableIdLiteral(block);
+    if (literalId != null) {
+      const table = findDataTableById(literalId);
+      return [String(table && Array.isArray(table.values) ? table.values.length : 0), Blockly.BBasic.ORDER_ATOMIC];
+    }
+    if (!block.getInputTargetBlock('TABLE_ID')) return ['0', Blockly.BBasic.ORDER_ATOMIC];
+    const wrapperName = registerDataSizeDispatchCallWrapper(Blockly);
+    const tableIdCode = Blockly.BBasic.valueToCode(block, 'TABLE_ID', Blockly.BBasic.ORDER_NONE) || '0';
+    const arg1 = Blockly.BBasic.superchipRwPairs[dataDispatchArg1VarName()];
+    const result = Blockly.BBasic.superchipRwPairs[functionCallDiscardVarName()];
+    const suffix = Blockly.BBasic.bankJumpSuffix(
+        Blockly.BBasic.getCurrentBank(), Blockly.BBasic.getSubroutineBank(wrapperName));
+    return [`${arg1.write} = ${tableIdCode}
+gosub ${wrapperName}${suffix}
+${result.read}`, Blockly.BBasic.ORDER_ATOMIC];
   };
 
   Blockly.BBasic['data_get_element'] = function(block) {

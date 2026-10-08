@@ -1,5 +1,5 @@
 <template>
-  <v-menu v-model="open" top>
+  <v-menu v-model="open" top :absolute="!!anchor" :position-x="anchor ? anchor.x : 0" :position-y="anchor ? anchor.y : 0">
     <template v-slot:activator="{ on, attrs }">
       <v-btn
         :title="activatorTitle"
@@ -41,6 +41,8 @@
 // version"): v-dialog always centres itself in the viewport regardless of
 // its activator's position, losing the anchored-right-next-to-the-button
 // placement every inline version already had.
+import {registerDeleteMenu, unregisterDeleteMenu} from '../hooks/delete-shortcut';
+
 export default {
   // Any attribute a caller passes that isn't one of the declared props below
   // (e.g. TextEditor.vue's "absolute top right" positioning props on its
@@ -60,13 +62,36 @@ export default {
     // icon-size class its other corner buttons already use (e.g.
     // "titlescreen-icon-btn-size").
     iconBtnClass: {type: String, default: ''},
+    // Whether what this deletes is the selected card or frame, which makes the Delete key open the
+    // confirmation (see hooks/delete-shortcut.js); selectPriority lets a frame win over its card.
+    selected: {type: Boolean, default: false},
+    selectPriority: {type: Number, default: 0},
   },
   data() {
     return {
       open: false,
+      // Where the pointer was when the Delete key opened the confirmation; null when the button was clicked.
+      anchor: null,
     };
   },
+  watch: {
+    open(value) {
+      if (!value) this.anchor = null;
+    },
+  },
+  mounted() {
+    registerDeleteMenu(this);
+  },
+  beforeDestroy() {
+    unregisterDeleteMenu(this);
+  },
   methods: {
+    openAtPointer(pointer) {
+      this.anchor = {x: pointer.x, y: pointer.y};
+      this.$nextTick(() => {
+        this.open = true;
+      });
+    },
     handleConfirm() {
       this.open = false;
       this.$emit('confirm');

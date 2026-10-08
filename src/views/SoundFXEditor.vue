@@ -229,6 +229,7 @@
                   <confirm-delete-menu
                     v-if="state.soundEffects.length > 1"
                     title="Delete this sound effect?"
+                    :selected="selectedCardIds.length === 1 && selectedCardIds[0] === soundEffect.id"
                     activator-title="Delete this sound effect"
                     icon-btn-class="soundfx-delete-btn soundfx-icon-btn-size"
                     @confirm="handleDeleteSoundEffect(soundEffect)"

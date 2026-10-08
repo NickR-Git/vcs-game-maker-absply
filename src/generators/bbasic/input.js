@@ -2,6 +2,7 @@
 
 import {canonicalDistanceVarName, distancePointVarName} from '../../utils/distance';
 import {keypadKeyVarName} from '../../utils/keypad';
+import {flagPoolVar, flagPoolBit} from './flag-pool';
 
 // Each of the 4 "rows" a keypad scan cycles through - SWCHA is written with
 // the same 4-bit "walking zero" pattern duplicated in both nibbles (bits
@@ -372,6 +373,51 @@ export const reserveJoystickButtonDevVars = (reserveDevVar, usedFor, needsReleas
   });
 };
 
+// "Switch ... was just switched on": the console switches in the order their two flag bits are given in
+// (the switch's value in the Switch block's dropdown). The family keeps, for each used switch, a bit for
+// "was on last frame" and one for "went on this frame".
+export const SWITCH_EDGE_FAMILY = 'switchEdgeFlags';
+const SWITCH_EDGE_SWITCHES = ['switchreset', 'switchselect', 'not switchbw', 'switchbw'];
+export const switchEdgeFlagsVarName = () => flagPoolVar(SWITCH_EDGE_FAMILY);
+export const switchEdgeIndex = (value) => SWITCH_EDGE_SWITCHES.indexOf(value);
+const switchEdgePrevBit = (value) => flagPoolBit(SWITCH_EDGE_FAMILY, switchEdgeIndex(value) * 2);
+export const switchEdgeJustBit = (value) => flagPoolBit(SWITCH_EDGE_FAMILY, switchEdgeIndex(value) * 2 + 1);
+// The pool bits (see planFlagPool) for the switches used with "was just switched on".
+export const switchEdgeOwnBits = (usedFor) => [...(usedFor || [])]
+    .filter((value) => switchEdgeIndex(value) >= 0)
+    .flatMap((value) => [switchEdgeIndex(value) * 2, switchEdgeIndex(value) * 2 + 1]);
+
+export const reserveSwitchEdgeDevVars = (reserveDevVar, usedFor) => {
+  if (!usedFor || !usedFor.size) return;
+  reserveDevVar(switchEdgeFlagsVarName(), undefined, 'console switches: on last frame / just switched on');
+};
+
+// Once per frame, before the game's code runs: sets each switch's "just switched on" bit for the one
+// frame it goes from off to on.
+export const generateSwitchEdgeChecks = (Blockly) => {
+  const used = Blockly.BBasic.switchEdgeUsedFor;
+  if (!used || !used.size) return '';
+  const flagsVar = Blockly.BBasic.nameDB_.getName(switchEdgeFlagsVarName(), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+  const lines = [];
+  [...used].filter((value) => switchEdgeIndex(value) >= 0).forEach((value) => {
+    const key = `_switchedge${switchEdgeIndex(value)}`;
+    const pressed = Blockly.BBasic.nameDB_.getName(value, Blockly.VARIABLE_CATEGORY_NAME);
+    const prev = `${flagsVar}{${switchEdgePrevBit(value)}}`;
+    const just = `${flagsVar}{${switchEdgeJustBit(value)}}`;
+    lines.push(
+        ` if ${pressed} then goto ${key}_on`,
+        ` ${prev} = 0`,
+        ` ${just} = 0`,
+        ` goto ${key}_done`,
+        `${key}_on`,
+        ` ${just} = 0`,
+        ` if !${prev} then ${just} = 1`,
+        ` ${prev} = 1`,
+        `${key}_done`);
+  });
+  return lines.join('\n');
+};
+
 // Spliced into commongamelogic right alongside generateJoystickDirection8Checks
 // (same region, same "precompute per-frame input state into hidden vars"
 // reasoning) - one check per joystick that actually has a tap/hold/released/
@@ -629,6 +675,11 @@ export default (Blockly) => {
   };
 
   Blockly.BBasic['input_console_switch_get'] = function(block) {
+    if (block.getFieldValue('MODE') === 'ONCE' && switchEdgeIndex(block.getFieldValue('SWITCH')) >= 0) {
+      // True for the one frame after the switch went from off to on (see generateSwitchEdgeChecks).
+      const flagsVar = Blockly.BBasic.nameDB_.getName(switchEdgeFlagsVarName(), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+      return [`${flagsVar}{${switchEdgeJustBit(block.getFieldValue('SWITCH'))}}`, Blockly.BBasic.ORDER_ATOMIC];
+    }
     // Variable getter.
     const switchName = Blockly.BBasic.nameDB_.getName(block.getFieldValue('SWITCH'),
         Blockly.VARIABLE_CATEGORY_NAME);

@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div :class="{'quick-color-collapsed': collapsed}">
     <v-divider class="quick-color-divider" />
     <div class="quick-color-label-row">
       <v-btn
@@ -199,7 +199,10 @@ export default defineComponent({
 </script>
 <style scoped>
 .quick-color-divider {
-  margin: 8px 0;
+  /* Reaches the full width of the pinned toolbar around it, like the line under it does. */
+  margin: 8px calc(-1 * var(--toolbar-bleed, 0px));
+  /* Vuetify caps a divider at its parent's width, which would leave the negative margin only moving it left. */
+  max-width: none;
 }
 
 .quick-color-label-row {
@@ -226,7 +229,16 @@ export default defineComponent({
   font-size: 12px;
   color: rgba(0, 0, 0, 0.6);
   margin-top: -2px;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
+}
+
+/* Collapsed, only the label row is left, so it doesn't need the room the swatches would sit in below it. */
+.quick-color-collapsed .quick-color-section-label {
+  margin-bottom: 0;
+}
+
+.quick-color-collapsed {
+  margin-bottom: -4px;
 }
 
 .quick-color-palette {
@@ -234,7 +246,7 @@ export default defineComponent({
   flex-wrap: wrap;
   align-items: center;
   gap: 4px;
-  margin-top: 8px;
+  margin-top: 2px;
 }
 
 .quick-color-swatch {

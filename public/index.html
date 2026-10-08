@@ -62,6 +62,7 @@
         return gopher2600DimGain;
       };
       window.playGopher2600AudioChunk = function(sampleRate, samples) {
+        if (typeof gopher2600Paused !== 'undefined' && gopher2600Paused) return;
         if (!gopher2600AudioCtx) {
           gopher2600AudioCtx = new (window.AudioContext || window.webkitAudioContext)({latencyHint: 'interactive'});
           gopher2600AudioNextStart = gopher2600AudioCtx.currentTime + GOPHER2600_AUDIO_CUSHION_SECONDS;
@@ -121,6 +122,8 @@
       // The Options tab's adaptive frame skipping, kept here so a replacement worker (after a
       // crash) is told it too.
       let gopher2600AdaptiveFrameSkip = true;
+      // The variables the debug info shows (see setDebugWatch below), kept for a replacement worker.
+      let debugWatch = [];
 
       // Two emulators can sit behind window.gopher2600: 6502.ts (public/js/stellerator-worker.js,
       // the default: much faster, with screen effects) and gopher2600
@@ -141,6 +144,8 @@
         phosphor: 0,
         scanlines: 0,
         gamma: 1,
+        debugOverlay: false,
+        debugVariables: [],
         scalingMode: 'none',
         fullscreenResolution: 'native',
         fullscreenScaling: 'qis',
@@ -290,6 +295,9 @@
             // re-applies the front-panel switches, once this fires.
             window.dispatchEvent(new Event('gopher2600-ready'));
             break;
+          case 'debug':
+            window.dispatchEvent(new CustomEvent('emulator-debug', {detail: message}));
+            break;
           case 'tickDone':
             gopher2600TicksInFlight = Math.max(0, gopher2600TicksInFlight - 1);
             break;
@@ -360,6 +368,8 @@
         gopher2600Worker.onmessage = (event) => handleGopher2600Message(event.data);
         gopher2600Worker.postMessage({type: 'setting', name: 'adaptiveFrameSkip', value: gopher2600AdaptiveFrameSkip});
         gopher2600Worker.postMessage({type: 'setting', name: 'cpuAccuracy', value: emulatorSettings.cpuAccuracy});
+        gopher2600Worker.postMessage({type: 'setting', name: 'debugOverlay', value: !!emulatorSettings.debugOverlay});
+        gopher2600Worker.postMessage({type: 'setting', name: 'debugWatch', value: debugWatch});
         // A fatal trap shows up as an error event on the worker (rate-limited
         // below: a ROM that crashes the emulator every frame would otherwise
         // restart it in a tight loop).
@@ -407,9 +417,18 @@
         if (emulatorSettings.cpuAccuracy !== previous.cpuAccuracy) {
           gopher2600Worker.postMessage({type: 'setting', name: 'cpuAccuracy', value: emulatorSettings.cpuAccuracy});
         }
+        if (!!emulatorSettings.debugOverlay !== !!previous.debugOverlay) {
+          gopher2600Worker.postMessage({type: 'setting', name: 'debugOverlay', value: !!emulatorSettings.debugOverlay});
+        }
         if (emulatorSettings.backend !== previous.backend) switchGopher2600Worker();
         // The next frame redraws with the new effects; a paused or idle emulator has none coming.
         stelleratorTargetSize = '';
+      };
+      // The variables the debug info shows, as [{name, address}] (the app works the addresses out from the
+      // last build); the worker reads them from RAM once a frame.
+      window.gopher2600.setDebugWatch = (watch) => {
+        debugWatch = Array.isArray(watch) ? watch : [];
+        gopher2600Worker.postMessage({type: 'setting', name: 'debugWatch', value: debugWatch});
       };
       // Entering or leaving full screen changes the size the picture is drawn at.
       document.addEventListener('fullscreenchange', () => {
@@ -422,6 +441,16 @@
 
       window.gopher2600.setPaused = (paused) => {
         gopher2600Paused = !!paused;
+        // The sound stops with the picture: what is already queued would otherwise play on (and a
+        // build that keeps the page busy would cut it into stutters).
+        if (gopher2600AudioCtx) {
+          if (gopher2600Paused) {
+            gopher2600AudioCtx.suspend();
+          } else {
+            gopher2600AudioNextStart = gopher2600AudioCtx.currentTime + GOPHER2600_AUDIO_CUSHION_SECONDS;
+            gopher2600AudioCtx.resume();
+          }
+        }
       };
       window.gopher2600.setAdaptiveFrameSkip = (enabled) => {
         gopher2600AdaptiveFrameSkip = !!enabled;

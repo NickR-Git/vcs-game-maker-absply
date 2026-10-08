@@ -356,6 +356,7 @@ const DEFAULT_CONFIGURATION = {
   tvStandard: 'ntsc',
   romSize: '4k',
   scoreFont: '',
+  secondaryScoreFont: '',
   muteAllAudio: false,
   showVariableComments: true,
 };

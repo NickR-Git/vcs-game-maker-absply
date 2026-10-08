@@ -210,6 +210,7 @@
                     <confirm-delete-menu
                       v-if="state.backgrounds.length > 1"
                       title="Delete this background?"
+                      :selected="background.id === selectedCardId"
                       activator-title="Delete this background"
                       icon-btn-class="player-icon-btn-size"
                       @confirm="handleDeleteBackground(background)"

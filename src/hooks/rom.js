@@ -36,6 +36,7 @@ import {captureEmulatorScreenshot} from '../utils/emulator-screenshot';
 import {CHAR_TO_GLYPH, TEXT_MESSAGE_LENGTH} from '../blocks/text-strings';
 import {withGopher2600, setEmulatorPaused} from './emulator';
 import {setRomCapacity, useRomCapacity} from './rom-capacity';
+import {setDebugVariables, collectDebugVariables} from './debug-symbols';
 
 Vue.use(VueCompositionApi);
 
@@ -485,7 +486,11 @@ const computeVariableUsage = () => {
   // it really lives in, so this folds systemVarCount into whichever side
   // System reserved is ACTUALLY occupying this build, rather than leaving it
   // out of both (the previous, confusing behavior this replaces).
-  const systemVarCount = SYSTEM_VARIABLES.length;
+  // A system variable the build left out (nothing but the template used it) takes no slot.
+  const omittedSystemVars = BlocklyBB.omittedSystemVars || new Set();
+  const keptSystemVariables = SYSTEM_VARIABLES.map((entry, i) => [...entry, i])
+      .filter(([name]) => !omittedSystemVars.has(name));
+  const systemVarCount = keptSystemVariables.length;
   return {
     letters: {
       used: (BlocklyBB.letterVarsUsed || 0) + (config.enableSuperchip ? 0 : systemVarCount),
@@ -519,7 +524,7 @@ const computeVariableUsage = () => {
     // generateSystemDims itself uses, rather than threading a third array
     // through BlocklyBB, since it needs nothing from an actual compile -
     // just the current Superchip toggle.
-    systemAssignments: SYSTEM_VARIABLES.map(([name, letter], i) =>
+    systemAssignments: keptSystemVariables.map(([name, letter, , i]) =>
       ({name, slot: config.enableSuperchip ? `var${i}` : letter})),
     // Per-slot breakdown for the dynamic dev/user var pool (see bbasic.js's
     // letterVarAssignments/superchipVarAssignments comment) - which
@@ -547,13 +552,14 @@ const computeVariableUsage = () => {
 // bank number too (see KERNEL_BANK_BY_ROMSIZE's identical values and
 // duplicated-on-purpose comment in generators/bbasic/text-minikernel.js) -
 // always the single highest-numbered bank for the ROM's size.
-const computeBankContents = (maxBanks, textMinikernelActive) => {
+const computeBankContents = (maxBanks, textMinikernelActive, titleScreenKernelActive) => {
   const banks = getRelocationBanks();
   const contents = {};
   for (let bank = 1; bank <= maxBanks; bank++) {
     contents[bank] = {
       events: [], backgrounds: [], player0Sprites: [], player1Sprites: [], music: [], subroutines: [],
-      functions: [], dataTables: [], soundEffects: [], textMinikernel: false, bankOverhead: false,
+      functions: [], dataTables: [], soundEffects: [], textMinikernel: false, titleScreenKernel: false,
+      bankOverhead: false,
     };
   }
   const place = (list, names, bankMap, labelFn) => {
@@ -592,7 +598,14 @@ const computeBankContents = (maxBanks, textMinikernelActive) => {
     const labels = unitKey === 'musicEngine' ? resolveMusicSongLabels() : [];
     contents[bank].music.push(...(labels.length ? labels : [unitKey]));
   });
-  place('subroutines', BlocklyBB.getSubroutineNames(), banks.subroutineBanks || {});
+  // The Title Screen Kernel is listed by itself (below) instead of among the subroutines.
+  const titleKernelBank = (banks.subroutineBanks || {})[TITLE_SCREEN_SUBROUTINE_NAME] || 1;
+  place('subroutines', BlocklyBB.getSubroutineNames().filter((name) => name !== TITLE_SCREEN_SUBROUTINE_NAME),
+      banks.subroutineBanks || {});
+  // titleScreenKernelActive is captured at the start of the build, for the same reason as textMinikernelActive below.
+  if (titleScreenKernelActive && contents[titleKernelBank]) {
+    contents[titleKernelBank].titleScreenKernel = true;
+  }
   // A function relocates as part "family" (see
   // computeFunctionFamilies) rather than entirely independently, but still
   // ends up with a real per-function entry in banks.functionBanks either
@@ -949,7 +962,16 @@ const musicReservedBank = (maxBanks, textMinikernelActive) => {
 // case is instead handled at the stuckBank fallback's  call site by
 // clearing that one unit's  tried-set and giving it a fresh attempt,
 // rather than by softening the exclusion here.
-const pickNextBank = (banks, maxBanks, textMinikernelActive, excludeBanks) => {
+const pickNextBank = (banks, maxBanks, textMinikernelActive, excludeBanks, unitKinds) => {
+  // Subroutines stay out of the bank the Title Screen Kernel is in, so that bank has the room for the title
+  // screen's graphics - unless that leaves no bank at all.
+  const titleKernelBank = (banks.subroutineBanks || {})[TITLE_SCREEN_SUBROUTINE_NAME];
+  if (titleKernelBank >= 2 && (unitKinds || []).includes('subroutineBanks') &&
+      !(excludeBanks && excludeBanks.has(titleKernelBank))) {
+    const avoided = pickNextBank(banks, maxBanks, textMinikernelActive,
+        new Set([...(excludeBanks || []), titleKernelBank]));
+    if (avoided) return avoided;
+  }
   const highestBank = textMinikernelActive ? maxBanks - 1 : maxBanks;
   if (highestBank < 2) return null;
   const counts = {};
@@ -1121,7 +1143,8 @@ const buildRomInner = async () => {
         const bank = candidate.kind === 'musicBanks' && reservedMusicBank ?
           reservedMusicBank :
           pickNextBank(banks, proactiveMaxBanks, textMinikernelActive,
-              reservedMusicBank ? new Set([reservedMusicBank]) : null);
+              reservedMusicBank ? new Set([reservedMusicBank]) : null,
+              (candidate.members || [candidate]).map(({kind}) => kind));
         if (!bank) break;
         // A "family" candidate (see computeFunctionFamilies) carries several
         // members that must all land in the SAME bank together - every
@@ -1182,6 +1205,7 @@ const buildRomInner = async () => {
       // the source throughout the whole compile pipeline - see
       // text-minikernel-files.js and compileBatariBasicToAsm.
       const textMinikernelActive = BlocklyBB.isTextMinikernelActive();
+      const titleScreenKernelActive = BlocklyBB.getSubroutineNames().includes(TITLE_SCREEN_SUBROUTINE_NAME);
       // Copied rather than used directly: getTextMinikernelSiblingFiles()
       // returns the same cached object every call, and this block below
       // mutates whatever ends up in siblingFiles['score_graphics.asm'] - doing
@@ -1209,7 +1233,7 @@ const buildRomInner = async () => {
       // stays undefined otherwise), and only fetches the specific per-copy
       // kernel files the project's  cards (across every page) actually use.
       if (BlocklyBB.titleScreenUsedKernelKeys) {
-        Object.assign(siblingFiles, await getTitleScreenSiblingFiles(BlocklyBB.titleScreenUsedKernelKeys));
+        Object.assign(siblingFiles, await getTitleScreenSiblingFiles(BlocklyBB.titleScreenUsedKernelKeys, !!BlocklyBB.titleScreenHasScoreCard));
         Object.assign(siblingFiles, BlocklyBB.titleScreenAsmFiles || {});
       }
       // The compiler has no font support, so point its score
@@ -1235,7 +1259,8 @@ const buildRomInner = async () => {
       if (effectiveScoreFont === SQUISH_SCORE_FONT && !scoreFontIsEdited(SQUISH_SCORE_FONT)) {
         if (!textMinikernelActive) siblingFiles['score_graphics.asm'] = await getExtendedScoreGraphics();
       } else {
-        const scoreFontOverride = await buildScoreFontOverride(effectiveScoreFont);
+        const scoreFontOverride = await buildScoreFontOverride(effectiveScoreFont,
+            (config.enableCycleScore || config.enableScanlinesDebug) ? undefined : config.secondaryScoreFont);
         if (scoreFontOverride) siblingFiles['score_graphics.asm'] = scoreFontOverride;
       }
       // Same override mechanism, for the Text Minikernel's  drawn
@@ -1350,11 +1375,14 @@ const buildRomInner = async () => {
       // sizes pay for the hotspot-detection trampoline at all), so a cached
       // measurement from a since-changed ROM size would misinform rather
       // than help.
+      const variableUsage = computeVariableUsage();
       setRomCapacity(capacity ?
         {...capacity, romSize: config.romSize,
-          bankContents: maxBanks ? computeBankContents(maxBanks, textMinikernelActive) : undefined,
-          variableUsage: computeVariableUsage()} :
+          bankContents: maxBanks ? computeBankContents(maxBanks, textMinikernelActive, titleScreenKernelActive) : undefined,
+          variableUsage} :
         capacity);
+      // Where each variable lives, for the emulator's debug info.
+      setDebugVariables(collectDebugVariables(variableUsage, compiledResult.symbolmap));
       // Remembers THIS build's  final layout as the next build's
       // first-attempt hint (see seedRelocationBanksFromLastSuccess's
       // comment in relocation-banks.js) - recorded on every success, not
@@ -1412,7 +1440,8 @@ const buildRomInner = async () => {
           candidate.kind === 'musicBanks' && reservedMusicBank ?
             reservedMusicBank :
             pickNextBank(banks, maxBanks, textMinikernelActive,
-                reservedMusicBank ? new Set([reservedMusicBank]) : null));
+                reservedMusicBank ? new Set([reservedMusicBank]) : null,
+                (candidate.members || [candidate]).map(({kind}) => kind)));
 
         // Fallback for when nothing is left in bank 1 to relocate, but some
         // OTHER bank turns out to be too full too - the one case
@@ -1560,7 +1589,7 @@ const buildRomInner = async () => {
               // caused a different real bug, a unit oscillating forever
               // between the same two equally-penalized banks.
               const excludeBanks = new Set([reservedMusicBank, ...triedBanks].filter(Boolean));
-              let nextBank = pickNextBank(banks, maxBanks, textMinikernelActive, excludeBanks);
+              let nextBank = pickNextBank(banks, maxBanks, textMinikernelActive, excludeBanks, [next.kind]);
               // Every available bank has now been tried for this ONE unit
               // (not the whole build - see the outer stuckBank exhaustion
               // check above, a separate case) - rather than give up on it
@@ -1575,7 +1604,7 @@ const buildRomInner = async () => {
                 triedBanks.clear();
                 triedBanks.add(stuckBank);
                 nextBank = pickNextBank(banks, maxBanks, textMinikernelActive,
-                    new Set([reservedMusicBank, stuckBank].filter(Boolean)));
+                    new Set([reservedMusicBank, stuckBank].filter(Boolean)), [next.kind]);
               }
               if (nextBank) {
                 candidate = {kind: next.kind, name: next.name, members: next.members};
@@ -1737,6 +1766,9 @@ export const buildBackgroundPreviewRom = (backgroundId, name) => {
     `<field name="NUM">0</field></shadow></value>`;
   const steps = [
     `<block type="background_set_select"><field name="VAR">${backgroundId}</field>`,
+    // The screen behind the playfield is black.
+    `<block type="background_set_color"><field name="VAR">COLUBK</field><value name="VALUE">` +
+      `<shadow type="math_number"><field name="NUM">0</field></shadow></value>`,
     previewNameBlockXml(name),
     hide(0),
     hide(1),
@@ -1744,7 +1776,8 @@ export const buildBackgroundPreviewRom = (backgroundId, name) => {
   const chain = steps.map((step) => step + '<next>').join('') + steps.map(() => '</next></block>').join('');
   return buildPreviewRom({
     name: name ? `Background ${backgroundId} (${name})` : `Background ${backgroundId}`,
-    configOverride: PREVIEW_TEXT_CONFIG,
+    // The score area is left out whether score fade is on or off, so the text row sits in the same place.
+    configOverride: {...PREVIEW_TEXT_CONFIG, showScore: false},
     xml: `<xml xmlns="https://developers.google.com/blockly/xml">` +
       `<block type="event_block"><field name="EVENT">system_start</field>` +
       `<statement name="DO">${chain}</statement></block></xml>`,
@@ -1952,7 +1985,7 @@ const buildPreviewRom = async ({name, xml, titleScreen = false, configOverride =
         if (textFontOverride) siblingFiles['text12b.asm'] = textFontOverride;
       }
       if (BlocklyBB.titleScreenUsedKernelKeys) {
-        Object.assign(siblingFiles, await getTitleScreenSiblingFiles(BlocklyBB.titleScreenUsedKernelKeys));
+        Object.assign(siblingFiles, await getTitleScreenSiblingFiles(BlocklyBB.titleScreenUsedKernelKeys, !!BlocklyBB.titleScreenHasScoreCard));
         Object.assign(siblingFiles, BlocklyBB.titleScreenAsmFiles || {});
       }
       const log = (text) => appendCompileLog(text);

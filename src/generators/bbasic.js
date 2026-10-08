@@ -36,7 +36,7 @@ import {dataTableSymbolName, processDataTablesStorageDefaults} from '../blocks/d
 import {matrixToPlayfield} from '../utils/pixels';
 import {colorByteToBuildBBasic} from '../utils/palette';
 import {CUSTOM_SCORE_FONT, SQUISH_SCORE_FONT, SQUISH_CUSTOM_SCORE_FONT,
-  customScoreFontUsesExtraGlyphs} from '../utils/score-font';
+  customScoreFontUsesExtraGlyphs, secondaryScoreFontName} from '../utils/score-font';
 import {canonicalDistanceVarName, distancePointVarName} from '../utils/distance';
 import {superchipRwFreeCount, pfRowDivisorFor} from '../utils/playfield-coords';
 import {bbTvSetting} from '../utils/tv-standard';
@@ -45,16 +45,22 @@ import {clampFrameDuration} from '../utils/duration';
 import {registerTitleScreenSubroutine, resolveTitlePlayerSlots, TITLE_KERNEL_ENDED_FAMILY, titleKernelEndedVar,
   titleKernelEndedBit, TITLE_CARD_HOLD_FAMILY, titleCardHoldVar, TITLE_BG_OVERRIDE_FAMILY,
   titleBgOverrideVar, titleBgOverrideBit, titleCardHoldBit, TITLE_CARD_ONCE_FAMILY, titleCardOnceVar,
+  TITLE_CARD_REVERSE_FAMILY, titleCardReverseVar, titleCardReverseBit,
+  TITLE_ANIMATE_FAMILY, titleAnimateVar,
+  TITLE_CARD_FINISHED_FAMILY, titleCardFinishedVar, titleCardFinishedBit, titleCardFinishedLatchBit,
   titleCardOnceBit, TITLE_PLAYER_ONCE_FAMILY, titlePlayerOnceVar, titlePlayerOnceBit} from './bbasic/titlescreen';
-import {resolveAnimatedTitleScreenCardRefs, resolveFrameBoxCardRefs, titleCardFrameCounterVarName, processTitleScreenStorageDefaults,
+import {resolveAnimatedTitleScreenCardRefs, resolveAllTitleScreenCardRefs, resolveFrameBoxCardRefs, resolvePlayOnceCardRefs, titleCardFrameCounterVarName, processTitleScreenStorageDefaults,
   titleCardScrollOffsetVarName, resolveTitleScreenCardsNeedingIndexRefs,
-  titleCardIndexVarName, titleCardScrollEdgeFlagsVarName, titleCardColorVarName,
+  titleCardIndexVarName, titleCardColorIndexVarName, resolveColorSplitCardRefs,
+  titleCardColorPageVarName, resolveColorPageCardRefs,
+  titleCardScrollEdgeFlagsVarName, titleCardColorVarName,
   TITLE_BG_COLOR_VAR_NAME, titleCardBoxColorVarName, titleCardBoxPf1VarName,
   titleCardBoxPf2VarName, titlePlayerIndexVarName, titlePlayerFrameVarName} from '../blocks/titlescreen';
 import {registerKeypadPollSubroutine, generateJoystickDirection8Table,
   reserveJoystickDirection8DevVars, generateJoystickDirection8Checks,
   reserveJoystickButtonDevVars, reserveJoystickDoubleTapDevVars,
-  generateJoystickButtonChecks, generateJoystickDoubleTapChecks} from './bbasic/input';
+  generateJoystickButtonChecks, generateJoystickDoubleTapChecks, SWITCH_EDGE_FAMILY, switchEdgeOwnBits,
+  reserveSwitchEdgeDevVars, generateSwitchEdgeChecks} from './bbasic/input';
 import {collisionMoveOldXVar, collisionMoveOldYVar} from './bbasic/collision';
 import {scoreBkColorVarName, generateScanlinesDebugScoreCode} from './bbasic/score';
 import {processPlayerAnimationsStorageDefaults, generateRomNoiseChecks, generateRainbowColorChecks,
@@ -145,6 +151,19 @@ export const SYSTEM_VARIABLES = [
   ['player1frame', 'y', 'real bB kernel var: which graphic frame player1 shows'],
   ['newbackground', 'z', 'real bB kernel var: which background is currently selected'],
 ];
+
+// System variables a build can do without when nothing but the fixed template touches them. The value is the
+// colour a "const" takes in the variable's place (null: the variable simply isn't declared). Which ones
+// qualify is worked out by workspaceToCode below, from the generated code of a first pass.
+const OMITTABLE_SYSTEM_VARIABLES = {
+  player1animation: null,
+  player0animation: null,
+  player1realcolor: 0x80,
+  player0realcolor: 0x40,
+};
+// Marks the template lines that give a system variable its starting value, so they can be told apart from a
+// block that writes the same value.
+const SYSTEM_DEFAULT_MARKER = '; system default';
 
 const ALL_LETTERS = 'abcdefghijklmnopqrstuvwxyz'.split('');
 const SYSTEM_VARIABLE_LETTERS = SYSTEM_VARIABLES.map(([, letter]) => letter);
@@ -934,7 +953,10 @@ Blockly.BBasic.init = function(workspace) {
   // Which title screen graphics the color and frame blocks target, and whether the background color block is
   // used: they only matter when the kernel is in use at all.
   const enabledBlocks = (type) => workspace.getAllBlocks(false).filter((block) => block.type === type && block.isEnabled());
-  const targets = (type) => enabledBlocks(type).map((block) => block.getFieldValue('CARD')).filter(Boolean);
+  // A block can still name a graphic that was deleted afterwards: that reference gets no variables or bits.
+  const existingCards = new Set(resolveAllTitleScreenCardRefs());
+  const targets = (type) => enabledBlocks(type).map((block) => block.getFieldValue('CARD'))
+      .filter((ref) => ref && existingCards.has(ref));
   this.titleCardColorRefs = new Set(this.titleScreenDrawUsed ? targets('titlescreen_card_color_set') : []);
   // The Player sprites card's players: one that plays several frames by itself needs a frame counter, and
   // one that plays by itself or is set by a block needs a byte for the kernel's bmp_playerN_index.
@@ -948,13 +970,32 @@ Blockly.BBasic.init = function(workspace) {
   this.titleFrameBoxRefs = new Set(this.titleScreenDrawUsed ? resolveFrameBoxCardRefs() : []);
   this.titleBoxRefs = new Set(this.titleScreenDrawUsed ? [...targets('titlescreen_box_set'),
     ...targets('titlescreen_box_color_set'), ...this.titleFrameBoxRefs] : []);
-  this.titleCardHoldRefs = this.titleScreenDrawUsed ? [...new Set(enabledBlocks('titlescreen_card_frame_set')
+  // A block can still name a graphic that has since been deleted (or no longer has several frames): such a
+  // reference gets no flag bits, variables or code.
+  const liveAnimatedCards = new Set(this.titleScreenDrawUsed ? resolveAnimatedTitleScreenCardRefs() : []);
+  const liveCardRefs = (refs) => [...new Set(refs.filter((ref) => ref && liveAnimatedCards.has(ref)))];
+  this.titleCardHoldRefs = this.titleScreenDrawUsed ? liveCardRefs(enabledBlocks('titlescreen_card_frame_set')
       .filter((block) => block.getFieldValue('HOLD') === 'TRUE')
-      .map((block) => block.getFieldValue('CARD')).filter(Boolean))] : [];
+      .map((block) => block.getFieldValue('CARD'))) : [];
   // Graphics and Player sprites that a block sets to "play once" need a bit that stops their frame counter.
-  this.titleCardOnceRefs = this.titleScreenDrawUsed ? [...new Set(enabledBlocks('titlescreen_card_frame_set')
-      .filter((block) => block.getFieldValue('PLAYBACK') === 'once')
-      .map((block) => block.getFieldValue('CARD')).filter(Boolean))] : [];
+  // That includes the graphics whose "Play animation once" switch is on.
+  this.titleCardOnceRefs = this.titleScreenDrawUsed ? liveCardRefs([
+    ...[...enabledBlocks('titlescreen_card_frame_set'), ...enabledBlocks('titlescreen_card_animate')]
+        .filter((block) => block.getFieldValue('PLAYBACK') === 'once')
+        .map((block) => block.getFieldValue('CARD')),
+    ...resolvePlayOnceCardRefs(),
+  ]) : [];
+  // The "Animate title screen graphic" blocks, each a trigger with ran/ran-last-frame bits of its kind.
+  this.titleAnimateBlockIds = this.titleScreenDrawUsed ?
+    enabledBlocks('titlescreen_card_animate').filter((block) => liveAnimatedCards.has(block.getFieldValue('CARD')))
+        .map((block) => block.id) : [];
+  // Graphics an "Animate title screen graphic ... in reverse" block can play backwards.
+  this.titleCardReverseRefs = this.titleScreenDrawUsed ?
+    liveCardRefs(enabledBlocks('titlescreen_card_animate').filter((block) => block.getFieldValue('DIRECTION') === 'reverse')
+        .map((block) => block.getFieldValue('CARD'))) : [];
+  // Graphics a "When title screen graphic animation finishes" block watches.
+  this.titleCardFinishedRefs = this.titleScreenDrawUsed ?
+    liveCardRefs(enabledBlocks('titlescreen_animation_finished').map((block) => block.getFieldValue('CARD'))) : [];
   if (this.titlePlayerSlots) {
     [0, 1].forEach((playerIndex) => {
       this.titlePlayerSlots[playerIndex].once = this.titlePlayerSlots[playerIndex].frameCount > 1 &&
@@ -995,6 +1036,13 @@ Blockly.BBasic.init = function(workspace) {
   // dead weight combined with the rest of a real project's  variable/bank
   // budget.
   this.joyButtonUsedFor = new Set();
+  // The console switches read with "was just switched on" (the Switch block's dropdown values).
+  this.switchEdgeUsedFor = new Set();
+  workspace.getAllBlocks(false).forEach((block) => {
+    if (block.type === 'input_console_switch_get' && block.isEnabled() && block.getFieldValue('MODE') === 'ONCE') {
+      this.switchEdgeUsedFor.add(block.getFieldValue('SWITCH'));
+    }
+  });
   // Which of those need the "how long the press that just ended lasted" variable
   // as well: everything but "held" (tapped, released and double-tapped all read
   // the release it records). A joystick only checked with "held" needs just the
@@ -1195,6 +1243,7 @@ Blockly.BBasic.init = function(workspace) {
   // permanently truthy from a previous compile, still fetching/including
   // Titlescreen Kernel files a project no longer uses at all.
   this.titleScreenUsedKernelKeys = undefined;
+  this.titleScreenHasScoreCard = false;
   this.titleScreenAsmFiles = {};
   // Same "reset every compile" reasoning as the two lines just above, for
   // the exact same "HAD one, then removed it" gap - this one is only ever
@@ -1231,8 +1280,10 @@ Blockly.BBasic.init = function(workspace) {
   // sound block names its channel (a fixed Ch0/Ch1 dropdown), and music
   // lists the channels its tracks play on.
   this.channelDurationChannels = new Set();
+  // With every sound muted (the Options tab), those blocks write nothing, so they need no duration byte.
+  const soundsMuted = !!((useConfigurationStorage().value || {}).muteAllAudio);
   workspace.getAllBlocks(false).forEach((block) => {
-    if ((block.type === 'soundfx_play' || block.type === 'simple_sound_set') && block.isEnabled()) {
+    if (!soundsMuted && (block.type === 'soundfx_play' || block.type === 'simple_sound_set') && block.isEnabled()) {
       this.channelDurationChannels.add(`${block.getFieldValue('CHANNEL')}`);
     }
   });
@@ -1560,11 +1611,12 @@ Blockly.BBasic.init = function(workspace) {
     // refs actually got one, without re-scanning the workspace themselves.
     this.titleScreenScrollTargetRefs = new Set(workspace.getAllBlocks(false)
         .filter((block) => block.type === 'titlescreen_scroll_set' || block.type === 'titlescreen_scroll_by')
-        .map((block) => block.getFieldValue('CARD')));
+        .map((block) => block.getFieldValue('CARD')).filter((ref) => existingCards.has(ref)));
     // Which "ref|edge" a "When title screen scroll reaches" block watches -
     // "Scroll title screen graphic" only sets the flags something watches.
     this.titleScrollEdgeWatches = new Set(workspace.getAllBlocks(false)
-        .filter((block) => block.type === 'titlescreen_scroll_edge_reached')
+        .filter((block) => block.type === 'titlescreen_scroll_edge_reached' &&
+          existingCards.has(block.getFieldValue('CARD')))
         .map((block) => `${block.getFieldValue('CARD')}|${block.getFieldValue('EDGE')}`));
     new Set([...this.titleScrollEdgeWatches].map((watch) => watch.split('|')[0])).forEach((ref) => {
       if (!ref) return;
@@ -1587,6 +1639,16 @@ Blockly.BBasic.init = function(workspace) {
     resolveTitleScreenCardsNeedingIndexRefs().forEach((ref) => {
       reserveTitleDevVar(titleCardIndexVarName(ref), undefined,
           'title screen card: bmp_KEY_index storage (frame/scroll offset)');
+    });
+    // An animation that repeats a picture under different colors keeps its row color list's frame offset in a
+    // separate byte (titleCardColorSplit).
+    resolveColorSplitCardRefs().forEach((ref) => {
+      reserveTitleDevVar(titleCardColorIndexVarName(ref), undefined,
+          'title screen card: bmp_KEY_colorindex storage (row color list frame offset)');
+    });
+    resolveColorPageCardRefs().forEach((ref) => {
+      reserveTitleDevVar(titleCardColorPageVarName(ref), undefined,
+          'title screen card: bmp_KEY_colorpage storage (page of its row color lists)');
     });
     this.titleCardColorRefs.forEach((ref) => {
       reserveTitleDevVar(titleCardColorVarName(ref), undefined,
@@ -1794,14 +1856,28 @@ Blockly.BBasic.init = function(workspace) {
     {family: TITLE_KERNEL_ENDED_FAMILY, bits: this.titleEndUsed ? [0] : []},
     {family: TITLE_CARD_HOLD_FAMILY, bits: this.titleCardHoldRefs.map((_, index) => index)},
     {family: TITLE_CARD_ONCE_FAMILY, bits: this.titleCardOnceRefs.map((_, index) => index)},
+    {family: TITLE_ANIMATE_FAMILY, bits: this.titleAnimateBlockIds.flatMap((_, index) => [index * 2, index * 2 + 1])},
+    {family: TITLE_CARD_REVERSE_FAMILY, bits: this.titleCardReverseRefs.map((_, index) => index)},
+    {family: TITLE_CARD_FINISHED_FAMILY, bits: this.titleCardFinishedRefs.flatMap((_, index) => [index * 2, index * 2 + 1])},
     {family: TITLE_PLAYER_ONCE_FAMILY, bits: [0, 1].filter((i) => this.titlePlayerSlots && this.titlePlayerSlots[i].once)},
     {family: TITLE_BG_OVERRIDE_FAMILY, bits: this.titleBgUsed ? [0] : []},
+    {family: SWITCH_EDGE_FAMILY, bits: switchEdgeOwnBits(this.switchEdgeUsedFor)},
   ]);
+  reserveSwitchEdgeDevVars(reserveDevVar, this.switchEdgeUsedFor);
   if (this.titleCardOnceRefs.length) {
     reserveDevVar(titleCardOnceVar(), undefined, 'title screen graphics set to play once by "Set title screen graphic frame"');
   }
   if (this.titlePlayerSlots && [0, 1].some((i) => this.titlePlayerSlots[i].once)) {
     reserveDevVar(titlePlayerOnceVar(), undefined, 'title screen Player sprites set to play once');
+  }
+  if (this.titleAnimateBlockIds.length) {
+    reserveDevVar(titleAnimateVar(), undefined, 'title screen "Animate graphic" blocks: ran this frame / ran last frame');
+  }
+  if (this.titleCardReverseRefs.length) {
+    reserveDevVar(titleCardReverseVar(), undefined, 'title screen graphics playing in reverse');
+  }
+  if (this.titleCardFinishedRefs.length) {
+    reserveDevVar(titleCardFinishedVar(), undefined, 'title screen graphics whose animation a block waits to finish');
   }
   if (this.titleCardHoldRefs.length) {
     reserveDevVar(titleCardHoldVar(), undefined, 'title screen graphics held on a frame by "Set title screen graphic frame"');
@@ -1981,6 +2057,14 @@ Blockly.BBasic.init = function(workspace) {
   // need the wider period never pays the variable's cost.
   if (config.enableRand16) {
     reserveDevVar('rand16', undefined, 'literal name the standard kernel checks for to widen the RNG period');
+  }
+
+  // A secondary score font (see buildScoreFontOverride in utils/score-font.js): the score code reads the low
+  // byte of the table in use from this one variable (see std_overscan.asm), which "Score set font to" changes.
+  this.scoreFontsEnabled = !config.enableCycleScore && !config.enableScanlinesDebug &&
+    secondaryScoreFontName(config.scoreFont, config.secondaryScoreFont) !== null;
+  if (this.scoreFontsEnabled) {
+    reserveDevVar('scorefontlow', undefined, 'low byte of the score font table in use (primary or secondary)');
   }
 
   // Same bucket again, for background_fade_to's  per-register state
@@ -2184,7 +2268,13 @@ Blockly.BBasic.init = function(workspace) {
   // letter-assignment loop at all once Superchip is on). With the Text
   // Minikernel active, TEXT_MINIKERNEL_RESERVED_LETTERS also comes off the
   // top regardless of Superchip - see its  comment for why.
-  const baseAvailableLetters = config.enableSuperchip ? ALL_LETTERS : USER_VARIABLE_LETTERS_WITHOUT_SUPERCHIP;
+  // A system variable this build does without hands its slot to this pool (at the end of it).
+  const omittedSystemVars = this.omittedSystemVars || new Set();
+  const freedSystemSlots = SYSTEM_VARIABLES
+      .map(([name, letter], i) => omittedSystemVars.has(name) ? (config.enableSuperchip ? `var${i}` : letter) : null)
+      .filter(Boolean);
+  const baseAvailableLetters = (config.enableSuperchip ? ALL_LETTERS : USER_VARIABLE_LETTERS_WITHOUT_SUPERCHIP)
+      .concat(freedSystemSlots);
   const availableLetters = this.isTextMinikernelActive() ?
     baseAvailableLetters.filter((letter) => !TEXT_MINIKERNEL_RESERVED_LETTERS.includes(letter)) :
     baseAvailableLetters;
@@ -2220,10 +2310,14 @@ Blockly.BBasic.init = function(workspace) {
   // romVariableAssignments) - lets a project actually see WHICH name landed
   // on which letter/var slot, not just how many total are used, e.g. to spot
   // a dev var that's still being reserved when it shouldn't be.
+  // The Title Screen variables that live in another variable's slot (see titleSharedSlots), by that variable.
+  const sharedWithOf = (name) => this.titleSharedSlots.filter(({target}) => target === name).map(({titleVar}) => titleVar);
   this.letterVarAssignments = defvars.map((name, i) =>
-    ({name, slot: availableLetters[i], description: this.devVarDescriptions[name], isUserVariable: this.userVarNames.has(name)}));
+    ({name, slot: availableLetters[i], description: this.devVarDescriptions[name], isUserVariable: this.userVarNames.has(name),
+      sharedWith: sharedWithOf(name)}));
   this.superchipVarAssignments = this.superchipVars.map((name, i) =>
-    ({name, slot: `var${SUPERCHIP_VAR_START + i}`, description: this.devVarDescriptions[name], isUserVariable: this.userVarNames.has(name)}));
+    ({name, slot: `var${SUPERCHIP_VAR_START + i}`, description: this.devVarDescriptions[name], isUserVariable: this.userVarNames.has(name),
+      sharedWith: sharedWithOf(name)}));
   if (defvars.length) {
     if (defvars.length > availableLetters.length) {
       throw new Error(`Too many variables: this project defines ${defvars.length + this.superchipVars.length}, ` +
@@ -3016,6 +3110,13 @@ Blockly.BBasic.finish = function(code) {
   // The starting colors (NTSC palette bytes), swapped for PAL60 like any other color.
   const defaultPlayer1Color = colorByteToBuildBBasic(0x80);
   const defaultPlayer0Color = colorByteToBuildBBasic(0x40);
+  // The starting values of the system variables this build keeps (see omitSystemVars).
+  const keptSystemVars = (names, valueOf) => names
+      .filter((name) => !(Blockly.BBasic.omittedSystemVars || new Set()).has(name))
+      .map((name) => ` ${name} = ${valueOf(name)} ${SYSTEM_DEFAULT_MARKER}`).join('\n');
+  const generatedPlayerColorDefaults = keptSystemVars(['player1realcolor', 'player0realcolor'],
+      (name) => name === 'player1realcolor' ? defaultPlayer1Color : defaultPlayer0Color);
+  const generatedPlayerAnimationDefaults = keptSystemVars(['player0animation', 'player1animation'], () => 0);
   // Zero the scroll edge flags / pending start row before any user event can
   // set them (they live in RAM that isn't guaranteed cleared).
   const generatedScrollDefaults = [
@@ -3144,7 +3245,8 @@ Blockly.BBasic.finish = function(code) {
   // (right after) DOES depend on this having already run THIS SAME PASS
   // (it reads justReleasedVar, which this is what actually computes each
   // frame - see that function's  comment).
-  const generatedJoystickButtonChecks = generateJoystickButtonChecks(Blockly);
+  const generatedJoystickButtonChecks = [generateJoystickButtonChecks(Blockly), generateSwitchEdgeChecks(Blockly)]
+      .filter(Boolean).join('\n');
   const generatedJoystickDoubleTapChecks = generateJoystickDoubleTapChecks(Blockly);
   // Has to run before generateDivMul() below: its  POINT input can be
   // any value block, including one that sets usesDivMul as a side effect
@@ -3189,7 +3291,7 @@ Blockly.BBasic.finish = function(code) {
     generatedBackgroundColorScrollTables,
     generatedSubroutines, generatedFunctions, generatedRelocatedEvents, generatedTextMinikernel,
     systemStartEvent, titleStartEvent, titleUpdateEvent, gamePlayStartEvent,
-    gameOverStartEvent, gameOverUpdateEvent, generatedProjectInfo, generatedConfiguration, generatedRomSize, generatedTv, generatedScrollDefaults, defaultPlayer1Color, defaultPlayer0Color,
+    gameOverStartEvent, gameOverUpdateEvent, generatedProjectInfo, generatedConfiguration, generatedRomSize, generatedTv, generatedScrollDefaults, generatedPlayerColorDefaults, generatedPlayerAnimationDefaults,
     defaultPlayfieldColor, defaultBackgroundColor, defaultInitialBackgroundColor, defaultScoreColor,
     generatedSystemDims,
     generatedTextMinikernelDefaults, generatedDivMul, generatedMuteAudio, generatedChannelDurationChecks,
@@ -3609,6 +3711,10 @@ Blockly.BBasic.generateGameEvent = function(eventName,
     const resets = [
       ...this.titleCardHoldRefs.map((ref, index) => `${titleCardHoldVar()}{${titleCardHoldBit(index)}} = 0`),
       ...this.titleCardOnceRefs.map((ref, index) => `${titleCardOnceVar()}{${titleCardOnceBit(index)}} = 0`),
+      ...this.titleCardReverseRefs.map((ref, index) => `${titleCardReverseVar()}{${titleCardReverseBit(index)}} = 0`),
+      ...this.titleCardFinishedRefs.flatMap((ref, index) => [
+        `${titleCardFinishedVar()}{${titleCardFinishedBit(index)}} = 0`,
+        `${titleCardFinishedVar()}{${titleCardFinishedLatchBit(index)}} = 0`]),
       ...[0, 1].filter((i) => this.titlePlayerSlots && this.titlePlayerSlots[i].once)
           .map((i) => `${titlePlayerOnceVar()}{${titlePlayerOnceBit(i)}} = 0`),
       ...(this.titleBgUsed ? [`${titleBgOverrideVar()}{${titleBgOverrideBit()}} = 0`] : []),
@@ -4151,6 +4257,7 @@ Blockly.BBasic.generateConfiguration = function() {
   // isolating the problem to specifically this "const font = hex" path -
   // see buildScoreFontOverride's  comment in utils/score-font.js, which
   // now has its  self-contained shift again instead).
+  const scoreFontsCode = this.scoreFontsEnabled ? 'const scorefonts = 1' : '';
   const scoreFontConfigurationCode = (!scoreFont || scoreFont === SQUISH_SCORE_FONT || scoreFont === SQUISH_CUSTOM_SCORE_FONT) ? '' :
     scoreFont === CUSTOM_SCORE_FONT ?
       '' :
@@ -4263,6 +4370,7 @@ Blockly.BBasic.generateConfiguration = function() {
     scoreFadeConfigurationCode,
     scorePaddingConfigurationCode,
     scoreFontConfigurationCode,
+    scoreFontsCode,
     textFontConfigurationCode,
     scoreFontExtraGlyphsConfigurationCode,
     textBkColorConfigurationCode,
@@ -4295,10 +4403,17 @@ Blockly.BBasic.generateSystemDims = function() {
   const configurationStorage = useConfigurationStorage();
   const config = (configurationStorage && configurationStorage.value) || {};
   const showVariableComments = config.showVariableComments ?? true;
+  const omitted = this.omittedSystemVars || new Set();
   const systemDims = SYSTEM_VARIABLES
-      .map(([name, letter, description], i) =>
-        ` dim ${name} = ${config.enableSuperchip ? `var${i}` : letter}` +
-          (showVariableComments ? `  ; ${description}` : ''))
+      .map(([name, letter, description], i) => {
+        if (!omitted.has(name)) {
+          return ` dim ${name} = ${config.enableSuperchip ? `var${i}` : letter}` +
+            (showVariableComments ? `  ; ${description}` : '');
+        }
+        const constant = OMITTABLE_SYSTEM_VARIABLES[name];
+        return constant === null ? '' : ` const ${name} = ${colorByteToBuildBBasic(constant)}`;
+      })
+      .filter(Boolean)
       .join('\n');
   return systemDims + this.generateTextMinikernelDims() + this.generateEnvelopeDims() +
     this.generateScoreBkColorRuntimeDims() + this.generateSuperchipVarDims();
@@ -5194,38 +5309,32 @@ Blockly.BBasic.generateAnimations = function() {
     // can each land in a different bank, and a bank isn't known until
     // later (rom.js's  allocator), so a cross-animation "goto" here
     // could easily become an illegal cross-bank jump.
+    // A frame that repeats an earlier frame's picture AND its row colors jumps to that frame's entry (its color
+    // block, then the shared graphic); one that repeats only the picture gets a color block and jumps to
+    // the earlier frame's graphic. Frame picture and color block are two separate pieces of declarative
+    // code, so a color block can come first and the picture block after it.
     const pixelKeyToGraphicLabel = new Map();
+    const fullKeyToEntryLabel = new Map();
     let frameLimit = 0;
     const stateMachine = animation.frames.map((frame, frameIndex) => {
       frameLimit += clampFrameDuration(frame.duration);
       const endLabel = `${animationLabel}frame${frameIndex}End`;
+      const entryLabel = `${animationLabel}frame${frameIndex}Entry`;
       const skipCondition = `  if ${name}frame > ${frameLimit} then goto ${endLabel}\n`;
       const pixelKey = frame.pixels.map((row) => row.join('')).join('|');
-
-      const existingGraphicLabel = pixelKeyToGraphicLabel.get(pixelKey);
-      if (existingGraphicLabel) {
-        return skipCondition +
-          `  goto ${existingGraphicLabel}\n` +
-          endLabel;
-      }
-
-      const graphicLabel = `${animationLabel}frame${frameIndex}Graphic`;
-      pixelKeyToGraphicLabel.set(pixelKey, graphicLabel);
-      const pixelSource = frame.pixels.slice().reverse().map((row) => '  %' + row.join(''));
       // Per-row sprite colors (useSpriteColorsFor, see Configuration.vue's
       // "enable per-row Player 0/1 sprite colors" toggles) - a real
-      // "playercolor:" block
-      // declared right alongside this frame's  graphic, exactly the same
+      // "playercolor:" block declared right alongside this frame's graphic, exactly the same
       // way generateBackgrounds' buildPfcolors declares a "pfcolors:" block
       // right alongside each background's "playfield:" - both are real
       // batari Basic declarative triggers that take effect the instant
       // execution reaches them, not a runtime pointer assignment. Read with
-      // the SAME row order (reversed, matching pixelSource just above) since
+      // the SAME row order (reversed, matching the graphic) since
       // the kernel indexes both tables with the exact same per-scanline y
       // (see std_kernel.asm's "lda (player0pointer),y" / "lda
       // (player0color),y" pair). Unlike buildPfcolors, no extra
       // padding/duplicate row is needed - that quirk was specific to the
-      // playfield's  pfres-based row-count math, not this 1:1 per-scanline
+      // playfield's pfres-based row-count math, not this 1:1 per-scanline
       // indexing, which the graphic pointer already relies on working
       // correctly.
       const colorSource = this.useSpriteColorsFor(name) ? (() => {
@@ -5234,12 +5343,35 @@ Blockly.BBasic.generateAnimations = function() {
         const rows = resolved.slice().reverse().map((byte) => '  ' + colorByteToBuildBBasic(byte));
         return `  ${name}color:\n` + rows.join('\n') + '\nend\n';
       })() : '';
+      const fullKey = `${pixelKey}#${colorSource}`;
+
+      const existingEntryLabel = fullKeyToEntryLabel.get(fullKey);
+      if (existingEntryLabel) {
+        return skipCondition +
+          `  goto ${existingEntryLabel}\n` +
+          endLabel;
+      }
+      fullKeyToEntryLabel.set(fullKey, entryLabel);
+
+      const existingGraphicLabel = pixelKeyToGraphicLabel.get(pixelKey);
+      if (existingGraphicLabel) {
+        return skipCondition +
+          `${entryLabel}\n` +
+          colorSource +
+          `  goto ${existingGraphicLabel}\n` +
+          endLabel;
+      }
+
+      const graphicLabel = `${animationLabel}frame${frameIndex}Graphic`;
+      pixelKeyToGraphicLabel.set(pixelKey, graphicLabel);
+      const pixelSource = frame.pixels.slice().reverse().map((row) => '  %' + row.join(''));
       return skipCondition +
+        `${entryLabel}\n` +
+        colorSource +
         `${graphicLabel}\n` +
         `  ${name}:\n` +
         pixelSource.join('\n') +
         '\nend\n' +
-        colorSource +
         `  goto ${animationLabel}animationEnd\n` +
         endLabel;
     });
@@ -5398,6 +5530,30 @@ import variables from './bbasic/variables';
 [background, bit, collision, color, colour, data, event, functionGenerators, input, logic, loops, math, music,
   random, score, sound, soundfx, sprites, subroutine, text, textMinikernel, titlescreen, variables]
     .forEach((init) => init(Blockly));
+
+// Which of OMITTABLE_SYSTEM_VARIABLES the finished code never touches apart from the template's starting
+// value and its once-a-frame restore of the colour registers.
+const findUnusedSystemVars = (code) => {
+  const ownLines = new RegExp(
+      `(^\\s*dim (${Object.keys(OMITTABLE_SYSTEM_VARIABLES).join('|')})\\b.*$)|(^.*${SYSTEM_DEFAULT_MARKER}$)|` +
+      '(^\\s*COLUP[01] = player[01]realcolor\\s*$)', 'gm');
+  const rest = code.replace(ownLines, '');
+  return new Set(Object.keys(OMITTABLE_SYSTEM_VARIABLES).filter((name) => !new RegExp(`\\b${name}\\b`).test(rest)));
+};
+
+// A first pass writes the project out as usual; if it shows that some system variables are only ever
+// touched by the fixed template, a second pass leaves them out, so their slots (or, for the colours, a
+// plain constant) replace the RAM they would have taken.
+const generateWithoutUnusedSystemVars = Blockly.BBasic.workspaceToCode;
+Blockly.BBasic.workspaceToCode = function(workspace) {
+  this.omittedSystemVars = new Set();
+  const code = generateWithoutUnusedSystemVars.call(this, workspace);
+  if (typeof code !== 'string' || !code.includes(SYSTEM_DEFAULT_MARKER)) return code;
+  const unused = findUnusedSystemVars(code);
+  if (!unused.size) return code;
+  this.omittedSystemVars = unused;
+  return generateWithoutUnusedSystemVars.call(this, workspace);
+};
 
 export default Blockly.BBasic;
 

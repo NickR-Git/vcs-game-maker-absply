@@ -236,12 +236,20 @@ scorepointerset
      asl
      asl
      asl
-     adc #<scoretable
+     ifconst scorefonts
+         adc scorefontlow
+     else
+         adc #<scoretable
+     endif
      tay 
      txa
      ; and #$F0
      ; lsr
      asr #$F0
-     adc #<scoretable
+     ifconst scorefonts
+         adc scorefontlow
+     else
+         adc #<scoretable
+     endif
      tax
      rts

@@ -10,6 +10,24 @@ export const matrixToPlayfield = (matrix) => matrix
 // ROWS (height), never columns/width - every caller of this (frame resize
 // in PixelEditor.vue/PlayerEditor.vue) only ever changes a sprite's row
 // count, its column count is fixed.
+// When imported frames replace a graphic's frames, they can keep the colors the old frames had: frame N takes
+// frame N's row colors and picture background box (its blocks and color), the last old frame's for any frame
+// past the old count. A frame of another height gets the row colors cut or padded with their last color.
+export const carryOverFrameColors = (oldFrames, newFrames) => newFrames.map((frame, index) => {
+  const source = oldFrames[Math.min(index, oldFrames.length - 1)];
+  if (!source) return frame;
+  const carried = {...frame};
+  if (source.rowColors && source.rowColors.length) {
+    const height = frame.pixels.length;
+    carried.rowColors = Array.from({length: height},
+        (_, row) => source.rowColors[Math.min(row, source.rowColors.length - 1)]);
+  }
+  ['pf1', 'pf2', 'background'].forEach((field) => {
+    if (source[field] !== undefined) carried[field] = source[field];
+  });
+  return carried;
+});
+
 export const scalePixelMatrixHeight = (pixels, newHeight, width) => {
   const oldHeight = pixels.length;
   if (!oldHeight) return new Array(newHeight).fill(0).map(() => new Array(width).fill(0));

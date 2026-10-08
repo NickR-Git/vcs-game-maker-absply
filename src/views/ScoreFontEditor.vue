@@ -8,11 +8,30 @@
         blocks. Pick a built-in digit font below, or draw a custom one.
       </p>
 
-      <v-select
-        v-model="selectedFont"
-        :items="scoreFontOptions"
-        label="Score font"
-      />
+      <div class="score-font-row">
+        <v-select
+          v-model="selectedFont"
+          :items="scoreFontOptions"
+          label="Primary score font"
+          class="score-font-select"
+        />
+        <v-select
+          v-model="secondaryFont"
+          :items="secondaryFontOptions"
+          label="Secondary score font"
+          :disabled="secondaryUnavailable"
+          :hint="secondaryUnavailable ? 'Squish fonts cannot be paired with another font' :
+            'Switch to it with the \'Score set font to\' block (Actions tab)'"
+          persistent-hint
+          class="score-font-select"
+        />
+      </div>
+      <div v-if="secondaryActive" class="score-font-role-row">
+        <v-btn-toggle v-model="editingRole" mandatory dense>
+          <v-btn small value="primary" title="Draw the primary font below">Edit primary</v-btn>
+          <v-btn small value="secondary" title="Draw the secondary font below">Edit secondary</v-btn>
+        </v-btn-toggle>
+      </div>
       <div class="score-bkcolor-row">
         <color-swatch-picker
           :value="scoreBkColorSwatchValue"
@@ -41,7 +60,9 @@
           <v-switch
             v-model="extraGlyphsEnabled"
             label="Use extra glyphs (10-15)"
-            hint="Costs 48 extra bytes of ROM space."
+            :hint="secondaryActive ? 'Not available while a secondary score font is set.' :
+              'Costs 48 extra bytes of ROM space.'"
+            :disabled="secondaryActive"
             persistent-hint
             class="option-switch"
           />
@@ -221,6 +242,35 @@ export default defineComponent({
       },
     });
 
+    // The secondary font: "" for none, "default" for the default font, otherwise a font name. It has the
+    // ten digits only, and shares one page of ROM with the primary font (see buildScoreFontOverride).
+    const secondaryFont = computed({
+      get() {
+        return (configurationStorage.value || {}).secondaryScoreFont || '';
+      },
+
+      set(value) {
+        configurationStorage.value = {
+          ...(configurationStorage.value || {}),
+          secondaryScoreFont: value,
+        };
+      },
+    });
+    const isSquishFont = (font) => font === SQUISH_SCORE_FONT || font === SQUISH_CUSTOM_SCORE_FONT;
+    const secondaryUnavailable = computed(() => isSquishFont(selectedFont.value));
+    const secondaryActive = computed(() => !!secondaryFont.value && !secondaryUnavailable.value);
+    const secondaryFontOptions = computed(() => [
+      {text: 'None', value: ''},
+      {text: 'Default', value: 'default'},
+      ...SCORE_FONT_NAMES.map((name) => ({text: name, value: name})),
+      CUSTOM_SCORE_FONT_OPTION,
+    ].map((option) => (option.value && editedScoreFontDigits(option.value === 'default' ? '' : option.value) ?
+      {...option, text: `${option.text} (edited)`} : option)));
+    // Which of the two fonts the editor below draws.
+    const editingRole = ref('primary');
+    const editingFont = computed(() => (editingRole.value === 'secondary' && secondaryActive.value ?
+      (secondaryFont.value === 'default' ? '' : secondaryFont.value) : selectedFont.value));
+
     // The score row's  background color, independent of the playfield -
     // only takes effect with the standard kernel's  generic "minikernel"
     // score-row hook (see generators/bbasic/score.js's
@@ -298,7 +348,7 @@ export default defineComponent({
     // font (different storage key, seeded from Squish's  compact shapes
     // instead of the standard 8-row digits), so the editor below switches
     // which one it's bound to based on the current selection.
-    const isSquishCustomSelected = computed(() => selectedFont.value === SQUISH_CUSTOM_SCORE_FONT);
+    const isSquishCustomSelected = computed(() => editingFont.value === SQUISH_CUSTOM_SCORE_FONT);
     // Explicit, stored opt-in (see utils/score-font.js's
     // customScoreFontExtraGlyphsEnabled/trimUnusedExtraGlyphs, the actual
     // source of truth this reads/writes the same configuration key as) -
@@ -348,14 +398,14 @@ export default defineComponent({
     });
     // Custom and Squish Custom keep their digits in separate storage; every other font in
     // the scoreFontEdits storage (see scoreFontEditKey in utils/score-font.js).
-    const editKey = computed(() => scoreFontEditKey(selectedFont.value));
+    const editKey = computed(() => scoreFontEditKey(editingFont.value));
     const ownStorage = computed(() =>
       isSquishCustomSelected.value ? squishCustomScoreFontStorage : scoreFontStorage);
-    const originalBytes = computed(() => scoreFontOriginalBytes(selectedFont.value));
+    const originalBytes = computed(() => scoreFontOriginalBytes(editingFont.value));
     // Squish and Squish Custom are 5 rows tall instead of the usual 8 - Squish never reads the
     // top 3 rows at runtime (see SQUISH_DIGIT_HEIGHT), so there's nothing useful to draw there.
-    const activeDigitHeight = computed(() => scoreFontDigitHeight(selectedFont.value));
-    const fontIsEdited = computed(() => editKey.value !== null && !!editedScoreFontDigits(selectedFont.value));
+    const activeDigitHeight = computed(() => scoreFontDigitHeight(editingFont.value));
+    const fontIsEdited = computed(() => editKey.value !== null && !!editedScoreFontDigits(editingFont.value));
     const canReset = computed(() => editKey.value === null || fontIsEdited.value);
     const resetLabel = computed(() =>
       editKey.value === null ? 'Reset to default digits' : 'Reset to original digits');
@@ -396,7 +446,7 @@ export default defineComponent({
         if (editKey.value === null) {
           working.value = processScoreFontDefaults(ownStorage.value, originalBytes.value, activeDigitHeight.value);
         } else {
-          const edited = editedScoreFontDigits(selectedFont.value);
+          const edited = editedScoreFontDigits(editingFont.value);
           working.value = {
             digits: edited ? JSON.parse(JSON.stringify(edited)) :
               fontToDigits(originalBytes.value, activeDigitHeight.value),
@@ -407,7 +457,7 @@ export default defineComponent({
         working.value = {digits: fontToDigits(originalBytes.value, activeDigitHeight.value)};
       }
     };
-    watch(selectedFont, () => {
+    watch(editingFont, () => {
       loadWorking();
       resetToken.value++;
     }, {immediate: true});
@@ -471,6 +521,11 @@ export default defineComponent({
       handleChange,
       handleReset,
       selectedFont,
+      secondaryFont,
+      secondaryFontOptions,
+      secondaryUnavailable,
+      secondaryActive,
+      editingRole,
       scoreBkColor,
       scoreBkColorSwatchValue,
       scoreFadeEnabled,
@@ -500,6 +555,23 @@ export default defineComponent({
    under the label text instead, matching the toggle's width. */
 .option-switch >>> .v-messages {
   margin-left: 46px;
+}
+
+.score-font-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.score-font-select {
+  flex: 1 1 150px;
+  max-width: 320px;
+  min-width: 0;
+}
+
+.score-font-role-row {
+  margin: 4px 0 28px;
 }
 
 .score-extras-row {

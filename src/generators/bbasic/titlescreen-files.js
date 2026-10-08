@@ -48,13 +48,15 @@ const getKernelFile = (name) => {
  * public/bb19/titlescreen/titlescreen_kernel.asm's #ifconst gates,
  * mirrored here so an unused copy's kernel file is never even fetched).
  * @param {Set<string>} usedKernelKeys e.g. new Set(['48x1_1', '96x2_3']).
+ * @param {boolean} hasScoreCard Whether a Score card is used: it draws with the shared 48x1 core, even with no 48x1 graphic.
  * @return {Promise<Object<string, string>>} filename -> file content.
  */
-export const getTitleScreenSiblingFiles = async (usedKernelKeys) => {
+export const getTitleScreenSiblingFiles = async (usedKernelKeys, hasScoreCard = false) => {
   const staticEntries = await getStaticFiles();
   const files = Object.fromEntries(staticEntries);
 
   const perCopyNames = new Set();
+  if (hasScoreCard) perCopyNames.add('48x1_X_kernel.asm');
   usedKernelKeys.forEach((key) => {
     perCopyNames.add(`${key}_kernel.asm`);
     if (key.startsWith('48x1_')) perCopyNames.add('48x1_X_kernel.asm');

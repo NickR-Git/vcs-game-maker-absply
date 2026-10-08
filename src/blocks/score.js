@@ -52,6 +52,23 @@ Blockly.defineBlocksWithJsonArray([
     'colour': SCORE_COLOR,
     'extensions': ['math_change_tooltip'],
   },
+  // Block for choosing which of the two score fonts is drawn.
+  {
+    'type': `score_font_set`,
+    'message0': `${SCORE_ICON} Score set font to %1`,
+    'args0': [
+      {
+        'type': 'field_dropdown',
+        'name': 'FONT',
+        'options': [['primary', 'primary'], ['secondary', 'secondary']],
+      },
+    ],
+    'previousStatement': null,
+    'nextStatement': null,
+    'colour': SCORE_COLOR,
+    'tooltip': `Switches the score digits to the primary or the secondary font chosen on the Score tab, at once. ` +
+      `Does nothing without a secondary font.`,
+  },
   // Block for the color getter.
   {
     'type': `score_color_get`,

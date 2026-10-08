@@ -900,3 +900,31 @@ Title screen blocks and automatic playback, picture background per frame, Save w
   the folder once per session.
 - Color swatches look the same in every editor and in the block color picker.
 - Changing row colors can be undone and redone.
+
+=== 0.51.32 ===
+Title screen animation blocks and smaller stored data, emulator debug info, Player visibility, data table size
+
+- Title screen: "Animate title screen graphic" block (forward or in reverse, then loop or play once) that
+  acts as a trigger, and "When title screen graphic animation finishes". A graphic's Title tab switch
+  "Play animation once" plays it through once; an animation only runs while its page is the one drawn.
+  Animations can last 255 ticks in all; the build says so when one is longer.
+- Title tab: frames can be dragged into a new order; Add frame copies the selected frame; frames copy
+  their picture background along with pixels; row colors can be copied and pasted on their own; Fill
+  works on the row color bar; Set height and the selection act on the right graphic when several pages
+  use the same ids; the import popups have a "Keep row and box colors" switch next to "Replace frames".
+- Title screen data takes less ROM: a graphic that repeats one picture under different row colors stores the
+  picture once and each color list once (48x2), identical pictures and identical color lists are shared
+  between graphics, and blocks that point at deleted graphics no longer cost variables or flag bits.
+  Subroutines are kept out of the bank the title screen kernel is in.
+- Sprites: frames that repeat a picture or its row colors are stored once; the Player get block has a
+  Visibility option; the Switch block can run once each time a switch is turned on; 16-direction Fire
+  keeps one speed at every angle and the joystick Fire timer starts over when a Fire tapped block runs.
+- Data: blocks for the size of a data table, by its dropdown or by id.
+- Emulator: a debug overlay for the 6502.ts emulator (registers, program counter, scanlines, CPU busy
+  cycles, and a table of chosen variable values) with a Debug Info popup to pick the variables; the
+  list and choice are saved in the project. The emulator and its sound stop while a ROM compiles.
+- Variables: system variables that nothing but the template used are left out of the build, and the
+  capacity list shows variables that share a slot.
+- Popups, toolbars and previews: bottom popup buttons look like the Select, Reset and Refresh emulator
+  buttons; the line under the toolbar icons spans the full width; Quick colors take less room;
+  background previews hide the score and use a black background; screenshots keep the screen shape.
