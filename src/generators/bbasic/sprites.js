@@ -274,6 +274,16 @@ export const backgroundColorTableHiVarName = () => 'backgroundColorTableHi';
 // why ball width/priority can't safely read the real hardware register back.
 export const ctrlpfShadowVarName = () => '_ctrlpf';
 
+// Both missiles' widths, a 2-bit code each, kept apart from playerNsize: NUSIZ's bits 4-5 are the missile width, but
+// playerNsize's own bits 4-6 hold the animation's loop, finished and pause flags, so sharing one byte made every
+// "set animation" change a missile's width (and every missile width change the animation's looping). Missile 0's
+// code sits in bits 4-5 (where NUSIZ0 has it) and missile 1's in bits 6-7.
+export const missileWidthsVarName = () => '_missileWidths';
+export const reserveMissileWidthsDevVar = (reserveDevVar, used) => {
+  if (!used) return;
+  reserveDevVar(missileWidthsVarName(), undefined, 'Missile 0 (bits 4-5) and Missile 1 (bits 6-7) width codes');
+};
+
 export const MISSILE_FIRE_FLAGS_FAMILY = 'missileFireFlags';
 export const missileFireFlagsVarName = () => flagPoolVar(MISSILE_FIRE_FLAGS_FAMILY);
 export const missileFireOwnBit = (name) => ({missile0: 0, missile1: 1, ball: 2})[name];
@@ -1834,14 +1844,15 @@ export default (Blockly) => {
         // any other width the project might pass in (not 1/2/4/8) falls
         // back to that same 0/1-pixel code rather than producing an
         // invalid NUSIZ pattern.
-        const sizeVarName = varName.replace('width', 'size').replace('missile', 'player');
+        const widthsVar = Blockly.BBasic.nameDB_.getName(missileWidthsVarName(), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+        const secondMissile = varName.startsWith('missile1');
         return `temp1 = ${argument0}\n` +
             `temp2 = 0\n` +
             `if temp1 = 2 then temp2 = 1\n` +
             `if temp1 = 4 then temp2 = 2\n` +
             `if temp1 = 8 then temp2 = 3\n` +
-            `temp2 = temp2 * 16\n` +
-            `${sizeVarName} = (${sizeVarName} & $0F) + temp2\n`;
+            `temp2 = temp2 * ${secondMissile ? 64 : 16}\n` +
+            `${widthsVar} = (${widthsVar} & ${secondMissile ? '$3F' : '$CF'}) + temp2\n`;
       } else if (varName.endsWith('visibility')) {
         const blockNumber = Blockly.BBasic.blockNumbers.next();
         const baseLabel = `_visibility_${blockNumber}`;
@@ -2062,9 +2073,11 @@ export default (Blockly) => {
     Blockly.BBasic['sprite_missile_size'] = function(block) {
       const name = `missile${block.getFieldValue('MISSILE') === '1' ? '1' : '0'}`;
       const size = block.getFieldValue('SIZE') || 0;
-      const varName = name.replace('missile', 'player') + 'size';
-      return `${varName} = ${varName} & $0F\n` +
-        `${varName} = ${varName} | ${size}\n`;
+      const widthsVar = Blockly.BBasic.nameDB_.getName(missileWidthsVarName(), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+      const secondMissile = name === 'missile1';
+      // The option's value ($00, $10, $20, $30) is the code in missile 0's place; missile 1's is four times that.
+      const code = Number(String(size).replace('$', '0x')) * (secondMissile ? 4 : 1);
+      return `${widthsVar} = (${widthsVar} & ${secondMissile ? '$3F' : '$CF'}) | ${code}\n`;
     };
   };
 

@@ -944,3 +944,10 @@ Keypad controllers in the 6502.ts emulator
 - The 6502.ts emulator plays Keypad Controllers on either port, so a project that uses Keypad blocks no longer
   moves to gopher2600. The keys bound to a port's digits are the keypad's buttons while a keypad is plugged
   into the port, and the joystick controls otherwise.
+
+=== 0.51.35 ===
+Setting a player's animation no longer changes a missile's width
+
+- Player set animation to (and Player animation change) no longer changes the width of the missile. The
+  animation's loop and finished flags shared two bits with the missile width, so each changed the other.
+  Missile widths are now kept in a byte of their own, only used by projects that set a missile width.

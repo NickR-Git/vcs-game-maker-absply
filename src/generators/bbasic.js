@@ -72,7 +72,7 @@ import {processPlayerAnimationsStorageDefaults, generateRomNoiseChecks, generate
   backgroundColorTableLoVarName, backgroundColorTableHiVarName,
   generateMissileFireChecks, generateBounceStageChecks, reserveMissileFireDevVars, reserveMissileBounceDevVars,
   generateSeekChecks, reserveSeekDevVars, reserveSeekArrivedDevVars,
-  reserveCtrlpfShadowDevVar, generateCtrlpfShadowSetup, resolveUsedPlayerAnimations,
+  reserveCtrlpfShadowDevVar, generateCtrlpfShadowSetup, missileWidthsVarName, reserveMissileWidthsDevVar, resolveUsedPlayerAnimations,
   resolvePlayerAnimationFinishedWatches,
   generateInertiaChecks, reserveInertiaDevVars, reserveSpriteScrollDevVars} from './bbasic/sprites';
 import {resolveSeekArrivedWatches} from '../blocks/sprites';
@@ -812,6 +812,10 @@ Blockly.BBasic.init = function(workspace) {
   // this.nameDB_.getName(...) crashed instead, since nameDB_ isn't
   // constructed yet this early in init() (it's set up further down, well
   // after this pre-scan section runs).
+  // Missile widths live in a byte of their own (see missileWidthsVarName), reserved only when a block sets one.
+  this.missileWidthUsed = workspace.getAllBlocks(false).some((block) => block.isEnabled() &&
+    (block.type === 'sprite_missile_size' ||
+     (block.type === 'sprite_missile_set' && /^missile[01]width$/.test(block.getFieldValue('VAR') || ''))));
   this.ctrlpfShadowUsed = workspace.getAllBlocks(false).some((block) => {
     if (!block.isEnabled()) return false;
     if (block.type === 'sprite_priority_set') return true;
@@ -1953,6 +1957,7 @@ Blockly.BBasic.init = function(workspace) {
   // - a no-op unless ctrlpfShadowUsed's  early pre-scan (above) found it
   // used.
   reserveCtrlpfShadowDevVar(reserveDevVar, this.ctrlpfShadowUsed);
+  reserveMissileWidthsDevVar(reserveDevVar, this.missileWidthUsed);
 
   // Same bucket again, for "Joystick N direction (8-way)"'s  per-frame
   // result (see joyDir8ResultVarName's  comment in generators/bbasic/
@@ -3270,6 +3275,14 @@ Blockly.BBasic.finish = function(code) {
   const generatedKeypadPollCall = Blockly.BBasic.generateKeypadPollCall();
   const generatedKeypadSetup = Blockly.BBasic.generateKeypadSetup();
   const generatedCtrlpfShadowSetup = generateCtrlpfShadowSetup(Blockly);
+  // NUSIZ takes the player's copies (bits 0-2) from playerNsize and the missile's width (bits 4-5) from the
+  // missile widths byte, never the animation flags that share playerNsize's upper bits.
+  const missileWidthsVar = this.missileWidthUsed ?
+    this.nameDB_.getName(missileWidthsVarName(), Blockly.Names.DEVELOPER_VARIABLE_TYPE) : null;
+  const nusiz0Expression = missileWidthsVar ?
+    `(player0size & $07) | (${missileWidthsVar} & $30)` : 'player0size & $07';
+  const nusiz1Expression = missileWidthsVar ?
+    `(player1size & $07) | ((${missileWidthsVar} & $C0) / 4)` : 'player1size & $07';
   const generatedBackgroundFadeSetup = Blockly.BBasic.generateBackgroundFadeSetup();
 
   this.isInitialized = false;
@@ -3304,7 +3317,8 @@ Blockly.BBasic.finish = function(code) {
     generatedBackgroundFadeChecks, generatedMusicChecks, generatedDistanceChecks, generatedDistancePointChecks,
     generatedJoystickDirection8Checks, generatedJoystickButtonChecks, generatedJoystickDoubleTapChecks,
     generatedTextScrollAdvance, generatedTitleKernelSkip, generatedScoreBkColorAsm, generatedRunOnceEdgeReset,
-    generatedKeypadPollCall, generatedKeypadSetup, generatedCtrlpfShadowSetup, generatedBackgroundFadeSetup});
+    generatedKeypadPollCall, generatedKeypadSetup, generatedCtrlpfShadowSetup, generatedBackgroundFadeSetup,
+    nusiz0Expression, nusiz1Expression});
 };
 
 // Builds the run-once flag bytes' per-frame reset body - registered as the
