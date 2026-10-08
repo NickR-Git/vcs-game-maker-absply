@@ -32,18 +32,16 @@
           No variables yet: build the ROM to list them.
         </div>
         <div v-for="group in groups" :key="group.title" class="debug-settings-group">
-          <div class="debug-settings-group-header">
-            <div class="debug-settings-group-title">{{ group.title }}</div>
-            <v-checkbox
-              :input-value="allChosen(group)"
-              :indeterminate="someChosen(group)"
-              label="Select all"
-              dense
-              hide-details
-              class="debug-settings-select-all"
-              @change="(checked) => handleToggleGroup(group, checked)"
-            />
-          </div>
+          <div class="debug-settings-group-title">{{ group.title }}</div>
+          <v-checkbox
+            :input-value="allChosen(group)"
+            :indeterminate="someChosen(group)"
+            label="Select all"
+            dense
+            hide-details
+            class="debug-settings-select-all"
+            @change="(checked) => handleToggleGroup(group, checked)"
+          />
           <div class="debug-settings-grid">
             <v-checkbox
               v-for="variable in group.variables"
@@ -147,21 +145,14 @@ export default {
   padding: 8px 0;
 }
 
-.debug-settings-group-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.debug-settings-group-title {
+  font-weight: 500;
   margin-top: 12px;
 }
 
-.debug-settings-group-title {
-  font-weight: 500;
-}
-
 .debug-settings-select-all {
-  margin: 0 !important;
-  padding: 0 !important;
-  flex: 0 0 auto;
+  margin-top: 2px !important;
+  padding-top: 0 !important;
 }
 
 .debug-settings-grid {
