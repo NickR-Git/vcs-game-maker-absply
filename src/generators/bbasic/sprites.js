@@ -275,7 +275,7 @@ export const backgroundColorTableHiVarName = () => 'backgroundColorTableHi';
 export const ctrlpfShadowVarName = () => '_ctrlpf';
 
 // Both missiles' widths, a 2-bit code each, kept apart from playerNsize: NUSIZ's bits 4-5 are the missile width, but
-// playerNsize's own bits 4-6 hold the animation's loop, finished and pause flags, so sharing one byte made every
+// the upper bits 4-6 of playerNsize hold the animation's loop, finished and pause flags, so sharing one byte made every
 // "set animation" change a missile's width (and every missile width change the animation's looping). Missile 0's
 // code sits in bits 4-5 (where NUSIZ0 has it) and missile 1's in bits 6-7.
 export const missileWidthsVarName = () => '_missileWidths';

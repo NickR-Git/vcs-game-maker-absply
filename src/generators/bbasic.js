@@ -812,7 +812,7 @@ Blockly.BBasic.init = function(workspace) {
   // this.nameDB_.getName(...) crashed instead, since nameDB_ isn't
   // constructed yet this early in init() (it's set up further down, well
   // after this pre-scan section runs).
-  // Missile widths live in a byte of their own (see missileWidthsVarName), reserved only when a block sets one.
+  // Missile widths live in a separate byte (see missileWidthsVarName), reserved only when a block sets one.
   this.missileWidthUsed = workspace.getAllBlocks(false).some((block) => block.isEnabled() &&
     (block.type === 'sprite_missile_size' ||
      (block.type === 'sprite_missile_set' && /^missile[01]width$/.test(block.getFieldValue('VAR') || ''))));
