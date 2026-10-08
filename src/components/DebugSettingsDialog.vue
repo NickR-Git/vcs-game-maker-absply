@@ -167,6 +167,14 @@ export default {
   margin: 6px 0 4px;
 }
 
+/* Capital letters have no descenders, so centering the line box leaves the word about a pixel high:
+   nudge the text down to sit in the middle of the button. */
+.debug-settings-select-row .v-btn >>> .v-btn__content {
+  position: relative;
+  top: 1px;
+  line-height: 18px;
+}
+
 .debug-settings-toggle-left.v-btn {
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
