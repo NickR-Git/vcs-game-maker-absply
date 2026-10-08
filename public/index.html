@@ -400,12 +400,6 @@
           if (name === 'setColorMode') gopher2600Replay.colorMode = !!args[0];
           if (name === 'setDifficulty') gopher2600Replay.difficulty[args[0]] = !!args[1];
           gopher2600Worker.postMessage({type: 'call', name, args});
-          // 6502.ts cannot emulate a keypad: a ROM that uses one moves to gopher2600, and back
-          // again once the next ROM does not.
-          if (name === 'setKeypadMode') {
-            gopher2600KeypadFallback = !!(gopher2600KeypadMode.left || gopher2600KeypadMode.right);
-            switchGopher2600Worker();
-          }
         };
       });
 

@@ -180,11 +180,8 @@ export default {
       return this.settings.backend === 'stellerator';
     },
     backendNote() {
-      if (this.info && this.info.keypadFallback) {
-        return 'This project uses a keypad, which 6502.ts cannot emulate, so it is running on gopher2600.';
-      }
       return this.stellerator ?
-        'A ROM that uses a keypad runs on gopher2600 instead, since 6502.ts has no keypad.' :
+        '6502.ts is fast and has screen effects and the debug info.' :
         'gopher2600 emulates every clock of the console. It is slower, and has no screen effects.';
     },
   },

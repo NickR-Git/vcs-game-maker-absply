@@ -1,6 +1,6 @@
 # VCS Game Maker: everything since 0.50.37
 
-This covers versions 0.50.38 through 0.51.33, grouped by area. The per-version
+This covers versions 0.50.38 through 0.51.34, grouped by area. The per-version
 detail is in `CHANGES_SINCE_0.50.37.txt`.
 
 ## Emulator and TV standard
@@ -30,6 +30,8 @@ detail is in `CHANGES_SINCE_0.50.37.txt`.
   cycles and a table of chosen variable values; a Debug Info popup picks the variables and the choice is
   saved with the project. The emulator and its sound stop while a ROM compiles. A variable the title screen
   shares a slot with shows its title screen name while the kernel runs.
+- The 6502.ts emulator plays Keypad Controllers on either port, so a project that uses Keypad blocks no longer
+  moves to gopher2600.
 
 ## Blocks and code generation
 

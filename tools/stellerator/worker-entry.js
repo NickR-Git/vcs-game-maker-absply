@@ -42,6 +42,9 @@ const MAX_SLICES_PER_FRAME = 400;
 
 const state = {
   debug: false,
+  // The keypad controllers: whether one is plugged into a port, and the key held on it.
+  keypad: {left: {mode: false, key: null}, right: {mode: false, key: null}},
+  swcha: 0xff,
   debugWatch: [],
   debugLastCpuCycles: 0,
   debugLastBusyCycles: 0,
@@ -124,6 +127,8 @@ const createBoard = async () => {
   board.setAudioEnabled(true);
   board.reset();
   state.board = board;
+  state.swcha = 0xff;
+  if (state.keypad.left.mode || state.keypad.right.mode) installKeypadBus();
   state.busyCycles = 0;
   state.debugLastBusyCycles = 0;
   state.debugLastCpuCycles = 0;
@@ -241,10 +246,69 @@ const portFrom = (name) => (name === 'right' ? 1 : 0);
 
 const joystickFor = (port) => (port === 1 ? state.board.getJoystick1() : state.board.getJoystick0());
 
+// ---- Keypad controllers ------------------------------------------------------------------------
+// 6502.ts has no keypad, so the worker plays one. The program picks a row by writing a 0 to one of
+// the four joystick direction lines of SWCHA (the upper nibble for the left port, the lower for the
+// right), and reads which column the held key is in from three input bits: INPT0, INPT1 and INPT4
+// for the left port, INPT2, INPT3 and INPT5 for the right (bit 7 is 0 for the pressed column). This
+// follows gopher2600's keypad.
+const KEYPAD_ROW = {'1': 0, '2': 0, '3': 0, '4': 1, '5': 1, '6': 1, '7': 2, '8': 2, '9': 2, '*': 3, '0': 3, '#': 3};
+const KEYPAD_COLUMN = {'1': 0, '4': 0, '7': 0, '*': 0, '2': 1, '5': 1, '8': 1, '0': 1, '3': 2, '6': 2, '9': 2, '#': 2};
+const KEYPAD_ROW_MASK = [0xe0, 0xd0, 0xb0, 0x70];
+
+// The column (0-2) the held key of a port shows on right now, or -1.
+const keypadColumn = (port) => {
+  const keypad = state.keypad[port];
+  if (!keypad.mode || keypad.key === null) return -1;
+  const lines = port === 'left' ? state.swcha & 0xf0 : (state.swcha & 0x0f) << 4;
+  const row = KEYPAD_ROW[keypad.key];
+  return (lines & KEYPAD_ROW_MASK[row]) === lines ? KEYPAD_COLUMN[keypad.key] : -1;
+};
+
+// Wraps the board's bus once: remembers what the program writes to SWCHA, and answers the input
+// registers of a port with a keypad plugged in from its keys instead of the joystick.
+const installKeypadBus = () => {
+  const bus = state.board && state.board.getBus();
+  if (!bus || bus.__keypadInstalled) return;
+  const read = bus.read.bind(bus);
+  const write = bus.write.bind(bus);
+  bus.read = (address) => {
+    const value = read(address);
+    if (!state.keypad.left.mode && !state.keypad.right.mode) return value;
+    const masked = address & 0x1fff;
+    if (masked & 0x1080) return value;
+    const register = masked & 0x0f;
+    // INPT0, INPT1, INPT4 are the left port's columns; INPT2, INPT3, INPT5 the right's.
+    const left = {8: 0, 9: 1, 12: 2}[register];
+    const right = {10: 0, 11: 1, 13: 2}[register];
+    const port = left !== undefined ? 'left' : right !== undefined ? 'right' : null;
+    if (!port || !state.keypad[port].mode) return value;
+    const column = port === 'left' ? left : right;
+    return (value & 0x7f) | (keypadColumn(port) === column ? 0 : 0x80);
+  };
+  bus.write = (address, value) => {
+    const masked = address & 0x1fff;
+    // SWCHA: not the cartridge (A12), RIOT (A7), I/O not timer (A9 set, A2 clear), register 0.
+    if (!(masked & 0x1000) && (masked & 0x80) && (masked & 0x200) && !(masked & 0x4) && (masked & 3) === 0) {
+      state.swcha = value & 0xff;
+    }
+    write(address, value);
+  };
+  bus.__keypadInstalled = true;
+};
+
 const handleKey = (code, down) => {
   if (!state.board) return;
-  const binding = state.keyMapping.find((entry) => entry.code === code && entry.kind !== 'keypad');
+  // A key is a keypad key while its port has a keypad plugged in, and a joystick control otherwise.
+  const binding = state.keyMapping.find((entry) => entry.code === code &&
+    (entry.kind === 'keypad') === state.keypad[entry.port === 'right' ? 'right' : 'left'].mode);
   if (!binding) return;
+  if (binding.kind === 'keypad') {
+    const keypad = state.keypad[binding.port === 'right' ? 'right' : 'left'];
+    if (down) keypad.key = binding.control;
+    else if (keypad.key === binding.control) keypad.key = null;
+    return;
+  }
   const joystick = joystickFor(portFrom(binding.port));
   switch (binding.control) {
     case 'up': joystick.getUp().toggle(down); break;
@@ -292,8 +356,12 @@ const CALLS = {
     state.difficultyPro[port === 'right' ? 'right' : 'left'] = !!pro;
     applyPanel();
   },
-  // Keypads are not emulated; the page does not send a keypad ROM here.
-  setKeypadMode: () => {},
+  setKeypadMode: (port, enabled) => {
+    const keypad = state.keypad[port === 'right' ? 'right' : 'left'];
+    keypad.mode = !!enabled;
+    keypad.key = null;
+    if (keypad.mode) installKeypadBus();
+  },
   setKeyMapping: (mapping) => {
     state.keyMapping = Array.isArray(mapping) ? mapping : [];
   },

@@ -937,3 +937,10 @@ Debug info shows title screen names for shared variables, sprites start from the
 - Debug Info popup: Select all and Select none in the first row of each section, styled as a two-button toggle.
 - A project with no block that sets or changes where a sprite is starts gameplay with the players, missiles
   and ball back at the positions a new project begins with, since the Titlescreen Kernel moves them around.
+
+=== 0.51.34 ===
+Keypad controllers in the 6502.ts emulator
+
+- The 6502.ts emulator plays Keypad Controllers on either port, so a project that uses Keypad blocks no longer
+  moves to gopher2600. The keys bound to a port's digits are the keypad's buttons while a keypad is plugged
+  into the port, and the joystick controls otherwise.
