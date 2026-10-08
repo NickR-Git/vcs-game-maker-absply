@@ -950,6 +950,11 @@ Blockly.BBasic.init = function(workspace) {
   // titleScreenSelectedIdVarName's  reservation further down), same
   // pattern as keypad0Used/keypad1Used just above.
   this.titleScreenDrawUsed = workspace.getAllBlocks(false).some((block) => block.type === 'titlescreen_draw');
+  // Whether any block sets or changes where a sprite is (or fires a missile or ball from a spot).
+  this.spritePositionBlocksUsed = workspace.getAllBlocks(false).some((block) => block.isEnabled() &&
+    ((/^sprite_(player|missile|ball)_(set|change)$/.test(block.type) &&
+      /^(player[01]|missile[01]|ball)[xy]$/.test(block.getFieldValue('VAR') || '')) ||
+     block.type === 'sprite_missile_fire'));
   // Which title screen graphics the color and frame blocks target, and whether the background color block is
   // used: they only matter when the kernel is in use at all.
   const enabledBlocks = (type) => workspace.getAllBlocks(false).filter((block) => block.type === type && block.isEnabled());
@@ -3729,6 +3734,15 @@ Blockly.BBasic.generateGameEvent = function(eventName,
   // Title screen start turns the kernel back on after "End title screen" turned it off.
   if (this.titleEndUsed && eventName === 'title_start') {
     eventCode = `${titleKernelEndedVar()}{${titleKernelEndedBit()}} = 0\n` + eventCode;
+  }
+  // The Titlescreen Kernel moves the sprites' positions around while it draws (it counts frames in missile0x, for
+  // one). A project with no block that sets or changes where a sprite is has nothing to put them back, so
+  // gameplay starts them from the positions a new project begins with.
+  if (this.titleScreenDrawUsed && eventName === 'gameplay_start' && !this.spritePositionBlocksUsed) {
+    eventCode = [
+      'player0x = 75', 'player0y = 75', 'player1x = 75', 'player1y = 25', 'ballx = 0', 'bally = 0',
+      'missile0x = 0', 'missile0y = 0', 'missile1x = 0', 'missile1y = 0',
+    ].join('\n') + '\n' + eventCode;
   }
   // Title Screen variables share their slots with gameplay variables, so each side starts with the
   // slots cleared (the same zeros the variables have at power-on).

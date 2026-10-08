@@ -1,6 +1,6 @@
 # VCS Game Maker: everything since 0.50.37
 
-This covers versions 0.50.38 through 0.51.32, grouped by area. The per-version
+This covers versions 0.50.38 through 0.51.33, grouped by area. The per-version
 detail is in `CHANGES_SINCE_0.50.37.txt`.
 
 ## Emulator and TV standard
@@ -28,7 +28,8 @@ detail is in `CHANGES_SINCE_0.50.37.txt`.
 - The emulator's volume follows the Sound and Music DIM setting while it plays.
 - A debug overlay for the 6502.ts emulator shows registers, the program counter, scanlines, CPU busy
   cycles and a table of chosen variable values; a Debug Info popup picks the variables and the choice is
-  saved with the project. The emulator and its sound stop while a ROM compiles.
+  saved with the project. The emulator and its sound stop while a ROM compiles. A variable the title screen
+  shares a slot with shows its title screen name while the kernel runs.
 
 ## Blocks and code generation
 
@@ -57,6 +58,8 @@ detail is in `CHANGES_SINCE_0.50.37.txt`.
   cards play their animation by themselves. Newer: an "Animate title screen graphic" block (forward or in
   reverse, loop or play once, acting as a trigger), a "When title screen graphic animation finishes" block,
   and a "Play animation once" switch on each graphic.
+- **Title screen to gameplay:** a project with no block that sets or changes a sprite's position starts gameplay
+  with the sprites at the positions a new project begins with.
 - **Sprites and data:** a Visibility option in the Player get block, a Switch block mode that runs once each
   time a switch is turned on, and blocks for the size of a data table.
 - **Sprites:** "Set fired speed" block, a "Width/quantity" choice in the Player get block, and

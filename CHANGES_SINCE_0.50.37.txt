@@ -928,3 +928,12 @@ Title screen animation blocks and smaller stored data, emulator debug info, Play
 - Popups, toolbars and previews: bottom popup buttons look like the Select, Reset and Refresh emulator
   buttons; the line under the toolbar icons spans the full width; Quick colors take less room;
   background previews hide the score and use a black background; screenshots keep the screen shape.
+
+=== 0.51.33 ===
+Debug info shows title screen names for shared variables, sprites start from their default positions after the title screen
+
+- Debug info: a variable that shares its slot with a title screen variable is shown by the title screen name
+  while the Titlescreen Kernel runs, and by the game name the rest of the time.
+- Debug Info popup: Select all and Select none in the first row of each section, styled as a two-button toggle.
+- A project with no block that sets or changes where a sprite is starts gameplay with the players, missiles
+  and ball back at the positions a new project begins with, since the Titlescreen Kernel moves them around.
