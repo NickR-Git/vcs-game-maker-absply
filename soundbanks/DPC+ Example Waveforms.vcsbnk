@@ -179,7 +179,7 @@
         15,
         15
       ],
-      "dpcWaveBars": 32
+      "dpcWaveBars": 16
     },
     {
       "name": "Demo Square 5",
@@ -238,7 +238,7 @@
         15,
         15
       ],
-      "dpcWaveBars": 32
+      "dpcWaveBars": 4
     },
     {
       "name": "Demo Square 4",
@@ -297,7 +297,7 @@
         12,
         12
       ],
-      "dpcWaveBars": 32
+      "dpcWaveBars": 4
     },
     {
       "name": "Demo Square 3",
@@ -356,7 +356,7 @@
         9,
         9
       ],
-      "dpcWaveBars": 32
+      "dpcWaveBars": 4
     },
     {
       "name": "Demo Noise",
@@ -474,7 +474,7 @@
         0,
         0
       ],
-      "dpcWaveBars": 32
+      "dpcWaveBars": 4
     },
     {
       "name": "Stay Frosty Sawtooth",
