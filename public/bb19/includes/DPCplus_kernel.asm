@@ -2,6 +2,39 @@ drawscreen
      lda #1
      sta CXCLR
      sta COLUBK ; REVENG - don't start with the lastline color
+     ifconst debugscore
+         ; Show the time the frame's code left over (the Options tab's "Show remaining CPU cycles as the score"): the
+         ; timer started above the 128 that fufu waits for, so what it holds beyond 128 is time still left, and below
+         ; 128 the code ran over (shown in red, as the other kernels do).
+         ldx #14
+         lda INTIM
+         bmi dpccycles_left
+         ldx #64
+         eor #$ff ;make negative
+dpccycles_left
+         stx scorecolor
+         and #$7f ; clear sign bit
+         tax
+         lda #0
+         sta score+1
+         sta score+2
+         txa
+         beq dpcdone_debugscore
+         ; each count of the timer is 64 cycles: add that many 64s to the score, in decimal
+         sed
+dpccycles_add
+         lda score+2
+         clc
+         adc #$64
+         sta score+2
+         lda score+1
+         adc #0
+         sta score+1
+         dex
+         bne dpccycles_add
+         cld
+dpcdone_debugscore
+     endif
 
 fufu
      lda INTIM

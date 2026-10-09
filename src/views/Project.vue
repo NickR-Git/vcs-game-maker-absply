@@ -1954,6 +1954,7 @@ export default defineComponent({
 
 /* The search field and the Show drop-down side by side under the screen's title. */
 .project-search-row {
+  margin-top: -18px;
   display: flex;
   gap: 16px;
   align-items: flex-start;
