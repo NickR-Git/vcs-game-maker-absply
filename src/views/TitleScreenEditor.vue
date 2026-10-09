@@ -189,9 +189,9 @@
                 outlined
                 :ripple="false"
                 class="titlescreen-screen-card"
-                :class="[screenDragCardClass(screenIndex), {'titlescreen-screen-card-selected': screen.id === selectedScreenId}]"
+                :class="[screenDragCardClass(screenIndex), {'titlescreen-screen-card-selected': selectedScreenIds.includes(screen.id)}]"
                 v-on="screenDragTargetListeners(screenIndex)"
-                @click.stop="selectScreen(screen.id)"
+                @click.stop="selectScreen(screen.id, $event)"
               >
                 <div
                   class="titlescreen-drag-handle"
@@ -246,9 +246,9 @@
                     </v-btn>
                     <confirm-delete-menu
                       v-if="state.screens.length > 1"
-                      title="Delete this title screen?"
-                      :selected="screen.id === selectedScreenId"
-                      activator-title="Delete this title screen"
+                      :title="screenSelection.deleteQuestion(screen.id, 'title screen', 1)"
+                      :selected="screenSelection.isDeleteTarget(screen.id, selectedScreenId)"
+                      :activator-title="screenSelection.deleteQuestion(screen.id, 'title screen', 1).replace('?', '')"
                       icon-btn-class="titlescreen-icon-btn-size"
                       @confirm="handleDeleteScreen(screen)"
                     />
@@ -280,9 +280,9 @@
                           outlined
                           :ripple="false"
                           class="titlescreen-card"
-                          :class="[cardDragCardClass(screen, index), {'titlescreen-card-selected': card.id === selectedCardId && screen.id === selectedCardScreenId}]"
+                          :class="[cardDragCardClass(screen, index), {'titlescreen-card-selected': isCardSelected(screen, card)}]"
                           v-on="cardDragTargetListeners(screen, index)"
-                          @click.stop="selectCard(card.id, screen.id)"
+                          @click.stop="selectCard(card.id, screen.id, $event)"
                         >
                           <div
                             class="titlescreen-drag-handle"
@@ -363,10 +363,10 @@
                               </v-btn>
 
                               <confirm-delete-menu
-                                title="Delete this card?"
-                                :selected="card.id === selectedCardId && screen.id === selectedCardScreenId"
+                                :title="cardDeleteQuestion(screen, card)"
+                                :selected="card.id === selectedCardId && isCardSelected(screen, card)"
                                 :select-priority="1"
-                                activator-title="Delete this card"
+                                :activator-title="cardDeleteQuestion(screen, card).replace('?', '')"
                                 icon-btn-class="titlescreen-icon-btn-size"
                                 @confirm="handleDeleteCard(screen, card)"
                               />
@@ -759,6 +759,7 @@ import QuickColorPalette from '../components/QuickColorPalette.vue';
 import {useCollapsedIds} from '../hooks/collapse';
 import {recordCardDeletion} from '../hooks/card-delete-undo';
 import {useDragReorder} from '../hooks/drag-reorder';
+import {useCardSelection} from '../hooks/card-selection';
 import {recordRowColorsChange} from '../utils/row-color-history';
 import {useTitleScreenStorage, useErrorStorage, usePixelGridOverlayStorage,
   usePlayerAnimationsStorage, useColorPaletteStorage} from '../hooks/project';
@@ -886,7 +887,9 @@ export default defineComponent({
 
     const handleDeleteScreen = (screen) => {
       if (state.value.screens.length <= 1) return;
-      state.value.screens = state.value.screens.filter(({id}) => id !== screen.id);
+      const doomed = screenSelection.idsToDelete(screen.id, 1);
+      state.value.screens = state.value.screens.filter(({id}) => !doomed.includes(id));
+      if (doomed.length > 1) screenSelectionRef.value.deselectCard();
       handleChildChange();
       instance.proxy.$forceUpdate();
     };
@@ -1042,7 +1045,28 @@ export default defineComponent({
       instance.proxy.$forceUpdate();
     };
 
+    // With several cards of a page selected, deleting one of them deletes them all.
+    const cardIdsToDelete = (screen, card) =>
+      (screen.id === selectedCardScreenId.value ? cardSelection.idsToDelete(card.id) : [card.id]);
+    const cardDeleteQuestion = (screen, card) => {
+      const count = cardIdsToDelete(screen, card).length;
+      return count > 1 ? `Delete these ${count} cards?` : 'Delete this card?';
+    };
     const handleDeleteCard = (screen, card) => {
+      const doomed = cardIdsToDelete(screen, card);
+      if (doomed.length > 1) {
+        const original = screen.cards.slice();
+        screen.cards = screen.cards.filter(({id}) => !doomed.includes(id));
+        cardSelection.deselectCard();
+        handleChildChange();
+        instance.proxy.$forceUpdate();
+        recordCardDeletion(() => {
+          screen.cards = original;
+          handleChildChange();
+          instance.proxy.$forceUpdate();
+        });
+        return;
+      }
       const index = screen.cards.findIndex(({id}) => id === card.id);
       screen.cards = screen.cards.filter(({id}) => id !== card.id);
       handleChildChange();
@@ -1518,6 +1542,15 @@ export default defineComponent({
     const isCollapsed = (key) => isCollapsedRaw(key);
     const toggleCollapsed = (key) => toggleCollapsedRaw(key);
 
+    // The page selection (made further down) in a plain holder, since the drag and delete code above it only run later
+    // (not a ref: that would unwrap the refs inside it).
+    const screenSelectionRef = {value: null};
+    const screenSelection = {
+      getSelectedIndices: () => screenSelectionRef.value.getSelectedIndices(),
+      deleteQuestion: (...args) => screenSelectionRef.value.deleteQuestion(...args),
+      isDeleteTarget: (...args) => screenSelectionRef.value.isDeleteTarget(...args),
+      idsToDelete: (...args) => screenSelectionRef.value.idsToDelete(...args),
+    };
     const {dragAttrs: screenDragAttrs, dragCardClass: screenDragCardClass,
       dragHandleListeners: screenDragHandleListeners, dragTargetListeners: screenDragTargetListeners} = useDragReorder(
         () => state.value.screens,
@@ -1525,6 +1558,7 @@ export default defineComponent({
           state.value.screens = items;
           handleChildChange();
         },
+        () => screenSelection.getSelectedIndices(),
     );
 
     // One useDragReorder instance PER SCREEN (each screen's  card list
@@ -1543,6 +1577,7 @@ export default defineComponent({
               screen.cards = items;
               handleChildChange();
             },
+            () => (screen.id === selectedCardScreenId.value ? cardSelection.getSelectedIndices() : []),
         ));
       }
       return cardDragReordersByScreen.get(screen.id);
@@ -1607,9 +1642,19 @@ export default defineComponent({
     const selectedCardId = ref(null);
     // Card ids are only unique within their page, so a selected card is its id and its page's id.
     const selectedCardScreenId = ref(null);
-    const selectCard = (id, screenId) => {
-      selectedCardId.value = id;
+    // Shift+click selects a range, Ctrl/Cmd+click adds or removes a card, within one page (see hooks/card-selection.js):
+    // deleting or dragging one of several selected cards does it to all of them.
+    const cardSelection = useCardSelection(() => {
+      const selectedScreen = state.value.screens.find(({id}) => id === selectedCardScreenId.value);
+      return selectedScreen ? selectedScreen.cards.map(({id}) => id) : [];
+    }, selectedCardId);
+    const {selectedCardIds} = cardSelection;
+    const isCardSelected = (screen, card) => screen.id === selectedCardScreenId.value && selectedCardIds.value.includes(card.id);
+    const selectCard = (id, screenId, event = {}) => {
+      // A card of another page starts a new selection.
+      if (screenId !== selectedCardScreenId.value) cardSelection.deselectCard();
       selectedCardScreenId.value = screenId;
+      cardSelection.selectCard(id, event);
       // Another card's frame no longer counts as the one being edited (its outline goes with it).
       if (activeCardId.value !== id || activeScreenId.value !== screenId) {
         activeFrameEditor.value = null;
@@ -1619,13 +1664,14 @@ export default defineComponent({
       }
     };
     const selectedScreenId = ref(null);
-    const selectScreen = (id) => {
-      selectedScreenId.value = id;
-    };
+    // The pages are selected the same way (Shift+click a range, Ctrl/Cmd+click one).
+    screenSelectionRef.value = useCardSelection(() => state.value.screens.map(({id}) => id), selectedScreenId);
+    const {selectedCardIds: selectedScreenIds} = screenSelectionRef.value;
+    const selectScreen = (id, event = {}) => screenSelectionRef.value.selectCard(id, event);
     const deselectCard = () => {
-      selectedCardId.value = null;
+      cardSelection.deselectCard();
       selectedCardScreenId.value = null;
-      selectedScreenId.value = null;
+      screenSelectionRef.value.deselectCard();
     };
 
     // The graphic card the shared "Set height" tool acts on - keyed off
@@ -1786,8 +1832,8 @@ export default defineComponent({
       isCollapsed, toggleCollapsed, cardCollapseKey,
       cardDragAttrs, cardDragCardClass, cardDragHandleListeners, cardDragTargetListeners,
       showPixelGrid, zoom, titlescreenZoomLevels: TITLESCREEN_ZOOM_LEVELS,
-      selectedCardId, selectedCardScreenId, selectCard,
-      selectedScreenId, selectScreen,
+      selectedCardId, selectedCardScreenId, selectCard, selectedCardIds, isCardSelected, cardDeleteQuestion,
+      selectedScreenId, selectScreen, selectedScreenIds, screenSelection,
       deselectCard,
       selectedGraphicCard, activeFrameEditor, setActiveFrame, isFrameActive, frameHighlightState,
       effectiveFrameEditor, pixelEditorRefKey,

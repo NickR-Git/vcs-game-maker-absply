@@ -313,6 +313,13 @@ const MAX_ARPEGGIO_SPEED_FRAMES = 15;
 // far too short to read as an actual fade.
 const CLICK_GUARD_SECONDS = 0.002;
 
+// Lets another preview (see utils/dpc-preview.js) take the place of the one playing, so Stop and the next preview end it.
+export const registerSoundEffectPreview = (sources, gainNode) => {
+  stopActivePreview();
+  activeSources = sources;
+  activeGainNode = gainNode;
+};
+
 /** Stops whatever sound effect preview is currently playing, if any. */
 export const stopSoundEffectPreview = () => {
   stopActivePreview();

@@ -122,7 +122,7 @@
                 outlined
                 :ripple="false"
                 class="data-card"
-                :class="[dragCardClass(index), {'data-card-selected': table.id === selectedCardId}]"
+                :class="[dragCardClass(index), {'data-card-selected': selectedCardIds.includes(table.id)}]"
                 v-on="dragTargetListeners(index)"
                 @click.stop="(event) => handleCardClick(table, event)"
               >
@@ -149,9 +149,9 @@
                 <div class="data-toolbar-top-right">
                   <confirm-delete-menu
                     v-if="state.dataTables.length > 1"
-                    title="Delete this table?"
-                    :selected="table.id === selectedCardId"
-                    activator-title="Delete this table"
+                    :title="deleteQuestion(table.id, 'table', 1)"
+                    :selected="table.id === selectedCardId && selectedCardIds.includes(table.id)"
+                    :activator-title="deleteQuestion(table.id, 'table', 1).replace('?', '')"
                     icon-btn-class="data-icon-btn-size"
                     @confirm="handleDeleteTable(table)"
                   />
@@ -354,6 +354,7 @@ import {useCollapsedIds} from '../hooks/collapse';
 import {recordReorder, sameItems} from '../hooks/reorder-history';
 import {canRedoReorder, canUndoReorder, noteEdit, settleEdits, tryRedoReorder, tryUndoReorder} from '../hooks/reorder-history';
 import {useDragReorder, CSS_CLASS_DRAGGING} from '../hooks/drag-reorder';
+import {useCardSelection} from '../hooks/card-selection';
 import {useBackgroundsStorage, useDataTablesStorage, usePlayerAnimationsStorage,
   useSoundEffectsStorage, useSongsStorage, useTextStringsStorage, useTitleScreenStorage,
   useDataColumnsStorage} from '../hooks/project';
@@ -491,13 +492,11 @@ export default defineComponent({
     // song cards and SoundFXEditor.vue/TextEditor.vue's  cards (see
     // MusicEditor.vue's  comment for the full reasoning): plain local
     // component state, not persisted, not wired into anything else.
+    // Shift+click selects a range, Ctrl/Cmd+click adds or removes a card (see hooks/card-selection.js): deleting or
+    // dragging one of several selected cards does it to all of them.
     const selectedCardId = ref(null);
-    const selectCard = (id) => {
-      selectedCardId.value = id;
-    };
-    const deselectCard = () => {
-      selectedCardId.value = null;
-    };
+    const {selectedCardIds, selectCard, deselectCard, getSelectedIndices, idsToDelete, deleteQuestion} = useCardSelection(
+        () => state.value.dataTables.map(({id}) => id), selectedCardId);
     // The table the shared toolbar below acts on - whichever card is
     // currently selected, same pattern as MusicEditor.vue's activeSong()
     // and GraphicEditorToolbar.vue's activeEditor driving each toolbar.
@@ -640,6 +639,7 @@ export default defineComponent({
             state.value.dataTables = items;
             handleChildChange();
           },
+          getSelectedIndices,
       );
 
     const instance = getCurrentInstance();
@@ -698,7 +698,9 @@ export default defineComponent({
     };
 
     const handleDeleteTable = (table) => {
-      state.value.dataTables = state.value.dataTables.filter(({id}) => id != table.id);
+      const doomed = idsToDelete(table.id, 1);
+      state.value.dataTables = state.value.dataTables.filter(({id}) => !doomed.includes(id));
+      if (doomed.length > 1) deselectCard();
       handleChildChange();
       instance.proxy.$forceUpdate();
     };
@@ -859,7 +861,7 @@ export default defineComponent({
     // on a value cell or in the notes field, lets go of the selected value
     // cell, so the notes field goes back to the whole table's note.
     const handleCardClick = (table, event) => {
-      selectCard(table.id);
+      selectCard(table.id, event);
       const target = event && event.target;
       if (!(target && target.closest && target.closest('.data-value-row, .data-notes-section'))) {
         handleClearSelectedValue(table);
@@ -1249,7 +1251,7 @@ export default defineComponent({
 
     return {
       dataColumns,
-      selectedCardId, selectCard, deselectCard, selectedTable, isDataToolbarScrolled,
+      selectedCardId, selectedCardIds, selectCard, deselectCard, deleteQuestion, selectedTable, isDataToolbarScrolled,
       state, handleChildChange, handleAddTable, handleDeleteTable, handleDuplicateTable,
       copiedTableData, handleCopyTable, handlePasteTable,
       handleAddValue, handleDeleteValue, handleValueChange, handleSelectValue, handleSubtractValue,

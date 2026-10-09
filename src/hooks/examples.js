@@ -11,19 +11,21 @@ import YAML from 'yaml';
 // To change which repo the examples come from, edit EXAMPLES_SOURCE.
 const EXAMPLES_SOURCE = {
   owner: 'NickR-Git',
-  repo: 'vcs-game-maker-absply',
+  repo: 'vcs-game-maker-content',
   branch: 'main',
   path: 'examples',
 };
 
 const SOURCE_KEY = `${EXAMPLES_SOURCE.owner}/${EXAMPLES_SOURCE.repo}@${EXAMPLES_SOURCE.branch}/${EXAMPLES_SOURCE.path}`;
+// Where the files come from, shown while they download.
+const SOURCE_URL = `https://github.com/${EXAMPLES_SOURCE.owner}/${EXAMPLES_SOURCE.repo}/tree/${EXAMPLES_SOURCE.branch}/${EXAMPLES_SOURCE.path}`;
 const DB_NAME = 'vcs-game-maker-examples';
 const STORE_NAME = 'examples';
 
 // status: 'idle' | 'loading' | 'done' | 'error'. While loading, total is how
 // many files are being downloaded (0 while still checking) and done how many
 // have finished.
-export const examplesState = reactive({entries: [], status: 'idle', message: '', done: 0, total: 0});
+export const examplesState = reactive({source: SOURCE_URL, entries: [], status: 'idle', message: '', done: 0, total: 0});
 
 const openDb = () => new Promise((resolve, reject) => {
   const request = indexedDB.open(DB_NAME, 1);
@@ -79,10 +81,22 @@ const summarize = (name, text) => {
   };
 };
 
+// The kernel an example was made for. Read from the file's text each time rather than kept in the stored summary,
+// so examples downloaded before this existed get one too; a project saved before the kernel option existed is Standard.
+const kernelOf = (text) => {
+  try {
+    const project = YAML.parse(text);
+    return ((project && project.configuration) || {}).kernel === 'dpcplus' ? 'dpcplus' : 'standard';
+  } catch (e) {
+    return 'standard';
+  }
+};
+
 const toEntry = (record) => ({
   name: record.name,
   text: record.text,
   ...record.summary,
+  kernel: kernelOf(record.text),
 });
 
 const sortEntries = (entries) => entries.sort((a, b) => a.name.localeCompare(b.name));

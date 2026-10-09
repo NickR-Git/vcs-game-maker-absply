@@ -9,6 +9,8 @@ import {preprocessBatariBasic, compileBatariBasicToAsm, assembleBatariBasic} fro
 import '../blocks';
 import BlocklyBB, {RELOCATABLE_EVENT_NAMES, SYSTEM_VARIABLES} from '../generators/bbasic';
 import {processPlayerAnimationsStorageDefaults} from '../generators/bbasic/sprites';
+import {getFastMathSiblingFiles} from '../utils/fast-math';
+import {getDpcPlusAudioSiblingFiles} from '../generators/bbasic/dpcplus-audio';
 import {getExtendedScoreGraphics, getTextMinikernelSiblingFiles, getDpcPlusTextMinikernelSiblingFiles,
   dpcPlusTextScreenLines} from '../generators/bbasic/text-minikernel-files';
 import {getTitleScreenSiblingFiles} from '../generators/bbasic/titlescreen-files';
@@ -1307,6 +1309,9 @@ const buildRomInner = async () => {
       // "inline"-a-real-file mechanism was confirmed to break once relocated
       // to a bank other than 1.
       Object.assign(siblingFiles, BlocklyBB.playerAnimAsmFiles || {});
+      if (BlocklyBB.usesDivMulRoutine() && (configurationStorage.value || {}).enableFastMath) {
+        Object.assign(siblingFiles, await getFastMathSiblingFiles(config.kernel));
+      }
       // The Titlescreen Kernel's  static shared helper code (public/bb19/
       // titlescreen/) plus this build's  generated titlescreen_layout_N.asm
       // (one per title screen page) and combined titlescreen_data.asm (see
@@ -1407,6 +1412,7 @@ const buildRomInner = async () => {
       appendCompileLog('Preprocessing...', 'stage');
       const preprocessed = await preprocessBatariBasic(code, log);
       appendCompileLog('Compiling to assembly...', 'stage');
+      Object.assign(siblingFiles, await getDpcPlusAudioSiblingFiles(siblingFiles, BlocklyBB.dpcAudioFiles));
       const compiled = await compileBatariBasicToAsm(preprocessed, siblingFiles, log);
       appendCompileLog('Assembling ROM...', 'stage');
       const compiledResult = await assembleBatariBasic(compiled.mainAsm, compiled.workDir, log);
@@ -2112,6 +2118,9 @@ const buildPreviewRom = async ({name, xml, titleScreen = false, configOverride =
       const siblingFiles = BlocklyBB.isTextMinikernelActive() ?
         {...(previewDpcPlus ? await getDpcPlusTextMinikernelSiblingFiles(BlocklyBB.isTextRow2Used(), !!BlocklyBB.textScrollCursorUsed) : await getTextMinikernelSiblingFiles())} : {};
       Object.assign(siblingFiles, BlocklyBB.playerAnimAsmFiles || {});
+      if (BlocklyBB.usesDivMulRoutine() && (configurationStorage.value || {}).enableFastMath) {
+        Object.assign(siblingFiles, await getFastMathSiblingFiles((configurationStorage.value || {}).kernel));
+      }
       if (BlocklyBB.isTextMinikernelActive()) {
         const textKernelFile = previewDpcPlus ? 'text12DPCplus.asm' : 'text12b.asm';
         const textFontOverride = await buildTextFontOverride(previewDpcPlus ? siblingFiles[textKernelFile] : null);
@@ -2125,6 +2134,7 @@ const buildPreviewRom = async ({name, xml, titleScreen = false, configOverride =
       appendCompileLog('Preprocessing...', 'stage');
       const preprocessed = await preprocessBatariBasic(code, log);
       appendCompileLog('Compiling to assembly...', 'stage');
+      Object.assign(siblingFiles, await getDpcPlusAudioSiblingFiles(siblingFiles, BlocklyBB.dpcAudioFiles));
       const compiled = await compileBatariBasicToAsm(preprocessed, siblingFiles, log);
       appendCompileLog('Assembling ROM...', 'stage');
       const compiledResult = await assembleBatariBasic(compiled.mainAsm, compiled.workDir, log);

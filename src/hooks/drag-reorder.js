@@ -45,13 +45,40 @@ export const CSS_CLASS_DRAG_OVER = 'drag-reorder-over';
 // side by side, where the drop mark goes on the near edge.
 export const CSS_CLASS_DRAG_OVER_AFTER = 'drag-reorder-over-after';
 
-export const useDragReorder = (getItems, setItems) => {
+// getSelectedIndices (optional) returns the indices of the cards selected with Shift or Ctrl/Cmd+click: dragging one of
+// two or more selected cards then moves all of them, together and in their order.
+// The items with the ones at the indices in group taken out and put back, in their order, just before the item that was at
+// insertAt (the end of the list when insertAt is the length). An insertAt that is itself in the group puts them where
+// that group started.
+export const moveCards = (items, group, insertAt) => {
+  const remaining = items.filter((_, i) => !group.includes(i));
+  let at = remaining.length;
+  for (let i = insertAt; i < items.length; i++) {
+    if (!group.includes(i)) {
+      at = remaining.indexOf(items[i]);
+      break;
+    }
+  }
+  remaining.splice(at, 0, ...group.map((i) => items[i]));
+  return remaining;
+};
+
+// The indices being dragged: the selected cards when the one dragged is one of two or more, otherwise just it.
+export const dragGroupFor = (index, selected) => {
+  const sorted = selected.slice().sort((a, b) => a - b);
+  return sorted.length > 1 && sorted.includes(index) ? sorted : [index];
+};
+
+export const useDragReorder = (getItems, setItems, getSelectedIndices = () => []) => {
   const draggedIndex = ref(null);
   const dragOverIndex = ref(null);
+  // The indices being dragged: just the one card, or every selected card when it is one of them.
+  const draggedGroup = ref([]);
 
   const reset = () => {
     draggedIndex.value = null;
     dragOverIndex.value = null;
+    draggedGroup.value = [];
   };
 
   const dragAttrs = () => ({
@@ -59,8 +86,9 @@ export const useDragReorder = (getItems, setItems) => {
   });
 
   const dragCardClass = (index) => ({
-    [CSS_CLASS_DRAGGING]: draggedIndex.value === index,
-    [CSS_CLASS_DRAG_OVER]: dragOverIndex.value === index && draggedIndex.value !== index,
+    [CSS_CLASS_DRAGGING]: draggedIndex.value === index || draggedGroup.value.includes(index),
+    [CSS_CLASS_DRAG_OVER]: dragOverIndex.value === index && !draggedGroup.value.includes(index) &&
+      draggedIndex.value !== index,
     [CSS_CLASS_DRAG_OVER_AFTER]: dragOverIndex.value === index && draggedIndex.value != null &&
       draggedIndex.value < index,
   });
@@ -68,6 +96,7 @@ export const useDragReorder = (getItems, setItems) => {
   const dragHandleListeners = (index) => ({
     dragstart: (event) => {
       draggedIndex.value = index;
+      draggedGroup.value = dragGroupFor(index, getSelectedIndices());
       event.dataTransfer.effectAllowed = 'move';
       // Firefox refuses to start a drag at all unless data is actually
       // set here - the value itself is never read back (the drop handler
@@ -103,12 +132,13 @@ export const useDragReorder = (getItems, setItems) => {
       event.preventDefault();
       event.stopPropagation();
       const from = draggedIndex.value;
+      const group = draggedGroup.value.length ? draggedGroup.value : [from];
       reset();
-      if (from == null || from === index) return;
+      if (from == null || group.includes(index)) return;
       const before = getItems().slice();
-      const items = before.slice();
-      const [moved] = items.splice(from, 1);
-      items.splice(index, 0, moved);
+      // The dragged cards go where the one dropped on is: after it when they came from above it, before it when
+      // they came from below.
+      const items = moveCards(before, group, from < index ? index + 1 : index);
       setItems(items);
       const after = items.slice();
       recordReorder({

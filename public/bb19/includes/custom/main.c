@@ -156,6 +156,8 @@ const unsigned char maskdata[32]=
          0x7F,0x3F,0x1F,0x0F,0x07,0x03,0x01,0
           };
 
+// Where the sound engine's waveforms are in the ROM (set by function 44).
+const unsigned char *dpcwaves;
 char spritesort[10] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 0};
 char myGfxIndex[10] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 0};
 
@@ -304,7 +306,7 @@ int main()
   int temp3;
   int Gfxindex;
   unsigned char *HMdiv=(unsigned char *)(0xc00+0x1000);
-  const unsigned char setbyte[32]=
+  static const unsigned char setbyte[32]=
 	{0x80,0x40,0x20,0x10,0x08,0x04,0x02,0x01,
 	 0x01,0x02,0x04,0x08,0x10,0x20,0x40,0x80,
 	 0x80,0x40,0x20,0x10,0x08,0x04,0x02,0x01,
@@ -393,6 +395,50 @@ int main()
       return;
     }
 
+    case 44: // sound engine waveforms: C_function1 / C_function2 = where they are in the ROM, as the sprite pointers are
+    {        // (low byte, then the high byte with the bank in its upper bits). 8 waveforms of 32 samples (0 to 15), two to a
+             // byte, the first in the low nibble.
+      dpcwaves=flashdata+(C_function2<<8)+C_function1;
+      return;
+    }
+    case 48: // waveform rebuild: C_function1 = RAM slot of the voice (display RAM address / 32), C_function2 = waveform number * 16
+    {        // + height. Writes the 32 samples of the waveform scaled to the height (a sample * height / 15, rounded), the first
+             // two bytes carrying the waveform and the height in their high nibbles.
+      unsigned char *dst=(unsigned char *)queue+((C_function1&0x7f)<<5);
+      const unsigned char *src=dpcwaves+((C_function2>>4)<<4);
+      temp3=C_function2&15;
+      for (temp4=0;temp4<32;++temp4)
+      {
+        temp5=((((src[temp4>>1]>>((temp4&1)<<2))&15)*temp3*17+134)>>8);
+        if (temp4<2) temp5|=(temp4==0)?(C_function2&0xF0):(temp3<<4);
+        dst[temp4]=temp5;
+      }
+      return;
+    }
+    case 40: // div8: C_function1 / C_function2 back in C_function[3]. A divisor under 2 gives the numerator
+    {        // unchanged, as the 6502's "jsr div8" does. No division instruction on this ARM, and the library
+             // routine is far bigger than shifting and subtracting.
+      temp2=C_function1;
+      if (C_function2>1)
+      {
+        temp3=C_function2<<7;
+        temp4=0;
+        for (temp5=0;temp5<8;++temp5)
+        {
+          temp4<<=1;
+          if (temp2>=temp3)
+          {
+            temp2-=temp3;
+            ++temp4;
+          }
+          temp3>>=1;
+        }
+        temp2=temp4;
+      }
+      C_function[3]=temp2;
+      return;
+    }
+
   default: // everything else
    break;
   }
@@ -433,6 +479,7 @@ int main()
   RIOT[spritedisplay]=temp3;
   // fetcher setup
   //my_memset(queue+(dfhigh(3)<<8)+dflow(3),0,192);
+  mask=0xFF; // the ones in bss start as whatever the RAM held, which showed in the first frame's player0
   my_memset(queue+get32bitdf(3),0,192);
 
   //my_memset(queue+(dfhigh(1)<<8)+dflow(1),RIOT[COLUM1],192); // clear multiplexed sprites and fill colors

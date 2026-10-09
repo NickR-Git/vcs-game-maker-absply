@@ -1,6 +1,7 @@
 import * as Blockly from 'blockly/core';
 
 import {SOUND_ICON} from './icon';
+import {useConfigurationStorage} from '../hooks/project';
 
 /*
 0 No sound (silent).
@@ -46,45 +47,44 @@ export const CHANNEL_OPTIONS = [
   ['Ch1', '1'],
 ];
 
-Blockly.defineBlocksWithJsonArray([
-  // Block for the getter.
-  {
-    'type': `simple_sound_set`,
-    'message0': `${SOUND_ICON} Play sound %1`,
-    'message1': `with frequency %1, volume %2 and duration %3 on %4`,
-    'args0': [
-      {
-        'type': 'field_dropdown',
-        'name': 'AUDC',
-        'options': AUDC_OPTIONS,
-      },
-    ],
-    'args1': [
-      {
-        'type': 'field_number',
-        'name': 'AUDF',
-        'value': 31,
-      },
-      {
-        'type': 'field_number',
-        'name': 'AUDV',
-        'value': 15,
-      },
-      {
-        'type': 'field_number',
-        'name': 'DURATION',
-        'value': 20,
-      },
-      {
-        'type': 'field_dropdown',
-        'name': 'CHANNEL',
-        'options': CHANNEL_OPTIONS,
-      },
-    ],
-    'inputsInline': false,
-    'previousStatement': null,
-    'nextStatement': null,
-    'colour': 'rgb(156, 39, 176)',
-    'tooltip': `Starts playing a simple sound.`,
+// Under DPC+, with its sound chip, channel 0 is the chip's three voices, each a channel (so a sound effect can
+// be on a voice the music does not use, or take one over from it for a while and give it back): channels 0, 2 and 3 are
+// voices 1, 2 and 3, and channel 1 is still the TIA's. See generators/bbasic/dpcplus-audio.js.
+export const DPC_PLUS_CHANNEL_OPTIONS = [
+  ['Ch0 voice 1', '0'],
+  ['Ch0 voice 2', '2'],
+  ['Ch0 voice 3', '3'],
+  ['Ch1 (TIA)', '1'],
+];
+
+// Whether the project's sounds are played by the DPC+ sound chip.
+export const dpcPlusChipOn = () => {
+  const config = (useConfigurationStorage() && useConfigurationStorage().value) || {};
+  return config.kernel === 'dpcplus' && config.enableDpcPlusAudio !== false;
+};
+
+// The channel choices of a sound block or a Music tab track.
+export const channelOptions = () => (dpcPlusChipOn() ? DPC_PLUS_CHANNEL_OPTIONS : CHANNEL_OPTIONS);
+
+Blockly.Blocks['simple_sound_set'] = {
+  init: function() {
+    this.appendDummyInput()
+        .appendField(`${SOUND_ICON} Play sound`)
+        .appendField(new Blockly.FieldDropdown(AUDC_OPTIONS), 'AUDC');
+    this.appendDummyInput()
+        .appendField('with frequency')
+        .appendField(new Blockly.FieldNumber(31), 'AUDF')
+        .appendField(', volume')
+        .appendField(new Blockly.FieldNumber(15), 'AUDV')
+        .appendField('and duration')
+        .appendField(new Blockly.FieldNumber(20), 'DURATION')
+        .appendField('on')
+        // A function, so the choices follow the kernel (see channelOptions).
+        .appendField(new Blockly.FieldDropdown(() => channelOptions()), 'CHANNEL');
+    this.setInputsInline(false);
+    this.setPreviousStatement(true, null);
+    this.setNextStatement(true, null);
+    this.setColour('rgb(156, 39, 176)');
+    this.setTooltip('Starts playing a simple sound.');
   },
-]);
+};

@@ -12,6 +12,7 @@ import './bit';
 import './collision';
 import './color';
 import './data';
+import './display-ram';
 import './event';
 import './input';
 import './loops';

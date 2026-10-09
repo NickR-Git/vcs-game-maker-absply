@@ -16,7 +16,8 @@ import {DEFAULT_PATTERN_STEPS, DEFAULT_TEMPO, LENGTH_UNITS_PER_STEP} from '../bl
 import {DEFAULT_DIM_PERCENT} from '../generators/bbasic/soundfx';
 import {DEFAULT_ARPEGGIO_DIVISION, DEFAULT_NOISE_PRIORITY} from '../blocks/soundfx';
 import {useDimSoundFxPercentStorage, useDimSoundFxStorage} from '../hooks/project';
-import {audcHasTunableNotes, noteAudv} from './music-notes';
+import {noteAudf, noteAudv, soundHasTunableNotes} from './music-notes';
+import {channelUsesTia, dpcPlusFor, playDpcPlusSound} from './dpc-preview';
 import {buildEnvelopeCurve} from './envelope';
 
 // The AudioContext is shared with the Sound tab's preview (utils/sound-preview.js).
@@ -313,7 +314,14 @@ const buildBufferCached = (context, approximation, chipClockHz, seconds) => {
 //     segments instead - see below).
 const playInstrumentHit = (context, {audc, audf, audv, arpeggioSpeed, arpeggioInterval, arpeggioRange, startTime,
   seconds, envelope, envelopeAttack, envelopeDecay, envelopeDecayEnd, envelopeReleaseStart, envelopeSustainLength,
-  envelopeRelease, dimMultiplier = 1, destination}) => {
+  envelopeRelease, dimMultiplier = 1, destination, dpcPlus = null}) => {
+  // The DPC+ sound chip plays it, so it is rebuilt the way the chip does (see utils/dpc-preview.js).
+  if (dpcPlus) {
+    const {source} = playDpcPlusSound(context, {sound: dpcPlus.sound, frequency: dpcPlus.frequency, volume: audv, seconds,
+      startTime, destination, loopSustain: true, dimMultiplier, arpeggioSpeed, arpeggioInterval, arpeggioRange});
+    pruneOnEnded(source);
+    return [source];
+  }
   const approximation = AUDC_APPROXIMATIONS[`${audc}`];
   if (!approximation) return [];
 
@@ -512,7 +520,7 @@ export const getPlaybackHead = () => {
  *     actually play back, not as a single static pitch.
  */
 export const previewPatternNote = ({audc, audf, audv, arpeggio, arpeggioDivision, arpeggioInterval, arpeggioRange,
-  tempo = DEFAULT_TEMPO}) => {
+  soundEffect = null, midi = null, tia = false, tempo = DEFAULT_TEMPO}) => {
   const context = getAudioContext();
   // Same "Dim SFX volume" Options-tab setting applied everywhere else this
   // note could be heard (pattern/song playback, the compiled ROM) - without
@@ -547,7 +555,7 @@ export const previewPatternNote = ({audc, audf, audv, arpeggio, arpeggioDivision
   const resolvedArpeggioRange = arpeggio ? Number(arpeggioRange) || 0 : 0;
 
   playInstrumentHit(context, {
-    audc, audf, audv, startTime, seconds, dimMultiplier,
+    audc, audf, audv, startTime, seconds, dimMultiplier, dpcPlus: soundEffect && !tia ? dpcPlusFor(soundEffect, midi) : null,
     arpeggioSpeed, arpeggioInterval: resolvedArpeggioInterval, arpeggioRange: resolvedArpeggioRange,
   });
 };
@@ -651,7 +659,8 @@ const schedulePattern = (context, pattern, soundEffects, startTime, tempo, isTra
     // AUDC_APPROXIMATIONS, since several tunable Sound types (e.g. AUDC 1's
     // "buzzy tones") still need the buffer-based buzzy synthesis, not a
     // plain square oscillator.
-    const isTunable = audcHasTunableNotes(soundEffect.audc);
+    const tiaTrack = channelUsesTia(track.channel);
+    const isTunable = soundHasTunableNotes(soundEffect, tiaTrack);
     // Same "always on for every note this instrument plays" rule as the
     // compiled ROM (see soundfx.js/generators/bbasic/music.js) - not
     // something set per-note. arpeggioDivision is tempo-relative (e.g. 8 =
@@ -674,7 +683,7 @@ const schedulePattern = (context, pattern, soundEffects, startTime, tempo, isTra
       // clipped by schedule() below.
       if (note.step + note.length <= startUnits) return;
       maxEndUnits = Math.max(maxEndUnits, note.step + note.length);
-      const audf = isTunable && note.midi !== 'hit' ? note.audf : soundEffect.audf;
+      const audf = isTunable && note.midi !== 'hit' ? noteAudf(note, soundEffect, tiaTrack) : soundEffect.audf;
       // Per-note override (see the Music tab's  piano-roll volume row),
       // falling back to the instrument's  preset. DIM is applied as a
       // continuous gain multiplier (see playInstrumentHit's
@@ -688,6 +697,7 @@ const schedulePattern = (context, pattern, soundEffects, startTime, tempo, isTra
         startUnits: note.step, endUnits: note.step + note.length,
         priority: Number(soundEffect.priority) || DEFAULT_NOISE_PRIORITY,
         trackGain, audc: soundEffect.audc, audf, audv, dimMultiplier, arpeggioSpeed, arpeggioInterval, arpeggioRange,
+        dpcPlus: tiaTrack ? null : dpcPlusFor(soundEffect, note.midi),
         envelope: !!soundEffect.envelope,
         envelopeAttack: soundEffect.envelopeAttack,
         envelopeDecay: soundEffect.envelopeDecay,
@@ -716,7 +726,7 @@ const schedulePattern = (context, pattern, soundEffects, startTime, tempo, isTra
       envelope: note.envelope, envelopeAttack: note.envelopeAttack, envelopeDecay: note.envelopeDecay,
       envelopeDecayEnd: note.envelopeDecayEnd, envelopeReleaseStart: note.envelopeReleaseStart,
       envelopeSustainLength: note.envelopeSustainLength, envelopeRelease: note.envelopeRelease,
-      destination: note.trackGain,
+      destination: note.trackGain, dpcPlus: note.dpcPlus,
     }));
   };
 

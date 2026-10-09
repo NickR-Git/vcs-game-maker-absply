@@ -520,6 +520,19 @@
       </div>
     </v-main>
 
+    <v-dialog v-model="soundKernelNotice.open" max-width="520">
+      <v-card>
+        <v-card-title>{{ soundKernelNotice.title }}</v-card-title>
+        <v-card-text>
+          <p v-for="line in soundKernelNotice.lines" :key="line">{{ line }}</p>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn text @click="soundKernelNotice.open = false">OK</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <v-footer class="error-message" :style="{height: errorHeight + 'px', maxHeight: errorHeight + 'px'}">
       <div
         class="error-resize-handle"
@@ -545,7 +558,7 @@
 
 <script>
 import {useCompileLog, useConfigurationStorage, useDarkModeStorage, useDesaturateBlocklyColorsStorage, useErrorBannerHighlight, useErrorStorage,
-  useAdaptiveFrameSkipStorage, useHideDescriptionTextStorage, useHideSidebarStorage, useStellaPathStorage,
+  useAdaptiveFrameSkipStorage, useHideDescriptionTextStorage, useHideSidebarStorage, useStellaPathStorage, useSoundEffectsStorage,
   markSkipLoadLastProjectCheckOnce} from './hooks/project';
 import {buildRom, useRomCapacity, useRomOutdated, useHasCompiledRom, useCompiledRomBytes,
   useBuildInProgress} from './hooks/rom';
@@ -558,6 +571,7 @@ import {syncExamples} from './hooks/examples';
 import {startGamepadInput} from './hooks/gamepad';
 import {startTapHold} from './hooks/tap-hold';
 import {syncSoundBanks} from './hooks/soundbanks';
+import {soundKernelNotice, syncSoundsToKernel} from './hooks/sound-kernel';
 import KeyMappingDialog from './components/KeyMappingDialog.vue';
 import EmulatorSettingsDialog from './components/EmulatorSettingsDialog.vue';
 import DebugSettingsDialog from './components/DebugSettingsDialog.vue';
@@ -656,6 +670,9 @@ export default {
   }),
   setup() {
     const errorStorage = useErrorStorage();
+    const soundEffectsRef = useSoundEffectsStorage();
+    const configurationRef = useConfigurationStorage();
+    const syncSounds = () => syncSoundsToKernel(soundEffectsRef, configurationRef.value || {});
     console.info('Text', version);
     return {
       emulatorSettings: useEmulatorSettings(), debugSymbols: useDebugVariables(),
@@ -669,6 +686,7 @@ export default {
       darkModeStorage: useDarkModeStorage(),
       adaptiveFrameSkipStorage: useAdaptiveFrameSkipStorage(),
       configurationStorage: useConfigurationStorage(),
+      soundKernelNotice, soundEffectsStorage: soundEffectsRef, syncSounds,
       romSaveMenuOpen: false,
       stellaPathStorage: useStellaPathStorage(),
     };
@@ -940,6 +958,20 @@ export default {
     },
   },
   watch: {
+    // Sounds follow the kernel: Standard sounds become DPC+ sounds when DPC+ is chosen (and back again), including
+    // sounds that arrive from an imported project or sound bank.
+    'configurationStorage.kernel': {
+      immediate: true,
+      handler() {
+        this.syncSounds();
+      },
+    },
+    'soundEffectsStorage': {
+      deep: true,
+      handler() {
+        this.syncSounds();
+      },
+    },
     // The addresses come from the last build, so a new build or a new choice sends the list again.
     debugWatch() {
       this.sendDebugWatch();
@@ -1813,7 +1845,9 @@ export default {
 .text-card,
 .song-card,
 .titlescreen-card,
-.titlescreen-screen-card {
+.titlescreen-screen-card,
+.example-card,
+.sound-bank-card {
   border-color: rgba(0, 0, 0, 0.24) !important;
 }
 
@@ -3070,6 +3104,8 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
 .dark-mode.v-application .song-card,
 .dark-mode.v-application .titlescreen-card,
 .dark-mode.v-application .titlescreen-screen-card,
+.dark-mode.v-application .example-card,
+.dark-mode.v-application .sound-bank-card,
 .dark-mode.v-application .data-format-menu,
 .dark-mode.v-application .v-menu__content:has(> .v-select-list),
 .dark-mode.v-application .v-menu__content > .v-card,

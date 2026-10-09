@@ -16,7 +16,8 @@ import Handlebars from 'handlebars';
 import {sumBy, chunk} from 'lodash';
 
 import {appendCompileLog, useBackgroundsStorage, useConfigurationStorage, useDataTablesStorage,
-  usePlayerAnimationsStorage, useTitleScreenStorage} from '../hooks/project';
+  usePlayerAnimationsStorage, useSongsStorage, useTitleScreenStorage} from '../hooks/project';
+import {processSongsStorageDefaults} from '../blocks/music';
 import {getRelocationBanks} from '../hooks/relocation-banks';
 import {DEFAULT_ROW_COLOR, processBackgroundStorageDefaults,
   backgroundFadeTimerVarName, backgroundFadePaceVarName, backgroundFadeTargetVarName,
@@ -65,7 +66,8 @@ import {registerKeypadPollSubroutine, generateJoystickDirection8Table,
   reserveSwitchEdgeDevVars, generateSwitchEdgeChecks} from './bbasic/input';
 import {collisionMoveOldXVar, collisionMoveOldYVar} from './bbasic/collision';
 import {scoreBkColorVarName, generateScanlinesDebugScoreCode} from './bbasic/score';
-import {processPlayerAnimationsStorageDefaults, generateRomNoiseChecks, generateRainbowColorChecks,
+import {processPlayerAnimationsStorageDefaults, generateRomNoiseChecks, generatePlayerHeightLimitChecks,
+  reservePlayerHeightLimitDevVars, generateRainbowColorChecks,
   generateRainbowColorGraphics, rainbowColorNeedsPlayerColors, rainbowColorNeedsPlayer1Colors,
   reserveRomNoiseDevVars, reserveRainbowColorDevVars, reserveBackgroundRainbowDevVars,
   ROM_NOISE_FLAGS_FAMILY, MISSILE_FIRE_FLAGS_FAMILY, SEEK_FLAGS_FAMILY, SEEK_ARRIVED_FLAGS_FAMILY,
@@ -82,7 +84,7 @@ import {planFlagPool} from './bbasic/flag-pool';
 import {resolveProjectMusic, MUSIC_PLAY_RESET_NAME, MUSIC_PLAY_BY_ID_NAME,
   musicPlayByIdArgVarName, musicPlaySongResetName,
   registerMusicPlayResetSubroutine, resolveMusicEventFlags,
-  resolveNotePlayedInstruments, reserveMusicDevVars} from './bbasic/music';
+  resolveNotePlayedInstruments, reserveMusicDevVars, setMusicDpcPlusPlan} from './bbasic/music';
 import {reserveTextScrollDevVars, generateTextScrollAdvance, generateTextOffsetTables, resolveTextScrollConstants,
   setTextScrollConstants} from './bbasic/text-scroll';
 import {generateTextStaticOffsetTables, generateTextRow2OffsetsTable, textLinesBaseVarName, textLinesMaxVarName,
@@ -563,6 +565,15 @@ Blockly.BBasic.init = function(workspace) {
   // has to be known before reserveDevVar hands out user variable letters
   // below, well before either block's  generator would otherwise run.
   this.romNoiseUsedFor = new Set();
+  // DPC+ players that have a "Player set Height" block (see playerHeightLimitVarName).
+  this.playerHeightLimitUsedFor = new Set();
+  if ((useConfigurationStorage().value || {}).kernel === 'dpcplus') {
+    workspace.getAllBlocks(false).forEach((block) => {
+      const match = block.type === 'sprite_player_set' && block.isEnabled() &&
+        /^player(\d)height$/.exec(block.getFieldValue('VAR') || '');
+      if (match) this.playerHeightLimitUsedFor.add(`player${match[1]}`);
+    });
+  }
   // Same reasoning, for the separate sprite_*_rainbow_colors block (see
   // ROM_NOISE_COLOR_REGISTERS' comment in generators/bbasic/sprites.js)
   // - pre-scanned here too (not just read when its  generator runs) so
@@ -1316,6 +1327,16 @@ Blockly.BBasic.init = function(workspace) {
   // Stored on the instance (not module-level state) since this Generator is
   // a shared singleton reused across every workspaceToCode() call - same
   // reasoning as textMinikernelUsed above.
+  // Under DPC+ the sounds are played by the DPC+ music chip (see generators/bbasic/dpcplus-audio.js). The plan
+  // collects the waveforms and pitches as the generators below ask for them.
+  {
+    const soundConfig = useConfigurationStorage().value || {};
+    const chipOn = soundConfig.kernel === 'dpcplus' && soundConfig.enableDpcPlusAudio !== false && !soundConfig.muteAllAudio;
+    const chipChannels = chipOn ? collectChipChannels(workspace, processSongsStorageDefaults(useSongsStorage()).songs) : [];
+    this.dpcAudioPlan = chipChannels.length ? createDpcPlusAudioPlan(soundConfig, chipChannels) : null;
+    this.dpcAudioFiles = {};
+    setMusicDpcPlusPlan(this.dpcAudioPlan);
+  }
   this.projectMusic = resolveProjectMusic(workspace, this.notePlayedInstruments);
 
   // Reset fresh every compile - same reasoning as playerAnimAsmFiles's
@@ -1367,11 +1388,13 @@ Blockly.BBasic.init = function(workspace) {
   const soundsMuted = !!((useConfigurationStorage().value || {}).muteAllAudio);
   workspace.getAllBlocks(false).forEach((block) => {
     if (!soundsMuted && (block.type === 'soundfx_play' || block.type === 'simple_sound_set') && block.isEnabled()) {
-      this.channelDurationChannels.add(`${block.getFieldValue('CHANNEL')}`);
+      this.channelDurationChannels.add(this.normalizeChannel(block.getFieldValue('CHANNEL')));
     }
   });
   if (this.projectMusic) this.projectMusic.channels.forEach((channel) => this.channelDurationChannels.add(`${channel}`));
   this.channelDurationUsed = this.channelDurationChannels.size > 0;
+  // A project with no sound has nothing for the chip to play.
+  if (!this.channelDurationUsed) this.dpcAudioPlan = null;
 
   // Every one-shot music event watch - "sequence chip finished"
   // (music_sequence_chip_finished/_by_id) AND "note played by instrument"
@@ -1986,6 +2009,7 @@ Blockly.BBasic.init = function(workspace) {
   }
 
   reserveRomNoiseDevVars(reserveDevVar, this.romNoiseUsedFor);
+  reservePlayerHeightLimitDevVars(reserveDevVar, this.playerHeightLimitUsedFor);
 
   // Same bucket again, for the separate rainbow-colors block's  per-
   // player state - a no-op unless rainbowColorUsedFor's  early pre-scan
@@ -2094,11 +2118,18 @@ Blockly.BBasic.init = function(workspace) {
   // pre-scan above) - a no-op unless a "Play sound" block or music is
   // actually present anywhere in the project.
   if (this.channelDurationUsed) {
-    ['0', '1'].forEach((channel) => {
+    ['0', '1', '2', '3'].forEach((channel) => {
       if (this.channelDurationChannels.has(channel)) {
         reserveDevVar(`channnel${channel}duration`, undefined, `frames left before AUDV${channel} auto-silences`);
       }
     });
+  }
+
+  // What the sound registers of the chip's channels become under DPC+ (see generators/bbasic/dpcplus-audio.js).
+  if (this.dpcAudioPlan) {
+    const labels = {dpcAudc: 'waveform (AUDC)', dpcAudv: 'volume (AUDV)'};
+    dpcAudioVars(this.dpcAudioPlan.channels).forEach((name) =>
+      reserveDevVar(name, undefined, `channel ${name.slice(-1)} ${labels[name.slice(0, -1)]}`));
   }
 
   // Each channel's  attack+decay frame countdown (see
@@ -2124,6 +2155,15 @@ Blockly.BBasic.init = function(workspace) {
     soundEffectChannelHasEnvelope(workspace, '0') || !!(this.projectMusic && this.projectMusic.channelHasEnvelope[0]);
   this.envelopeStage1Used =
     soundEffectChannelHasEnvelope(workspace, '1') || !!(this.projectMusic && this.projectMusic.channelHasEnvelope[1]);
+  // The chip's second and third voices (channels 2 and 3) have an envelope countdown each.
+  [2, 3].forEach((channel) => {
+    this[`envelopeStage${channel}Used`] = !!this.dpcAudioPlan && this.dpcAudioPlan.isChannel(channel) && (
+      soundEffectChannelHasEnvelope(workspace, `${channel}`) ||
+      !!(this.projectMusic && this.projectMusic.channelHasEnvelope[channel]));
+    if (this[`envelopeStage${channel}Used`]) {
+      reserveDevVar(`envelopeStage${channel}`, undefined, `channel ${channel}'s attack+decay frame countdown`);
+    }
+  });
   if (this.envelopeStage0Used) {
     reserveDevVar('envelopeStage0', undefined, 'channel 0\'s attack+decay frame countdown');
   }
@@ -2134,6 +2174,10 @@ Blockly.BBasic.init = function(workspace) {
   // so there the shared envelope byte is an ordinary variable.
   if (config.kernel === 'dpcplus' && (this.envelopeStage0Used || this.envelopeStage1Used)) {
     reserveDevVar('envelopeConfig', undefined, 'both channels\' envelope-config index, packed one nibble each');
+  }
+  // The same for channels 2 and 3 (low and high nibble).
+  if (this.envelopeStage2Used || this.envelopeStage3Used) {
+    reserveDevVar('envelopeConfigB', undefined, 'channel 2 and 3 envelope-config index, packed one nibble each');
   }
 
   // "rand16" is a real batari Basic feature (see std_routines.asm's
@@ -2159,7 +2203,8 @@ Blockly.BBasic.init = function(workspace) {
   // collision that the dynamic pool's  dedup logic doesn't have. Only
   // reserved while the toggle is actually on, so a project that doesn't
   // need the wider period never pays the variable's cost.
-  if (config.enableRand16) {
+  // (Not under DPC+: its chip has a 32-bit random number generator, so the option is hidden there and ignored here.)
+  if (config.enableRand16 && config.kernel !== 'dpcplus') {
     reserveDevVar('rand16', undefined, 'literal name the standard kernel checks for to widen the RNG period');
   }
 
@@ -3430,6 +3475,7 @@ Blockly.BBasic.finish = function(code) {
   const generatedAnimations = Blockly.BBasic.generateAnimations();
   const generatedDataTables = Blockly.BBasic.generateDataTables(Blockly.BBasic.primaryBank());
   const generatedRomNoiseChecks = generateRomNoiseChecks(Blockly);
+  const generatedPlayerHeightLimitChecks = generatePlayerHeightLimitChecks(Blockly);
   // Built earlier, during init() (see registerTitleScreenSubroutine in
   // generators/bbasic/titlescreen.js) - not a generate*() call here like
   // its neighbors, since it needs cardAnimationByRef (kernel slot keys,
@@ -3487,6 +3533,18 @@ Blockly.BBasic.finish = function(code) {
       if (text === 'end') return '@end';
       return /^[ ]/.test(line) ? text : '@' + text;
     }).join('\n');
+  }
+  // The DPC+ sound engine's routine, called at the end of commongamelogic once the frame's sound code has run.
+  let generatedDpcPlusAudio = '';
+  let dpcAudioNames = null;
+  if (this.dpcAudioPlan) {
+    dpcAudioNames = Object.fromEntries(dpcAudioVars(this.dpcAudioPlan.channels).map((name) =>
+      [name, this.nameDB_.getName(name, Blockly.Names.DEVELOPER_VARIABLE_TYPE)]));
+    this.subroutines[DPC_AUDIO_SUBROUTINE_NAME] = this.dpcAudioPlan.routine(dpcAudioNames);
+    this.dpcAudioFiles = {'DPC_frequencies.h': this.dpcAudioPlan.frequencyFile()};
+    generatedDpcPlusAudio = ` gosub ${DPC_AUDIO_SUBROUTINE_NAME}${Blockly.BBasic.bankJumpSuffix(
+        Blockly.BBasic.primaryBank(), Blockly.BBasic.getSubroutineBank(DPC_AUDIO_SUBROUTINE_NAME))}
+`;
   }
   const generatedSubroutines = Blockly.BBasic.generateSubroutines();
   const generatedFunctions = Blockly.BBasic.generateFunctions();
@@ -3598,8 +3656,8 @@ Blockly.BBasic.finish = function(code) {
   // under the "Code generated by VCS Game Maker." heading below.
   const generatedBody = definitions.filter((definition) => definition.trim() !== '').join('\n\n') +
     '\n\n\n' + code;
-  return handlebarsTemplate({generatedBody, generatedBackgrounds,
-    generatedAnimations, generatedDataTables, generatedRomNoiseChecks, generatedTitleScreenAnimationChecks,
+  const generated = handlebarsTemplate({generatedDpcPlusAudio, generatedBody, generatedBackgrounds,
+    generatedAnimations, generatedDataTables, generatedRomNoiseChecks, generatedPlayerHeightLimitChecks, generatedTitleScreenAnimationChecks,
     generatedRainbowColorGraphics, generatedRainbowColorChecks, generatedMissileFireChecks,
     generatedSeekChecks, generatedInertiaChecks, generatedShakeScreenChecks, generatedDpcPlusColorPriming, generatedDpcPlusColorTables, generatedDpcPlusInitialDrawscreen,
     generatedDpcPlusSpriteDefaults,
@@ -3619,6 +3677,7 @@ Blockly.BBasic.finish = function(code) {
     generatedTextScrollAdvance, generatedTitleKernelSkip, generatedScoreBkColorAsm, generatedRunOnceEdgeReset,
     generatedKeypadPollCall, generatedKeypadSetup, generatedCtrlpfShadowSetup, generatedBackgroundFadeSetup,
     nusiz0Expression, nusiz1Expression, player1NusizLine, player1FlipLines, extraPlayerNusizLines});
+  return dpcAudioNames ? redirectSoundRegisters(generated, dpcAudioNames) : generated;
 };
 
 // Builds the run-once flag bytes' per-frame reset body - registered as the
@@ -4346,6 +4405,16 @@ Blockly.BBasic.effectiveShowBlankLines = function() {
 // than only at drawscreen). Placed here, after every block for the frame has
 // had its say, this is genuinely the last word each frame, silencing both
 // channels outright regardless of what a Sound block set them to.
+// A sound block's or Music tab track's channel as it is played. The chip's channels (2 and 3, with 0) exist only while the
+// chip plays the sounds (see dpcplus-audio.js); a channel number left over from a project made under another kernel (or
+// with the chip turned off) is channel 0.
+Blockly.BBasic.normalizeChannel = function(value) {
+  const channel = Number(value) || 0;
+  if (channel === 1) return '1';
+  if (channel >= 2 && this.dpcAudioPlan && this.dpcAudioPlan.isChannel(channel)) return `${channel}`;
+  return '0';
+};
+
 Blockly.BBasic.generateMuteAudio = function() {
   const configurationStorage = useConfigurationStorage();
   const config = (configurationStorage && configurationStorage.value) || {};
@@ -4507,7 +4576,7 @@ Blockly.BBasic.generateDpcPlusInitialDrawscreen = function() {
 Blockly.BBasic.generateChannelDurationChecks = function() {
   if (!this.channelDurationUsed) return '';
   const lines = [' asm'];
-  ['0', '1'].forEach((channel) => {
+  ['0', '1', '2', '3'].forEach((channel) => {
     if (!this.channelDurationChannels.has(channel)) return;
     const duration = this.nameDB_.getName(`channnel${channel}duration`, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
     lines.push(
@@ -6275,6 +6344,7 @@ import text from './bbasic/text';
 import textMinikernel from './bbasic/text-minikernel';
 import titlescreen from './bbasic/titlescreen';
 import variables from './bbasic/variables';
+import {collectChipChannels, createDpcPlusAudioPlan, DPC_AUDIO_SUBROUTINE_NAME, dpcAudioVars, redirectSoundRegisters} from './bbasic/dpcplus-audio';
 
 [background, bit, collision, color, colour, data, event, functionGenerators, input, logic, loops, math, music,
   random, score, sound, soundfx, sprites, subroutine, text, textMinikernel, titlescreen, variables]

@@ -107,7 +107,7 @@
           small
           class="project-flat-icon-btn data-icon-btn-size"
           :class="{'project-flat-icon-btn-active': showExamples && !showSoundBanks}"
-          :title="examples.status === 'loading' ? 'Example Projects (checking for updates...)' : 'Example Projects'"
+          :title="examples.status === 'loading' ? `Example Projects (checking ${examples.source} for updates...)` : 'Example Projects'"
           @click="showSoundBanks = false; showExamples = true"
         >
           <v-progress-circular
@@ -131,7 +131,7 @@
           small
           class="project-flat-icon-btn data-icon-btn-size"
           :class="{'project-flat-icon-btn-active': showSoundBanks}"
-          :title="soundBanks.status === 'loading' ? 'Sound Banks (checking for updates...)' : 'Sound Banks'"
+          :title="soundBanks.status === 'loading' ? `Sound Banks (checking ${soundBanks.source} for updates...)` : 'Sound Banks'"
           @click="showSoundBanks = true"
         >
           <v-progress-circular
@@ -220,12 +220,21 @@
 
     <v-card-text v-else-if="showSoundBanks" class="project-settings-text">
       <span class="text-subtitle-1 project-settings-label">Sound Banks</span>
-      <v-select
-        v-model="data.soundBankFilter"
-        :items="soundBankFilterItems"
-        label="Show"
-        class="sound-bank-filter"
-      />
+      <div class="project-search-row">
+        <v-text-field
+          v-model="data.soundBankSearch"
+          label="Search"
+          prepend-inner-icon="mdi-magnify"
+          clearable
+          class="project-search-field"
+        />
+        <v-select
+          v-model="data.soundBankFilter"
+          :items="soundBankFilterItems"
+          label="Show"
+          class="sound-bank-filter"
+        />
+      </div>
       <p class="v-messages theme--light v-messages__message example-status">
         Sounds and sound banks from GitHub. Click one to choose which sounds to import into the
         open project.
@@ -233,9 +242,9 @@
       <div v-if="soundBanks.status === 'loading'" class="example-progress">
         <v-progress-circular indeterminate :size="16" :width="2" />
         <span v-if="soundBanks.total">
-          Downloading sound banks ({{ soundBanks.done }} of {{ soundBanks.total }})...
+          Downloading sound banks ({{ soundBanks.done }} of {{ soundBanks.total }}) from {{ soundBanks.source }}...
         </span>
-        <span v-else>Checking for sound banks...</span>
+        <span v-else>Checking {{ soundBanks.source }} for sound banks...</span>
       </div>
       <p v-if="!soundBanks.entries.length && soundBanks.status !== 'loading'" class="v-messages theme--light v-messages__message example-status">
         <template v-if="soundBanks.status === 'error'">
@@ -284,6 +293,11 @@
             <div v-if="bank.sounds.length" class="example-card-line sound-bank-names">
               {{ bank.sounds.join(', ') }}
             </div>
+            <div v-if="bank.developer" class="example-card-line">by {{ bank.developer }}</div>
+            <div v-if="soundBankWebsiteLink(bank)" class="example-card-line">
+              <a :href="soundBankWebsiteLink(bank)" target="_blank" rel="noopener noreferrer" @click.stop>{{ bank.website }}</a>
+            </div>
+            <div class="example-card-line example-card-kernel">{{ soundBankKernelLabel(bank) }} Kernel</div>
           </div>
         </v-card>
       </div>
@@ -296,12 +310,21 @@
 
     <v-card-text v-else class="project-settings-text">
       <span class="text-subtitle-1 project-settings-label">Example Projects</span>
+      <div class="project-search-row">
+        <v-text-field
+          v-model="data.exampleSearch"
+          label="Search"
+          prepend-inner-icon="mdi-magnify"
+          clearable
+          class="project-search-field"
+        />
+      </div>
       <div v-if="examples.status === 'loading'" class="example-progress">
         <v-progress-circular indeterminate :size="16" :width="2" />
         <span v-if="examples.total">
-          Downloading example projects ({{ examples.done }} of {{ examples.total }})...
+          Downloading example projects ({{ examples.done }} of {{ examples.total }}) from {{ examples.source }}...
         </span>
-        <span v-else>Checking for example projects...</span>
+        <span v-else>Checking {{ examples.source }} for example projects...</span>
       </div>
       <p v-if="!examples.entries.length && examples.status !== 'loading'" class="v-messages theme--light v-messages__message example-status">
         <template v-if="examples.status === 'error'">
@@ -312,7 +335,7 @@
       </p>
       <div class="example-list">
         <v-card
-          v-for="example in examples.entries"
+          v-for="example in filteredExamples"
           :key="example.name"
           outlined
           :ripple="false"
@@ -332,15 +355,21 @@
             <div class="example-card-title">{{ exampleTitle(example) }}</div>
             <div v-if="example.version" class="example-card-line">Version {{ example.version }}</div>
             <div v-if="example.developer" class="example-card-line">by {{ example.developer }}</div>
+            <div class="example-card-line example-card-kernel">{{ soundBankKernelLabel(example) }} Kernel</div>
           </div>
         </v-card>
       </div>
     </v-card-text>
 
-    <v-dialog v-model="data.exampleDialog" width="640" content-class="example-dialog">
+    <v-dialog
+      v-model="data.exampleDialog"
+      width="640"
+      :content-class="data.selectedExample && data.selectedExample.screenshot ? 'example-dialog example-dialog-fitted' : 'example-dialog'"
+    >
       <v-card v-if="data.selectedExample" class="example-card">
         <v-card-title>{{ exampleTitle(data.selectedExample) }}</v-card-title>
         <v-card-text class="example-info-fields">
+          <div class="example-card-line example-dialog-kernel">{{ soundBankKernelLabel(data.selectedExample) }} Kernel</div>
           <div v-if="data.selectedExample.screenshot" class="example-screenshot-frame example-dialog-screenshot">
             <img
               :src="data.selectedExample.screenshot"
@@ -452,6 +481,7 @@ import {useEmulatorSettings, saveEmulatorSettings} from '../hooks/emulator-setti
 import {soundBanksState} from '../hooks/soundbanks';
 import {processSoundEffectsStorageDefaults} from '../blocks/soundfx';
 import {buildSoundBankImportEntries, importSoundBankEntries, soundEffectsInBankFile} from '../utils/sound-bank';
+import {KERNEL_NAMES} from '../utils/dpc-sound';
 import SoundBankImportDialog from '../components/SoundBankImportDialog.vue';
 import {previewSoundEffect, stopSoundEffectPreview} from '../utils/sound-preview';
 import {DEFAULT_DIM_PERCENT, dimVolume} from '../generators/bbasic/soundfx';
@@ -513,6 +543,9 @@ export default defineComponent({
       soundBankError: '',
       // Which downloads the Sound Banks screen lists: 'all', 'bank', 'sound' or 'instrument'.
       soundBankFilter: 'all',
+      // Text the Sound Banks and Example Projects screens narrow their cards down to.
+      soundBankSearch: '',
+      exampleSearch: '',
       // Name of the sound bank whose preview is playing, or ''.
       previewingSoundBank: '',
       // The handle "Save" writes back to, from the last "Save As..." or
@@ -662,12 +695,24 @@ export default defineComponent({
       {text: 'Sound banks', value: 'bank'},
       {text: 'Sounds', value: 'sound'},
       {text: 'Instruments', value: 'instrument'},
+      {text: 'Percussion', value: 'percussion'},
     ];
+    // Every word typed has to be somewhere in the card's text (names, developer, kernel...).
+    const matchesSearch = (search, parts) => {
+      const words = String(search || '').toLowerCase().split(/\s+/).filter(Boolean);
+      if (!words.length) return true;
+      const text = parts.filter(Boolean).join(' ').toLowerCase();
+      return words.every((word) => text.includes(word));
+    };
     const filteredSoundBanks = computed(() => soundBanksState.entries.filter(
-        (bank) => data.soundBankFilter === 'all' || bank.kind === data.soundBankFilter));
+        (bank) => (data.soundBankFilter === 'all' || bank.kind === data.soundBankFilter) &&
+          matchesSearch(data.soundBankSearch, [bank.name, bank.developer, bank.kernel, bank.kind, ...(bank.sounds || [])])));
+    const filteredExamples = computed(() => examplesState.entries.filter(
+        (example) => matchesSearch(data.exampleSearch,
+            [example.name, example.title, example.developer, example.version, example.kernel, example.description])));
 
     return {data, router, showExamples, showSoundBanks, isToolbarScrolled, examples: examplesState, soundBanks: soundBanksState,
-      soundBankFilterItems, filteredSoundBanks, backgroundsStorage, playerAnimationsStorage,
+      soundBankFilterItems, filteredSoundBanks, filteredExamples, backgroundsStorage, playerAnimationsStorage,
       workspaceStorage, configurationStorage, scoreFontStorage, squishCustomScoreFontStorage, scoreFontEditsStorage, dataTablesStorage,
       textStringsStorage, textFontStorage, soundEffectsStorage, songsStorage, titleScreenStorage, colorPaletteStorage,
       debugVariablesStorage, emulatorSettingsStorage, projectTitle,
@@ -1384,10 +1429,20 @@ export default defineComponent({
     },
 
     soundBankKindIcon(bank) {
-      return {bank: 'mdi-database', instrument: 'mdi-piano'}[bank.kind] || 'mdi-waveform';
+      return {bank: 'mdi-database', instrument: 'mdi-piano', percussion: '$drum'}[bank.kind] || 'mdi-waveform';
+    },
+    // The website of a file as a link, or '' when it is not a web address.
+    soundBankWebsiteLink(bank) {
+      const site = (bank.website || '').trim();
+      if (!site) return '';
+      const url = /^https?:\/\//i.test(site) ? site : `https://${site}`;
+      return /^https?:\/\/[^\s]+$/i.test(url) ? url : '';
+    },
+    soundBankKernelLabel(bank) {
+      return KERNEL_NAMES[bank.kernel] || bank.kernel;
     },
     soundBankKindLabel(bank) {
-      return {bank: 'Sound bank', instrument: 'Instrument'}[bank.kind] || 'Sound';
+      return {bank: 'Sound bank', instrument: 'Instrument', percussion: 'Percussion'}[bank.kind] || 'Sound';
     },
 
     // A single sound is titled with the name saved inside its file, a bank with
@@ -1764,6 +1819,15 @@ export default defineComponent({
 
 .example-card-text {
   padding: 8px 12px 12px;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The kernel is always the bottom line of a card, whatever else is on it and however tall its row is. */
+.example-card-kernel {
+  margin-top: auto;
+  padding-top: 4px;
 }
 
 .example-card-title {
@@ -1773,6 +1837,18 @@ export default defineComponent({
 .example-card-line {
   font-size: 0.85em;
   opacity: 0.7;
+}
+
+.example-dialog-kernel {
+  font-size: 1.1em;
+  line-height: 1.5;
+  opacity: 0.85;
+  margin-bottom: 16px;
+}
+
+/* The kernel line sits right under the title. */
+.example-dialog .v-card__title {
+  padding-bottom: 2px;
 }
 
 .example-dialog-screenshot {
@@ -1876,6 +1952,17 @@ export default defineComponent({
   white-space: nowrap;
 }
 
+/* The search field and the Show drop-down side by side under the screen's title. */
+.project-search-row {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.project-search-field {
+  max-width: 320px;
+}
+
 /* The Show drop-down under the Sound Banks title: as wide as its choices need, not the page. */
 .sound-bank-filter {
   max-width: 220px;
@@ -1941,5 +2028,11 @@ export default defineComponent({
    (see .example-card in the scoped styles). */
 .v-dialog.example-dialog {
   overflow: hidden;
+}
+
+/* With a screenshot the popup is only as wide as the picture (the same width as .example-dialog-screenshot) plus the
+   card's side padding, instead of the full 640px. */
+.v-dialog.example-dialog.example-dialog-fitted {
+  width: min(640px, calc(36vh * 320 / 220 + 48px)) !important;
 }
 </style>

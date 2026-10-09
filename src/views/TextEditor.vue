@@ -73,9 +73,9 @@
                 outlined
                 :ripple="false"
                 class="text-card"
-                :class="[dragCardClass(index), {'text-card-selected': entry.id === selectedCardId}]"
+                :class="[dragCardClass(index), {'text-card-selected': selectedCardIds.includes(entry.id)}]"
                 v-on="dragTargetListeners(index)"
-                @click.stop="selectCard(entry.id)"
+                @click.stop="selectCard(entry.id, $event)"
               >
                 <div
                   class="text-drag-handle"
@@ -100,9 +100,9 @@
                 </div>
                 <confirm-delete-menu
                   v-if="state.textStrings.length > 1"
-                  title="Delete this message?"
-                  :selected="entry.id === selectedCardId"
-                  activator-title="Delete this message"
+                  :title="deleteQuestion(entry.id, 'message', 1)"
+                  :selected="entry.id === selectedCardId && selectedCardIds.includes(entry.id)"
+                  :activator-title="deleteQuestion(entry.id, 'message', 1).replace('?', '')"
                   icon-btn-class="text-delete-btn text-icon-btn-size"
                   absolute
                   top
@@ -189,7 +189,8 @@ import TextFontEditor from '../components/TextFontEditor.vue';
 import {useCollapsedIds} from '../hooks/collapse';
 import {recordReorder, sameItems, tryRedoReorder, tryUndoReorder} from '../hooks/reorder-history';
 import {undoRedoKind} from '../utils/undo-hotkey';
-import {CSS_CLASS_DRAGGING} from '../hooks/drag-reorder';
+import {CSS_CLASS_DRAGGING, dragGroupFor, moveCards} from '../hooks/drag-reorder';
+import {useCardSelection} from '../hooks/card-selection';
 import {useConfigurationStorage, useTextStringsStorage, useTextColumnsStorage} from '../hooks/project';
 import {DEFAULT_TEXT_JUSTIFY, DEFAULT_TEXT_STRINGS, DEFAULT_TEXT_MAX_DISPLAY_WIDTH,
   TEXT_MAX_DISPLAY_WIDTH_OPTIONS, TEXT_CARD_MAX_LENGTH,
@@ -305,13 +306,11 @@ export default defineComponent({
     // song cards and SoundFXEditor.vue's  sound effect cards (see
     // MusicEditor.vue's  comment for the full reasoning): plain local
     // component state, not persisted, not wired into anything else.
+    // Shift+click selects a range, Ctrl/Cmd+click adds or removes a card (see hooks/card-selection.js): deleting or
+    // dragging one of several selected cards does it to all of them.
     const selectedCardId = ref(null);
-    const selectCard = (id) => {
-      selectedCardId.value = id;
-    };
-    const deselectCard = () => {
-      selectedCardId.value = null;
-    };
+    const {selectedCardIds, selectCard, deselectCard, getSelectedIndices, idsToDelete, deleteQuestion} = useCardSelection(
+        () => state.value.textStrings.map(({id}) => id), selectedCardId);
 
     const state = computed({
       get() {
@@ -350,13 +349,15 @@ export default defineComponent({
     // "insert above," with no way to drop a card at the END of a row or
     // between two cards sharing that row.
     const draggedEntryIndex = ref(null);
+    // Every card being dragged: the selected ones when the one dragged is one of them.
+    const draggedGroup = ref([]);
     // {index, side} - side is 'before' or 'after', which HALF of card
     // `index` the pointer is currently over - same halfway-point
     // convention MusicEditor.vue's  dragOverSideFor/DataEditor.vue's
     // valueRowListeners already use for their identical grid-drop
     // problem.
     const dragOverEntry = ref(null);
-    const isEntryDragging = (index) => draggedEntryIndex.value === index;
+    const isEntryDragging = (index) => draggedEntryIndex.value === index || draggedGroup.value.includes(index);
     const isEntryDragOver = (index) =>
       !!dragOverEntry.value && dragOverEntry.value.index === index && !isEntryDragging(index);
     const entryDragOverSide = (index) => (isEntryDragOver(index) ? dragOverEntry.value.side : null);
@@ -373,6 +374,7 @@ export default defineComponent({
     const dragHandleListeners = (index) => ({
       dragstart: (event) => {
         draggedEntryIndex.value = index;
+        draggedGroup.value = dragGroupFor(index, getSelectedIndices());
         event.dataTransfer.effectAllowed = 'move';
         // Same Firefox requirement as hooks/drag-reorder.js's
         // dragHandleListeners - the value itself is never read back.
@@ -380,6 +382,7 @@ export default defineComponent({
       },
       dragend: () => {
         draggedEntryIndex.value = null;
+        draggedGroup.value = [];
         dragOverEntry.value = null;
       },
     });
@@ -400,20 +403,19 @@ export default defineComponent({
       drop: (event) => {
         event.preventDefault();
         const from = draggedEntryIndex.value;
+        const group = draggedGroup.value.length ? draggedGroup.value : [from];
         draggedEntryIndex.value = null;
+        draggedGroup.value = [];
         dragOverEntry.value = null;
-        if (from == null || from === index) return;
+        if (from == null || group.includes(index)) return;
         // Computed fresh off the actual drop event's  pointer position -
         // see MusicEditor.vue's  sequenceChipListeners drop handler for
         // why this isn't just read back off dragOverEntry instead.
         const side = dragOverSideFor(event);
-        let insertAt = side === 'after' ? index + 1 : index;
-        if (from < insertAt) insertAt--;
-        if (insertAt === from) return;
+        const insertAt = side === 'after' ? index + 1 : index;
         const before = state.value.textStrings.slice();
-        const items = before.slice();
-        const [moved] = items.splice(from, 1);
-        items.splice(insertAt, 0, moved);
+        const items = moveCards(before, group, insertAt);
+        if (sameItems(items, before)) return;
         state.value.textStrings = items;
         handleChildChange();
         const after = items.slice();
@@ -450,7 +452,9 @@ export default defineComponent({
 
     const handleDeleteEntry = (entry) => {
       if (state.value.textStrings.length <= 1) return;
-      state.value.textStrings = state.value.textStrings.filter(({id}) => id != entry.id);
+      const doomed = idsToDelete(entry.id, 1);
+      state.value.textStrings = state.value.textStrings.filter(({id}) => !doomed.includes(id));
+      if (doomed.length > 1) deselectCard();
       handleChildChange();
       instance.proxy.$forceUpdate();
     };
@@ -477,7 +481,7 @@ export default defineComponent({
     onBeforeUnmount(() => window.removeEventListener('keydown', handleHistoryHotkey));
 
     return {
-      selectedCardId, selectCard, deselectCard,
+      selectedCardId, selectedCardIds, selectCard, deselectCard, deleteQuestion,
       state, handleChildChange, handleAddEntry, handleDeleteEntry, handleTextChange,
       isCollapsed, toggleCollapsed, textBkColor, enableTextScrollCursor,
       textScrollCursorBlinkSpeed, BLINK_SPEED_OPTIONS, textMaxDisplayWidth,

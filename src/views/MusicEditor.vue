@@ -801,7 +801,7 @@ import {useCollapsedIds} from '../hooks/collapse';
 import {recordReorder, sameItems} from '../hooks/reorder-history';
 import {canRedoReorder, canUndoReorder, noteEdit, settleEdits, tryRedoReorder, tryUndoReorder} from '../hooks/reorder-history';
 import {useMusicEditorActiveState, usePlaybackStatusState} from '../hooks/music-editor-state';
-import {useDimSoundFxPercentStorage, useDimSoundFxStorage, useSongsStorage,
+import {useConfigurationStorage, useDimSoundFxPercentStorage, useDimSoundFxStorage, useSongsStorage,
   useSoundEffectsStorage, loadMutedMusicTrackIds, loadSoloedMusicTrackIds, MUTED_MUSIC_TRACKS_KEY,
   SOLOED_MUSIC_TRACKS_KEY, isMusicTrackMuted} from '../hooks/project';
 import {
@@ -811,10 +811,10 @@ import {
 } from '../blocks/music';
 import {processSoundEffectsStorageDefaults} from '../blocks/soundfx';
 import {DEFAULT_DIM_PERCENT} from '../generators/bbasic/soundfx';
-import {CHANNEL_OPTIONS} from '../blocks/sound';
+import {channelOptions} from '../blocks/sound';
 import {getDateInfix} from '../utils/date';
 import {openFileDialog} from '../utils/file';
-import {audcHasTunableNotes, audfByMidiForAudc, CANONICAL_NOTE_ROWS, noteAudv} from '../utils/music-notes';
+import {audfByMidiForAudc, getCanonicalNoteRows, noteAudv, soundHasTunableNotes} from '../utils/music-notes';
 import {effectiveTempo, getPlaybackHead, playPattern, playSequence, previewPatternNote, setTrackMuted,
   stopPatternPlayback} from '../utils/music-playback';
 import {autoInstrumentColor, instrumentColorFor, isLightColor,
@@ -875,7 +875,13 @@ const HIT_ROW = [{midi: 'hit', label: 'Hit'}];
 // Same array the template's "sharedNoteRows" binding builds (see the
 // return statement below) - hoisted to module scope so the Move tool's
 // drag logic can look up a row by index/offset too, not just render them.
-const SHARED_NOTE_ROWS = [...CANONICAL_NOTE_ROWS, ...HIT_ROW];
+// The pitched rows depend on the kernel (see getCanonicalNoteRows), so this is read when needed, not kept.
+let sharedNoteRowsCache = {source: null, rows: HIT_ROW};
+const currentSharedNoteRows = () => {
+  const source = getCanonicalNoteRows();
+  if (sharedNoteRowsCache.source !== source) sharedNoteRowsCache = {source, rows: [...source, ...HIT_ROW]};
+  return sharedNoteRowsCache.rows;
+};
 // .piano-roll-cell's fixed CSS height (see its rule further down) -
 // duplicated here as a named constant (not read from the DOM) since the
 // Move tool's vertical drag needs to convert a pixel Y-delta into a row
@@ -918,6 +924,7 @@ export default defineComponent({
   setup() {
     const songsStorage = useSongsStorage();
     const soundEffectsStorage = useSoundEffectsStorage();
+    const configurationStorage = useConfigurationStorage();
     // Same shared app-wide storage keys as SoundFXEditor.vue's  identical
     // dimSoundFx/dimSoundFxPercent pair (see useDimSoundFxStorage's
     // comment in hooks/project.js - a standing app preference, not part of
@@ -1147,7 +1154,7 @@ export default defineComponent({
     // ALREADY assigned to a track from before it was untagged (see
     // trackSoundEffect, unaffected by this filter, still resolves it by id
     // regardless), but shouldn't be newly choosable from this dropdown.
-    const soundEffectOptions = () => soundEffects().filter((soundEffect) => soundEffect.isInstrument).map(
+    const soundEffectOptions = () => soundEffects().filter((soundEffect) => soundEffect.isInstrument || soundEffect.isPercussion).map(
         (soundEffect) => ({text: soundEffect.name || `Unnamed ${soundEffect.id}`, value: soundEffect.id}));
 
     const handleChildChange = () => {
@@ -2706,6 +2713,11 @@ export default defineComponent({
     // light enough to need it.
     const instrumentTextColor = (track) => isLightColor(instrumentColor(track)) ? '#000' : '#fff';
 
+    // Under DPC+ the chip plays channel 0 and the TIA plays channel 1, so a channel 1 track has the notes of the TIA.
+    const trackUsesTia = (track) => {
+      const config = (configurationStorage && configurationStorage.value) || {};
+      return config.kernel === 'dpcplus' && config.enableDpcPlusAudio !== false && Number(track.channel) === 1;
+    };
     const rowIsAvailable = (track, row) => {
       const soundEffect = trackSoundEffect(track);
       if (!soundEffect) return false;
@@ -2713,8 +2725,9 @@ export default defineComponent({
       // (noise/untuned types) - a tunable instrument already has
       // its  proper pitched rows, so Hit is greyed out for it instead of
       // offering a redundant, pitch-less way to trigger the same sound.
-      if (row.midi === 'hit') return !audcHasTunableNotes(soundEffect.audc);
-      return audfByMidiForAudc(soundEffect.audc).has(row.midi);
+      const tia = trackUsesTia(track);
+      if (row.midi === 'hit') return !soundHasTunableNotes(soundEffect, tia);
+      return soundHasTunableNotes(soundEffect, tia) && audfByMidiForAudc(soundEffect.audc, tia).has(row.midi);
     };
     // Same "not available to the currently active track" check
     // patternCellClasses'  piano-roll-cell-row-unavailable already
@@ -2730,7 +2743,8 @@ export default defineComponent({
       if (row.midi === 'hit') return null;
       const soundEffect = trackSoundEffect(track);
       if (!soundEffect) return null;
-      return audfByMidiForAudc(soundEffect.audc).get(row.midi);
+      const tia = trackUsesTia(track);
+      return soundHasTunableNotes(soundEffect, tia) ? audfByMidiForAudc(soundEffect.audc, tia).get(row.midi) : null;
     };
 
     // One "slice" of a step, in LENGTH_UNITS_PER_STEP units, per the "Note
@@ -3477,6 +3491,7 @@ export default defineComponent({
           arpeggioDivision: soundEffect.arpeggioDivision,
           arpeggioInterval: soundEffect.arpeggioInterval,
           arpeggioRange: soundEffect.arpeggioRange,
+          soundEffect, midi: row.midi, tia: trackUsesTia(activeTrack),
           tempo: effectiveTempo(song, pattern),
         });
       }
@@ -3509,6 +3524,7 @@ export default defineComponent({
         arpeggioDivision: soundEffect.arpeggioDivision,
         arpeggioInterval: soundEffect.arpeggioInterval,
         arpeggioRange: soundEffect.arpeggioRange,
+        soundEffect, midi: note.midi, tia: trackUsesTia(track),
         tempo: effectiveTempo(song, pattern),
       });
     };
@@ -3532,7 +3548,7 @@ export default defineComponent({
       const snapUnits = subdivisionUnitLength();
       const rawDeltaUnits = ((event.clientX - startClientX) / cellWidthPx()) * LENGTH_UNITS_PER_STEP;
       const deltaUnits = Math.round(rawDeltaUnits / snapUnits) * snapUnits;
-      // Rows read top-to-bottom in SHARED_NOTE_ROWS order, same as the
+      // Rows read top-to-bottom in currentSharedNoteRows() order, same as the
       // template's v-for - dragging DOWN on screen means a LATER row
       // index, so the row delta (not the step delta above) is added, not
       // subtracted.
@@ -3540,8 +3556,8 @@ export default defineComponent({
       group.forEach((member) => {
         const maxStartUnits = Math.max(0, stepCount * LENGTH_UNITS_PER_STEP - member.note.length);
         member.note.step = Math.max(0, Math.min(maxStartUnits, member.startStep + deltaUnits));
-        const newRowIndex = Math.max(0, Math.min(SHARED_NOTE_ROWS.length - 1, member.startRowIndex + deltaRows));
-        const newRow = SHARED_NOTE_ROWS[newRowIndex];
+        const newRowIndex = Math.max(0, Math.min(currentSharedNoteRows().length - 1, member.startRowIndex + deltaRows));
+        const newRow = currentSharedNoteRows()[newRowIndex];
         // A row this track's instrument can't actually play (rowIsAvailable -
         // see canPlaceNoteAt) is skipped rather than landing there anyway -
         // this one note just stops following the cursor vertically past
@@ -3643,13 +3659,13 @@ export default defineComponent({
       // actually "first" (a marquee can be dragged in any of the 4
       // directions from its starting corner).
       const deltaRows = Math.round((currentClientY - startClientY) / PIANO_ROLL_ROW_HEIGHT_PX);
-      const endRowIndex = Math.max(0, Math.min(SHARED_NOTE_ROWS.length - 1, startRowIndex + deltaRows));
+      const endRowIndex = Math.max(0, Math.min(currentSharedNoteRows().length - 1, startRowIndex + deltaRows));
       const minRowIndex = Math.min(startRowIndex, endRowIndex);
       const maxRowIndex = Math.max(startRowIndex, endRowIndex);
       const deltaUnits = ((currentClientX - startClientX) / cellWidthPx()) * LENGTH_UNITS_PER_STEP;
       const minUnits = Math.min(startUnits, startUnits + deltaUnits);
       const maxUnits = Math.max(startUnits, startUnits + deltaUnits);
-      const selectedMidis = new Set(SHARED_NOTE_ROWS.slice(minRowIndex, maxRowIndex + 1).map((r) => r.midi));
+      const selectedMidis = new Set(currentSharedNoteRows().slice(minRowIndex, maxRowIndex + 1).map((r) => r.midi));
       // note.step < maxUnits && note.step + note.length > minUnits - tests
       // each note's REAL [step, step+length) range against the marquee,
       // not the step column(s) it happens to sit in, so a short note only
@@ -3665,7 +3681,7 @@ export default defineComponent({
       window.removeEventListener('mouseup', stopMarqueeSelect);
     };
     const handleMarqueeSelectStart = (pattern, track, row, step, event) => {
-      const startRowIndex = SHARED_NOTE_ROWS.findIndex((candidate) => candidate.midi === row.midi);
+      const startRowIndex = currentSharedNoteRows().findIndex((candidate) => candidate.midi === row.midi);
       // Captured once up front (fixed-positioned, so it needs no re-
       // measuring mid-drag - internal scrolling moves the grid's content,
       // not the grid's viewport rect) and used to clamp the drawn box below:
@@ -3727,7 +3743,7 @@ export default defineComponent({
       const group = notesToMove.map((groupNote) => ({
         note: groupNote,
         startStep: groupNote.step,
-        startRowIndex: SHARED_NOTE_ROWS.findIndex((candidate) => candidate.midi === groupNote.midi),
+        startRowIndex: currentSharedNoteRows().findIndex((candidate) => candidate.midi === groupNote.midi),
       }));
       movingNote.value = {
         note, track, row, pattern, song, group,
@@ -4041,7 +4057,8 @@ export default defineComponent({
       // perfectly valid, already-set channel 0 (same class of bug as the
       // Sound tab's  Frequency field before its  fix). Number(value)
       // converts back to match what's actually stored.
-      channelOptionItems: CHANNEL_OPTIONS.map(([text, value]) => ({text, value: Number(value)})),
+      // Under DPC+ with its sound chip the choices are the chip's three voices and the TIA's channel.
+      channelOptionItems: computed(() => channelOptions().map(([text, value]) => ({text, value: Number(value)}))),
       subdivisionOptionItems: DURATION_SUBDIVISION_OPTIONS.map((n) => ({text: `${n}`, value: n})),
       minPatternSteps: MIN_PATTERN_STEPS,
       maxPatternSteps: MAX_PATTERN_STEPS,
@@ -4049,7 +4066,7 @@ export default defineComponent({
       volumeRowHeight, startVolumeRowResize,
       pianoRollHeight, startPianoRollResize, startPianoRollResizeTop,
       isMusicToolbarScrolled, musicToolbarHeight,
-      sharedNoteRows: SHARED_NOTE_ROWS,
+      sharedNoteRows: computed(() => currentSharedNoteRows()),
       isBlackKeyRow, labelRowUnavailable,
       isPatternCollapsed, togglePatternCollapsed, isInstrumentsCollapsed, toggleInstrumentsCollapsed,
       isSequenceCollapsed, toggleSequenceCollapsed,

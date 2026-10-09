@@ -205,7 +205,10 @@ export const getEnvelopeConfigs = () => [...envelopeConfigs.values()];
 
 export default (Blockly) => {
   Blockly.BBasic['soundfx_play'] = function(block) {
-    const channel = block.getFieldValue('CHANNEL');
+    const channel = Blockly.BBasic.normalizeChannel(block.getFieldValue('CHANNEL'));
+    // Channels 0 and 1 keep their envelope config in one byte (low and high nibble), channels 2 and 3 in another.
+    const high = Number(channel) % 2 === 1;
+    const configVar = Number(channel) < 2 ? 'envelopeConfig' : 'envelopeConfigB';
     const soundEffect = findSoundEffectById(block.getFieldValue('SOUNDFX'));
     if (!soundEffect) {
       return `rem Sound effect not found\n`;
@@ -280,14 +283,14 @@ export default (Blockly) => {
           release: envelopeRelease, decayEndPercent: envelopeDecayEnd, releaseStartPercent: envelopeReleaseStart,
           peakVolume: effectiveAudv, totalFrames: duration,
         });
-        envelopeLines = (channel === '1' ?
-          `envelopeConfig = (envelopeConfig & $0F) | ${configIndex * 16}\n` :
-          `envelopeConfig = (envelopeConfig & $F0) | ${configIndex}\n`) +
+        envelopeLines = (high ?
+          `${configVar} = (${configVar} & $0F) | ${configIndex * 16}\n` :
+          `${configVar} = (${configVar} & $F0) | ${configIndex}\n`) +
           `${stageVar} = ${attack + decay + sustainLength + release}\n`;
       } else {
-        envelopeLines = (channel === '1' ?
-          `envelopeConfig = (envelopeConfig & $0F) | ${NO_ENVELOPE_SENTINEL * 16}\n` :
-          `envelopeConfig = (envelopeConfig & $F0) | ${NO_ENVELOPE_SENTINEL}\n`) +
+        envelopeLines = (high ?
+          `${configVar} = (${configVar} & $0F) | ${NO_ENVELOPE_SENTINEL * 16}\n` :
+          `${configVar} = (${configVar} & $F0) | ${NO_ENVELOPE_SENTINEL}\n`) +
           `${stageVar} = 0\n`;
       }
     }
@@ -300,9 +303,13 @@ export default (Blockly) => {
     // pre-scan actually reserved.
     const durationVar = Blockly.BBasic.nameDB_.getName(
         `channnel${channel}duration`, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+    // Under DPC+ the waveform and the pitch of the sound (see generators/bbasic/dpcplus-audio.js).
+    // The chip's channels are played by the chip; channel 1 stays on the TIA with the sound's Standard type and frequency.
+    const dpcPlan = Blockly.BBasic.dpcAudioPlan && Blockly.BBasic.dpcAudioPlan.isChannel(channel) ?
+      Blockly.BBasic.dpcAudioPlan : null;
     return `AUDV${channel}=0\n` +
-      `AUDC${channel}=${audc}\n` +
-      `AUDF${channel}=${audf}\n` +
+      `AUDC${channel}=${dpcPlan ? dpcPlan.waveIdForSound(soundEffect) : audc}\n` +
+      `AUDF${channel}=${dpcPlan ? dpcPlan.pitchIdForSound(soundEffect) : audf}\n` +
       `AUDV${channel}=${effectiveAudv}\n` +
       `${durationVar}=${duration}\n` +
       envelopeLines;
@@ -347,7 +354,11 @@ export default (Blockly) => {
       if (!envelopeTable) return '';
       const comment = showVariableComments ?
         `\n rem ; envelope config ${index}: attack+decay+sustain+release curve` : '';
-      return `${comment}\n data _envelope${index}\n  ${envelopeTable.join(', ')}\nend`;
+      // 16 values to a line: batari Basic refuses a data line much longer than that ("Maximum line length exceeded in
+      // data statement"), which a long Sustain made.
+      const lines = [];
+      for (let i = 0; i < envelopeTable.length; i += 16) lines.push(`  ${envelopeTable.slice(i, i + 16).join(', ')}`);
+      return `${comment}\n data _envelope${index}\n${lines.join('\n')}\nend`;
     }).filter(Boolean).join('\n\n');
   };
 
@@ -396,8 +407,6 @@ export default (Blockly) => {
     // from inside each channel's  section below, guarded by that exact
     // same flag - same hazard/fix shape as buildTextScrollSetupLines'
     // comment in text-scroll.js.
-    const stage0 = () => this.nameDB_.getName('envelopeStage0', Blockly.Names.DEVELOPER_VARIABLE_TYPE);
-    const stage1 = () => this.nameDB_.getName('envelopeStage1', Blockly.Names.DEVELOPER_VARIABLE_TYPE);
 
     // One channel's  full dispatch: for every registered config, try it
     // against X (the unpacked index); the matching config's  block reads
@@ -435,57 +444,32 @@ export default (Blockly) => {
     // (envelopeStage0Used/envelopeStage1Used) found it genuinely needed;
     // omitted entirely otherwise, so a project using envelope on only one
     // channel never references (or reserves) the other channel's  var.
-    const channel0Section = (() => {
-      if (!this.envelopeStage0Used) return [];
+    // One channel's section. Channels 0 and 1 share envelopeConfig (low and high nibble) and channels 2 and 3 (the DPC+
+    // chip's second and third voices) share envelopeConfigB.
+    const channelSection = (channel) => {
+      if (!this[`envelopeStage${channel}Used`]) return [];
+      const high = channel % 2 === 1;
+      const configVar = channel < 2 ? 'envelopeConfig' : 'envelopeConfigB';
       return [
-        // X holds the unpacked nibble from here through buildChannelDispatch
-        // below - tax'd immediately (instead of re-reading/re-masking
-        // envelopeConfig a second time right before the dispatch, as this
-        // used to).
-        '       lda envelopeConfig',
-        '       and #$0F',
+        // X holds the unpacked nibble from here through buildChannelDispatch below - tax'd immediately (instead of
+        // re-reading/re-masking the config a second time right before the dispatch).
+        `       lda ${configVar}`,
+        ...(high ? ['       lsr', '       lsr', '       lsr', '       lsr'] : ['       and #$0F']),
         '       tax',
         '       cpx #' + NO_ENVELOPE_SENTINEL,
-        // A plain "beq _envelope0_done" here used to reach clean across
-        // however much of buildChannelDispatch's  output follows -
-        // fine with a couple of configs, but a real reported build failure
-        // once a project registered enough of them (5, in the reported
-        // case) to push _envelope0_done's  address past a BEQ's plain
-        // ±127-byte range ("Branch out of range"). Standard 6502 long-
-        // branch idiom instead: invert the condition (BNE, not BEQ) over a
-        // JMP, which has no such range limit - functionally identical,
-        // just two extra bytes regardless of how far away the target
-        // actually ends up being.
-        '       bne _envelope0_hasconfig',
-        '       jmp _envelope0_done',
-        '_envelope0_hasconfig',
-        ...buildChannelDispatch('0', '0', stage0()),
+        // A plain BEQ over the dispatch used to run out of range once a project registered enough configs ("Branch
+        // out of range"): the inverted branch over a JMP has no such limit.
+        `       bne _envelope${channel}_hasconfig`,
+        `       jmp _envelope${channel}_done`,
+        `_envelope${channel}_hasconfig`,
+        ...buildChannelDispatch(`${channel}`, `${channel}`,
+            this.nameDB_.getName(`envelopeStage${channel}`, Blockly.Names.DEVELOPER_VARIABLE_TYPE)),
       ];
-    })();
-    const channel1Section = (() => {
-      if (!this.envelopeStage1Used) return [];
-      return [
-        // See channel0Section's  identical "X held from here through
-        // buildChannelDispatch" comment just above.
-        '       lda envelopeConfig',
-        '       lsr',
-        '       lsr',
-        '       lsr',
-        '       lsr',
-        '       tax',
-        '       cpx #' + NO_ENVELOPE_SENTINEL,
-        // See channel0Section's  identical comment just above.
-        '       bne _envelope1_hasconfig',
-        '       jmp _envelope1_done',
-        '_envelope1_hasconfig',
-        ...buildChannelDispatch('1', '1', stage1()),
-      ];
-    })();
+    };
 
     const asmBlock = [
       ' asm',
-      ...channel0Section,
-      ...channel1Section,
+      ...[0, 1, 2, 3].flatMap(channelSection),
       'end',
     ].join('\n');
     // One combined payload (code + its  data tables) wrapped as a single

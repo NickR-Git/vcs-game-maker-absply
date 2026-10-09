@@ -10,9 +10,50 @@ import {useConfigurationStorage,
   useSoundEffectsStorage, useSongsStorage, loadMutedMusicTrackIds, loadSoloedMusicTrackIds,
   isMusicTrackMuted} from '../../hooks/project';
 import {effectiveTempo} from '../../utils/music-playback';
-import {audcHasTunableNotes, noteAudv} from '../../utils/music-notes';
+import {noteAudf, noteAudv, soundHasTunableNotes} from '../../utils/music-notes';
 import {registerEnvelopeConfig, NO_ENVELOPE_SENTINEL,
   getEnvelopeConfigs} from './soundfx';
+
+// Set by generators/bbasic.js for the length of a compile in which the DPC+ music chip plays the sounds (see
+// generators/bbasic/dpcplus-audio.js), otherwise null. Under it AUDC is the waveform number, AUDF the pitch (an
+// entry of the frequency table, a piano key for a note), and arpeggios are written out as the notes they flip between.
+let dpcPlusPlan = null;
+export const setMusicDpcPlusPlan = (plan) => {
+  dpcPlusPlan = plan;
+  // The chip's second and third voices (channels 2 and 3) use the two spare bits of the music flags byte as their active flags.
+  MUSIC_FLAGS_SPARE_BITS = [6, 7].filter((bit) => !(plan && plan.isChannel(bit === 6 ? 2 : 3)));
+};
+// The channel a track plays on: the chip's channels 2 and 3 only exist while the chip plays the sounds (any other channel
+// number is channel 0), channel 1 is always the TIA's.
+const trackChannel = (track) => {
+  const channel = Number(track.channel) || 0;
+  if (channel === 1) return 1;
+  return channel >= 2 && dpcPlusPlan && dpcPlusPlan.isChannel(channel) ? channel : 0;
+};
+// The 2 or more notes of an arpeggio, as the events that are played one after the other: a flip is one event as long
+// as the arpeggio speed (frames), and a pitch is the note's key plus the interval in semitones for the "alt" tokens
+// and 12 more or less for an octave up or down.
+const arpeggioToEvents = (event) => {
+  const sequence = ARPEGGIO_PHASE_SEQUENCES[event.arpeggioRange] || ARPEGGIO_PHASE_SEQUENCES[0];
+  const pitchOf = (token) => {
+    const shift = (token.endsWith('A') ? event.arpeggioInterval : 0) + (token[0] === 'U' ? 12 : token[0] === 'D' ? -12 : 0);
+    return Math.min(88, Math.max(1, event.audf + shift));
+  };
+  const events = [];
+  let remaining = event.frames;
+  for (let phase = 0; remaining > 0; phase++) {
+    const frames = Math.min(remaining, event.arpeggioSpeed);
+    remaining -= frames;
+    events.push({...event, audf: pitchOf(sequence[phase % sequence.length]), frames, arpeggioSpeed: 0,
+      arpeggioInterval: 0, arpeggioRange: 0,
+      // The envelope and the "note played" watch belong to the end and the start of the whole note.
+      envelope: event.envelope && remaining === 0,
+      notePlayedIndex: phase === 0 ? event.notePlayedIndex : 0,
+      ...(remaining === 0 ? {} : {envelopeAttack: 0, envelopeDecay: 0, envelopeDecayEnd: 0, envelopeRelease: 0,
+        envelopeSustainLength: 0, envelopeReleaseStart: 0})});
+  }
+  return events;
+};
 
 const FRAMES_PER_SECOND = 60; // NTSC - matches "set tv ntsc" in bbasic.bb.hbs
 // A held note's duration is stored in the low 7 bits of its  byte (see
@@ -160,7 +201,7 @@ export const musicSeqPosVarName = (channel) => `musicCh${channel}SeqPos`;
 // here). The cost of packing: a repeat count is capped at 16 total plays
 // (a 4-bit nibble only reaches 15 repeats-remaining) - well past any
 // realistic use, and still adjustable per group independently either way.
-export const musicSeqRepeatVarName = () => 'musicRep';
+export const musicSeqRepeatVarName = (channel = 0) => (Number(channel) >= 2 ? 'musicRepB' : 'musicRep');
 export const MAX_SEQ_REPEAT_COUNT = 16;
 // One shared byte (not a var per flag/channel) holding every boolean the
 // music player needs project-wide - dev vars are a hard-capped, only
@@ -181,7 +222,7 @@ export const musicJustStoppedBit = 2;
 // bit alone meant whichever channel finished first would freeze every OTHER
 // channel's audio at whatever it happened to be at that instant, instead of
 // letting it reach its  natural end and mute itself.
-export const musicChannelActiveBit = (channel) => 3 + Number(channel);
+export const musicChannelActiveBit = (channel) => (Number(channel) >= 2 ? Number(channel) + 4 : 3 + Number(channel));
 // Shared across every channel (like playing/loop/justStopped, unlike the
 // per-channel active bits above) - set by music_pause_song, cleared by
 // music_unpause_song, checked first thing in generateMusicChecks'
@@ -202,7 +243,7 @@ export const musicPausedBit = 5;
 // mixing both watch types now only pays for as many TOTAL overflow bytes as
 // its TOTAL watch count actually needs, not one set per feature.
 export const musicEventFlagsOverflowVarName = (byteIndex) => `musicEvtFlags${byteIndex}`;
-const MUSIC_FLAGS_SPARE_BITS = [6, 7];
+let MUSIC_FLAGS_SPARE_BITS = [6, 7];
 
 // Resolves every one-shot music event watch a project's  blocks
 // reference - music_sequence_chip_finished (fires for ANY chip, no
@@ -636,7 +677,7 @@ const buildMusicPlayResetBody = (Blockly, song, music) => {
     // reset (nothing worth preserving from whatever the shared byte held
     // before).
     const seqRepeatReset = multiSeq && music.hasRepeats ?
-      `${resolveVar(musicSeqRepeatVarName())} = ${song.sequenceRepeatPacked[0] || 0}\n` : '';
+      `${resolveVar(musicSeqRepeatVarName(channel))} = ${song.sequenceRepeatPacked[0] || 0}\n` : '';
     // Phase 0, counter 1 packed into one byte (see musicArpCounterPhaseVarName's
     // comment - counter in the low nibble) - a plain "= 1" already leaves
     // the high (phase) nibble zeroed too, same as the old two-statement
@@ -676,7 +717,7 @@ const buildMusicPlaySongResetBody = (Blockly, song, music) => {
     // per-nibble update, same reasoning as buildMusicPlayResetBody's
     // identical line.
     const seqRepeatReset = music.hasRepeats ?
-      `${resolveVar(musicSeqRepeatVarName())} = ${song.sequenceRepeatPacked[0] || 0}\n` : '';
+      `${resolveVar(musicSeqRepeatVarName(channel))} = ${song.sequenceRepeatPacked[0] || 0}\n` : '';
     // pageVar only actually exists (see generateMusicChecks'  comment)
     // once this channel's  combined data spans more than one page -
     // writing to it otherwise would reference a dev var that was never
@@ -761,7 +802,7 @@ export const musicChannelsUsedBySong = (song) => {
   const channels = new Set();
   (song.patterns || []).forEach((pattern) => {
     (pattern.tracks || []).forEach((track) => {
-      if ((track.notes || []).length) channels.add(Number(track.channel) || 0);
+      if ((track.notes || []).length) channels.add(trackChannel(track));
     });
   });
   return channels;
@@ -865,7 +906,7 @@ const flattenPatternEvents = (song, pattern, channels, soundEffects, config = {}
     notesByChannel[channel] = [];
   });
   (pattern.tracks || []).forEach((track) => {
-    const channel = Number(track.channel) || 0;
+    const channel = trackChannel(track);
     if (!notesByChannel[channel]) return;
     if (isMusicTrackMuted(mutedTrackIds, soloedTrackIds, song, pattern, track)) return;
     const soundEffect = soundEffects.find(({id}) => `${id}` === `${track.soundEffectId}`);
@@ -887,7 +928,9 @@ const flattenPatternEvents = (song, pattern, channels, soundEffects, config = {}
     // (note.midi) - notes never store sound-type-dependent data of their
     // , they always follow the instrument's live settings, even if
     // those change after the note was placed.
-    const isTunable = audcHasTunableNotes(soundEffect.audc);
+    // Under DPC+ only channel 0 is played by the chip; channel 1 stays on the TIA, with the sound's Standard type.
+    const chipPlan = dpcPlusPlan && dpcPlusPlan.isChannel(channel) ? dpcPlusPlan : null;
+    const isTunable = soundHasTunableNotes(soundEffect, !chipPlan);
     // 0 (the "no watched instrument" sentinel - see
     // resolveNotePlayedInstruments) for an instrument nothing actually
     // watches; same value every note on this track packs into its  AUDV
@@ -895,7 +938,9 @@ const flattenPatternEvents = (song, pattern, channels, soundEffects, config = {}
     // depends only on the instrument, never on the individual note.
     const notePlayedIndex = notePlayedIndexById.get(`${soundEffect.id}`) || 0;
     (track.notes || []).forEach((note) => {
-      const audf = !isTunable || note.midi === 'hit' ? soundEffect.audf : note.audf;
+      // A hit plays at the pitch of the sound itself.
+      const audf = !isTunable || note.midi === 'hit' ?
+        (chipPlan ? chipPlan.pitchIdForSound(soundEffect) : soundEffect.audf) : noteAudf(note, soundEffect, !chipPlan);
       // Per-note override (see the Music tab's  piano-roll volume row),
       // falling back to the instrument's  preset - same DIM-scaling as
       // before, just applied to whichever value is actually in effect for
@@ -909,7 +954,7 @@ const flattenPatternEvents = (song, pattern, channels, soundEffects, config = {}
         startUnits: note.step,
         lengthUnits: note.length,
         audv,
-        audc: soundEffect.audc,
+        audc: chipPlan ? chipPlan.waveIdForSound(soundEffect) : soundEffect.audc,
         audf,
         envelope: !!soundEffect.envelope,
         envelopeAttack: soundEffect.envelopeAttack,
@@ -1065,7 +1110,9 @@ const flattenPatternEvents = (song, pattern, channels, soundEffects, config = {}
     const hasEnvelope = channelHasEnvelopeOverride ? channelHasEnvelopeOverride[channel] :
       events.some((event) => event.envelope);
     chunked[channel] = [];
-    events.forEach(({audv, audc, audf, frames, envelope, arpeggioSpeed, arpeggioInterval, arpeggioRange,
+    const playedEvents = dpcPlusPlan && dpcPlusPlan.isChannel(channel) ?
+      events.flatMap((event) => (event.arpeggioSpeed > 0 && event.audv > 0 ? arpeggioToEvents(event) : [event])) : events;
+    playedEvents.forEach(({audv, audc, audf, frames, envelope, arpeggioSpeed, arpeggioInterval, arpeggioRange,
       notePlayedIndex, envelopeAttack, envelopeDecay, envelopeDecayEnd, envelopeRelease, envelopeSustainLength,
       envelopeReleaseStart}) => {
       // Only THIS event's  arpeggio use caps it to 15 frames - a rest or
@@ -1390,7 +1437,7 @@ export const resolveProjectMusic = (workspace, notePlayedIndexById = new Map()) 
         (pattern.tracks || []).forEach((track) => {
           const id = `${track.soundEffectId}`;
           if (!notePlayedIndexById.has(id)) return;
-          const channel = Number(track.channel) || 0;
+          const channel = trackChannel(track);
           if (!notePlayedChannelsById.has(id)) notePlayedChannelsById.set(id, new Set());
           notePlayedChannelsById.get(id).add(channel);
         });
@@ -1737,7 +1784,10 @@ export const reserveMusicDevVars = (reserveDevVar, reserveDevVarRW, music, music
   // the packed-nibble layout), reserved once here regardless of how many
   // channels the project actually uses.
   if (multiSeq && music.hasRepeats) {
-    reserveDevVar(musicSeqRepeatVarName(), undefined, 'shared packed-nibble repeat counters, all channels');
+    reserveDevVar(musicSeqRepeatVarName(), undefined, 'shared packed-nibble repeat counters, channels 0 and 1');
+    if (dpcPlusPlan && (dpcPlusPlan.isChannel(2) || dpcPlusPlan.isChannel(3))) {
+      reserveDevVar(musicSeqRepeatVarName(2), undefined, 'packed-nibble repeat counters, channels 2 and 3');
+    }
   }
   // One shared byte for playing/loop/justStopped plus every channel's
   // active flag (see musicFlagsVarName's comment) - used to cost 3 vars
@@ -2670,8 +2720,8 @@ export default (Blockly) => {
       // channel 1's in the high nibble (see musicSeqRepeatVarName's
       // comment) - seqRepeatHigh picks which nibble THIS channel's
       // reads/writes below mask against.
-      const seqRepeatVar = multiSeq && music.hasRepeats ? resolveVar(musicSeqRepeatVarName()) : null;
-      const seqRepeatHigh = channel === '1';
+      const seqRepeatVar = multiSeq && music.hasRepeats ? resolveVar(musicSeqRepeatVarName(channel)) : null;
+      const seqRepeatHigh = channel === '1' || channel === '3';
       // Only channel 1's  high-nibble read (seqRepeatVar / 16) actually
       // needs division - channel 0's low-nibble read is a plain & mask.
       if (seqRepeatVar && seqRepeatHigh) Blockly.BBasic.usesDivMul = true;
@@ -2760,7 +2810,7 @@ export default (Blockly) => {
       // this). Channel 0 packs into the low nibble instead (plain add, no
       // multiply needed), same asymmetry soundfx.js's  packing already
       // has.
-      if (hasEnvelope && channel === '1') Blockly.BBasic.usesDivMul = true;
+      if (hasEnvelope && (channel === '1' || channel === '3')) Blockly.BBasic.usesDivMul = true;
       const arpSpeedRangeVar = hasArpeggio ? resolveVar(musicArpSpeedRangeVarName(channel)) : null;
       const arpCounterPhaseVar = hasArpeggio ? resolveVar(musicArpCounterPhaseVarName(channel)) : null;
       const arpBaseIntervalVar = hasArpeggio ? resolveVar(musicArpBaseIntervalVarName(channel)) : null;
@@ -2955,7 +3005,9 @@ export default (Blockly) => {
       // same way soundfx_play's  generator already does, rather than
       // through resolveVar/nameDB_ (which is only for the reserved-letter
       // pool).
-      const envelopeConfigVar = 'envelopeConfig';
+      // Channels 0 and 1 keep their envelope config in one byte (low and high nibble), channels 2 and 3 in another.
+      const envelopeConfigVar = Number(channel) >= 2 ? 'envelopeConfigB' : 'envelopeConfig';
+      const envelopeHighNibble = channel === '1' || channel === '3';
       const envelopeStageVar = hasEnvelope ? resolveVar(`envelopeStage${channel}`) : null;
       const envelopeMarkerLabel = `_music${channel}_skipenv`;
       const skipEnvelopeMarkers = hasEnvelope ? [` gosub ${envelopeMarkerLabel}`] : [];
@@ -2969,17 +3021,17 @@ export default (Blockly) => {
         // "Off": both the sentinel value packed in and 0 are compile-time
         // constants here, so no runtime multiply is needed even on channel
         // 1 - only the "real config" branch below needs one.
-        channel === '1' ?
+        envelopeHighNibble ?
           ` ${envelopeConfigVar} = ${envelopeConfigVar} & 15` :
           ` ${envelopeConfigVar} = ${envelopeConfigVar} & 240`,
-        channel === '1' ?
+        envelopeHighNibble ?
           ` ${envelopeConfigVar} = ${envelopeConfigVar} + ${NO_ENVELOPE_SENTINEL * 16}` :
           ` ${envelopeConfigVar} = ${envelopeConfigVar} + ${NO_ENVELOPE_SENTINEL}`,
         ` ${envelopeStageVar} = 0`,
         ` goto ${envelopeMarkerLabel}_applied`,
         `${envelopeMarkerLabel}_on`,
         ` ${envelopeStageVar} = _envelopeAdLen[temp1]`,
-        ...(channel === '1' ? [
+        ...(envelopeHighNibble ? [
           ` temp2 = temp1 * 16`,
           ` ${envelopeConfigVar} = ${envelopeConfigVar} & 15`,
           ` ${envelopeConfigVar} = ${envelopeConfigVar} + temp2`,

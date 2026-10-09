@@ -602,7 +602,13 @@ const buildCombinedPlayerVarBlocks = ({icon, colour}) => {
         {
           'type': 'field_dropdown',
           'name': 'VAR',
-          'options': buildPlayerVarOptionsFn((name) => [[VISIBILITY_ICON + ' Visibility', `${name}visibility`]]),
+          'options': buildPlayerVarOptionsFn((name) => [
+            [VISIBILITY_ICON + ' Visibility', `${name}visibility`],
+            // Cuts a DPC+ player's picture down to this many scanlines (a drawn row is 2) whatever its animation frame
+            // says, e.g. to make a bar that grows and shrinks. 255 takes the limit off.
+            ...(((useConfigurationStorage() || {}).value || {}).kernel === 'dpcplus' ?
+              [[HEIGHT_ICON + ' Height limit in lines (DPC+)', `${name}height`]] : []),
+          ]),
         },
         {
           'type': 'input_value',

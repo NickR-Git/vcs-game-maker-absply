@@ -228,9 +228,9 @@
                   </v-btn>
                   <confirm-delete-menu
                     v-if="state.soundEffects.length > 1"
-                    title="Delete this sound effect?"
-                    :selected="selectedCardIds.length === 1 && selectedCardIds[0] === soundEffect.id"
-                    activator-title="Delete this sound effect"
+                    :title="deleteTitleFor(soundEffect)"
+                    :selected="selectedCardId === soundEffect.id && selectedCardIds.includes(soundEffect.id)"
+                    :activator-title="deleteTitleFor(soundEffect).replace('?', '')"
                     icon-btn-class="soundfx-delete-btn soundfx-icon-btn-size"
                     @confirm="handleDeleteSoundEffect(soundEffect)"
                   />
@@ -260,37 +260,59 @@
                       @change="handleChildChange"
                       class="soundfx-priority"
                     />
-                    <v-btn
-                      icon
-                      small
-                      class="soundfx-instrument-btn soundfx-icon-btn-size"
-                      :title="(soundEffect.isInstrument ?
-                        'An instrument (click to make it a sound) ' :
-                        'A sound (click to make it an instrument) ') +
-                        '- purely a tag for this tab\'s \'Show\' filter above; every sound effect can ' +
-                        'already be used both as a soundfx_play trigger and as a Music tab instrument ' +
-                        'regardless of this.'"
-                      @click="() => handleToggleInstrument(soundEffect)"
-                    >
-                      <!-- The icon is the kind itself (a waveform for a sound, a piano for an
-                           instrument), swapped by the click, not one icon switched on and off. -->
-                      <v-icon small>{{ soundEffect.isInstrument ? 'mdi-piano' : 'mdi-waveform' }}</v-icon>
-                    </v-btn>
+                    <v-menu offset-y content-class="soundfx-kind-menu">
+                      <template v-slot:activator="{on, attrs}">
+                        <v-btn
+                          icon
+                          small
+                          v-bind="attrs"
+                          v-on="on"
+                          class="soundfx-instrument-btn soundfx-icon-btn-size"
+                          :title="soundKindFor(soundEffect).text + ' (click to change). A sound effect is played by a Play sound effect block, an instrument plays notes on the piano rows of the Music tab, and percussion plays its one pitch from the Hit row there. Any of them can be used both ways - this decides where each one is offered.'"
+                        >
+                          <!-- The icon is the kind itself: a waveform for a sound, a piano for an instrument, a drum for
+                               percussion. -->
+                          <v-icon small>{{ soundKindFor(soundEffect).icon }}</v-icon>
+                        </v-btn>
+                      </template>
+                      <v-list dense>
+                        <v-list-item v-for="kind in soundKinds" :key="kind.value" @click="() => handleSetSoundKind(soundEffect, kind.value)">
+                          <v-list-item-icon><v-icon small>{{ kind.icon }}</v-icon></v-list-item-icon>
+                          <v-list-item-content><v-list-item-title>{{ kind.text }}</v-list-item-title></v-list-item-content>
+                        </v-list-item>
+                      </v-list>
+                    </v-menu>
                   </div>
                 </v-card-text>
 
                 <v-card-text v-if="!isCollapsed(soundEffect)" class="soundfx-fields-section">
                   <div class="soundfx-fields">
                     <v-select
+                      v-if="!dpcPlusSoundCards"
                       label="Sound type"
                       v-model="soundEffect.audc"
                       :items="audcOptionItems"
                       @change="() => handleAudcChange(soundEffect)"
                       class="soundfx-audc"
                     />
+                    <WaveformEditor
+                      v-if="dpcPlusSoundCards"
+                      :sound="soundEffect"
+                      class="soundfx-waveform"
+                      @change="(wave) => handleWaveformChange(soundEffect, wave)"
+                    />
                     <div class="soundfx-basic-fields-row">
                       <v-select
-                        v-if="audcHasTunableNotes(soundEffect.audc)"
+                        v-if="dpcPlusSoundCards"
+                        :label="soundEffect.isPercussion ? 'Pitch' : 'Note'"
+                        title="The piano key the sound plays. A sound converted from the Standard kernel can have a pitch between two keys, shown as Custom."
+                        :value="dpcPlusNoteValue(soundEffect)"
+                        :items="dpcPlusNoteItems(soundEffect)"
+                        @change="(value) => handleDpcPlusNoteChange(soundEffect, value)"
+                        class="soundfx-frequency"
+                      />
+                      <v-select
+                        v-else-if="audcHasTunableNotes(soundEffect.audc) && !soundEffect.isPercussion"
                         label="Frequency"
                         title="Limited to the AUDF values that play a clean, in-tune note on this sound type - same set the piano roll allows on the Music tab."
                         v-model.number="soundEffect.audf"
@@ -327,6 +349,52 @@
                         @change="handleChildChange"
                         class="soundfx-number"
                       />
+                    </div>
+                    <!-- Channel 1 is still played by the TIA under DPC+, so a sound also has a Standard sound type and
+                         frequency, which this part sets and previews. -->
+                    <div v-if="dpcPlusSoundCards" class="soundfx-tia-section">
+                      <div
+                        class="soundfx-tia-title"
+                        title="Channel 1 is played by the TIA, not the DPC+ chip, so the sound plays as this Standard sound type and frequency when it is used on channel 1."
+                      >Channel 1 (TIA)</div>
+                      <div class="soundfx-basic-fields-row">
+                        <v-select
+                          label="Sound type"
+                          v-model="soundEffect.audc"
+                          :items="audcOptionItems"
+                          @change="() => handleTiaChange(soundEffect, true)"
+                          class="soundfx-audc"
+                        />
+                      </div>
+                      <div class="soundfx-basic-fields-row">
+                        <v-select
+                          v-if="audcHasTunableNotes(soundEffect.audc, true) && !soundEffect.isPercussion"
+                          label="Frequency"
+                          v-model.number="soundEffect.audf"
+                          :items="frequencyItems(soundEffect.audc)"
+                          @change="() => handleTiaChange(soundEffect)"
+                          class="soundfx-frequency"
+                        />
+                        <v-text-field
+                          v-else
+                          label="Frequency"
+                          v-model.number="soundEffect.audf"
+                          type="number"
+                          min="0"
+                          max="31"
+                          @change="() => handleTiaChange(soundEffect)"
+                          class="soundfx-frequency"
+                        />
+                        <v-btn
+                          icon
+                          small
+                          title="Preview it the way the TIA plays it on channel 1"
+                          class="soundfx-play-btn soundfx-icon-btn-size"
+                          @click.stop="() => handlePlaySoundEffect(soundEffect, true)"
+                        >
+                          <v-icon>mdi-play</v-icon>
+                        </v-btn>
+                      </div>
                     </div>
                     <div class="soundfx-arpeggio-block"
                       :class="{'soundfx-arpeggio-block--expanded': soundEffect.arpeggio}"
@@ -507,15 +575,18 @@
   </div>
 </template>
 <script>
+import Vue from 'vue';
 import {computed, defineComponent, getCurrentInstance, onBeforeUnmount, onMounted, ref, watch} from '@vue/composition-api';
 import {saveAs} from 'file-saver';
 import {max} from 'lodash';
 
 import {useCollapsedIds} from '../hooks/collapse';
 import {useDragReorder} from '../hooks/drag-reorder';
+import {useCardSelection} from '../hooks/card-selection';
 import {canRedoReorder, canUndoReorder, noteEdit, settleEdits, tryRedoReorder, tryUndoReorder} from '../hooks/reorder-history';
-import {useDimSoundFxPercentStorage, useDimSoundFxStorage, useSoundEffectsStorage,
+import {useConfigurationStorage, useDimSoundFxPercentStorage, useDimSoundFxStorage, useSoundEffectsStorage,
   useSoundFxColumnsStorage} from '../hooks/project';
+import {frequencyForMidi, midiForPianoIndex, PIANO_KEY_COUNT} from '../utils/dpc-sound';
 import {AUDC_OPTIONS} from '../blocks/sound';
 import {DEFAULT_SOUND_EFFECTS, processSoundEffectsStorageDefaults, ARPEGGIO_DIVISION_OPTIONS,
   DEFAULT_ARPEGGIO_DIVISION, DEFAULT_ARPEGGIO_INTERVAL, MIN_ARPEGGIO_INTERVAL,
@@ -528,17 +599,19 @@ import {DEFAULT_DIM_PERCENT, dimVolume} from '../generators/bbasic/soundfx';
 import {getDateInfix} from '../utils/date';
 import {openFileDialog} from '../utils/file';
 import {previewSoundEffect, stopSoundEffectPreview} from '../utils/sound-preview';
+import {previewDpcPlusSoundEffect} from '../utils/dpc-preview';
 import {autoInstrumentColor} from '../utils/instrument-colors';
 import {audcHasTunableNotes, notesForAudc} from '../utils/music-notes';
 import {buildSoundBankImportEntries, importSoundBankEntries} from '../utils/sound-bank';
 import ColorSwatchPicker from '../components/ColorSwatchPicker.vue';
+import WaveformEditor from '../components/WaveformEditor.vue';
 import SoundBankImportDialog from '../components/SoundBankImportDialog.vue';
 import ConfirmDeleteMenu from '../components/ConfirmDeleteMenu.vue';
 import EnvelopeGraph from '../components/EnvelopeGraph.vue';
 import {REDO_TITLE, UNDO_TITLE, undoRedoKind} from '../utils/undo-hotkey';
 
 export default defineComponent({
-  components: {ColorSwatchPicker, ConfirmDeleteMenu, EnvelopeGraph, SoundBankImportDialog},
+  components: {WaveformEditor, ColorSwatchPicker, ConfirmDeleteMenu, EnvelopeGraph, SoundBankImportDialog},
   setup() {
     const soundEffectsStorage = useSoundEffectsStorage();
     // App-wide preference, not part of this project's  saved
@@ -569,40 +642,10 @@ export default defineComponent({
     // outside any card (this tab's  outer editor-container, see its
     // @click) clears the selection.
     const selectedCardId = ref(null);
-    // Every selected card. Shift+click selects the cards from the anchor (the card clicked last
-    // without Shift) to the one clicked; Ctrl/Cmd+click adds a card to the selection or takes it
-    // out. selectedCardId stays the one the shared toolbar's per-sound buttons act on: the card
-    // clicked last.
-    const selectedCardIds = ref([]);
-    let anchorCardId = null;
-    const selectCard = (id, event = {}) => {
-      const ids = state.value.soundEffects.map((soundEffect) => soundEffect.id);
-      if (event.shiftKey && ids.includes(anchorCardId)) {
-        const from = ids.indexOf(anchorCardId);
-        const to = ids.indexOf(id);
-        selectedCardIds.value = ids.slice(Math.min(from, to), Math.max(from, to) + 1);
-        selectedCardId.value = id;
-      } else if (event.ctrlKey || event.metaKey) {
-        if (selectedCardIds.value.includes(id)) {
-          selectedCardIds.value = selectedCardIds.value.filter((other) => other !== id);
-          selectedCardId.value = selectedCardIds.value.length ?
-            selectedCardIds.value[selectedCardIds.value.length - 1] : null;
-        } else {
-          selectedCardIds.value = [...selectedCardIds.value, id];
-          selectedCardId.value = id;
-        }
-        anchorCardId = id;
-      } else {
-        selectedCardIds.value = [id];
-        selectedCardId.value = id;
-        anchorCardId = id;
-      }
-    };
-    const deselectCard = () => {
-      selectedCardId.value = null;
-      selectedCardIds.value = [];
-      anchorCardId = null;
-    };
+    // Every selected card (Shift+click selects a range, Ctrl/Cmd+click adds or removes one); see hooks/card-selection.js.
+    // selectedCardId stays the one the shared toolbar's per-sound buttons act on: the card clicked last.
+    const {selectedCardIds, selectCard, deselectCard, getSelectedIndices, idsToDelete, deleteQuestion} = useCardSelection(
+        () => state.value.soundEffects.map(({id}) => id), selectedCardId);
     // The sound effect the shared toolbar below acts on - whichever card is
     // currently selected, same pattern as DataEditor.vue's selectedTable
     // and MusicEditor.vue's activeSong().
@@ -645,8 +688,23 @@ export default defineComponent({
         }
       });
     };
+    const configurationStorage = useConfigurationStorage();
+    // Under DPC+ with its sound chip a sound is a waveform drawn on the card and a note, not a sound type.
+    const dpcPlusSoundCards = computed(() => {
+      const config = configurationStorage.value || {};
+      return config.kernel === 'dpcplus' && config.enableDpcPlusAudio !== false;
+    });
+    // The developer and website from the project settings go into every exported file (not the title, version or email).
+    const developerInfo = () => {
+      const config = configurationStorage.value || {};
+      return {
+        ...(config.projectDeveloper ? {developer: config.projectDeveloper} : {}),
+        ...(config.projectWebsite ? {website: config.projectWebsite} : {}),
+      };
+    };
     const handleChildChange = () => {
       syncEnvelopeDurations();
+
       state.value = state.value;
     };
     handleChildChange();
@@ -770,11 +828,22 @@ export default defineComponent({
     const soundFilterItems = [
       {text: 'All', value: 'all'},
       {text: 'Instruments', value: 'instrument'},
+      {text: 'Percussion', value: 'percussion'},
       {text: 'Sound effects', value: 'sound'},
     ];
+    // The three kinds of sound a card can be (the button in its name row).
+    const soundKinds = [
+      {value: 'sound', text: 'Sound effect', icon: 'mdi-waveform'},
+      {value: 'instrument', text: 'Instrument', icon: 'mdi-piano'},
+      {value: 'percussion', text: 'Percussion', icon: '$drum'},
+    ];
+    const soundKindFor = (soundEffect) =>
+      soundKinds.find(({value}) => (soundEffect.isPercussion ? value === 'percussion' :
+        soundEffect.isInstrument ? value === 'instrument' : value === 'sound'));
     const matchesSoundFilter = (soundEffect) => {
-      if (soundFilter.value === 'instrument') return !!soundEffect.isInstrument;
-      if (soundFilter.value === 'sound') return !soundEffect.isInstrument;
+      if (soundFilter.value === 'instrument') return !!soundEffect.isInstrument && !soundEffect.isPercussion;
+      if (soundFilter.value === 'percussion') return !!soundEffect.isPercussion;
+      if (soundFilter.value === 'sound') return !soundEffect.isInstrument && !soundEffect.isPercussion;
       return true;
     };
 
@@ -790,6 +859,8 @@ export default defineComponent({
           state.value.soundEffects = items;
           handleChildChange();
         },
+        // Dragging one of several selected cards moves all of them.
+        getSelectedIndices,
     );
 
     const instance = getCurrentInstance();
@@ -888,6 +959,7 @@ export default defineComponent({
         arpeggioRange: DEFAULT_ARPEGGIO_RANGE,
         color: null,
         isInstrument: false,
+        isPercussion: false,
       };
 
       state.value.soundEffects.push(newSoundEffect);
@@ -908,8 +980,12 @@ export default defineComponent({
       instance.proxy.$forceUpdate();
     };
 
+    // With several cards selected, deleting one of them deletes them all (the first stays if they are every sound there is).
+    const deleteTitleFor = (soundEffect) => deleteQuestion(soundEffect.id, 'sound effect', 1);
     const handleDeleteSoundEffect = (soundEffect) => {
-      state.value.soundEffects = state.value.soundEffects.filter(({id}) => id != soundEffect.id);
+      const doomed = idsToDelete(soundEffect.id, 1);
+      state.value.soundEffects = state.value.soundEffects.filter(({id}) => !doomed.includes(id));
+      if (doomed.length > 1) deselectCard();
       handleChildChange();
       instance.proxy.$forceUpdate();
     };
@@ -922,7 +998,9 @@ export default defineComponent({
     // within a single project's  storage).
     const handleExportSoundEffect = (soundEffect) => {
       // eslint-disable-next-line no-unused-vars
-      const {id, ...soundEffectData} = soundEffect;
+      const {id, ...rest} = soundEffect;
+      // The kernel the sound was made for goes first in the file.
+      const soundEffectData = {kernel: (configurationStorage.value || {}).kernel || 'standard', ...developerInfo(), ...rest};
       const blob = new Blob([JSON.stringify(soundEffectData, null, 2)], {type: 'application/json'});
       const filename = (soundEffect.name || `sound-${soundEffect.id}`).replace(/[^A-Za-z0-9]+/g, '_');
       saveAs(blob, `Sound_${filename}-${getDateInfix()}.vcssnd`);
@@ -946,7 +1024,13 @@ export default defineComponent({
             if (!soundEffectData || typeof soundEffectData !== 'object' || !('audc' in soundEffectData)) {
               throw new Error('File does not contain valid sound effect data');
             }
-            Object.assign(soundEffect, soundEffectData, {id: soundEffect.id});
+            // eslint-disable-next-line no-unused-vars
+            const {kernel, developer, website, ...importedFields} = soundEffectData;
+            delete soundEffect.dpcShape;
+            delete soundEffect.dpcFrequency;
+            delete soundEffect.dpcWave;
+            delete soundEffect.dpcWaveBars;
+            Object.assign(soundEffect, importedFields, {id: soundEffect.id});
             // Not just handleChildChange() - an imported file's  audf
             // (especially one hand-edited, or exported from a build before
             // the curated "in tune" Frequency list existed) can be a raw
@@ -977,7 +1061,8 @@ export default defineComponent({
       const chosen = selectedSoundEffects.value.length > 1 ? selectedSoundEffects.value : state.value.soundEffects;
       const soundEffects = chosen.map(({id, ...rest}) => rest); // eslint-disable-line no-unused-vars
       const blob = new Blob(
-          [JSON.stringify({type: 'VCS Game Maker Sound Bank', soundEffects}, null, 2)],
+          [JSON.stringify({type: 'VCS Game Maker Sound Bank', kernel: (configurationStorage.value || {}).kernel || 'standard',
+            ...developerInfo(), soundEffects}, null, 2)],
           {type: 'application/json'});
       saveAs(blob, `SoundBank-${getDateInfix()}.vcsbnk`);
     };
@@ -1018,13 +1103,18 @@ export default defineComponent({
       soundBankImportOpen.value = false;
     };
 
-    const handlePlaySoundEffect = (soundEffect) => {
+    // tia: play it the way the TIA does (channel 1 under DPC+) rather than the way the DPC+ chip does.
+    const handlePlaySoundEffect = (soundEffect, tia = false) => {
       // Matches how loud the emulator plays it with DIM on (it scales its output by the same
       // percentage) - previewing at the un-dimmed volume would make the preview lie about what
       // the game sounds like in the emulator.
       const audv = dimSoundFx.value ?
         dimVolume(soundEffect.audv, dimSoundFxPercent.value) : soundEffect.audv;
-      previewSoundEffect({...soundEffect, audv});
+      if (dpcPlusSoundCards.value && !tia) {
+        previewDpcPlusSoundEffect({...soundEffect, audv}, configurationStorage.value || {});
+      } else {
+        previewSoundEffect({...soundEffect, audv});
+      }
     };
 
     const handleStopPreview = () => stopSoundEffectPreview();
@@ -1034,8 +1124,45 @@ export default defineComponent({
       handleChildChange();
     };
 
-    const handleToggleInstrument = (soundEffect) => {
-      soundEffect.isInstrument = !soundEffect.isInstrument;
+    const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+    const pianoKeyItems = Array.from({length: PIANO_KEY_COUNT}, (_, i) => {
+      const midi = midiForPianoIndex(i + 1);
+      return {text: `${NOTE_NAMES[midi % 12]}${Math.floor(midi / 12) - 1} (${Math.round(frequencyForMidi(midi) * 10) / 10} Hz)`,
+        value: midi};
+    });
+    // The piano key a sound's pitch is, or 'custom' for a pitch between keys.
+    const dpcPlusNoteValue = (soundEffect) => {
+      const hz = Number(soundEffect.dpcFrequency) || 0;
+      const midi = Math.round(69 + 12 * Math.log2(hz / 440));
+      return hz > 0 && midi >= 21 && midi <= 108 && Math.abs(frequencyForMidi(midi) - hz) < 0.01 * hz ? midi : 'custom';
+    };
+    const dpcPlusNoteItems = (soundEffect) => (dpcPlusNoteValue(soundEffect) === 'custom' ?
+      [{text: `Custom (${soundEffect.dpcFrequency} Hz)`, value: 'custom'}, ...pianoKeyItems] : pianoKeyItems);
+    const handleDpcPlusNoteChange = (soundEffect, midi) => {
+      if (midi === 'custom') return;
+      Vue.set(soundEffect, 'dpcFrequency', Math.round(frequencyForMidi(midi) * 100) / 100);
+      handleChildChange();
+    };
+    const handleWaveformChange = (soundEffect, {wave, bars, shape}) => {
+      // Vue.set, since a sound brought in from a file or converted earlier may not have these fields yet, and a field
+      // added to an object any other way is not seen by the card.
+      Vue.set(soundEffect, 'dpcWave', wave);
+      Vue.set(soundEffect, 'dpcWaveBars', bars);
+      Vue.set(soundEffect, 'dpcShape', shape);
+      handleChildChange();
+    };
+
+    // Changing the Standard sound type or frequency of a sound under DPC+ (what channel 1 plays): it is remembered that
+    // they were set by hand, so switching the project to the Standard kernel keeps them.
+    const handleTiaChange = (soundEffect, typeChanged = false) => {
+      Vue.set(soundEffect, 'dpcTiaEdited', true);
+      if (typeChanged) handleAudcChange(soundEffect);
+      else handleChildChange();
+    };
+
+    const handleSetSoundKind = (soundEffect, kind) => {
+      soundEffect.isInstrument = kind === 'instrument';
+      soundEffect.isPercussion = kind === 'percussion';
       handleChildChange();
     };
 
@@ -1047,13 +1174,13 @@ export default defineComponent({
     // AUDF value (not instead of it) since the underlying byte is still
     // what's stored/generated.
     const frequencyItems = (audc) =>
-      notesForAudc(audc).map(({value, label}) => ({text: `${value} (${label})`, value}));
+      notesForAudc(audc, dpcPlusSoundCards.value).map(({value, label}) => ({text: `${value} (${label})`, value}));
 
     // AUDC types with no well-defined pitch (most percussion/noise sounds)
     // keep the old plain 0-31 number field instead - there's no "valid
     // frequency" set to limit to, every byte is equally as (un)musical.
     const handleAudcChange = (soundEffect) => {
-      if (audcHasTunableNotes(soundEffect.audc)) {
+      if (audcHasTunableNotes(soundEffect.audc, dpcPlusSoundCards.value)) {
         const items = frequencyItems(soundEffect.audc);
         if (!items.some(({value}) => value === soundEffect.audf)) {
           // Snaps to the closest still-valid AUDF rather than always
@@ -1075,17 +1202,18 @@ export default defineComponent({
     return {
       selectedCardId, selectedCardIds, selectCard, deselectCard, selectedSoundEffect, selectedSoundEffects,
       handleExportSelectedSoundEffects, isSoundFxToolbarScrolled,
-      state, handleChildChange, handleAddSoundEffect, handleDeleteSoundEffect, handleDuplicateSoundEffect,
+      state, handleChildChange, handleAddSoundEffect, handleDeleteSoundEffect, deleteTitleFor, handleDuplicateSoundEffect,
       handlePlaySoundEffect,
       handleExportSoundEffect, handleImportSoundEffect,
       handleExportSoundBank, handleImportSoundBank,
       soundBankImportOpen, soundBankImportEntries, handleConfirmSoundBankImport,
       canUndoEnvelope, canRedoEnvelope, handleUndoEnvelope, handleRedoEnvelope, reorderCanUndo, reorderCanRedo, UNDO_TITLE, REDO_TITLE, handleResetEnvelope,
-      handleStopPreview, handleSetSoundEffectColor, handleToggleInstrument, autoInstrumentColor,
+      handleStopPreview, handleSetSoundEffectColor, autoInstrumentColor,
       isCollapsed, toggleCollapsed,
       audcHasTunableNotes, frequencyItems, handleAudcChange,
       dimSoundFx, dimSoundFxPercent, dimSoundFxPercentDisplay,
-      soundFxColumns, soundFilter, soundFilterItems, matchesSoundFilter,
+      soundFxColumns, soundFilter, soundFilterItems, matchesSoundFilter, soundKinds, soundKindFor, handleSetSoundKind, dpcPlusSoundCards, dpcPlusNoteValue, dpcPlusNoteItems,
+      handleDpcPlusNoteChange, handleWaveformChange, handleTiaChange,
       audcOptionItems: AUDC_OPTIONS.map(([text, value]) => ({text, value})),
       arpeggioRangeOptionItems: ARPEGGIO_RANGE_OPTIONS.map(([text, value]) => ({text, value})),
       arpeggioDivisionOptionItems: ARPEGGIO_DIVISION_OPTIONS.map((value) => ({text: `1/${value}`, value})),
@@ -1572,9 +1700,9 @@ export default defineComponent({
      ("the bottom of sound cards is too close to the envelope toggle when
      the envelope toggle is turned off" - visible specifically then since
      the Envelope switch, not the taller EnvelopeGraph, is this section's
-     last row in that state). Same 8px the deleted section used to
-     provide. */
-  padding-bottom: 8px;
+     last row in that state). The 8px the deleted section used to
+     provide, plus 8px more. */
+  padding-bottom: 16px;
 }
 
 /* Same top-right corner/offset as DataEditor.vue's .data-toolbar-top-
@@ -1614,6 +1742,25 @@ export default defineComponent({
   row-gap: 0;
   column-gap: 8px;
   flex-wrap: wrap;
+}
+
+.soundfx-tia-section {
+  flex: 1 1 100%;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.soundfx-tia-title {
+  font-size: 0.8em;
+  opacity: 0.7;
+  margin-bottom: 2px;
+}
+
+.soundfx-waveform {
+  /* The shape drawn on the card takes the card's whole width, on a line by itself. */
+  flex: 1 1 100%;
+  width: 100%;
+  margin: 4px 0 20px;
 }
 
 .soundfx-audc {
@@ -1780,5 +1927,12 @@ export default defineComponent({
 
 .add-soundfx-buttom {
   bottom: 8px;
+}
+</style>
+
+<style>
+/* The sound kind menu is drawn outside the card (see the kind button in a card's name row), so its style is not scoped. */
+.soundfx-kind-menu {
+  border: 1px solid rgba(128, 128, 128, 0.7);
 }
 </style>

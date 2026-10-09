@@ -7,7 +7,7 @@ export default (Blockly) => {
     const audc = block.getFieldValue('AUDC');
     const audf = block.getFieldValue('AUDF');
     const audv = block.getFieldValue('AUDV');
-    const channel = block.getFieldValue('CHANNEL');
+    const channel = Blockly.BBasic.normalizeChannel(block.getFieldValue('CHANNEL'));
     const duration = block.getFieldValue('DURATION');
 
     const configurationStorage = useConfigurationStorage();
@@ -32,9 +32,14 @@ export default (Blockly) => {
     // hooks/project.js), not part of this project's  saved configuration.
     const effectiveAudv = audv;
 
+    // Under DPC+ the sound type and frequency are turned into the waveform and pitch the sound chip plays (see
+    // generators/bbasic/dpcplus-audio.js).
+    // Only channel 0 is played by the chip; channel 1 stays on the TIA.
+    const dpcPlan = Blockly.BBasic.dpcAudioPlan && Blockly.BBasic.dpcAudioPlan.isChannel(channel) ?
+      Blockly.BBasic.dpcAudioPlan : null;
     const code = `AUDV${channel}=0\n` +
-      `AUDC${channel}=${audc}\n` +
-      `AUDF${channel}=${audf}\n` +
+      `AUDC${channel}=${dpcPlan ? dpcPlan.waveIdForTia(audc) : audc}\n` +
+      `AUDF${channel}=${dpcPlan ? dpcPlan.pitchIdForTia(audc, audf) : audf}\n` +
       `AUDV${channel}=${effectiveAudv}\n` +
       `channnel${channel}duration=${duration}\n`;
     return code;

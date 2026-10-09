@@ -154,9 +154,9 @@
                 outlined
                 :ripple="false"
                 class="animation-card"
-                :class="[dragCardClass(index), {'animation-card-selected': animation.id === selectedCardId}]"
+                :class="[dragCardClass(index), {'animation-card-selected': selectedCardIds.includes(animation.id)}]"
                 v-on="dragTargetListeners(index)"
-                @click.stop="selectCard(animation.id)"
+                @click.stop="selectCard(animation.id, $event)"
               >
                 <div
                   class="animation-drag-handle"
@@ -279,9 +279,9 @@
                     </v-btn>
                     <confirm-delete-menu
                       v-if="state.animations.length > 1"
-                      title="Delete this animation?"
-                      :selected="animation.id === selectedCardId"
-                      activator-title="Delete this animation"
+                      :title="deleteQuestion(animation.id, 'animation', 1)"
+                      :selected="animation.id === selectedCardId && selectedCardIds.includes(animation.id)"
+                      :activator-title="deleteQuestion(animation.id, 'animation', 1).replace('?', '')"
                       icon-btn-class="player-icon-btn-size"
                       @confirm="handleDeleteAnimation(animation)"
                     />
@@ -458,6 +458,7 @@ import PlayfieldColorStrip from '../components/PlayfieldColorStrip.vue';
 import QuickColorPalette from '../components/QuickColorPalette.vue';
 import {useCollapsedIds} from '../hooks/collapse';
 import {useDragReorder} from '../hooks/drag-reorder';
+import {useCardSelection} from '../hooks/card-selection';
 import {recordRowColorsChange} from '../utils/row-color-history';
 import {DEFAULT_ROW_COLOR, clearRowColors} from '../blocks/background';
 import {DEFAULT_SPRITES, processPlayerAnimationsStorageDefaults} from '../generators/bbasic/sprites';
@@ -584,13 +585,11 @@ export default defineComponent({
     // component state, not persisted, not wired into anything else. Also
     // drives the shared "Set height" tool below (see selectedAnimation's
     // comment).
+    // Shift+click selects a range, Ctrl/Cmd+click adds or removes a card (see hooks/card-selection.js): deleting or
+    // dragging one of several selected cards does it to all of them.
     const selectedCardId = ref(null);
-    const selectCard = (id) => {
-      selectedCardId.value = id;
-    };
-    const deselectCard = () => {
-      selectedCardId.value = null;
-    };
+    const {selectedCardIds, selectCard, deselectCard, getSelectedIndices, idsToDelete, deleteQuestion} = useCardSelection(
+        () => state.value.animations.map(({id}) => id), selectedCardId);
 
     // Tracks whichever frame's PixelEditor instance was last clicked
     // into (see its "activate" event, emitted from PixelEditor.vue's
@@ -788,6 +787,7 @@ export default defineComponent({
           state.value.animations = items;
           handleChildChange();
         },
+        getSelectedIndices,
     );
 
     // Frame reordering: one drag-reorder instance per animation, made on
@@ -1153,7 +1153,9 @@ export default defineComponent({
     };
 
     const handleDeleteAnimation = (animation) => {
-      state.value.animations = state.value.animations.filter(({id}) => id != animation.id);
+      const doomed = idsToDelete(animation.id, 1);
+      state.value.animations = state.value.animations.filter(({id}) => !doomed.includes(id));
+      if (doomed.length > 1) deselectCard();
       console.info('Deleted ', animation);
       handleChildChange();
       instance.proxy.$forceUpdate();
@@ -1255,7 +1257,7 @@ export default defineComponent({
       });
     };
 
-    return {selectedCardId, selectCard, deselectCard,
+    return {selectedCardId, selectedCardIds, selectCard, deselectCard, deleteQuestion,
       state, handleChildChange, handleFrameDurationChange,
       handleAddFrame, handleDeleteFrame,
       handleImportAnimationFrames, replaceFramesOnImport, keepColorsOnImport, importMenuOpenAnimationId,

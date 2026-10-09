@@ -556,6 +556,29 @@ export const ROM_NOISE_COLOR_REGISTERS = {
   player1: {low: 'player1color', high: 'missile1y', kernelOption: 'player1colors'},
 };
 
+// DPC+: "Player set Height" keeps a player's picture no taller than a limit, whatever its animation frame says. The
+// animation code sets the height again every frame, so the block stores the limit (plus one, so 0 means none: 255
+// is the same as no limit) in this byte and generatePlayerHeightLimitChecks applies it right after the animations.
+export const playerHeightLimitVarName = (name) => `${name}HeightLimit`;
+export const reservePlayerHeightLimitDevVars = (reserveDevVar, usedFor) => {
+  (usedFor || []).forEach((name) => reserveDevVar(playerHeightLimitVarName(name), undefined,
+      'this player height limit plus one, from the Player set Height block (0 for none)'));
+};
+export const generatePlayerHeightLimitChecks = (Blockly) => {
+  const used = [...(Blockly.BBasic.playerHeightLimitUsedFor || [])];
+  if (!used.length) return '';
+  return used.map((name) => {
+    const limit = Blockly.BBasic.nameDB_.getName(playerHeightLimitVarName(name), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+    const done = `_heightlimit_${name}_done`;
+    return [
+      ` if ${limit} = 0 then goto ${done}`,
+      ` temp1 = ${limit} - 1`,
+      ` if temp1 < ${name}height then ${name}height = temp1`,
+      `${done}`,
+    ].join('\n');
+  }).join('\n') + '\n';
+};
+
 // Actually allocates a RAM slot (letter or varN) for each dev var name this
 // feature needs, and gets each one a real "dim name = ..." declaration -
 // merely resolving a name through nameDB_.getName (what every generator
@@ -1949,6 +1972,11 @@ export default (Blockly) => {
             `if temp1 = 8 then temp2 = 3\n` +
             `temp2 = temp2 * ${secondMissile ? 64 : 16}\n` +
             `${widthsVar} = (${widthsVar} & ${secondMissile ? '$3F' : '$CF'}) + temp2\n`;
+      } else if (/^player\dheight$/.test(varName) && (useConfigurationStorage().value || {}).kernel === 'dpcplus') {
+        const limit = Blockly.BBasic.nameDB_.getName(playerHeightLimitVarName(varName.replace('height', '')),
+            Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+        return `${limit} = ${argument0} + 1
+`;
       } else if (varName.endsWith('visibility')) {
         const blockNumber = Blockly.BBasic.blockNumbers.next();
         const baseLabel = `_visibility_${blockNumber}`;

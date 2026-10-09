@@ -130,9 +130,9 @@
                 outlined
                 :ripple="false"
                 class="background-card"
-                :class="[dragCardClass(index), {'background-card-selected': background.id === selectedCardId}]"
+                :class="[dragCardClass(index), {'background-card-selected': selectedCardIds.includes(background.id)}]"
                 v-on="dragTargetListeners(index)"
-                @click.stop="selectCard(background.id)"
+                @click.stop="selectCard(background.id, $event)"
               >
                 <div
                   class="background-drag-handle"
@@ -209,9 +209,9 @@
                     </v-btn>
                     <confirm-delete-menu
                       v-if="state.backgrounds.length > 1"
-                      title="Delete this background?"
-                      :selected="background.id === selectedCardId"
-                      activator-title="Delete this background"
+                      :title="deleteQuestion(background.id, 'background', 1)"
+                      :selected="background.id === selectedCardId && selectedCardIds.includes(background.id)"
+                      :activator-title="deleteQuestion(background.id, 'background', 1).replace('?', '')"
                       icon-btn-class="player-icon-btn-size"
                       @confirm="handleDeleteBackground(background)"
                     />
@@ -324,7 +324,8 @@ import {max} from 'lodash';
 import {useCollapsedIds} from '../hooks/collapse';
 import {recordReorder, sameItems} from '../hooks/reorder-history';
 import {recordRowColorsChange} from '../utils/row-color-history';
-import {CSS_CLASS_DRAGGING} from '../hooks/drag-reorder';
+import {CSS_CLASS_DRAGGING, dragGroupFor, moveCards} from '../hooks/drag-reorder';
+import {useCardSelection} from '../hooks/card-selection';
 import ConfirmDeleteMenu from '../components/ConfirmDeleteMenu.vue';
 import EditorZoom from '../components/EditorZoom.vue';
 import GraphicEditorToolbar from '../components/GraphicEditorToolbar.vue';
@@ -433,13 +434,11 @@ export default defineComponent({
     // song cards and the other tabs'  entry cards (see
     // MusicEditor.vue's  comment for the full reasoning): plain local
     // component state, not persisted, not wired into anything else.
+    // Shift+click selects a range, Ctrl/Cmd+click adds or removes a card (see hooks/card-selection.js): deleting or
+    // dragging one of several selected cards does it to all of them.
     const selectedCardId = ref(null);
-    const selectCard = (id) => {
-      selectedCardId.value = id;
-    };
-    const deselectCard = () => {
-      selectedCardId.value = null;
-    };
+    const {selectedCardIds, selectCard, deselectCard, getSelectedIndices, idsToDelete, deleteQuestion} = useCardSelection(
+        () => state.value.backgrounds.map(({id}) => id), selectedCardId);
 
     // Tracks whichever background's PixelEditor instance was last
     // clicked into (see its "activate" event, emitted from PixelEditor.vue's
@@ -590,10 +589,12 @@ export default defineComponent({
     // before/after in reading order), not top/bottom - same reasoning as
     // TextEditor.vue's  identical replacement.
     const draggedIndex = ref(null);
+    // Every card being dragged: the selected ones when the one dragged is one of them.
+    const draggedGroup = ref([]);
     // {index, side} - side is 'before' or 'after', which HALF of card
     // `index` the pointer is currently over.
     const dragOverEntry = ref(null);
-    const isEntryDragging = (index) => draggedIndex.value === index;
+    const isEntryDragging = (index) => draggedIndex.value === index || draggedGroup.value.includes(index);
     const isEntryDragOver = (index) =>
       !!dragOverEntry.value && dragOverEntry.value.index === index && !isEntryDragging(index);
     const entryDragOverSide = (index) => (isEntryDragOver(index) ? dragOverEntry.value.side : null);
@@ -610,11 +611,13 @@ export default defineComponent({
     const dragHandleListeners = (index) => ({
       dragstart: (event) => {
         draggedIndex.value = index;
+        draggedGroup.value = dragGroupFor(index, getSelectedIndices());
         event.dataTransfer.effectAllowed = 'move';
         event.dataTransfer.setData('text/plain', String(index));
       },
       dragend: () => {
         draggedIndex.value = null;
+        draggedGroup.value = [];
         dragOverEntry.value = null;
       },
     });
@@ -638,6 +641,7 @@ export default defineComponent({
         if (isCollapsed(background) !== collapsed[index]) toggleCollapsed(background);
       });
       if (selected) selectedCardId.value = selected.id;
+      selectedCardIds.value = selectedCardIds.value.map((id) => idMap.get(id) || id);
     };
 
     const dragTargetListeners = (index) => ({
@@ -657,17 +661,16 @@ export default defineComponent({
       drop: (event) => {
         event.preventDefault();
         const from = draggedIndex.value;
+        const group = draggedGroup.value.length ? draggedGroup.value : [from];
         draggedIndex.value = null;
+        draggedGroup.value = [];
         dragOverEntry.value = null;
-        if (from == null || from === index) return;
+        if (from == null || group.includes(index)) return;
         const side = dragOverSideFor(event);
-        let insertAt = side === 'after' ? index + 1 : index;
-        if (from < insertAt) insertAt--;
-        if (insertAt === from) return;
+        const insertAt = side === 'after' ? index + 1 : index;
         const before = state.value.backgrounds.slice();
-        const items = before.slice();
-        const [moved] = items.splice(from, 1);
-        items.splice(insertAt, 0, moved);
+        const items = moveCards(before, group, insertAt);
+        if (sameItems(items, before)) return;
         state.value.backgrounds = items;
         renumberBackgrounds();
         handleChildChange();
@@ -810,13 +813,15 @@ export default defineComponent({
     };
 
     const handleDeleteBackground = (background) => {
-      state.value.backgrounds = state.value.backgrounds.filter(({id}) => id != background.id);
+      const doomed = idsToDelete(background.id, 1);
+      state.value.backgrounds = state.value.backgrounds.filter(({id}) => !doomed.includes(id));
+      if (doomed.length > 1) deselectCard();
       console.info('Deleted ', background);
       handleChildChange();
       instance.proxy.$forceUpdate();
     };
 
-    return {selectedCardId, selectCard, deselectCard, backgroundAspectRatio,
+    return {selectedCardId, selectedCardIds, selectCard, deselectCard, deleteQuestion, backgroundAspectRatio,
       state, handleChildChange, handleBackgroundPixelsInput, handleAddBackground, handleDeleteBackground, handleDuplicateBackground,
       testingId, buildInProgress, handleTestBackground,
       selectedQuickColor, quickColorPalette,

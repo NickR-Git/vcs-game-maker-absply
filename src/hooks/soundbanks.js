@@ -12,19 +12,21 @@ import {soundEffectsInBankFile} from '../utils/sound-bank';
 // To change which repo the sound banks come from, edit SOUND_BANKS_SOURCE.
 const SOUND_BANKS_SOURCE = {
   owner: 'NickR-Git',
-  repo: 'vcs-game-maker-absply',
+  repo: 'vcs-game-maker-content',
   branch: 'main',
   path: 'soundbanks',
 };
 
 const SOURCE_KEY = `${SOUND_BANKS_SOURCE.owner}/${SOUND_BANKS_SOURCE.repo}@${SOUND_BANKS_SOURCE.branch}/${SOUND_BANKS_SOURCE.path}`;
+// Where the files come from, shown while they download.
+const SOURCE_URL = `https://github.com/${SOUND_BANKS_SOURCE.owner}/${SOUND_BANKS_SOURCE.repo}/tree/${SOUND_BANKS_SOURCE.branch}/${SOUND_BANKS_SOURCE.path}`;
 const DB_NAME = 'vcs-game-maker-soundbanks';
 const STORE_NAME = 'soundbanks';
 
 // status: 'idle' | 'loading' | 'done' | 'error'. While loading, total is how
 // many files are being downloaded (0 while still checking) and done how many
 // have finished.
-export const soundBanksState = reactive({entries: [], status: 'idle', message: '', done: 0, total: 0});
+export const soundBanksState = reactive({source: SOURCE_URL, entries: [], status: 'idle', message: '', done: 0, total: 0});
 
 const openDb = () => new Promise((resolve, reject) => {
   const request = indexedDB.open(DB_NAME, 1);
@@ -74,16 +76,36 @@ const summarize = (name, text) => {
   return {sounds, isBank};
 };
 
-// What a download is: a 'bank' (a file of several sounds), an 'instrument' (a single sound
-// tagged as an instrument on the Sound tab) or a plain 'sound'. Read from the file's text
+// What a download is: a 'bank' (a file of several sounds), an 'instrument' or 'percussion' (a single sound
+// tagged as one on the Sound tab) or a plain 'sound'. Read from the file's text
 // each time rather than kept in the stored summary, so files downloaded before this existed
 // get one too.
 const kindOf = (text, isBank) => {
   if (isBank) return 'bank';
   try {
-    return JSON.parse(text).isInstrument ? 'instrument' : 'sound';
+    const sound = JSON.parse(text);
+    return sound.isPercussion ? 'percussion' : sound.isInstrument ? 'instrument' : 'sound';
   } catch (e) {
     return 'sound';
+  }
+};
+
+// The kernel a file says it was made for; a file saved before that was recorded is a Standard kernel one.
+const kernelOf = (text) => {
+  try {
+    return JSON.parse(text).kernel === 'dpcplus' ? 'dpcplus' : 'standard';
+  } catch (e) {
+    return 'standard';
+  }
+};
+
+// The developer and website a file was exported with (see the Sound tab's export), or '' for each it does not have.
+const creditOf = (text) => {
+  try {
+    const {developer, website} = JSON.parse(text);
+    return {developer: typeof developer === 'string' ? developer : '', website: typeof website === 'string' ? website : ''};
+  } catch (e) {
+    return {developer: '', website: ''};
   }
 };
 
@@ -92,6 +114,8 @@ const toEntry = (record) => ({
   text: record.text,
   ...record.summary,
   kind: kindOf(record.text, record.summary && record.summary.isBank),
+  kernel: kernelOf(record.text),
+  ...creditOf(record.text),
 });
 
 const sortEntries = (entries) => entries.sort((a, b) => a.name.localeCompare(b.name));

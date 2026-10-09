@@ -449,6 +449,9 @@ if (!Blockly.Variables.flyoutCategory.isExtraBlocksPatch) {
         '<value name="VALUE"><shadow type="logic_boolean"><field name="BOOL">TRUE</field></shadow></value>' +
         '</block>' +
         '<block type="system_variable_get"></block>' +
+        '<block type="display_ram_set"><value name="VALUE"><shadow type="math_number"><field name="NUM">0</field></shadow></value></block>' +
+        '<block type="display_ram_change"><value name="VALUE"><shadow type="math_number"><field name="NUM">1</field></shadow></value></block>' +
+        '<block type="display_ram_get"></block>' +
         '</xml>',
     ).children;
     return [xmlList[0], ...extraBlocks, ...xmlList.slice(1)];

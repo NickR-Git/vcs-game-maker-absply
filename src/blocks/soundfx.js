@@ -4,7 +4,7 @@ import Vue from 'vue';
 import * as Blockly from 'blockly/core';
 
 import {useSoundEffectsStorage} from '../hooks/project';
-import {CHANNEL_OPTIONS} from './sound';
+import {channelOptions} from './sound';
 import {SOUND_ICON} from './icon';
 
 const SOUND_COLOR = 'rgb(156, 39, 176)';
@@ -165,6 +165,9 @@ export const DEFAULT_SOUND_EFFECTS = {
       // The default sound starts as a plain sound effect; clicking its
       // icon on the Sound tab makes it an instrument.
       isInstrument: false,
+      // A percussion sound (a drum hit): on the Music tab it plays from the Hit row at the pitch set here, never from
+      // the piano keys. A sound is a sound effect, an instrument or percussion, never two of them.
+      isPercussion: false,
     },
   ],
 };
@@ -258,7 +261,8 @@ export const processSoundEffectsStorageDefaults = (soundEffectsStorage) => {
     // Presets saved before this existed won't have it yet - defaults false
     // (a plain "sound effect"), matching every preset's  behavior before
     // this tag existed.
-    soundEffect.isInstrument = !!soundEffect.isInstrument;
+    soundEffect.isPercussion = !!soundEffect.isPercussion;
+    soundEffect.isInstrument = !!soundEffect.isInstrument && !soundEffect.isPercussion;
     // Same Number() coercion as arpeggioRange above, for the same v-select
     // quirk. A preset saved before Priority existed at all falls back to
     // the default.
@@ -303,7 +307,7 @@ Blockly.Blocks['soundfx_play'] = {
         .appendField(`${SOUND_ICON} Play sound effect`)
         .appendField(new Blockly.FieldDropdown(buildSoundEffectOptions), 'SOUNDFX')
         .appendField('on')
-        .appendField(new Blockly.FieldDropdown(CHANNEL_OPTIONS), 'CHANNEL');
+        .appendField(new Blockly.FieldDropdown(() => channelOptions()), 'CHANNEL');
     this.setPreviousStatement(true, null);
     this.setNextStatement(true, null);
     this.setColour(SOUND_COLOR);

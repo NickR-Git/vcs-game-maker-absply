@@ -176,12 +176,20 @@
             persistent-hint
             class="option-switch"
           />
+          <v-switch
+            v-model="configurationState.enableDpcPlusAudio"
+            @change="handleChangeConfiguration"
+            label="Play sound and music with the DPC+ sound chip"
+            hint="Sounds and songs are played by the DPC+ chip: each sound has a waveform you draw on its Sound tab card instead of a sound type, and a note can be any piano key. It plays two of the chip's three voices, and the sound stops for the part of each frame after the picture (a faint 60 Hz buzz). Turned off, the sounds use the TIA's two channels like the standard kernel."
+            persistent-hint
+            class="option-switch"
+          />
         </template>
         <v-switch
           v-model="configurationState.enablePlayer0SpriteColors"
           @change="handleChangeConfiguration"
-          label="Enable per-row Player 0 sprite colors (playercolors)"
-          hint="Lets Player 0 show a different color on every row, the same way backgrounds can. Costs missile0 (can't be used as a sprite anywhere in the project once this is on) and paddle input. batari Basic requires player1colors alongside playercolors, so turning this on also turns on (and locks on) Player 1 sprite colors below, costing missile1 too."
+          :label="kernelIsDpcPlus ? 'Enable per-row Player 0 sprite colors' : 'Enable per-row Player 0 sprite colors (playercolors)'"
+          :hint="kernelIsDpcPlus ? 'Lets Player 0 show a different color on every row, the same way backgrounds can. The colors are the ones set on each sprite row in the Sprites tab.' : 'Lets Player 0 show a different color on every row, the same way backgrounds can. Costs missile0 (can\'t be used as a sprite anywhere in the project once this is on) and paddle input. batari Basic requires player1colors alongside playercolors, so turning this on also turns on (and locks on) Player 1 sprite colors below, costing missile1 too.'"
           persistent-hint
           class="option-switch"
         />
@@ -190,14 +198,15 @@
           @change="handleChangeConfiguration"
           :disabled="player0RainbowColorsActive"
           :color="player0RainbowColorsActive ? 'amber darken-2' : undefined"
-          label="Enable per-row Player 1 sprite colors (player1colors)"
-          :hint="player0RainbowColorsActive ?
+          :label="kernelIsDpcPlus ? 'Enable per-row Player 1 sprite colors' : 'Enable per-row Player 1 sprite colors (player1colors)'"
+          :hint="kernelIsDpcPlus ? 'Lets Player 1 and the other players show a different color on every row, the same way backgrounds can. The colors are the ones set on each sprite row in the Sprites tab.' : player0RainbowColorsActive ?
             'Forced on: batari Basic requires player1colors whenever playercolors (Player 0 sprite colors, above) is on.' :
             'Lets Player 1 show a different color on every row, the same way backgrounds can. Costs missile1 (can\'t be used as a sprite anywhere in the project once this is on) - unlike Player 0 sprite colors, this works alone with no other cost.'"
           persistent-hint
           class="option-switch"
         />
         <v-switch
+          v-if="!kernelIsDpcPlus"
           v-model="configurationState.enablePfColors"
           @change="handleChangeConfiguration"
           label="Enable per-row playfield colors (pfcolors)"
@@ -229,6 +238,14 @@
           @change="handleChangeConfiguration"
           label="Optimize for speed (speed)"
           hint="May increase speed - particularly of multiplication and division - at the cost of code size."
+          persistent-hint
+          class="option-switch"
+        />
+        <v-switch
+          v-model="configurationState.enableFastMath"
+          @change="handleChangeConfiguration"
+          label="Faster multiply and divide"
+          hint="Replaces the multiply and divide routines with ones that look the answer up in a table (multiplying always takes about 60 cycles instead of up to 180) and shift and subtract for big answers (dividing takes at most about 210 cycles instead of over 1000). Costs about 600 bytes of ROM. Only matters when a block multiplies or divides by something that is not a power of 2, such as the playfield and sprite conversion blocks. On DPC+ only dividing changes: big answers are worked out by the coprocessor, and no extra ROM is used."
           persistent-hint
           class="option-switch"
         />
@@ -397,6 +414,7 @@ const DEFAULT_CONFIGURATION = {
   dpcPlusPfres: 12,
   enableDpcPlusPfColors: false,
   enableDpcPlusBkColors: false,
+  enableDpcPlusAudio: true,
   showScore: true,
   enableScoreFade: false,
   showBlankLines: true,
@@ -405,6 +423,7 @@ const DEFAULT_CONFIGURATION = {
   enablePfColors: false,
   enableSuperchip: false,
   enableOptimizationSpeed: false,
+  enableFastMath: false,
   enableInlineRand: true,
   enableRand16: true,
   enableCycleScore: false,
@@ -524,11 +543,12 @@ export default defineComponent({
     // allows "playercolors" alongside "no_blank_lines", so the toggle is
     // forced on and disabled rather than letting the user pick a
     // combination that's guaranteed to fail to build.
-    const player0RainbowColorsActive = computed(() => usesPlayer0RainbowColors());
+    const kernelIsDpcPlus = computed(() => configurationState.value.kernel === 'dpcplus');
+    // batari Basic's playercolors rules (player1colors alongside, no no_blank_lines) are the standard kernel's.
+    const player0RainbowColorsActive = computed(() => !kernelIsDpcPlus.value && usesPlayer0RainbowColors());
 
     // Gates every DPC+-only/std-kernel-only v-if pair in the template
     // below, and the equivalent branches in generators/bbasic.js.
-    const kernelIsDpcPlus = computed(() => configurationState.value.kernel === 'dpcplus');
 
     // Display-only inverted proxy for the "Show blank lines" toggle -
     // configurationState.showBlankLines itself keeps its original polarity
@@ -701,6 +721,7 @@ export default defineComponent({
       state.dpcPlusRowScanlines = DEFAULT_CONFIGURATION.dpcPlusRowScanlines;
       state.enableDpcPlusPfColors = DEFAULT_CONFIGURATION.enableDpcPlusPfColors;
       state.enableDpcPlusBkColors = DEFAULT_CONFIGURATION.enableDpcPlusBkColors;
+      state.enableDpcPlusAudio = DEFAULT_CONFIGURATION.enableDpcPlusAudio;
       state.showScore = DEFAULT_CONFIGURATION.showScore;
       state.enableScoreFade = DEFAULT_CONFIGURATION.enableScoreFade;
       state.showBlankLines = DEFAULT_CONFIGURATION.showBlankLines;
@@ -709,6 +730,7 @@ export default defineComponent({
       state.enablePfColors = DEFAULT_CONFIGURATION.enablePfColors;
       state.enableSuperchip = DEFAULT_CONFIGURATION.enableSuperchip;
       state.enableOptimizationSpeed = DEFAULT_CONFIGURATION.enableOptimizationSpeed;
+      state.enableFastMath = DEFAULT_CONFIGURATION.enableFastMath;
       state.enableInlineRand = DEFAULT_CONFIGURATION.enableInlineRand;
       state.enableRand16 = DEFAULT_CONFIGURATION.enableRand16;
       state.enableCycleScore = DEFAULT_CONFIGURATION.enableCycleScore;
