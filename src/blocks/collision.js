@@ -1,6 +1,7 @@
 import * as Blockly from 'blockly/core';
 
 import {PLAYER_ICON, MISSILE_ICON, BALL_ICON, PLAYFIELD_ICON} from './icon';
+import {useConfigurationStorage} from '../hooks/project';
 
 const options = [
   [PLAYER_ICON + ' Player 0', 'player0'],
@@ -10,6 +11,14 @@ const options = [
   [BALL_ICON + ' Ball', 'ball'],
   [PLAYFIELD_ICON + ' Playfield', 'playfield'],
 ];
+
+// The DPC+ kernel's extra sprites (Player 2 to 9) are offered too.
+const collisionOptions = function() {
+  const dpcPlus = ((useConfigurationStorage() || {}).value || {}).kernel === 'dpcplus';
+  if (!dpcPlus) return options;
+  const extra = Array.from({length: 8}, (_, i) => [PLAYER_ICON + ' Player ' + (i + 2), 'player' + (i + 2)]);
+  return [...options.slice(0, 2), ...extra, ...options.slice(2)];
+};
 
 // The "Check bounding box collision with Playfield" / "Bounding box
 // collision result" block pair (predictive software box collision, with
@@ -28,12 +37,12 @@ Blockly.defineBlocksWithJsonArray([
       {
         'type': 'field_dropdown',
         'name': 'VAR0',
-        options,
+        'options': collisionOptions,
       },
       {
         'type': 'field_dropdown',
         'name': 'VAR1',
-        options,
+        'options': collisionOptions,
       },
     ],
     'output': 'Boolean',
@@ -42,10 +51,10 @@ Blockly.defineBlocksWithJsonArray([
   },
 ]);
 
-const playerOptions = [
-  [PLAYER_ICON + ' Player 0', '0'],
-  [PLAYER_ICON + ' Player 1', '1'],
-];
+const playerOptions = function() {
+  const dpcPlus = ((useConfigurationStorage() || {}).value || {}).kernel === 'dpcplus';
+  return Array.from({length: dpcPlus ? 10 : 2}, (_, i) => [PLAYER_ICON + ' Player ' + i, String(i)]);
+};
 
 // One-frame-delayed hardware-collision "backtrack" check - no movement
 // and no extra drawscreen: bBasic's kernel already clears the

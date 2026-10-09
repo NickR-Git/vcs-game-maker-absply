@@ -2,6 +2,7 @@
 
 import {playfieldToMatrix} from '../../utils/pixels';
 import {useConfigurationStorage} from '../../hooks/project';
+import {fireObjectName} from '../../utils/fire-object';
 import {pfRowDivisorFor, MISSILE_BALL_PF_X_OFFSET} from '../../utils/playfield-coords';
 import {flagPoolVar, flagPoolBit} from './flag-pool';
 import {fadeFlagsVarName, fadeActiveBit, effectiveBackgroundRows} from '../../blocks/background';
@@ -74,53 +75,46 @@ export const processPlayerAnimationsStorageDefaults = (playerAnimationsStorage) 
 // not just a literal 0), not something a project's  blocks need to
 // reference by name to reach. It is also what both players start on:
 // bbasic.bb.hbs sets player0animation and player1animation to 0 at boot.
+// 'player0'..'player9' for a Player block's dropdown value (players 2 to 9 are the DPC+ kernel's virtual sprites).
+export const playerNameOfValue = (value) => `player${/^[0-9]$/.test(String(value)) ? value : '0'}`;
+
 export const resolveUsedPlayerAnimations = (workspace) => {
   const used = {player0: new Set([0]), player1: new Set([0])};
   const unsafe = {player0: false, player1: false};
-  const animationVarName = (block) => block.getFieldValue('VAR');
+  const track = (name, index) => {
+    if (!used[name]) {
+      used[name] = new Set([0]);
+      unsafe[name] = false;
+    }
+    if (Number.isInteger(index)) {
+      used[name].add(index);
+    } else {
+      unsafe[name] = true;
+    }
+  };
+  const animationOf = (varField) => {
+    const match = /^(player\d)animation$/.exec(varField || '');
+    return match ? match[1] : null;
+  };
+  const selectedIndex = (valueBlock) => valueBlock && valueBlock.type === 'sprite_player_animation_select' ?
+    Number(valueBlock.getFieldValue('VAR')) : NaN;
   workspace.getAllBlocks(false).forEach((block) => {
     if (block.type === 'sprite_player_set') {
-      const varField = animationVarName(block);
-      const name = varField === 'player0animation' ? 'player0' : varField === 'player1animation' ? 'player1' : null;
-      if (!name) return;
-      const valueBlock = block.getInputTargetBlock('VALUE');
-      const index = valueBlock && valueBlock.type === 'sprite_player_animation_select' ?
-        Number(valueBlock.getFieldValue('VAR')) : NaN;
-      if (Number.isInteger(index)) {
-        used[name].add(index);
-      } else {
-        unsafe[name] = true;
-      }
+      const name = animationOf(block.getFieldValue('VAR'));
+      if (name) track(name, selectedIndex(block.getInputTargetBlock('VALUE')));
     } else if (block.type === 'sprite_player_set_animation') {
       // Same reachability tracking as the sprite_player_set + nested
       // sprite_player_animation_select combo above, just read straight off
       // this block's PLAYER/VAR fields directly - no separate VALUE input
       // to dig into, since both are baked into one block here.
-      const name = block.getFieldValue('PLAYER') === '1' ? 'player1' : 'player0';
-      const index = Number(block.getFieldValue('VAR'));
-      if (Number.isInteger(index)) {
-        used[name].add(index);
-      } else {
-        unsafe[name] = true;
-      }
+      track(playerNameOfValue(block.getFieldValue('PLAYER')), Number(block.getFieldValue('VAR')));
     } else if (block.type === 'sprite_player_set_animation_id') {
-      // Same VALUE-digging as sprite_player_set above (this block's VALUE
-      // is just as arbitrary an expression) - provably safe only
-      // when a sprite_player_animation_select block happens to be plugged
-      // into it, same as there.
-      const name = block.getFieldValue('PLAYER') === '1' ? 'player1' : 'player0';
-      const valueBlock = block.getInputTargetBlock('VALUE');
-      const index = valueBlock && valueBlock.type === 'sprite_player_animation_select' ?
-        Number(valueBlock.getFieldValue('VAR')) : NaN;
-      if (Number.isInteger(index)) {
-        used[name].add(index);
-      } else {
-        unsafe[name] = true;
-      }
+      // The VALUE is as arbitrary an expression as in sprite_player_set above: provably safe only
+      // when a sprite_player_animation_select block is plugged into it.
+      track(playerNameOfValue(block.getFieldValue('PLAYER')), selectedIndex(block.getInputTargetBlock('VALUE')));
     } else if (block.type === 'sprite_player_change') {
-      const varField = animationVarName(block);
-      if (varField === 'player0animation') unsafe.player0 = true;
-      if (varField === 'player1animation') unsafe.player1 = true;
+      const name = animationOf(block.getFieldValue('VAR'));
+      if (name) track(name, NaN);
     }
   });
   // The Sprites tab's animation preview (see buildPlayerAnimationPreviewRom in
@@ -130,10 +124,7 @@ export const resolveUsedPlayerAnimations = (workspace) => {
   // has no relocation to make room).
   const previewOnly = (useConfigurationStorage().value || {}).previewAnimationOnly;
   if (Number.isInteger(previewOnly)) return {player0: new Set([previewOnly]), player1: new Set()};
-  return {
-    player0: unsafe.player0 ? null : used.player0,
-    player1: unsafe.player1 ? null : used.player1,
-  };
+  return Object.fromEntries(Object.keys(used).map((name) => [name, unsafe[name] ? null : used[name]]));
 };
 
 // Every player a sprite_player_animation_finished watch block actually
@@ -148,7 +139,7 @@ export const resolvePlayerAnimationFinishedWatches = (workspace) => {
   const watched = new Set();
   workspace.getAllBlocks(false).forEach((block) => {
     if (block.type !== 'sprite_player_animation_finished') return;
-    watched.add(block.getFieldValue('PLAYER') === '1' ? 'player1' : 'player0');
+    watched.add(playerNameOfValue(block.getFieldValue('PLAYER')));
   });
   return watched;
 };
@@ -256,7 +247,12 @@ export const rainbowColorOffsetVarName = (name) => `${name}RainbowColorOffset`;
 // (bit 4) and a separate offset var.
 export const BACKGROUND_RAINBOW_OWN_BIT = 4;
 export const backgroundRainbowActiveBit = () => flagPoolBit(ROM_NOISE_FLAGS_FAMILY, BACKGROUND_RAINBOW_OWN_BIT);
+// DPC+ only: set once the rainbow's color rows are loaded, cleared whenever a background loads its color rows.
+export const BACKGROUND_RAINBOW_LOADED_BIT = 5;
+export const backgroundRainbowLoadedBit = () => flagPoolBit(ROM_NOISE_FLAGS_FAMILY, BACKGROUND_RAINBOW_LOADED_BIT);
 export const backgroundRainbowOffsetVarName = () => 'backgroundRainbowColorOffset';
+// DPC+ moves the rainbow by scrolling its color rows, so it keeps the offset it last scrolled to.
+export const backgroundRainbowLastVarName = () => 'backgroundRainbowColorLast';
 // Where the loaded background's color table is (address low and high byte),
 // saved when it loads so "Stop background rainbow colors" can point the kernel
 // back at it.
@@ -279,6 +275,24 @@ export const ctrlpfShadowVarName = () => '_ctrlpf';
 // "set animation" change a missile's width (and every missile width change the animation's looping). Missile 0's
 // code sits in bits 4-5 (where NUSIZ0 has it) and missile 1's in bits 6-7.
 export const missileWidthsVarName = () => '_missileWidths';
+// DPC+ only: which of a player's animation frames' graphics is in display RAM right now (0 = none), so a
+// frame already shown isn't copied in again every frame.
+export const dpcPlusShownVarName = (name) => `_${name}Shown`;
+export const dpcPlusColorShownVarName = (name) => `_${name}ColorShown`;
+export const reserveDpcPlusShownDevVars = (reserveDevVar, used, extraPlayers = []) => {
+  if (!used) return;
+  ['player0', 'player1', ...extraPlayers.map((n) => `player${n}`)].forEach((name) =>
+    reserveDevVar(dpcPlusShownVarName(name), undefined, `Which ${name} animation frame's graphic is loaded (DPC+)`));
+  // Players 2 to 9 are plain kernel sprites with no such state: their animation, frame and size/flip
+  // live in variables of the same names the first two players use.
+  extraPlayers.forEach((n) => {
+    reserveDevVar(`player${n}animation`, undefined, `Which animation is playing on player${n} (DPC+)`);
+    reserveDevVar(`player${n}frame`, undefined, `Which frame player${n} shows; 255 hides it (DPC+)`);
+    reserveDevVar(`player${n}realcolor`, undefined, `player${n}'s color (DPC+)`);
+    reserveDevVar(dpcPlusColorShownVarName(`player${n}`), undefined, `Which color table player${n} uses (DPC+)`);
+    reserveDevVar(`player${n}size`, undefined, `player${n}'s copies (bits 0-2), flip (bit 3) and animation flags (DPC+)`);
+  });
+};
 export const reserveMissileWidthsDevVar = (reserveDevVar, used) => {
   if (!used) return;
   reserveDevVar(missileWidthsVarName(), undefined, 'Missile 0 (bits 4-5) and Missile 1 (bits 6-7) width codes');
@@ -286,7 +300,9 @@ export const reserveMissileWidthsDevVar = (reserveDevVar, used) => {
 
 export const MISSILE_FIRE_FLAGS_FAMILY = 'missileFireFlags';
 export const missileFireFlagsVarName = () => flagPoolVar(MISSILE_FIRE_FLAGS_FAMILY);
-export const missileFireOwnBit = (name) => ({missile0: 0, missile1: 1, ball: 2})[name];
+export const missileFireOwnBit = (name) => ({missile0: 0, missile1: 1, ball: 2,
+  player0: 3, player1: 4, player2: 5, player3: 6, player4: 7, player5: 8, player6: 9, player7: 10, player8: 11,
+  player9: 12})[name];
 export const missileFireActiveBit = (name) => flagPoolBit(MISSILE_FIRE_FLAGS_FAMILY, missileFireOwnBit(name));
 export const missileFireDirVarName = (name) => `${name}FireDir`;
 export const missileFireSpeedVarName = (name) => `${name}FireSpeed`;
@@ -336,7 +352,8 @@ export const SEEK_FLAGS_FAMILY = 'seekFlags';
 export const seekFlagsVarName = () => flagPoolVar(SEEK_FLAGS_FAMILY);
 // The bit number of a sprite in the seek, scroll and inertia flag bytes.
 export const spriteOwnBit = (name) => {
-  const bits = {player0: 0, player1: 1, missile0: 2, missile1: 3, ball: 4};
+  const bits = {player0: 0, player1: 1, missile0: 2, missile1: 3, ball: 4,
+    player2: 5, player3: 6, player4: 7, player5: 8, player6: 9, player7: 10, player8: 11, player9: 12};
   return bits[name];
 };
 export const seekActiveBit = (name) => flagPoolBit(SEEK_FLAGS_FAMILY, spriteOwnBit(name));
@@ -576,6 +593,10 @@ export const reserveBackgroundRainbowDevVars = (reserveDevVar, reserveDevVarRW, 
   }
   // Only ever written when a background loads and read by Stop, so they live in
   // the read/write pool.
+  if ((useConfigurationStorage().value || {}).kernel === 'dpcplus') {
+    reserveDevVarRW(backgroundRainbowLastVarName(), 'playfield rainbow colors: offset it last scrolled to (DPC+)');
+    return;
+  }
   reserveDevVarRW(backgroundColorTableLoVarName(), 'loaded background row colors: table address, low byte');
   reserveDevVarRW(backgroundColorTableHiVarName(), 'loaded background row colors: table address, high byte');
 };
@@ -824,9 +845,12 @@ export const generateRomNoiseChecks = (Blockly) => {
   const flagsVar = resolveVar(romNoiseFlagsVarName());
   const configurationStorage = useConfigurationStorage();
   const config = (configurationStorage && configurationStorage.value) || {};
-  const baseHigh = romNoiseBaseHighByteHex(config);
+  // DPC+ reads graphics at an offset into the cartridge's data instead of at a 6507 address, and only Player 0's
+  // pointer is a variable (player0pointerlo/hi).
+  const dpcPlus = config.kernel === 'dpcplus';
+  const baseHigh = dpcPlus ? '$04' : romNoiseBaseHighByteHex(config);
   const lines = [];
-  ['player0', 'player1'].forEach((name) => {
+  (dpcPlus ? ['player0'] : ['player0', 'player1']).forEach((name) => {
     if (!used.has(name)) return;
     const doneLabel = `_romnoise_${name}_done`;
     const offsetVar = resolveVar(romNoiseOffsetVarName(name));
@@ -909,6 +933,7 @@ export const rainbowColorNeedsPlayer1Colors = (usedFor) => !!(usedFor && usedFor
 // the same literal formatting, not the one-space-per-statement convention
 // the per-frame checks below it use).
 export const generateRainbowColorGraphics = (Blockly) => {
+  if ((useConfigurationStorage().value || {}).kernel === 'dpcplus') return '';
   const used = Blockly.BBasic.rainbowColorUsedFor;
   if (!used || !used.size) return '';
   const lines = [];
@@ -943,7 +968,62 @@ const rainbowOffsetExpression = (Blockly, plan, varName) => {
   return Blockly.BBasic.superchipRwPairs[varName].read;
 };
 
+// The playfield rainbow on DPC+: the playfield color rows hold a rainbow (loaded when the block first runs), and
+// each frame they are scrolled by however far the offset has moved since the frame before.
+const generateDpcPlusBackgroundRainbowChecks = (Blockly) => {
+  if (!Blockly.BBasic.backgroundRainbowUsed) return '';
+  const flagsVar = Blockly.BBasic.nameDB_.getName(romNoiseFlagsVarName(), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+  const lastPair = Blockly.BBasic.superchipRwPairs[backgroundRainbowLastVarName()];
+  const offset = rainbowOffsetExpression(Blockly, (Blockly.BBasic.rainbowSimpleOffset || {}).background,
+      backgroundRainbowOffsetVarName());
+  const doneLabel = '_rainbowcolor_background_done';
+  const loadedLabel = '_rainbowcolor_background_loaded';
+  // The playfield color rows: a rainbow, one hue per row, 15 hues so the 255 rows join up seamlessly. The kernel's
+  // color queue holds 256 rows: the last one is filled in after moving the queue back one row (the trick the
+  // batari Basic DPC+ color scrolling examples use).
+  const rainbowRow = (r) => '  $' + ((r % 15) * 16 + 10).toString(16).toUpperCase().padStart(2, '0');
+  const rows = Array.from({length: 255}, (_, r) => rainbowRow(r));
+  return [
+    ` if !${flagsVar}{${backgroundRainbowActiveBit()}} then goto ${doneLabel}`,
+    ` if ${flagsVar}{${backgroundRainbowLoadedBit()}} then goto ${loadedLabel}`,
+    '  pfcolors:', ...rows, 'end',
+    ' pfscroll 255 4 4',
+    '  pfcolors:', rainbowRow(255), 'end',
+    ` ${flagsVar}{${backgroundRainbowLoadedBit()}} = 1`,
+    loadedLabel,
+    ` temp1 = ${offset}`,
+    ` temp2 = temp1 - ${lastPair.read}`,
+    ` ${lastPair.write} = temp1`,
+    ` if temp2 = 0 then goto ${doneLabel}`,
+    ' pfscroll temp2 4 4',
+    doneLabel,
+  ].join('\n') + '\n';
+};
+
+const generateDpcPlusRainbowColorChecks = (Blockly) => {
+  const used = Blockly.BBasic.rainbowColorUsedFor;
+  if (!used || !used.has('player0')) return generateDpcPlusBackgroundRainbowChecks(Blockly);
+  const flagsVar = Blockly.BBasic.nameDB_.getName(romNoiseFlagsVarName(), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+  const doneLabel = '_rainbowcolor_player0_done';
+  const offset = rainbowOffsetExpression(Blockly, (Blockly.BBasic.rainbowSimpleOffset || {}).player0,
+      rainbowColorOffsetVarName('player0'));
+  return [
+    ` if !${flagsVar}{${rainbowColorActiveBit('player0')}} then goto ${doneLabel}`,
+    ` temp1 = ${offset}`,
+    ' asm',
+    '       lda temp1',
+    '       sta player0color',
+    '       lda #$04',
+    '       sta player0color+1',
+    'end',
+    doneLabel,
+  ].join('\n') + '\n' + generateDpcPlusBackgroundRainbowChecks(Blockly);
+};
+
 export const generateRainbowColorChecks = (Blockly) => {
+  // DPC+ reads Player 0's colors through the two-byte pointer player0color (an offset into the cartridge's data),
+  // so the rainbow aims that at ROM bytes the same way. The other players' pointers are not variables.
+  if ((useConfigurationStorage().value || {}).kernel === 'dpcplus') return generateDpcPlusRainbowColorChecks(Blockly);
   const used = Blockly.BBasic.rainbowColorUsedFor;
   const backgroundLines = [];
   if (Blockly.BBasic.backgroundRainbowUsed && Blockly.BBasic.usePlayfieldRowColors()) {
@@ -1136,7 +1216,7 @@ export const generateMissileFireChecks = (Blockly) => {
   const resolveRW = (canonicalName) => Blockly.BBasic.superchipRwPairs[canonicalName];
   const flagsVar = resolveVar(missileFireFlagsVarName());
   const lines = [];
-  ['missile0', 'missile1', 'ball'].forEach((name) => {
+  ['missile0', 'missile1', 'ball', ...[...used].filter((name) => /^player[0-9]$/.test(name))].forEach((name) => {
     if (!used.has(name)) return;
     const doneLabel = `_missilefire_${name}_done`;
     const dirVar = resolveVar(missileFireDirVarName(name));
@@ -1290,6 +1370,11 @@ export const generateMissileFireChecks = (Blockly) => {
 // only clobbered by drawscreen, which can't run mid-statement (see
 // score.js's  comment on the same convention), and nothing in this block
 // calls pfread() to worry about clobbering it early.
+// Every sprite Seek and Inertia can move: the two players, the missiles and the ball, and, on DPC+, the extra
+// players the project uses.
+const moveableSpriteNames = (Blockly) => ['player0', 'player1',
+  ...(Blockly.BBasic.dpcPlusExtraPlayers || []).map((n) => `player${n}`), 'missile0', 'missile1', 'ball'];
+
 export const generateSeekChecks = (Blockly) => {
   const used = Blockly.BBasic.seekUsedFor;
   if (!used || !used.size) return '';
@@ -1298,7 +1383,7 @@ export const generateSeekChecks = (Blockly) => {
   const flagsVar = resolveVar(seekFlagsVarName());
   const arrivedWatches = Blockly.BBasic.seekArrivedWatches || new Set();
   const lines = [];
-  ['player0', 'player1', 'missile0', 'missile1', 'ball'].forEach((name) => {
+  moveableSpriteNames(Blockly).forEach((name) => {
     if (!used.has(name)) return;
     const blockNumber = Blockly.BBasic.blockNumbers.next(`seek_${name}`);
     const doneLabel = `_seek_${name}_${blockNumber}_done`;
@@ -1568,7 +1653,7 @@ export const generateInertiaChecks = (Blockly) => {
   const accelFlagsVar = accelUsedFor.size ? resolveVar(inertiaAccelFlagsVarName()) : null;
   const decelFlagsVar = decelUsedFor.size ? resolveVar(inertiaDecelFlagsVarName()) : null;
   const lines = [];
-  ['player0', 'player1', 'missile0', 'missile1', 'ball'].forEach((name) => {
+  moveableSpriteNames(Blockly).forEach((name) => {
     if (!usedFor.has(name)) return;
     const velocityXVar = resolveVar(inertiaVelocityXVarName(name));
     const velocityYVar = resolveVar(inertiaVelocityYVarName(name));
@@ -1781,16 +1866,16 @@ export default (Blockly) => {
     Blockly.BBasic[`sprite_${name}_get`] = function(block) {
       // Variable getter.
       // The width/quantity option reads the low 3 bits of the size variable.
-      const widthOf = /^__(player[01])size_w_$/.exec(block.getFieldValue('VAR') || '');
+      const widthOf = /^__(player\d)size_w_$/.exec(block.getFieldValue('VAR') || '');
       if (widthOf) return [`(${widthOf[1]}size & 7)`, Blockly.BBasic.ORDER_ATOMIC];
       // Visibility: a hidden player is on frame 255, so frame / 255 is 1 for hidden and 0 for shown.
-      const visibleOf = /^__(player[01])visible_$/.exec(block.getFieldValue('VAR') || '');
+      const visibleOf = /^__(player\d)visible_$/.exec(block.getFieldValue('VAR') || '');
       if (visibleOf) {
         Blockly.BBasic.usesDivMul = true;
         return [`(1 - ${visibleOf[1]}frame / 255)`, Blockly.BBasic.ORDER_ATOMIC];
       }
       // Horizontal flip is bit 3 of the size variable.
-      const flipOf = /^__(player[01])size_3_$/.exec(block.getFieldValue('VAR') || '');
+      const flipOf = /^__(player\d)size_3_$/.exec(block.getFieldValue('VAR') || '');
       if (flipOf) return [`((${flipOf[1]}size & 8) / 8)`, Blockly.BBasic.ORDER_ATOMIC];
       const code = Blockly.BBasic.nameDB_.getName(block.getFieldValue('VAR'),
           Blockly.VARIABLE_CATEGORY_NAME);
@@ -1879,6 +1964,26 @@ export default (Blockly) => {
       } else if (varName.endsWith('animation')) {
         return `${varName} = ${argument0}\n` + animationLoopBitsCode(block, varName);
       }
+      // Players 2 to 9 are colored by a table in ROM per color, so each fixed color a block gives one is noted
+      // (see generateAnimations); a color worked out while the game runs can not be shown on them.
+      const extraColor = /^(player[2-9])realcolor$/.exec(varName);
+      if (extraColor) {
+        const literal = /^\s*(?:\$([0-9a-fA-F]{1,2})|(\d+))\s*$/.exec(argument0);
+        if (literal) {
+          const byte = literal[1] ? parseInt(literal[1], 16) : Number(literal[2]);
+          const colors = Blockly.BBasic.dpcPlusPlayerColors;
+          if (byte >= 0 && byte <= 255 && colors) (colors[extraColor[1]] = colors[extraColor[1]] || new Set()).add(byte);
+        }
+      }
+      // DPC+ counts a player's y in scanlines down to the sprite's top edge, the standard kernel in units of two
+      // scanlines down to the sprite's bottom edge (line 2 * y + 4), and the DPC+ picture starts 4 lines higher, so
+      // the same spot is 2 * y minus the sprite's height in lines.
+      if (/^player\dy$/.test(varName) && (useConfigurationStorage().value || {}).kernel === 'dpcplus') {
+        const lines = Blockly.BBasic.dpcPlusSpriteLines();
+        const literal = /^\s*(\d+)\s*$/.exec(argument0);
+        if (literal) return `${varName} = ${Math.min(255, Math.max(0, 2 * Number(literal[1]) - lines))}\n`;
+        return `temp1 = (${argument0}) * 2\n${varName} = temp1 - ${lines}\n`;
+      }
       return varName + ' = ' + argument0 + '\n';
     };
 
@@ -1903,7 +2008,7 @@ export default (Blockly) => {
   // resolvePlayerName, reading the PLAYER field at generation time instead
   // of a closed-over name.
   const createGeneratorForPlayer = () => {
-    const resolvePlayerName = (block) => `player${block.getFieldValue('PLAYER') === '1' ? '1' : '0'}`;
+    const resolvePlayerName = (block) => playerNameOfValue(block.getFieldValue('PLAYER'));
 
     // The dropdown already holds the animation's position in the list, which is
     // what the generated animation dispatch compares against - player-
@@ -2022,7 +2127,10 @@ export default (Blockly) => {
       const resolveVar = (canonicalName) =>
         Blockly.BBasic.nameDB_.getName(canonicalName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
       const flagsVar = resolveVar(romNoiseFlagsVarName());
-      return `${flagsVar}{${romNoiseActiveBit(name)}} = 0\n`;
+      // On DPC+ the animation only loads a frame's graphic when it changes, so it has to be told to load it again.
+      const dpcPlus = (useConfigurationStorage().value || {}).kernel === 'dpcplus';
+      const reload = dpcPlus && name === 'player0' ? `${resolveVar(dpcPlusShownVarName(name))} = 0\n` : '';
+      return `${flagsVar}{${romNoiseActiveBit(name)}} = 0\n${reload}`;
     };
 
     // Trigger for sprite_player_rainbow_colors - see this file's
@@ -2202,8 +2310,7 @@ export default (Blockly) => {
   // instance means from its  MISSILE field.
 
   createGeneratorForFireBall('missile',
-      (block) => block.getFieldValue('MISSILE') === 'ball' ? 'ball' :
-        `missile${block.getFieldValue('MISSILE') === '1' ? '1' : '0'}`);
+      (block) => fireObjectName(block.getFieldValue('MISSILE')));
 
   // Just captures the target/speed and sets the active bit for whichever
   // object OBJECT picks - the actual per-frame movement happens in
@@ -2446,7 +2553,7 @@ export default (Blockly) => {
   // whenever this block is used, via the same pre-scan Fire uses.
   Blockly.BBasic['sprite_fire_angle_get'] = function(block) {
     const field = block.getFieldValue('MISSILE');
-    const name = field === 'ball' ? 'ball' : `missile${field === '1' ? '1' : '0'}`;
+    const name = fireObjectName(field);
     const dirVar = Blockly.BBasic.nameDB_.getName(
         missileFireDirVarName(name), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
     return [dirVar, Blockly.BBasic.ORDER_ATOMIC];
@@ -2457,7 +2564,7 @@ export default (Blockly) => {
   // block of this type makes it keep one.
   Blockly.BBasic['sprite_fire_speed_set'] = function(block) {
     const field = block.getFieldValue('MISSILE');
-    const name = field === 'ball' ? 'ball' : `missile${field === '1' ? '1' : '0'}`;
+    const name = fireObjectName(field);
     const used = Blockly.BBasic.missileFireUsedFor;
     if (!used || !used.has(name)) return '';
     const speedPair = Blockly.BBasic.superchipRwPairs[missileFireSpeedVarName(name)];

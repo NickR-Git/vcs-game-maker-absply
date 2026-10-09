@@ -220,8 +220,10 @@ export default {
 
     if (this.showGrid || this.selection || this.polygonPreview || this.hoverCell) this.setupGridOverlay();
     this.setupBackdrop();
+    window.addEventListener('mouseup', this.handleWindowMouseUp);
   },
   beforeDestroy() {
+    window.removeEventListener('mouseup', this.handleWindowMouseUp);
     this.teardownGridOverlay();
     if (this.backdropObserver) this.backdropObserver.disconnect();
   },
@@ -681,7 +683,17 @@ export default {
         historyLength: this.editor.history.undoStack.length,
         redoStack: [...this.editor.history.redoStack],
         selection: this.selection,
+        // The history keeps at most 100 entries, so once it is full a stroke adds none
+        // and the length alone can't tell what the stroke drew.
+        pixels: this.getPixels(),
       };
+    },
+
+    // The button released somewhere other than the canvas (outside the window, say) without a
+    // mouseleave having ended the stroke: abandon it the same way leaving the canvas does.
+    handleWindowMouseUp(event) {
+      if (!this.strokeStart || event.target === this.$refs.editor) return;
+      this.handleMouseLeave(event);
     },
 
     // Dragging a drawing/selection tool off the canvas abandons the whole
@@ -701,6 +713,8 @@ export default {
       const history = this.editor.history;
       while (history.undoStack.length > start.historyLength) this.editor.undo();
       history.redoStack = start.redoStack;
+      // Anything the rollback by history didn't take back (a full history) is put back by hand.
+      if (!isMatrixEqual(start.pixels, this.getPixels())) this.setPixels(start.pixels, false);
       this.selection = start.selection;
       // A Move drag abandoned like this puts the rows' colors back too.
       if (this.rowMove) {

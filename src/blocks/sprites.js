@@ -1,7 +1,7 @@
 import * as Blockly from 'blockly/core';
 
 import {processPlayerAnimationsStorageDefaults} from '../generators/bbasic/sprites';
-import {usePlayerAnimationsStorage} from '../hooks/project';
+import {usePlayerAnimationsStorage, useConfigurationStorage} from '../hooks/project';
 import {PLAYER_ICON, MISSILE_ICON, BALL_ICON, COLOR_ICON, HEIGHT_ICON, ANIMATION_ICON, VISIBILITY_ICON, HORIZONTAL_ICON, VERTICAL_ICON, MIRROR_ICON, FRAME_ICON, PLAY_ICON, PAUSE_ICON, PRIORITY_ICON, DATA_ICON, SEEK_ICON, INERTIA_ICON, STOP_ICON} from './icon';
 
 const PRIORITY_COLOUR = '#009688';
@@ -36,7 +36,7 @@ const buildAnimationSelectBlock = ({icon, colour, storageFactory}) => {
     init: function() {
       this.appendDummyInput()
           .appendField(`${icon} Player`)
-          .appendField(new Blockly.FieldDropdown(PLAYER_OPTIONS), 'PLAYER')
+          .appendField(new Blockly.FieldDropdown(PLAYER_DROPDOWN_OPTIONS), 'PLAYER')
           .appendField(`${ANIMATION_ICON} animation`)
           .appendField(
               new Blockly.FieldDropdown(buildAnimationOptions(storageFactory)), 'VAR');
@@ -68,7 +68,7 @@ const buildAnimationSetBlock = ({icon, colour, storageFactory}) => {
     init: function() {
       this.appendDummyInput()
           .appendField(`${icon} Player`)
-          .appendField(new Blockly.FieldDropdown(PLAYER_OPTIONS), 'PLAYER')
+          .appendField(new Blockly.FieldDropdown(PLAYER_DROPDOWN_OPTIONS), 'PLAYER')
           .appendField(`${ANIMATION_ICON} set animation to`)
           .appendField(
               new Blockly.FieldDropdown(buildAnimationOptions(storageFactory)), 'VAR')
@@ -111,7 +111,7 @@ const buildAnimationSetByIdBlock = ({icon, colour}) => {
       this.appendValueInput('VALUE')
           .setCheck('Number')
           .appendField(`${icon} Player`)
-          .appendField(new Blockly.FieldDropdown(PLAYER_OPTIONS), 'PLAYER')
+          .appendField(new Blockly.FieldDropdown(PLAYER_DROPDOWN_OPTIONS), 'PLAYER')
           .appendField(`${ANIMATION_ICON} set animation to ID`);
       this.appendDummyInput()
           .appendField(' ')
@@ -148,7 +148,7 @@ const buildAnimationIdGetBlock = ({icon, colour}) => {
     init: function() {
       this.appendDummyInput()
           .appendField(`${icon} Player`)
-          .appendField(new Blockly.FieldDropdown(PLAYER_OPTIONS), 'PLAYER')
+          .appendField(new Blockly.FieldDropdown(PLAYER_DROPDOWN_OPTIONS), 'PLAYER')
           .appendField(`${ANIMATION_ICON} current animation ID`);
       this.setOutput(true, 'Number');
       this.setColour(colour);
@@ -173,7 +173,7 @@ const buildAnimationFinishedBlock = ({icon, colour}) => {
     init: function() {
       this.appendDummyInput()
           .appendField(`${icon} When Player`)
-          .appendField(new Blockly.FieldDropdown(PLAYER_OPTIONS), 'PLAYER')
+          .appendField(new Blockly.FieldDropdown(PLAYER_DROPDOWN_OPTIONS), 'PLAYER')
           .appendField(`${ANIMATION_ICON} animation has finished`);
       this.appendStatementInput('DO');
       this.setPreviousStatement(true);
@@ -328,7 +328,16 @@ const setupFireDefaultAngleSync = (block) => {
 // full labels here would read as a doubled "Player Player 0" once placed.
 const PLAYER_OPTIONS = [['0', '0'], ['1', '1']];
 
-const playerNameFromField = (block) => `player${block && block.getFieldValue('PLAYER') === '1' ? '1' : '0'}`;
+// The DPC+ kernel has eight more sprites (Player 2 to 9), offered by the blocks that can drive them.
+const PLAYER_DROPDOWN_OPTIONS = function() {
+  const dpcPlus = ((useConfigurationStorage() || {}).value || {}).kernel === 'dpcplus';
+  return Array.from({length: dpcPlus ? 10 : 2}, (_, i) => [String(i), String(i)]);
+};
+
+const playerNameFromField = (block) => {
+  const value = block && block.getFieldValue('PLAYER');
+  return `player${/^[0-9]$/.test(value) ? value : '0'}`;
+};
 
 // Same reasoning as PLAYER_OPTIONS above, for Missile 0/1 - genuinely
 // identical hardware objects (missileFireActiveBit/missileFireDirVarName/
@@ -342,6 +351,14 @@ const MISSILE_OPTIONS = [['0', '0'], ['1', '1']];
 // The Fire block covers both missiles and the ball in one dropdown (the field is still called
 // MISSILE, as it was when the block only did missiles, so saved projects keep loading).
 const FIRE_OBJECT_OPTIONS = [['Missile 0', '0'], ['Missile 1', '1'], ['Ball', 'ball']];
+// Fire also launches the players (all ten on DPC+, two otherwise), as a Fire object like the missiles.
+const FIRE_OBJECT_DROPDOWN_OPTIONS = function() {
+  const dpcPlus = ((useConfigurationStorage() || {}).value || {}).kernel === 'dpcplus';
+  const players = Array.from({length: dpcPlus ? 10 : 2}, (_, i) => ['Player ' + i, 'player' + i]);
+  return [...FIRE_OBJECT_OPTIONS, ...players];
+};
+const fireObjectColour = (value) => (value === 'ball' ? '#ff8800' : (value === '1' || value === 'player1') ? 'blue' :
+  /^player[2-9]$/.test(value) ? '#8a5ac2' : 'red');
 
 const missileNameFromField = (block) => `missile${block && block.getFieldValue('MISSILE') === '1' ? '1' : '0'}`;
 
@@ -432,7 +449,7 @@ const buildMissileVarOptionsFn = (extraOptionsFor) => function() {
 // directly (same "dropdown drives colour + optional VAR-prefix translate"
 // shape) rather than duplicating it.
 export const registerDropdownFieldSyncExtension = (extensionName, dropdownFieldName, namePrefixFor) => {
-  const colourFor = (value) => (value === '1' ? 'blue' : 'red');
+  const colourFor = (value) => (value === '1' ? 'blue' : /^[2-9]$/.test(value) ? '#8a5ac2' : 'red');
   Blockly.Extensions.register(extensionName, function() {
     // eslint-disable-next-line no-invalid-this
     const block = this;
@@ -506,7 +523,7 @@ export const registerDropdownFieldSyncExtension = (extensionName, dropdownFieldN
 };
 
 registerDropdownFieldSyncExtension('sprite_player_field_sync', 'PLAYER',
-    (value) => `player${value === '1' ? '1' : '0'}`);
+    (value) => `player${/^[0-9]$/.test(value) ? value : '0'}`);
 registerDropdownFieldSyncExtension('sprite_missile_field_sync', 'MISSILE',
     (value) => `missile${value === '1' ? '1' : '0'}`);
 
@@ -526,7 +543,7 @@ const buildCombinedPlayerVarBlocks = ({icon, colour}) => {
         {
           'type': 'field_dropdown',
           'name': 'PLAYER',
-          'options': PLAYER_OPTIONS,
+          'options': PLAYER_DROPDOWN_OPTIONS,
         },
         {
           'type': 'field_dropdown',
@@ -580,7 +597,7 @@ const buildCombinedPlayerVarBlocks = ({icon, colour}) => {
         {
           'type': 'field_dropdown',
           'name': 'PLAYER',
-          'options': PLAYER_OPTIONS,
+          'options': PLAYER_DROPDOWN_OPTIONS,
         },
         {
           'type': 'field_dropdown',
@@ -631,7 +648,7 @@ const buildCombinedPlayerVarBlocks = ({icon, colour}) => {
         {
           'type': 'field_dropdown',
           'name': 'PLAYER',
-          'options': PLAYER_OPTIONS,
+          'options': PLAYER_DROPDOWN_OPTIONS,
         },
         {
           'type': 'field_dropdown',
@@ -920,7 +937,7 @@ const buildPlayerBlocks = ({icon, colour}) => {
         {
           'type': 'field_dropdown',
           'name': 'PLAYER',
-          'options': PLAYER_OPTIONS,
+          'options': PLAYER_DROPDOWN_OPTIONS,
         },
         {
           'type': 'field_dropdown',
@@ -941,7 +958,7 @@ const buildPlayerBlocks = ({icon, colour}) => {
         {
           'type': 'field_dropdown',
           'name': 'PLAYER',
-          'options': PLAYER_OPTIONS,
+          'options': PLAYER_DROPDOWN_OPTIONS,
         },
         {
           'type': 'field_dropdown',
@@ -1139,6 +1156,14 @@ const SEEK_OBJECT_OPTIONS = [
   [BALL_ICON + ' Ball', 'ball'],
 ];
 
+// Seek and Inertia also move the DPC+ kernel's extra sprites (Player 2 to 9).
+const SEEK_OBJECT_DROPDOWN_OPTIONS = function() {
+  const dpcPlus = ((useConfigurationStorage() || {}).value || {}).kernel === 'dpcplus';
+  if (!dpcPlus) return SEEK_OBJECT_OPTIONS;
+  const extra = Array.from({length: 8}, (_, i) => [PLAYER_ICON + ' Player ' + (i + 2), 'player' + (i + 2)]);
+  return [...SEEK_OBJECT_OPTIONS.slice(0, 2), ...extra, ...SEEK_OBJECT_OPTIONS.slice(2)];
+};
+
 // Same colour-per-choice treatment as sprite_player_fade_colour_sync above,
 // generalized to OBJECT's 5-way pick instead of a 2-way one - reusing each
 // object's  individual block colour (red for either Player 0 or
@@ -1147,6 +1172,7 @@ const SEEK_OBJECT_OPTIONS = [
 // this file) rather than inventing a new palette just for this dropdown.
 const SEEK_OBJECT_COLOURS = {
   player0: 'red', player1: 'blue', missile0: 'red', missile1: 'blue', ball: '#ff8800',
+  ...Object.fromEntries([2, 3, 4, 5, 6, 7, 8, 9].map((n) => [`player${n}`, '#8a5ac2'])),
 };
 // Validator-based, not setOnChange - see registerDropdownFieldSyncExtension's
 // comment above for why: setOnChange only ever fires from a real
@@ -1233,7 +1259,7 @@ Blockly.defineBlocksWithJsonArray([
       {
         'type': 'field_dropdown',
         'name': 'OBJECT',
-        'options': SEEK_OBJECT_OPTIONS,
+        'options': SEEK_OBJECT_DROPDOWN_OPTIONS,
       },
       {
         'type': 'input_value',
@@ -1296,7 +1322,7 @@ Blockly.defineBlocksWithJsonArray([
       {
         'type': 'field_dropdown',
         'name': 'OBJECT',
-        'options': SEEK_OBJECT_OPTIONS,
+        'options': SEEK_OBJECT_DROPDOWN_OPTIONS,
       },
     ],
     'output': 'Boolean',
@@ -1321,7 +1347,7 @@ Blockly.defineBlocksWithJsonArray([
       {
         'type': 'field_dropdown',
         'name': 'OBJECT',
-        'options': SEEK_OBJECT_OPTIONS,
+        'options': SEEK_OBJECT_DROPDOWN_OPTIONS,
       },
       {
         'type': 'input_value',
@@ -1348,7 +1374,7 @@ Blockly.defineBlocksWithJsonArray([
       {
         'type': 'field_dropdown',
         'name': 'OBJECT',
-        'options': SEEK_OBJECT_OPTIONS,
+        'options': SEEK_OBJECT_DROPDOWN_OPTIONS,
       },
     ],
     'output': 'Boolean',
@@ -1388,7 +1414,7 @@ Blockly.defineBlocksWithJsonArray([
       {
         'type': 'field_dropdown',
         'name': 'OBJECT',
-        'options': SEEK_OBJECT_OPTIONS,
+        'options': SEEK_OBJECT_DROPDOWN_OPTIONS,
       },
       // Forces ACTION/OBJECT above onto a separate input instead of being
       // swept into DIRECTION's - Blockly's JSON interpolation attaches any
@@ -1482,7 +1508,7 @@ Blockly.defineBlocksWithJsonArray([
       {
         'type': 'field_dropdown',
         'name': 'OBJECT',
-        'options': SEEK_OBJECT_OPTIONS,
+        'options': SEEK_OBJECT_DROPDOWN_OPTIONS,
       },
       {
         'type': 'input_value',
@@ -1535,7 +1561,7 @@ Blockly.defineBlocksWithJsonArray([
       {
         'type': 'field_dropdown',
         'name': 'OBJECT',
-        'options': SEEK_OBJECT_OPTIONS,
+        'options': SEEK_OBJECT_DROPDOWN_OPTIONS,
       },
       {
         'type': 'field_label',
@@ -1700,7 +1726,7 @@ const buildCombinedMissileFireBlock = ({icon, colour}) => {
     init: function() {
       this.appendDummyInput()
           .appendField(`${icon} Fire`)
-          .appendField(new Blockly.FieldDropdown(FIRE_OBJECT_OPTIONS), 'MISSILE');
+          .appendField(new Blockly.FieldDropdown(FIRE_OBJECT_DROPDOWN_OPTIONS), 'MISSILE');
       this.appendValueInput('X')
           .setCheck('Number')
           .appendField('from X');
@@ -1742,7 +1768,7 @@ const buildCombinedMissileFireBlock = ({icon, colour}) => {
       this.setColour(colour);
       // Red for Missile 0, blue for Missile 1 (like the other missile blocks)
       // and orange for the Ball, following the dropdown.
-      const fireColourFor = (value) => (value === 'ball' ? '#ff8800' : value === '1' ? 'blue' : 'red');
+      const fireColourFor = fireObjectColour;
       const objectField = this.getField('MISSILE');
       this.setColour(fireColourFor(objectField.getValue()));
       objectField.setValidator((newValue) => {
@@ -1858,9 +1884,9 @@ Blockly.Blocks['sprite_fire_angle_get'] = {
   init: function() {
     this.appendDummyInput()
         .appendField(`${MISSILE_ICON} Fire angle of`)
-        .appendField(new Blockly.FieldDropdown(FIRE_OBJECT_OPTIONS), 'MISSILE');
+        .appendField(new Blockly.FieldDropdown(FIRE_OBJECT_DROPDOWN_OPTIONS), 'MISSILE');
     this.setOutput(true, 'Number');
-    const colourFor = (value) => (value === 'ball' ? '#ff8800' : value === '1' ? 'blue' : 'red');
+    const colourFor = fireObjectColour;
     const objectField = this.getField('MISSILE');
     this.setColour(colourFor(objectField.getValue()));
     objectField.setValidator((newValue) => {
@@ -1883,12 +1909,12 @@ Blockly.Blocks['sprite_fire_speed_set'] = {
     this.appendValueInput('SPEED')
         .setCheck('Number')
         .appendField(`${MISSILE_ICON} Set fired`)
-        .appendField(new Blockly.FieldDropdown(FIRE_OBJECT_OPTIONS), 'MISSILE')
+        .appendField(new Blockly.FieldDropdown(FIRE_OBJECT_DROPDOWN_OPTIONS), 'MISSILE')
         .appendField('speed to');
     this.setInputsInline(true);
     this.setPreviousStatement(true, null);
     this.setNextStatement(true, null);
-    const colourFor = (value) => (value === 'ball' ? '#ff8800' : value === '1' ? 'blue' : 'red');
+    const colourFor = fireObjectColour;
     const objectField = this.getField('MISSILE');
     this.setColour(colourFor(objectField.getValue()));
     objectField.setValidator((newValue) => {

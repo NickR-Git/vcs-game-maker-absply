@@ -17,6 +17,8 @@ goog.require('Blockly.BBasic');
 */
 
 
+import {useConfigurationStorage} from '../../hooks/project';
+
 export default (Blockly) => {
   Blockly.BBasic['variables_get'] = function(block) {
   // Variable getter.
@@ -32,6 +34,26 @@ export default (Blockly) => {
     const varName = Blockly.BBasic.nameDB_.getName(
         block.getFieldValue('VAR'), Blockly.VARIABLE_CATEGORY_NAME);
     return varName + ' = ' + argument0 + '\n';
+  };
+
+  // DPC+'s variable stack (see blocks/stack.js). The other kernels have no push/pull.
+  const stackStatement = (command) => function(block) {
+    const varName = Blockly.BBasic.nameDB_.getName(block.getFieldValue('VAR'), Blockly.VARIABLE_CATEGORY_NAME);
+    const config = (useConfigurationStorage() && useConfigurationStorage().value) || {};
+    if (config.kernel !== 'dpcplus') {
+      return ` rem ${command} ${varName}: the variable stack needs the DPC+ kernel\n`;
+    }
+    return ` ${command} ${varName}\n`;
+  };
+  Blockly.BBasic['variables_push'] = stackStatement('push');
+  Blockly.BBasic['variables_pull'] = stackStatement('pull');
+  Blockly.BBasic['variables_stack_position'] = function(block) {
+    const config = (useConfigurationStorage() && useConfigurationStorage().value) || {};
+    const position = Math.min(255, Math.max(0, Math.round(Number(block.getFieldValue('POSITION')) || 0)));
+    if (config.kernel !== 'dpcplus') {
+      return ` rem stack ${position}: the variable stack needs the DPC+ kernel\n`;
+    }
+    return ` stack ${position}\n`;
   };
 
   Blockly.BBasic['math_change'] = function(block) {

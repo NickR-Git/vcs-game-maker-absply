@@ -859,6 +859,13 @@ export default {
       if (usage.superchipRw.available) {
         parts.push(`${usage.superchipRw.used} of ${usage.superchipRw.available} Superchip read/write vars`);
       }
+      // DPC+'s own always-on bonus RAM pool (var0-var8 - see
+      // computeVariableUsage's own comment in hooks/rom.js) - no toggle to
+      // gate on, so this simply doesn't show for non-DPC+ builds (available
+      // is 0 then), same convention as the Superchip clauses above.
+      if (usage.dpcPlus.available) {
+        parts.push(`${usage.dpcPlus.used} of ${usage.dpcPlus.available} DPC+ bonus RAM`);
+      }
       return `${parts.join(', ')} used.`;
     },
     // System variables (player0frame, newbackground, etc. - see
@@ -986,6 +993,7 @@ export default {
       return [
         ...sortByAssignmentSlot((usage.letterAssignments || []).filter(matches)),
         ...sortByAssignmentSlot((usage.superchipAssignments || []).filter(matches)),
+        ...sortByAssignmentSlot((usage.dpcPlusAssignments || []).filter(matches)),
         // Superchip's  r/w pool (see computeVariableUsage's  comment
         // in hooks/rom.js) - every entry here is isUserVariable: false, so
         // this only ever contributes to the block list, never the user one,
@@ -1850,6 +1858,22 @@ export default {
 /* Menus that hold a bare list instead of a card (e.g. the Data tab's cell
    mode menu) get the same border. */
 .data-format-menu {
+  border: 1px solid rgba(0, 0, 0, 0.24);
+}
+
+/* A dropdown's list is narrower than its menu when the menu scrolls (the scrollbar takes the difference), and the
+   menu itself had no background, so the scrollbar read as sitting outside the dropdown. With the list's
+   color on the menu, the scrollbar sits inside it, on the right edge. */
+.v-menu__content.theme--light {
+  background-color: #fff;
+}
+
+.v-menu__content.theme--dark {
+  background-color: #1e1e1e;
+}
+
+/* The same outline the popups get (a .v-card inside the menu carries theirs), for dropdown lists. */
+.v-menu__content:has(> .v-select-list) {
   border: 1px solid rgba(0, 0, 0, 0.24);
 }
 
@@ -3047,6 +3071,7 @@ input[type='checkbox']:not(:checked) ~ .v-input--switch__thumb {
 .dark-mode.v-application .titlescreen-card,
 .dark-mode.v-application .titlescreen-screen-card,
 .dark-mode.v-application .data-format-menu,
+.dark-mode.v-application .v-menu__content:has(> .v-select-list),
 .dark-mode.v-application .v-menu__content > .v-card,
 .dark-mode.v-application .v-dialog > .v-card,
 .dark-mode.v-application .error-message {

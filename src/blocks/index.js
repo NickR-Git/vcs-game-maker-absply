@@ -21,6 +21,7 @@ import './random';
 import './score';
 import './sound';
 import './soundfx';
+import './stack';
 import './sprites';
 import './subroutine';
 import './text-minikernel';

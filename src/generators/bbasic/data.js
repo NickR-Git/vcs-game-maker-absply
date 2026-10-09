@@ -22,9 +22,10 @@ const DATA_DISPATCH_FUNCTION_CANONICAL_NAME = '_dataElementDispatch';
 // another nested Function call, same lifetime functionCallDiscardVarName's
 // comment already documents for the RESULT side of this exact pattern
 // (reused here rather than a dedicated result var).
-export const dataDispatchArg1VarName = () => 'dataDispatchArg1';
-export const dataDispatchArg2VarName = () => 'dataDispatchArg2';
-export const dataBitDispatchArg3VarName = () => 'dataBitDispatchArg3';
+// The names must not start with "data": the compiler then fails to read them as function-call arguments.
+export const dataDispatchArg1VarName = () => 'tableLookupArg1';
+export const dataDispatchArg2VarName = () => 'tableLookupArg2';
+export const dataBitDispatchArg3VarName = () => 'tableLookupArg3';
 
 // Lazily builds (once per compile) a bB `function` that dispatches on a
 // runtime table-id argument (temp1) and index argument (temp2), returning

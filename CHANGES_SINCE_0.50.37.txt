@@ -958,3 +958,23 @@ Ball width and playfield priority survive the title screen
 - The Titlescreen Kernel leaves the CTRLPF register at the value it needs, so a ball width or playfield
   priority set before the title screen was lost. Gameplay start, Gameover start and End title screen now
   put them back.
+
+=== 0.51.37 ===
+DPC+ kernel support, with Players 2 to 9 and a Background scroll colors block
+
+- DPC+ projects compile and run in the 6502.ts emulator: default project, background scrolling, row colors, score
+  colors, the score background color, animations and sprite positions match the standard kernel. Playfield rows are
+  set by a DPC+ resolution field with a preset dropdown; the Superchip toggle is hidden and ignored on DPC+.
+- DPC+ variables: the 9 extra variables, the memory of the sprites a project does not use, and the 256-byte stack
+  (Push, Pull and Stack position blocks). Sound envelopes and shared slots no longer use fixed bytes there.
+- Players 2 to 9 on DPC+: position, size, animation, color, Fire, Seek, Inertia, Bounce, Collided, scroll with
+  playfield and Undo last move. Player rainbow colors and ROM noise work for Player 0 on DPC+.
+- New Background scroll colors block: scrolls only the playfield row colors (stop at top/bottom edge available),
+  a scanline at a time on DPC+ and a playfield row at a time on the standard kernel. The playfield rainbow colors
+  block works on DPC+ too.
+- Data tab: a Data table cell type that points at another table.
+- The Fire block can launch players. Background fixes: smooth scrolling and colors that line up with the
+  playfield pixels on DPC+, aspect ratios under DPC+, dropdown menus with a border and a scrollbar inside them,
+  playfield resolution label no longer cut off. The pixel editor no longer shows pixels as filled that were not
+  drawn when a stroke leaves the grid.
+- System variables for the background and playfield colors become constants when nothing changes them.

@@ -1,6 +1,6 @@
 'use strict';
 
-import {effectiveBackgroundRows} from '../blocks/background';
+import {effectiveBackgroundRows, dpcPlusPfresOf} from '../blocks/background';
 
 // Pixel-to-cell math for pfread()-based playfield lookups. Recreated for
 // collision_check_position_box (see generators/bbasic/collision.js) after
@@ -41,6 +41,8 @@ export const MISSILE_BALL_PF_X_OFFSET = 18;
 // sprite<->playfield Y conversion blocks (generators/bbasic/background.js).
 export const pfRowDivisorFor = (config) => {
   const cfg = config || {};
+  // DPC+ has a separate number of rows and row height (see dpcPlusRowLinesFor), in lines instead of two-line steps.
+  if (cfg.kernel === 'dpcplus') return dpcPlusRowLinesFor(cfg) / 2;
   // A manual "pfrowheight" override (see Configuration.vue's "Override
   // playfield row height" switch + field for it) takes priority over the
   // automatic floor(96/pfres) calculation below - matches the kernel's
@@ -61,6 +63,18 @@ export const pfRowDivisorFor = (config) => {
   // floor(96 / pfres), never round(96 / pfres), for the values that do not
   // divide 96 evenly (5, 7, 9, 10, 11, 13, 14...).
   return Math.floor(96 / pfres);
+};
+
+// The height of a playfield row in scanlines under DPC+, which has no pfres: the same as the standard
+// kernel gives it with the project's standard-kernel settings (pfres with Superchip RAM, 12 rows without, or the
+// row height override), so a project looks the same on either kernel. The Superchip switch is kept aside while
+// DPC+ is selected (see Configuration.vue), where the real one is off.
+export const dpcPlusRowLinesFor = (config) => {
+  const cfg = config || {};
+  if (cfg.enablePfRowHeight && cfg.pfrowheight) return Math.max(1, Math.min(255, 2 * Math.round(Number(cfg.pfrowheight))));
+  // Any number of rows from 1 to 192: the coprocessor steps through the rows by a fraction (DFxFRACINC), so a row
+  // does not have to be a whole number of lines.
+  return Math.max(1, Math.min(255, Math.round(1000 * 192 / dpcPlusPfresOf(cfg)) / 1000));
 };
 
 // How many bytes of Superchip RAM's  read/write pool (r000-r127/w000-

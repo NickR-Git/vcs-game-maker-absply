@@ -8,7 +8,7 @@
           runtime with the "Data table ID at index" block - useful for anything indexed by a
           runtime variable, like per-scene stats or animation lookups. Each value can be typed
           as plain decimal, binary, or hex, or toggled to a color/background/animation/sound/
-          song/text picker instead for convenience - the byte actually stored is the same
+          song/text/data table picker instead for convenience - the byte actually stored is the same
           either way.
         </p>
 
@@ -472,6 +472,10 @@ export default defineComponent({
     const musicOptions = computed(() =>
       processSongsStorageDefaults(songsStorage).songs
           .map(({id, name}) => ({text: name || `Unnamed ${id}`, value: id})));
+    // Data tables are referenced by their stored id too, like the Data blocks' table dropdown
+    // (blocks/data.js's buildDataTableOptions).
+    const dataTableOptions = computed(() =>
+      state.value.dataTables.map(({id, name}) => ({text: name || `Unnamed ${id}`, value: Number(id)})));
     const textStringsStorage = useTextStringsStorage();
     const textOptions = computed(() =>
       processTextStringsStorageDefaults(textStringsStorage).textStrings
@@ -919,11 +923,12 @@ export default defineComponent({
     // animation list (see playerOptions above) - stores whichever animation
     // INDEX is picked.
     const FORMAT_CYCLE = ['dec', 'bin', 'hex', 'color', 'titlescreen', 'player0', 'background',
-      'sound', 'music', 'text'];
+      'sound', 'music', 'text', 'datatable'];
     const FORMAT_ICONS = {
       dec: 'mdi-alpha-d-box', bin: 'mdi-alpha-b-box', hex: 'mdi-alpha-h-box', color: 'mdi-palette', titlescreen: 'mdi-image-frame',
       background: 'mdi-map', player0: 'mdi-human-handsup',
       sound: 'mdi-waveform', music: 'mdi-music-note', text: 'mdi-card-text-outline',
+      datatable: 'mdi-table',
     };
     // The name of each entry mode, as listed in the cell's mode menu.
     const FORMAT_LABELS = {
@@ -937,6 +942,7 @@ export default defineComponent({
       sound: 'Sound effect',
       music: 'Song',
       text: 'Text string',
+      datatable: 'Data table',
     };
     const valueFormat = (table, index) => {
       const format = (table.valueFormats && table.valueFormats[index]) || 'dec';
@@ -957,6 +963,7 @@ export default defineComponent({
       sound: soundOptions,
       music: musicOptions,
       text: textOptions,
+      datatable: dataTableOptions,
     };
     const dropdownOptionsFor = (format) => DROPDOWN_OPTIONS_BY_FORMAT[format];
     const setValueFormat = (table, index, next) => {

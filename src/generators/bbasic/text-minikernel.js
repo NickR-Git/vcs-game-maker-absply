@@ -4,6 +4,7 @@ import {chunk} from 'lodash';
 
 import {useConfigurationStorage} from '../../hooks/project';
 import {colorByteToBuildBBasic} from '../../utils/palette';
+import {fixedFreeVariable} from '../../utils/fixed-vars';
 import {TEXT_MESSAGE_LENGTH, CHAR_TO_GLYPH, listTextStrings,
   resolveTextMaxDisplayWidth} from '../../blocks/text-strings';
 import {functionCallDiscardVarName} from '../../blocks/function';
@@ -78,8 +79,15 @@ export const TEXT_SCROLL_CURSOR_HIDDEN_BIT = 1;
 // correctly). Duplicated in miniature from hooks/rom.js's
 // BANK_COUNT_BY_ROMSIZE rather than imported, to avoid pulling that module's
 // heavy compiler chain into every generator file (same reasoning as
-// bbasic.js's  BANKSWITCHED_ROM_SIZES duplicate).
-const KERNEL_BANK_BY_ROMSIZE = {'8k': 2, '16k': 4, '32k': 8, '64k': 16};
+// bbasic.js's BANKSWITCHED_ROM_SIZES duplicate).
+// 'dpcplus' key: DPC+'s "jsr minikernel" hook (confirmed present in
+// DPCplus_kernel.asm, same plain same-bank call) has the identical
+// same-bank constraint - DPC+ fixes exactly 6 addressable banks
+// (bB-source-numbered 1-6 - see BANK_COUNT_BY_ROMSIZE's comment in
+// hooks/rom.js for the full derivation/evidence). The other two 4K regions
+// of the 32KB ROM are the graphics bank and a separate ARM-driver bank,
+// neither addressable via a bBasic "bank N" tag.
+const KERNEL_BANK_BY_ROMSIZE = {'8k': 2, '16k': 4, '32k': 8, '64k': 16, 'dpcplus': 6};
 
 // Resolves a literal "math_number" field's  text to a real JS number, or
 // null if it isn't one of the literal forms that block's  field
@@ -192,7 +200,7 @@ export const trackTextStaticOffsetUsage = (Blockly, bank) => {
 export const generateTextStaticOffsetTables = (Blockly, bank) => {
   if (!Blockly.BBasic.isTextMultiRowUsed()) return '';
   const usage = Blockly.BBasic.dataTableBankUsage[TEXT_STATIC_OFFSET_TABLE_ID];
-  if (!(usage ? usage.has(bank) : bank === 1)) return '';
+  if (!(usage ? usage.has(bank) : bank === Blockly.BBasic.primaryBank())) return '';
   const layout = getStaticMessageLayout();
   const offsets = layout.map((entry) => `${entry.offset}`).join(', ');
   const hasRow2Bytes = layout.map((entry) => (entry.wrapToLine2 && entry.lineCount >= 2 ? 1 : 0)).join(', ');
@@ -258,7 +266,7 @@ const ensureTextRow2Pairs = (Blockly) => {
 export const generateTextRow2OffsetsTable = (Blockly, bank) => {
   if (!Blockly.BBasic.textShowByIdRow2Used) return '';
   const usage = Blockly.BBasic.dataTableBankUsage[TEXT_ROW2_OFFSET_TABLE_ID];
-  if (!(usage ? usage.has(bank) : bank === 1)) return '';
+  if (!(usage ? usage.has(bank) : bank === Blockly.BBasic.primaryBank())) return '';
   const offsets = ensureTextRow2Pairs(Blockly);
   const tableName = bankSuffixedTableName('text_row2_offsets', bank);
   return ` data ${tableName}\n  ${offsets.join(', ')}\nend`;
@@ -1082,11 +1090,11 @@ export default (Blockly) => {
     const textDataPtrComment = showVariableComments ? '  ; Text Minikernel\'s message-table pointer' : '';
     const textRow2ActiveComment = showVariableComments ?
       '  ; whether the currently shown message also draws a wrapped second line' : '';
-    const textIndexDim = `\n dim TextIndex = var44${textIndexComment}`;
+    const textIndexDim = `\n dim TextIndex = ${fixedFreeVariable(config, 44)}${textIndexComment}`;
     const textDataPtrDim = this.pfscoreEnabledForTextMinikernel ?
-      `\n dim TextDataPtr = var46${textDataPtrComment}` : '';
+      `\n dim TextDataPtr = ${fixedFreeVariable(config, 46)}${textDataPtrComment}` : '';
     const textRow2ActiveDim = this.needsTextRow2ActiveDim() ?
-      `\n dim TextRow2Active = var45${textRow2ActiveComment}` : '';
+      `\n dim TextRow2Active = ${fixedFreeVariable(config, 45)}${textRow2ActiveComment}` : '';
     return textIndexDim + textDataPtrDim + textRow2ActiveDim;
   };
 
@@ -1245,7 +1253,7 @@ export default (Blockly) => {
 
     const configurationStorage = useConfigurationStorage();
     const config = (configurationStorage && configurationStorage.value) || {};
-    const kernelBank = KERNEL_BANK_BY_ROMSIZE[config.romSize];
+    const kernelBank = KERNEL_BANK_BY_ROMSIZE[config.kernel === 'dpcplus' ? 'dpcplus' : config.romSize];
     if (!kernelBank) return block;
 
     // 2600basic's  per-bank bookkeeping (the space-left tracking that
@@ -1286,12 +1294,33 @@ export default (Blockly) => {
     // loop after whatever generateRelocatedSections already covers, instead
     // of always at 2, leaves every bank declared exactly once.
     const usedBanks = Blockly.BBasic.usedRelocationBankNumbers();
+    const primaryBank = Blockly.BBasic.primaryBank();
+    // DPC+ only (primaryBank is 2 only for DPC+, 1 for every other kernel) -
+    // see generateRelocatedSections' own identical "Harmony cart fix"
+    // comment in bbasic.js for the real docs citation.
+    const harmonyCartFix = primaryBank === 2 ? '\n temp1=temp1' : '';
     const skippedBankPlaceholders = [];
-    const gapFillStart = Math.max(2, Blockly.BBasic.highestUsedRelocationBankNumber() + 1);
+    // Closing tag is always a literal "bank 1", never primaryBank() - see
+    // generateRelocatedSections' identical comment (statements.c's
+    // newbank() treats "bank 1" as a genuine no-op, but bank 2 has real
+    // side effects for DPC+ that a bare closer must never re-trigger).
+    const gapFillStart = Math.max(primaryBank + 1, Blockly.BBasic.highestUsedRelocationBankNumber() + 1);
     for (let bank = gapFillStart; bank < kernelBank; bank++) {
-      if (!usedBanks.has(bank)) skippedBankPlaceholders.push(` bank ${bank}\n bank 1`);
+      if (!usedBanks.has(bank)) skippedBankPlaceholders.push(` bank ${bank}${harmonyCartFix}\n bank 1`);
     }
 
-    return `${skippedBankPlaceholders.join('\n')}\n bank ${kernelBank}\n${block}\n bank 1`;
+    return `${skippedBankPlaceholders.join('\n')}\n bank ${kernelBank}${harmonyCartFix}\n${block}\n bank 1`;
   };
+
+  // The Text Minikernel draws through the standard kernel's score code, so under DPC+ every text block is skipped
+  // (a block that reports a value reports false) and the rest of the project still builds and runs.
+  Object.keys(Blockly.BBasic).filter((type) => type.startsWith('text_minikernel_')).forEach((type) => {
+    const generate = Blockly.BBasic[type];
+    Blockly.BBasic[type] = function(block) {
+      const config = (useConfigurationStorage() && useConfigurationStorage().value) || {};
+      if (config.kernel !== 'dpcplus') return generate.call(this, block);
+      return block.outputConnection ? ['0', Blockly.BBasic.ORDER_ATOMIC] :
+        ' rem Text blocks need the standard kernel and are skipped with DPC+\n';
+    };
+  });
 };

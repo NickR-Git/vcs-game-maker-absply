@@ -268,7 +268,8 @@ export default (Blockly) => {
     // variable without that would be a compile error against an undeclared
     // name. Silently no-op otherwise, same convention as
     // generateScoreBkColorAsm/Defaults' "nothing to do" cases just above.
-    if (!Blockly.BBasic.isTextMinikernelActive()) return '';
+    const dpcPlus = ((useConfigurationStorage() || {}).value || {}).kernel === 'dpcplus';
+    if (!dpcPlus && !Blockly.BBasic.isTextMinikernelActive()) return '';
     const argument0 = Blockly.BBasic.valueToCode(block, 'VALUE',
         Blockly.BBasic.ORDER_ASSIGNMENT) || '0';
     return `${scoreBkColorVarName()} = ${argument0}\n`;
@@ -330,6 +331,9 @@ export default (Blockly) => {
     if (this.isTextMinikernelActive()) return '';
     const configurationStorage = useConfigurationStorage();
     const config = (configurationStorage && configurationStorage.value) || {};
+    // The DPC+ kernel draws its score without a minikernel (its colors come from "scorecolors:"), and the
+    // routine would be placed in bank 1, which holds the kernel, and break the picture.
+    if (config.kernel === 'dpcplus') return '';
     const colorLine = this.scoreBkColorIsBackground(config.scoreBkColor) ?
       '       lda backgroundrealcolor' :
       `       lda #${colorByteToBuildBBasic(this.resolveScoreBkColorByte(config.scoreBkColor))}`;
@@ -409,9 +413,13 @@ export default (Blockly) => {
   // instead, which is already initialized elsewhere, so there's nothing of
   // its  to set here.
   Blockly.BBasic.generateScoreBkColorDefaults = function() {
-    if (!this.isTextMinikernelActive()) return '';
     const configurationStorage = useConfigurationStorage();
     const config = (configurationStorage && configurationStorage.value) || {};
+    if (config.kernel === 'dpcplus') {
+      return this.usesScoreBkColorSetter ?
+        ` scorebkcolor = ${colorByteToBuildBBasic(this.resolveScoreBkColorByte(config.scoreBkColor))}\n` : '';
+    }
+    if (!this.isTextMinikernelActive()) return '';
     if (!this.usesScoreBkColorSetter && this.scoreBkColorIsBackground(config.scoreBkColor)) return '';
     return ` scorebkcolor = ${colorByteToBuildBBasic(this.resolveScoreBkColorByte(config.scoreBkColor))}\n`;
   };

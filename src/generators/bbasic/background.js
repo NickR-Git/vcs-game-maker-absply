@@ -1,6 +1,7 @@
 'use strict';
 
 import {useConfigurationStorage} from '../../hooks/project';
+import {fireObjectName} from '../../utils/fire-object';
 import {effectiveBackgroundRows, backgroundDataRows, backgroundFadeTimerVarName, backgroundFadePaceVarName,
   backgroundFadeTargetVarName, fadeFlagsVarName, FADE_STEPS, backgroundRowFadeVarName, rowFadeStartColor,
   backgroundFadeFinishedBit, fadeActiveBit, backgroundFadeWatchKey,
@@ -662,7 +663,7 @@ export default (Blockly) => {
     let is16 = false;
     if (dirBlock && dirBlock.type === 'sprite_fire_angle_get') {
       const field = dirBlock.getFieldValue('MISSILE');
-      const fired = field === 'ball' ? 'ball' : `missile${field === '1' ? '1' : '0'}`;
+      const fired = fireObjectName(field);
       is16 = (Blockly.BBasic.missileFire16UsedFor || new Set()).has(fired);
       const stage = Blockly.BBasic.superchipRwPairs[missileBounceStageVarName(fired)];
       if (stage) {
@@ -752,6 +753,18 @@ export default (Blockly) => {
       rawVar === 'COLUBK' ? 'backgroundrealcolor' : rawVar;
     const varName = Blockly.BBasic.nameDB_.getName(
         targetVar, Blockly.VARIABLE_CATEGORY_NAME);
+    // The DPC+ kernel takes the background and playfield colors from color tables, not the color registers, so a
+    // fixed color also has to go into its table (a table holds literal values only, a changing one is not possible).
+    const dpcPlusConfig = (useConfigurationStorage() && useConfigurationStorage().value) || {};
+    const fixedColor = /^\s*(\$[0-9A-Fa-f]{1,2}|\d+)\s*$/.test(argument0);
+    if (dpcPlusConfig.kernel === 'dpcplus' && fixedColor) {
+      if (rawVar === 'COLUBK' && !dpcPlusConfig.enableDpcPlusBkColors) {
+        return `${varName} = ${argument0}\n bkcolors:\n  ${argument0.trim()}\n@end\n`;
+      }
+      if (rawVar === 'COLUPF' && !Blockly.BBasic.dpcPlusPfColorsOn(dpcPlusConfig)) {
+        return `${varName} = ${argument0}\n pfcolors:\n  ${argument0.trim()}\n@end\n`;
+      }
+    }
     return varName + ' = ' + argument0 + '\n';
   };
 
@@ -1488,19 +1501,76 @@ export default (Blockly) => {
   // with Up/Down/Up (2x)/Down (2x), never Left/Right.
   const BACKGROUND_SCROLL_ROW_DELTA = {up: -1, down: 1, upup: -2, downdown: 2};
 
+  // The block that scrolls only the colors runs the same code as Background scroll with its colors-only mode on.
+  Blockly.BBasic['background_scroll_colors'] = function(block) {
+    const fields = {DIRECTION: block.getFieldValue('DIRECTION'), STOPATEDGE: block.getFieldValue('STOPATEDGE'),
+      COLORS: 'FALSE', COLORS_ONLY: 'TRUE'};
+    return Blockly.BBasic['background_scroll']({getFieldValue: (name) => fields[name]});
+  };
+
   Blockly.BBasic[`background_scroll`] = function(block) {
     const direction = block.getFieldValue('DIRECTION');
     const delta = BACKGROUND_SCROLL_ROW_DELTA[direction];
+    // DPC+'s pfscroll takes the number of rows to move (255 is one row the other way) rather than a direction, only
+    // moves vertically, and the first value after it picks which columns of data (0-3), playfield colors (4) and
+    // background colors (6) go with it.
+    const dpcPlusConfig = (useConfigurationStorage() && useConfigurationStorage().value) || {};
+    if (dpcPlusConfig.kernel === 'dpcplus') {
+      const DPC_PLUS_SCROLL_VALUE = {up: 1, down: 255, upup: 2, downdown: 254};
+      if (!(direction in DPC_PLUS_SCROLL_VALUE)) return ' rem Left/Right scrolling is not available with the DPC+ kernel\n';
+      const scroll = Blockly.BBasic.dpcPlusScroll;
+      // The standard kernel's pfscroll moves two lines per call (four for the "2x" directions).
+      const lineCount = Math.abs(BACKGROUND_SCROLL_ROW_DELTA[direction] || 1) * 2;
+      if (!scroll) {
+        return ` pfscroll ${DPC_PLUS_SCROLL_VALUE[direction]}${block.getFieldValue('COLORS_ONLY') === 'TRUE' ? ' 4 4' : ''}\n`;
+      }
+      // The playfield rows are cut thinner (see generateBackgrounds), so a step moves `fine` lines. The
+      // standard kernel moves two lines per frame (four for the "2x" directions), so a step is taken every
+      // fine / lines frames, or several steps every frame when the rows are single lines.
+      const colorsOnly = block.getFieldValue('COLORS_ONLY') === 'TRUE';
+      const colorsMove = scroll.colors && (colorsOnly || block.getFieldValue('COLORS') === 'TRUE');
+      // The playfield columns are queues 0-3, the playfield colors queue 4 and the background colors queue 6.
+      const queueSets = Blockly.BBasic.dpcPlusScrollQueues(dpcPlusConfig, colorsMove, colorsOnly);
+      if (!queueSets.length) return ' rem Scrolling colors only needs playfield or background colors (Options tab)\n';
+      const scrollLines = (amount) => queueSets.map((queues) => ` pfscroll ${amount}${queues}`);
+      const rows = scroll.rows;
+      const offset = Blockly.BBasic.nameDB_.getName(colorsOnly ? '_dpcColorScrollOffset' : '_dpcScrollOffset',
+          Blockly.Names.DEVELOPER_VARIABLE_TYPE);
+      const stepRows = Math.max(1, Math.round(lineCount / scroll.fine));
+      const divider = Math.max(1, 2 ** Math.round(Math.log2(Math.max(1, scroll.fine / lineCount))));
+      const value = delta > 0 ? 256 - stepRows : stepRows;
+      // The playfield holds the background repeated over and over (see tileForDpcPlusScroll in
+      // generators/bbasic.js), the view starts one background-height in, and the offset variable follows how far
+      // it has moved, between 1 and one background-height. Moving past either end shows the same picture as
+      // a whole background-height further along, so the view jumps by that much and never runs out of picture.
+      const uid = Blockly.BBasic.blockNumbers.next('dpcscroll');
+      const lines = divider > 1 ? [` temp1 = framecounter & ${divider - 1}`, ` if temp1 <> 0 then goto _dpcscroll_${uid}_done`] : [];
+      // Stopping at the edge: the view is about to run past either end of the background.
+      if (block.getFieldValue('STOPATEDGE') === 'TRUE') {
+        lines.push(delta > 0 ? ` if ${offset} <= ${stepRows} then goto _dpcscroll_${uid}_done` :
+          ` if ${offset} > ${rows - stepRows} then goto _dpcscroll_${uid}_done`);
+      }
+      lines.push(...scrollLines(value));
+      if (delta > 0) {
+        lines.push(` if ${offset} > ${stepRows} then ${offset} = ${offset} - ${stepRows} : goto _dpcscroll_${uid}_done`,
+            ` ${offset} = ${offset} + ${rows}`, ` ${offset} = ${offset} - ${stepRows}`, ...scrollLines(rows));
+      } else {
+        lines.push(` if ${offset} <= ${rows - stepRows} then ${offset} = ${offset} + ${stepRows} : goto _dpcscroll_${uid}_done`,
+            ` ${offset} = ${offset} + ${stepRows}`, ` ${offset} = ${offset} - ${rows}`, ...scrollLines(256 - rows));
+      }
+      lines.push(`@ _dpcscroll_${uid}_done`);
+      return lines.join('\n') + '\n';
+    }
     // "scroll playfield colors": the row colors move with the pixels (see
     // buildBackgroundColorScroll in generators/bbasic.js). Only for the
     // directions that move rows.
-    const colorsOn = delta != null && block.getFieldValue('COLORS') === 'TRUE' &&
+    const colorsOn = delta != null && (block.getFieldValue('COLORS') === 'TRUE' || block.getFieldValue('COLORS_ONLY') === 'TRUE') &&
       !!Blockly.BBasic.backgroundColorScrollUsed;
     // Without tracking nothing is taller than the screen, so pfscroll rotates the
     // rows in place and the colors rotate the same way. The rotation is noticed
     // by the same thing pfscroll itself goes by: playfieldpos is reset to the
     // row height when "up" has moved a whole row, and to 1 when "down" has.
-    const colorRotationLines = (uid) => {
+    const colorRotationLines = (uid, everyCall, stopAtEdgeToo) => {
       const resolve = (name) =>
         Blockly.BBasic.nameDB_.getName(name, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
       const config = (useConfigurationStorage() && useConfigurationStorage().value) || {};
@@ -1509,7 +1579,8 @@ export default (Blockly) => {
       const skip = `_bgcolorscroll_${uid}_skip`;
       const up = delta < 0;
       return [
-        ` if playfieldpos <> ${up ? pfRowDivisorFor(config) : 1} then goto ${skip}`,
+        ...(stopAtEdgeToo ? [up ? ` if ${offset} >= ${rows - 1} then goto ${skip}` : ` if ${offset} = 0 then goto ${skip}`] : []),
+        ...(everyCall ? [] : [` if playfieldpos <> ${up ? pfRowDivisorFor(config) : 1} then goto ${skip}`]),
         ...(up ? [
           ` ${offset} = ${offset} + 1`,
           ` if ${offset} >= ${rows} then ${offset} = 0`,
@@ -1520,6 +1591,12 @@ export default (Blockly) => {
         `@ ${skip}`,
       ];
     };
+    // "colors only": the color rows step one row per block, and the pixels stay put.
+    if (block.getFieldValue('COLORS_ONLY') === 'TRUE') {
+      if (!colorsOn) return ' rem Scrolling colors only needs per-row playfield colors (Options tab) and Up/Down\n';
+      return colorRotationLines(Blockly.BBasic.blockNumbers.next('bgscroll'), true,
+          block.getFieldValue('STOPATEDGE') === 'TRUE').join('\n') + '\n';
+    }
     if (!Blockly.BBasic.backgroundScrollTracking || delta == null) {
       if (!colorsOn) return `pfscroll ${direction}\n`;
       return [` pfscroll ${direction}`, ...colorRotationLines(Blockly.BBasic.blockNumbers.next('bgscroll'))].join('\n') + '\n';
@@ -1820,6 +1897,71 @@ export default (Blockly) => {
     return `temp1 = ${frames}\n` +
       `if temp1 > ${SHAKE_SCREEN_MAX_FRAMES} then temp1 = ${SHAKE_SCREEN_MAX_FRAMES}\n` +
       `${shakeVar} = temp1\n`;
+  };
+
+  // DPC+ only - see this block's own definition in blocks/background.js for
+  // why nothing else sets DFxFRACINC automatically. The real formula
+  // (confirmed against two real DPC+ example programs' own numbers) is
+  // FRACINC = round(256/scanlines) - but 256 itself doesn't fit an 8-bit
+  // byte, so that can only be computed exactly at compile time, when
+  // SCANLINES is a literal typed-in number (the common case, matching how
+  // every real DPC+ example hand-picks a fixed FRACINC value rather than
+  // computing one from a variable). resolveTableIdLiteral in generators/
+  // bbasic/data.js is the precedent for this "read a literal math_number
+  // directly, fall back to a real runtime expression otherwise" split.
+  //
+  // When SCANLINES is a runtime variable/expression instead, 256 can't be
+  // represented, so this falls back to 255/scanlines - off by exactly 1
+  // from the true value whenever scanlines evenly divides 256 (e.g. 8
+  // scanlines: true value 32, this gives 31), otherwise exact. A single
+  // scanline off out of 200-ish is not visually meaningful for a coarse,
+  // trig-free row-height setting - same tolerance this codebase already
+  // accepts for DIRECTION16_STEPS' own coarse approximation.
+  Blockly.BBasic[`background_set_dpc_plus_row_height`] = function(block) {
+    const target = block.getInputTargetBlock('SCANLINES');
+    const literal = target && target.type === 'math_number' ? Number(target.getFieldValue('NUM')) : null;
+    let fracInc;
+    // valueToCode is only ever called once below - calling it twice would
+    // generate the connected block's own code twice, a real risk for
+    // anything more than a bare literal/variable.
+    const setupLines = [];
+    if (literal && literal > 0) {
+      fracInc = `${Math.max(1, Math.min(255, Math.round(256 / literal)))}`;
+    } else {
+      const scanlines = Blockly.BBasic.valueToCode(block, 'SCANLINES', Blockly.BBasic.ORDER_ASSIGNMENT) || '8';
+      // temp1 is bB's own always-available scratch byte (not a reserved
+      // dev var) - safe here since this is a one-shot trigger, not a
+      // per-frame check, so nothing else could be mid-use of it in the
+      // same statement sequence.
+      setupLines.push(` temp1 = 255 / ${scanlines}`, ` if temp1 = 0 then temp1 = 1`);
+      fracInc = 'temp1';
+    }
+    // Per-row playfield/background color resolution (DF4/DF6FRACINC) is
+    // kept in lockstep with pixel-data resolution (DF0-3FRACINC) here
+    // rather than exposed as its own separate setting, for Phase 1
+    // simplicity - real DPC+ projects CAN run color at a different (often
+    // finer) rate than pixel data (confirmed via real examples setting
+    // DF4/DF6FRACINC=255 while DF0-3 used 128), but that's a follow-up, not
+    // required for basic per-row color support to work.
+    const configurationStorage = useConfigurationStorage();
+    const config = (configurationStorage && configurationStorage.value) || {};
+    const colorLines = [];
+    // The color tables are read at half the rate of the playfield rows, so their increment is doubled.
+    let colorFracInc = Math.min(255, fracInc * 2);
+    if (fracInc === 'temp1') {
+      setupLines.push(' temp2 = 255', ' if temp1 < 128 then temp2 = temp1 + temp1');
+      colorFracInc = 'temp2';
+    }
+    if (Blockly.BBasic.dpcPlusPfColorsOn(config)) colorLines.push(` DF4FRACINC = ${colorFracInc}`);
+    if (config.enableDpcPlusBkColors) colorLines.push(` DF6FRACINC = ${colorFracInc}`);
+    return [
+      ...setupLines,
+      ` DF0FRACINC = ${fracInc}`,
+      ` DF1FRACINC = ${fracInc}`,
+      ` DF2FRACINC = ${fracInc}`,
+      ` DF3FRACINC = ${fracInc}`,
+      ...colorLines,
+    ].join('\n') + '\n';
   };
 };
 

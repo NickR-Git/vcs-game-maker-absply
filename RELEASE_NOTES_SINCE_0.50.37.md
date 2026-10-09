@@ -1,6 +1,6 @@
 # VCS Game Maker: everything since 0.50.37
 
-This covers versions 0.50.38 through 0.51.36, grouped by area. The per-version
+This covers versions 0.50.38 through 0.51.37, grouped by area. The per-version
 detail is in `CHANGES_SINCE_0.50.37.txt`.
 
 ## Emulator and TV standard
@@ -144,3 +144,15 @@ detail is in `CHANGES_SINCE_0.50.37.txt`.
   Experimental links, which open in the system browser in the desktop app.
 - Build errors for exceeding the ROM size name the configured size.
 - The Create New Project popup is one color with Subdued Palette or Dark Mode on.
+
+## DPC+ kernel
+
+- DPC+ projects build and run in the 6502.ts emulator, with the default project, backgrounds and scrolling, row
+  colors, score colors and the score background color matching the standard kernel. The playfield resolution is a
+  field with presets, and the Superchip toggle is hidden and ignored.
+- More variables: DPC+'s extra variables, the memory of unused sprites, and a 256-byte stack with Push, Pull and
+  Stack position blocks.
+- Players 2 to 9 are available in the Player blocks, Fire, Seek, Inertia, Bounce, Collided and Undo last move.
+  Rainbow colors and ROM noise work for Player 0.
+- New **Background scroll colors** block scrolls only the row colors; the playfield rainbow works on DPC+.
+- The Data tab has a **Data table** cell type.

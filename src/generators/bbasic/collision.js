@@ -39,6 +39,23 @@ export const collisionMoveOldYVar = (playerNum) => `collisionOldY${playerNum}`;
 // wall instead of sliding along it, but it's the one version of this that's
 // actually held up.
 
+// The DPC+ kernel's hardware collision only knows Player 0, Player 1 (which stands for all the virtual sprites,
+// Player 1 to 9, together), the missiles, the ball and the playfield. Collisions with Players 2 to 9 are the hardware
+// check against Player 1 narrowed down by comparing bounding boxes, the way the batari Basic DPC+ collision example
+// does. Two virtual sprites never collide in hardware at all, so for those it is the boxes alone.
+const boundingBox = (name) => {
+  if (/^player\d$/.test(name)) return {x: `${name}x`, y: `${name}y`, width: 8, height: `${name}height`};
+  if (name === 'ball') return {x: 'ballx', y: 'bally', width: 2, height: 'ballheight'};
+  return {x: `${name}x`, y: `${name}y`, width: 2, height: `${name}height`};
+};
+const boxesOverlap = (a, b) => {
+  const first = boundingBox(a);
+  const second = boundingBox(b);
+  return `(${first.y} + ${first.height}) >= ${second.y} && ${first.y} <= (${second.y} + ${second.height}) && ` +
+    `(${first.x} + ${first.width}) >= ${second.x} && ${first.x} <= (${second.x} + ${second.width})`;
+};
+const isExtraPlayer = (name) => /^player[2-9]$/.test(name);
+
 export default (Blockly) => {
   Blockly.BBasic[`collision_get`] = function(block) {
     const var0 = Blockly.BBasic.nameDB_.getName(block.getFieldValue('VAR0'),
@@ -46,6 +63,14 @@ export default (Blockly) => {
     const var1 = Blockly.BBasic.nameDB_.getName(block.getFieldValue('VAR1'),
         Blockly.VARIABLE_CATEGORY_NAME);
 
+    if (var0 !== var1 && (isExtraPlayer(var0) || isExtraPlayer(var1))) {
+      const [extra, other] = isExtraPlayer(var0) ? [var0, var1] : [var1, var0];
+      if (other === 'playfield') return [`collision(playfield, player1)`, Blockly.BBasic.ORDER_ATOMIC];
+      const boxes = boxesOverlap(extra, other);
+      // Another virtual sprite has no hardware collision with these, only the boxes can tell.
+      const code = /^player[1-9]$/.test(other) ? boxes : `collision(${other}, player1) && ${boxes}`;
+      return [code, Blockly.BBasic.ORDER_LOGICAL_AND];
+    }
     const code = var0 === var1 ? 'true' :
       `collision(${var0}, ${var1})`;
 
@@ -84,7 +109,8 @@ export default (Blockly) => {
     const revertLabel = `_collision_check_${playerNum}_${blockNumber}_revert`;
     const doneLabel = `_collision_check_${playerNum}_${blockNumber}_done`;
     return [
-      `if collision(${player}, playfield) then goto ${revertLabel}`,
+      // Players 2 to 9 have no hardware collision: the Player 1 flag stands for all the virtual sprites.
+      `if collision(${isExtraPlayer(player) ? 'player1' : player}, playfield) then goto ${revertLabel}`,
       `goto ${doneLabel}`,
       `@ ${revertLabel}`,
       `${player}x = ${oldXPair.read}`,

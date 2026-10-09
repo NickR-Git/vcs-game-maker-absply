@@ -176,7 +176,7 @@ export default (Blockly) => {
   // bankJumpSuffix), same as generateGameLoopEvent's  identical fix.
     const argument0 = Blockly.BBasic.valueToCode(block, 'FRAMES',
         Blockly.BBasic.ORDER_ASSIGNMENT) || '1';
-    const suffix = Blockly.BBasic.bankJumpSuffix(Blockly.BBasic.getCurrentBank(), 1);
+    const suffix = Blockly.BBasic.bankJumpSuffix(Blockly.BBasic.getCurrentBank(), Blockly.BBasic.primaryBank());
     const counter = Blockly.BBasic.nameDB_.getName(
         WAIT_FRAMES_COUNTER_VAR_NAME, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
     // NOT a "for X = 1 to <bound>" loop (what this used to be): that

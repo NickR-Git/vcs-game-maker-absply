@@ -296,8 +296,21 @@ export const DEFAULT_BACKGROUND_ROWS = 11;
 // against a known-working reference program (compiled and run in the
 // emulator) that pfres rows of playfield: data - not pfres-1 - render
 // correctly, so the Superchip case uses pfres directly.
+// The number of playfield rows on screen under DPC+, which has no Superchip RAM to set it with; it uses the DPC+
+// setting, or, for a project that never set it, what the standard kernel it came from had.
+export const dpcPlusPfresOf = (config) => {
+  const cfg = config || {};
+  if (Number(cfg.dpcPlusPfres) > 0) return Math.round(Number(cfg.dpcPlusPfres));
+  // A project that never set it follows the standard kernel's settings it came from.
+  const superchip = cfg.enableSuperchipStandard !== undefined ? cfg.enableSuperchipStandard : cfg.enableSuperchip;
+  return superchip ? Math.max(1, Number(cfg.pfres) || 12) : 12;
+};
+
 export const effectiveBackgroundRows = (config) => {
   const cfg = config || {};
+  // DPC+ sets a number of playfield rows (the one extra row below the screen is counted in
+  // backgroundDataRows, like without Superchip).
+  if (cfg.kernel === 'dpcplus') return Math.max(1, dpcPlusPfresOf(cfg) - 1);
   return cfg.enableSuperchip ? Math.max(1, Number(cfg.pfres) || DEFAULT_BACKGROUND_ROWS) :
     DEFAULT_BACKGROUND_ROWS;
 };
@@ -598,7 +611,29 @@ Blockly.Blocks['background_scroll'] = {
         `the edges itself. "scroll playfield colors", when checked (and per-row playfield colors are on in ` +
         `the Options tab), moves each row's color along with its pixels for Up/Down/Up (2x)/Down (2x), ` +
         `instead of the colors staying where they are on the screen. Use it on every scroll block of a ` +
-        `project that scrolls colors.`);
+        `project that scrolls colors. To scroll just the colors, use "Background scroll colors" instead.`);
+  },
+};
+
+// Scrolls only the row colors, leaving the playfield pixels where they are. The standard kernel moves them a whole
+// playfield row per block; DPC+ moves them by scanline.
+Blockly.Blocks['background_scroll_colors'] = {
+  init: function() {
+    this.appendDummyInput()
+        .appendField(`${BACKGROUND_ICON} Background scroll colors`)
+        .appendField(new Blockly.FieldDropdown(BACKGROUND_PFSCROLL_OPTIONS.filter(([, value]) =>
+          value !== 'left' && value !== 'right')), 'DIRECTION')
+        .appendField(' ')
+        .appendField(new Blockly.FieldCheckbox('FALSE'), 'STOPATEDGE')
+        .appendField('stop at top/bottom edge');
+    this.setPreviousStatement(true);
+    this.setNextStatement(true);
+    this.setColour(BACKGROUND_COLOR);
+    this.setTooltip('Scrolls just the playfield row colors in the given direction and leaves the playfield ' +
+        'pixels where they are, so it works without scrolling the playfield. It needs per-row ' +
+        'playfield colors (the Options tab). The standard kernel moves the colors a whole playfield row at a ' +
+        'time; DPC+ moves them a scanline at a time. "stop at top/bottom edge", when checked, stops the colors ' +
+        'at the top or bottom of the background instead of wrapping around.');
   },
 };
 
@@ -1283,6 +1318,37 @@ Blockly.defineBlocksWithJsonArray([
       'running by itself every frame afterward, even from inside an "if" block that only briefly ' +
       'becomes true, same as "Fade color to". Triggering it again while already shaking restarts the ' +
       'countdown at the new frame count, rather than stacking.',
+  },
+  // DPC+ only (see blockly-toolbox.xml.hbs's own {{#if kernelIsDpcPlus}}
+  // gate) - the standard kernel derives its playfield row height from
+  // pfres/pfrowheight, both compile-time constants with no DPC+ equivalent;
+  // DPC+ instead reads it every frame from a runtime register (DFxFRACINC)
+  // that nothing initializes on its own (confirmed: no default anywhere in
+  // DPCplus_kernel.asm's startup) - so a project with no block like this
+  // one anywhere would render its playfield at whatever height happens to
+  // be left in uninitialized RAM. See generators/bbasic/background.js's
+  // generateDpcPlusRowHeight for the actual DFxFRACINC math.
+  {
+    'type': `background_set_dpc_plus_row_height`,
+    'message0': `${BACKGROUND_ICON} Set playfield row height to %1 scanlines`,
+    'args0': [
+      {
+        'type': 'input_value',
+        'name': 'SCANLINES',
+        'check': 'Number',
+      },
+    ],
+    'inputsInline': true,
+    'previousStatement': null,
+    'nextStatement': null,
+    'colour': BACKGROUND_COLOR,
+    'tooltip': 'DPC+ only: sets how many scanlines tall each playfield row is drawn - unlike the ' +
+      'standard kernel, DPC+ has no built-in default for this, so a block like this needs to run ' +
+      'somewhere (once at startup is enough) or the playfield renders at whatever height happens to ' +
+      'be left in RAM. Also controls per-row playfield/background color resolution if either is ' +
+      'enabled (Options tab) - they stay locked to this same row height. Running this again with a ' +
+      'different value re-flows every row live, which is exactly how DPC+ projects implement things ' +
+      'like a title screen with different proportions than the main game.',
   },
 ]);
 

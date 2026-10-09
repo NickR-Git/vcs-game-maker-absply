@@ -745,7 +745,8 @@ export default (Blockly) => {
     const checks = this.distanceChecks;
     if (!checks || !checks.size) return '';
     registerDistanceAbsDiffSubroutine(Blockly);
-    const suffix = Blockly.BBasic.bankJumpSuffix(1, Blockly.BBasic.getSubroutineBank(DISTANCE_ABS_DIFF_NAME));
+    const suffix = Blockly.BBasic.bankJumpSuffix(
+        Blockly.BBasic.primaryBank(), Blockly.BBasic.getSubroutineBank(DISTANCE_ABS_DIFF_NAME));
     const lines = [];
     checks.forEach(({axis, obj0, obj1}, rawVarName) => {
       const varName = Blockly.BBasic.nameDB_.getName(rawVarName, Blockly.Names.DEVELOPER_VARIABLE_TYPE);
@@ -798,7 +799,8 @@ export default (Blockly) => {
     const checks = this.distancePointChecks;
     if (!checks || !checks.size) return '';
     registerDistanceAbsDiffSubroutine(Blockly);
-    const suffix = Blockly.BBasic.bankJumpSuffix(1, Blockly.BBasic.getSubroutineBank(DISTANCE_ABS_DIFF_NAME));
+    const suffix = Blockly.BBasic.bankJumpSuffix(
+        Blockly.BBasic.primaryBank(), Blockly.BBasic.getSubroutineBank(DISTANCE_ABS_DIFF_NAME));
     const lines = [];
     checks.forEach(({axis, obj0, index, block}) => {
       const varName = Blockly.BBasic.nameDB_.getName(
@@ -828,7 +830,8 @@ export default (Blockly) => {
   // end up relocated to another bank like any other.
   Blockly.BBasic.generateKeypadPollCall = function() {
     if (!this.keypad0Used && !this.keypad1Used) return '';
-    const suffix = Blockly.BBasic.bankJumpSuffix(1, Blockly.BBasic.getSubroutineBank('keypadpoll'));
+    const suffix = Blockly.BBasic.bankJumpSuffix(
+        Blockly.BBasic.primaryBank(), Blockly.BBasic.getSubroutineBank('keypadpoll'));
     return ` gosub keypadpoll${suffix}`;
   };
 

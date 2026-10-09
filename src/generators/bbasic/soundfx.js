@@ -4,6 +4,7 @@ import {findSoundEffectById, processSoundEffectsStorageDefaults} from '../../blo
 import {useConfigurationStorage,
   useSoundEffectsStorage} from '../../hooks/project';
 import {buildEnvelopeCurve, clampEnvelopeStages} from '../../utils/envelope';
+import {fixedFreeVariable} from '../../utils/fixed-vars';
 
 // The DIM toggle's default percentage, used until the user picks a value
 // on the slider next to it.
@@ -322,7 +323,8 @@ export default (Blockly) => {
     const config = (configurationStorage && configurationStorage.value) || {};
     const comment = (config.showVariableComments ?? true) ?
       '  ; both channels\' envelope-config index (see registerEnvelopeConfig), packed one nibble each' : '';
-    return `\n dim envelopeConfig = var47${comment}`;
+    if (config.kernel === 'dpcplus') return '';
+    return `\n dim envelopeConfig = ${fixedFreeVariable(config, 47)}${comment}`;
   };
 
   // Every distinct envelope config's single combined data table (see
