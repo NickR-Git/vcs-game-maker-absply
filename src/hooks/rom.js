@@ -9,7 +9,8 @@ import {preprocessBatariBasic, compileBatariBasicToAsm, assembleBatariBasic} fro
 import '../blocks';
 import BlocklyBB, {RELOCATABLE_EVENT_NAMES, SYSTEM_VARIABLES} from '../generators/bbasic';
 import {processPlayerAnimationsStorageDefaults} from '../generators/bbasic/sprites';
-import {getExtendedScoreGraphics, getTextMinikernelSiblingFiles} from '../generators/bbasic/text-minikernel-files';
+import {getExtendedScoreGraphics, getTextMinikernelSiblingFiles, getDpcPlusTextMinikernelSiblingFiles,
+  dpcPlusTextScreenLines} from '../generators/bbasic/text-minikernel-files';
 import {getTitleScreenSiblingFiles} from '../generators/bbasic/titlescreen-files';
 import {TITLE_SCREEN_SUBROUTINE_NAME, estimateTitleScreenGraphicsBytes} from '../generators/bbasic/titlescreen';
 import {titleScreenAnyPageOverRowBudget} from '../blocks/titlescreen';
@@ -721,6 +722,8 @@ const computeBankContents = (maxBanks, textMinikernelActive, titleScreenKernelAc
   // account for them).
   if (textMinikernelActive && contents[maxBanks]) {
     contents[maxBanks].textMinikernel = true;
+    const textBank = BlocklyBB.textKernelBank();
+    if (textBank && contents[textBank]) contents[textBank].textMinikernel = true;
   }
   // generateRelocatedSections (generators/bbasic.js) always declares this
   // exact top bank on a bankswitched, non-Text-Minikernel build, even with
@@ -1293,9 +1296,8 @@ const buildRomInner = async () => {
       // preset font once would leave that override stuck there forever,
       // masking the Text Minikernel's  extended file even after switching
       // back to Squish or to a different project).
-      const siblingFiles = textMinikernelActive ? {...await getTextMinikernelSiblingFiles()} : {};
-      // Its extended score digits are laid out for the standard kernel; DPC+ keeps the stock ones.
-      if (config.kernel === 'dpcplus') delete siblingFiles['score_graphics.asm'];
+      const siblingFiles = textMinikernelActive ?
+        {...(config.kernel === 'dpcplus' ? await getDpcPlusTextMinikernelSiblingFiles(BlocklyBB.isTextRow2Used(), !!BlocklyBB.textScrollCursorUsed) : await getTextMinikernelSiblingFiles())} : {};
       // Hand-written .asm content generated during this same attempt's
       // regenerateCode() call above (player animation frame pointers, see
       // generateAnimations in generators/bbasic.js), added as sibling files
@@ -1356,8 +1358,11 @@ const buildRomInner = async () => {
       // text12b.asm in the first place then), and only actually returns an
       // override once the Text Font Editor has ever written to storage.
       if (textMinikernelActive) {
-        const textFontOverride = await buildTextFontOverride();
-        if (textFontOverride) siblingFiles['text12b.asm'] = textFontOverride;
+        // DPC+ keeps its whole text kernel in one file, the standard kernel's drawing code is text12b.asm
+        const textKernelFile = config.kernel === 'dpcplus' ? 'text12DPCplus.asm' : 'text12b.asm';
+        const textFontOverride = await buildTextFontOverride(
+            config.kernel === 'dpcplus' ? siblingFiles[textKernelFile] : null);
+        if (textFontOverride) siblingFiles[textKernelFile] = textFontOverride;
         // Row 2's  color ("Text: set row 2 color" block) - see
         // buildTextRow2ColorOverride's  doc comment in utils/text-font.js.
         // Real resolved name read off BlocklyBB.nameDB_ the same way
@@ -1365,8 +1370,8 @@ const buildRomInner = async () => {
         if (BlocklyBB.isTextRow2Used()) {
           const colorVarName = BlocklyBB.nameDB_.getName(
               textRow2ColorVarName(), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
-          siblingFiles['text12b.asm'] = buildTextRow2ColorOverride(
-              siblingFiles['text12b.asm'], {colorVarName});
+          siblingFiles[textKernelFile] = buildTextRow2ColorOverride(
+              siblingFiles[textKernelFile], {colorVarName});
         }
         // The "more below" scroll cursor (see utils/text-font.js's
         // buildTextScrollCursorOverride) splices its  drawing code into
@@ -1390,7 +1395,7 @@ const buildRomInner = async () => {
           const endColorVarName = BlocklyBB.nameDB_.getName(
               textEndIconColorVarName(), Blockly.Names.DEVELOPER_VARIABLE_TYPE);
           const blinkMask = resolveBlinkMask(config.textScrollCursorBlinkSpeed);
-          siblingFiles['text12b.asm'] = buildTextScrollCursorOverride(siblingFiles['text12b.asm'],
+          siblingFiles[textKernelFile] = buildTextScrollCursorOverride(siblingFiles[textKernelFile],
               {glyphByte, linesMaxVarName, linesBaseVarName, colorVarName, endColorVarName, blinkMask});
         }
       }
@@ -1925,7 +1930,14 @@ export const buildPlayerAnimationPreviewRom = (animationIndex, centerX, height, 
   const config = useConfigurationStorage().value || {};
   const middle = effectiveBackgroundRows(config) * pfRowDivisorFor(config) / 2 - 1;
   const x = Math.round(81 - centerX * (widthScale || 1));
-  const y = Math.min(191, Math.max(1, Math.round(middle + (height || 8) / 2)));
+  // The block that sets y converts the standard kernel's units for DPC+ (2 * y minus the tallest sprite's height in
+  // lines, see sprite_player_set), so the value is worked back from where the top edge should be: the sprite
+  // centered on the shortened screen the text leaves (the preview always hides the score).
+  const dpcPlus = config.kernel === 'dpcplus';
+  const y = dpcPlus ?
+    Math.min(191, Math.max(1, Math.round((dpcPlusTextScreenLines(false, false) / 2 - (height || 8) +
+      BlocklyBB.dpcPlusSpriteLines()) / 2))) :
+    Math.min(191, Math.max(1, Math.round(middle + (height || 8) / 2)));
   const steps = [
     `<block type="background_set_color"><field name="VAR">COLUBK</field>${num(0)}`,
     // 0 = no background: the game loop would otherwise load background 1 on its first pass.
@@ -2096,11 +2108,14 @@ const buildPreviewRom = async ({name, xml, titleScreen = false, configOverride =
       // The name shown on the Text Minikernel (background and sprite
       // previews) needs its asm files next to the source; a copy, since the
       // cached object is shared (see buildRomInner).
-      const siblingFiles = BlocklyBB.isTextMinikernelActive() ? {...await getTextMinikernelSiblingFiles()} : {};
+      const previewDpcPlus = (configurationStorage.value || {}).kernel === 'dpcplus';
+      const siblingFiles = BlocklyBB.isTextMinikernelActive() ?
+        {...(previewDpcPlus ? await getDpcPlusTextMinikernelSiblingFiles(BlocklyBB.isTextRow2Used(), !!BlocklyBB.textScrollCursorUsed) : await getTextMinikernelSiblingFiles())} : {};
       Object.assign(siblingFiles, BlocklyBB.playerAnimAsmFiles || {});
       if (BlocklyBB.isTextMinikernelActive()) {
-        const textFontOverride = await buildTextFontOverride();
-        if (textFontOverride) siblingFiles['text12b.asm'] = textFontOverride;
+        const textKernelFile = previewDpcPlus ? 'text12DPCplus.asm' : 'text12b.asm';
+        const textFontOverride = await buildTextFontOverride(previewDpcPlus ? siblingFiles[textKernelFile] : null);
+        if (textFontOverride) siblingFiles[textKernelFile] = textFontOverride;
       }
       if (BlocklyBB.titleScreenUsedKernelKeys) {
         Object.assign(siblingFiles, await getTitleScreenSiblingFiles(BlocklyBB.titleScreenUsedKernelKeys, !!BlocklyBB.titleScreenHasScoreCard));

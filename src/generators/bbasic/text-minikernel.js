@@ -87,6 +87,8 @@ export const TEXT_SCROLL_CURSOR_HIDDEN_BIT = 1;
 // hooks/rom.js for the full derivation/evidence). The other two 4K regions
 // of the 32KB ROM are the graphics bank and a separate ARM-driver bank,
 // neither addressable via a bBasic "bank N" tag.
+const isDpcPlusConfig = () => (((useConfigurationStorage() || {}).value || {}).kernel === 'dpcplus');
+
 const KERNEL_BANK_BY_ROMSIZE = {'8k': 2, '16k': 4, '32k': 8, '64k': 16, 'dpcplus': 6};
 
 // Resolves a literal "math_number" field's  text to a real JS number, or
@@ -1006,8 +1008,13 @@ export default (Blockly) => {
   // below, which always force TextRow2Active to 0), so this only reflects
   // what the PLAIN Show text blocks can ever act on.
   Blockly.BBasic.isTextRow2Used = function() {
-    return this.isTextMinikernelActive() &&
-      (listTextStrings().some((entry) => entry.wrapToLine2) || !!this.textRowSetUsed);
+    // An entry that wraps only counts when a block can show it: a project that never shows one has no use for the
+    // second row (and for DPC+ its lines).
+    const wrapping = listTextStrings().filter((entry) => entry.wrapToLine2);
+    const wrappingShown = wrapping.length && (this.textEntryShowBlocks || []).some((block) =>
+      block.type === 'text_minikernel_show_by_id' ||
+      wrapping.some((entry) => `${entry.id}` === `${block.getFieldValue('TEXT_ID')}`));
+    return this.isTextMinikernelActive() && (!!wrappingShown || !!this.textRowSetUsed);
   };
 
   // Whether TextRow2Active itself needs to be dimmed - a BROADER condition
@@ -1108,6 +1115,12 @@ export default (Blockly) => {
   Blockly.BBasic.generateTextMinikernelDefaults = function() {
     if (!this.isTextMinikernelActive()) return '';
     const lines = [` TextColor = ${colorByteToBuildBBasic(0x0F)}`];
+    // DPC+ keeps these in the memory of virtual sprites the kernel does not clear, so they start out as whatever
+    // was there (a second text row drawn before the first message is shown).
+    if (isDpcPlusConfig()) {
+      lines.push(' TextIndex = 0');
+      if (this.needsTextRow2ActiveDim()) lines.push(' TextRow2Active = 0');
+    }
     // Row 2's  color defaults to the "$01 sentinel" (see
     // buildTextRow2ColorOverride's  comment in utils/text-font.js), not a
     // real color - it means "follow TextColor" until a "Text: set color"
@@ -1154,7 +1167,19 @@ export default (Blockly) => {
   // bank 1" (see KERNEL_BANK_BY_ROMSIZE above) so it shares the kernel's
   // bank, matching the plain (non-bankswitched) "jsr minikernel" call the
   // standard kernel makes into it.
+  // The bank the standard kernel's drawing code and message data go in (text12a.asm's "textbank" - the score-loop
+  // half stays in the kernel bank), or 0 when they stay with it: DPC+ keeps everything in one bank, and an 8k ROM
+  // has no bank to spare. It is the one below the kernel bank, which the relocation also uses, so that bank's
+  // section is where generateRelocatedSections puts this content.
+  Blockly.BBasic.textKernelBank = function() {
+    const config = ((useConfigurationStorage() || {}).value) || {};
+    if (config.kernel === 'dpcplus') return 0;
+    const kernelBank = KERNEL_BANK_BY_ROMSIZE[config.romSize];
+    return kernelBank >= 4 ? kernelBank - 1 : 0;
+  };
+
   Blockly.BBasic.generateTextMinikernel = function() {
+    this.textBankBody = '';
     if (!this.isTextMinikernelActive()) return '';
 
     // Row 0: reserved blank - TextIndex lives in RAM the standard kernel
@@ -1241,11 +1266,17 @@ export default (Blockly) => {
     // but nothing about combining the Text Minikernel with hardware
     // collision has ever been tested against that arrangement, only this
     // one, so there's no reason to keep the two files apart from each other.
+    const dpcPlusText = isDpcPlusConfig();
+    // The standard kernel can run the drawing code and the message data from another bank (text12a.asm
+    // switches to it through "textbank"), which leaves the kernel bank with just the score-loop half. That
+    // content goes out with the relocated sections (generateRelocatedSections), as the bank has other
+    // content in it too.
+    const textBank = Blockly.BBasic.textKernelBank();
+    this.textBankBody = textBank ? [dataTable, '', ' inline text12b.asm'].join('\n') : '';
     const block = [
-      dataTable,
-      '',
-      ' inline text12a.asm',
-      ' inline text12b.asm',
+      ...(textBank ? [] : [dataTable, '']),
+      ...(dpcPlusText ? [' inline text12DPCplus.asm'] :
+        textBank ? [' inline text12a.asm'] : [' inline text12a.asm', ' inline text12b.asm']),
       // The playfield color scroll tables go in this bank too (the kernel's):
       // see buildBackgroundColorScroll in generators/bbasic.js.
       ...(Blockly.BBasic.backgroundColorScrollTopBank ? ['', Blockly.BBasic.backgroundColorScrollTablesAsm] : []),
@@ -1311,16 +1342,4 @@ export default (Blockly) => {
 
     return `${skippedBankPlaceholders.join('\n')}\n bank ${kernelBank}${harmonyCartFix}\n${block}\n bank 1`;
   };
-
-  // The Text Minikernel draws through the standard kernel's score code, so under DPC+ every text block is skipped
-  // (a block that reports a value reports false) and the rest of the project still builds and runs.
-  Object.keys(Blockly.BBasic).filter((type) => type.startsWith('text_minikernel_')).forEach((type) => {
-    const generate = Blockly.BBasic[type];
-    Blockly.BBasic[type] = function(block) {
-      const config = (useConfigurationStorage() && useConfigurationStorage().value) || {};
-      if (config.kernel !== 'dpcplus') return generate.call(this, block);
-      return block.outputConnection ? ['0', Blockly.BBasic.ORDER_ATOMIC] :
-        ' rem Text blocks need the standard kernel and are skipped with DPC+\n';
-    };
-  });
 };

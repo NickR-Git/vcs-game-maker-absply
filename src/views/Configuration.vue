@@ -110,7 +110,7 @@
           @change="handleChangeConfiguration"
           :items="kernelOptions"
           label="Kernel"
-          hint="DPC+ trades the standard kernel's playfield/missile/ball tricks (Superchip, per-row playfield colors, no_blank_lines/ball_blank_lines) for an ARM co-processor with its own capabilities (settable playfield row height, independent per-row playfield AND background colors) - see the options that appear below once selected."
+          hint="DPC+ trades the standard kernel's playfield/missile/ball tricks (Superchip, per-row playfield colors, no_blank_lines) for an ARM co-processor with different capabilities (settable playfield row height, independent per-row playfield AND background colors) - see the options that appear below once selected."
           persistent-hint
         />
         <v-switch
@@ -132,20 +132,6 @@
             :hint="player0RainbowColorsActive ?
               'Forced off: the player0 rainbow colors block requires blank lines shown normally - batari Basic never allows player-colors and no_blank_lines together.' :
               'Turning this on packs playfield rows tighter together, but uses missile0\'s graphics circuitry, so missile0 can no longer be used as a sprite.'"
-            persistent-hint
-            class="option-switch"
-          />
-          <v-switch
-            v-model="configurationState.enableBallBlankLines"
-            @change="handleChangeConfiguration"
-            :disabled="configurationState.enablePfColors || player0RainbowColorsActive"
-            :color="(configurationState.enablePfColors || player0RainbowColorsActive) ? 'amber darken-2' : undefined"
-            label="Fill blank lines with the ball instead of missile0 (ball_blank_lines)"
-            :hint="configurationState.enablePfColors ?
-              'Forced off: this only works with per-row playfield colors (pfcolors, below) turned off.' :
-              (player0RainbowColorsActive ?
-                'Forced off: the player0 rainbow colors block requires blank lines shown normally.' :
-                'An alternative to turning \'Show blank lines\' off above: removes the gaps between playfield rows using the ball\'s graphics circuitry instead of missile0\'s, so missile0 stays free to use as a normal sprite (unlike turning \'Show blank lines\' off, which costs missile0 entirely). Works automatically, no Ball blocks needed. On a solid playfield color (pfcolors off), the ball\'s fill pixels - if you also use it as a sprite - already match the background for free, since the ball always draws in the playfield color.')"
             persistent-hint
             class="option-switch"
           />
@@ -439,7 +425,7 @@ const DEFAULT_CONFIGURATION = {
 // unlike romSizeOptions below.
 const KERNEL_OPTIONS = [
   {text: 'Standard', value: 'standard'},
-  {text: 'DPC+', value: 'dpcplus'},
+  {text: 'DPC+ (Experimental)', value: 'dpcplus'},
 ];
 
 export default defineComponent({
@@ -608,13 +594,7 @@ export default defineComponent({
     const handleChangeConfiguration = () => {
       const state = configurationState.value;
       if (player0RainbowColorsActive.value) state.showBlankLines = true;
-      // ball_blank_lines only makes sense with pfcolors off (see its
-      // hint text) and can't coexist with the player0 rainbow colors
-      // requirement above (blank lines shown normally) - forced off rather
-      // than left in a combination guaranteed to be ignored/fail to build,
-      // same "force off and disable" pattern showBlankLines itself uses.
-      if (state.enablePfColors || player0RainbowColorsActive.value) state.enableBallBlankLines = false;
-      // DPC+ has no Superchip/no_blank_lines/ball_blank_lines equivalent -
+      // DPC+ has no Superchip/no_blank_lines equivalent -
       // the template hides these switches under DPC+, but force them off
       // here too in case an old project has them set from before the
       // kernel was switched. rand16 is different: DPC+ has its own
@@ -631,7 +611,6 @@ export default defineComponent({
           state.enableSuperchipStandard = !!state.enableSuperchip;
         }
         state.enableSuperchip = false;
-        state.enableBallBlankLines = false;
         state.enableRand16 = false;
       } else if (state.enableSuperchipStandard !== undefined) {
         state.enableSuperchip = state.enableSuperchipStandard;

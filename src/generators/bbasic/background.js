@@ -10,7 +10,11 @@ import {effectiveBackgroundRows, backgroundDataRows, backgroundFadeTimerVarName,
   backgroundScrollRowVarName, backgroundScrollRowMaxVarName, backgroundScrollSubRowVarName,
   backgroundScrollEdgeFlagsVarName, BACKGROUND_SCROLL_EDGE_BITS, backgroundScrollStartVarName,
   BACKGROUND_SCROLL_PATCH_SUBROUTINE_NAME, backgroundColorOffsetVarName} from '../../blocks/background';
-import {pfRowDivisorFor, PLAYER_PF_X_OFFSET, MISSILE_BALL_PF_X_OFFSET} from '../../utils/playfield-coords';
+import {pfRowDivisorFor as exactRowDivisorFor, PLAYER_PF_X_OFFSET, MISSILE_BALL_PF_X_OFFSET} from '../../utils/playfield-coords';
+
+// batari Basic can only multiply and divide by whole numbers, and with DPC+ a row is not always a whole number of
+// y steps (28 rows of 6.857 lines), so those blocks use the nearest whole number of steps.
+const pfRowDivisorFor = (config) => Math.max(1, Math.round(exactRowDivisorFor(config)));
 import {ctrlpfShadowVarName, spriteScrollFlagsVarName, spriteScrollActiveBit,
   missileBounceStageVarName,
   DIRECTION16_STEPS, backgroundRainbowActiveBit, backgroundRainbowOffsetVarName,
@@ -868,7 +872,8 @@ export default (Blockly) => {
   Blockly.BBasic.emitColorFadeTrigger = function(rawVar, color, frames) {
     const colorVar = resolveFadeColorVar(rawVar);
     const timerVar = resolveVar(backgroundFadeTimerVarName(rawVar));
-    const paceVar = resolveVar(backgroundFadePaceVarName(rawVar));
+    const constantPace = (Blockly.BBasic.fadeConstantPace || {})[rawVar];
+    const paceVar = constantPace === undefined ? resolveVar(backgroundFadePaceVarName(rawVar)) : null;
     const targetVar = resolveVar(backgroundFadeTargetVarName(rawVar));
     const activeBit = `${resolveVar(fadeFlagsVarName(rawVar))}{${fadeActiveBit(rawVar)}}`;
     // frames/FADE_STEPS is still a genuine runtime division (frames isn't
@@ -882,7 +887,7 @@ export default (Blockly) => {
     // matter which bank this trigger's  code ends up in, unlike a
     // non-power-of-2 divisor would if this block ever landed in a
     // relocated event.
-    Blockly.BBasic.usesDivMul = true;
+    if (constantPace === undefined) Blockly.BBasic.usesDivMul = true;
 
     const blockNumber = Blockly.BBasic.blockNumbers.next();
     const resetLabel = `_bgfade_${blockNumber}_reset`;
@@ -900,11 +905,13 @@ export default (Blockly) => {
       `if ${colorVar} = temp1 then goto ${skipLabel}`,
       `@ ${resetLabel}`,
       `${targetVar} = temp1`,
-      `${paceVar} = (${frames}) / ${FADE_STEPS}`,
-      `if ${paceVar} <> 0 then goto ${paceReadyLabel}`,
-      ` ${paceVar} = 1`,
-      `@ ${paceReadyLabel}`,
-      `${timerVar} = ${paceVar}`,
+      ...(constantPace === undefined ? [
+        `${paceVar} = (${frames}) / ${FADE_STEPS}`,
+        `if ${paceVar} <> 0 then goto ${paceReadyLabel}`,
+        ` ${paceVar} = 1`,
+        `@ ${paceReadyLabel}`,
+        `${timerVar} = ${paceVar}`,
+      ] : [`${timerVar} = ${constantPace}`]),
       `${activeBit} = 1`,
       `@ ${skipLabel}`,
     ].join('\n') + '\n';
@@ -1176,7 +1183,9 @@ export default (Blockly) => {
     const checksForVar = (rawVar) => {
       const colorVarName = resolveFadeColorVar(rawVar);
       const timerVar = resolveVar(backgroundFadeTimerVarName(rawVar));
-      const paceVar = resolveVar(backgroundFadePaceVarName(rawVar));
+      // A fixed pace is loaded as a constant (an immediate operand) rather than read from a variable.
+      const constantPace = (this.fadeConstantPace || {})[rawVar];
+      const paceVar = constantPace === undefined ? resolveVar(backgroundFadePaceVarName(rawVar)) : `#${constantPace}`;
       const targetVar = resolveVar(backgroundFadeTargetVarName(rawVar));
       const tag = FADE_LABEL_TAG_BY_VAR[rawVar] || rawVar;
 

@@ -978,3 +978,18 @@ DPC+ kernel support, with Players 2 to 9 and a Background scroll colors block
   playfield resolution label no longer cut off. The pixel editor no longer shows pixels as filled that were not
   drawn when a stroke leaves the grid.
 - System variables for the background and playfield colors become constants when nothing changes them.
+
+=== 0.51.38 ===
+Text Minikernel on DPC+, and the standard kernel's text code moves out of the kernel bank
+
+- The Text Minikernel works with the DPC+ kernel: wrapped second row, the scroll cursor and custom text fonts. The
+  main screen is shortened by the lines the text takes, to a height the kernel can end cleanly (see
+  text-minikernel-files.js). A hidden score under DPC+ text is drawn in black. DPC+ is labelled Experimental in
+  the kernel dropdown.
+- On the standard kernel (16k and larger ROMs) the text drawing code and message data go in the bank below the kernel
+  bank (textbank), freeing space in the kernel bank.
+- The second text row is only compiled in when a block can show a message that wraps.
+- Title Screen variables can share a slot with the direction byte of a fired object that only gameplay fires.
+- Backgrounds are no longer padded when the Background tab opens, so changing pfres or the kernel never resizes them.
+- DPC+ background and animation previews build and center their sprite; whole-number row heights are used where a
+  block cannot divide by a fraction of a row.

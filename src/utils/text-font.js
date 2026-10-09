@@ -252,9 +252,11 @@ const nibbleBits = (row) => row.map((pixel) => pixel ? '1' : '0').join('');
  * card has ever written to storage), or if the bundled text12b.asm isn't
  * shaped as expected - either way, the caller keeps using the stock,
  * unmodified file.
+ * @param {?string} pristineSource The kernel file to start from, when it is not text12b.asm (DPC+ has a
+ *     single text12DPCplus.asm with the same glyph tables).
  * @return {!Promise<?string>}
  */
-export const buildTextFontOverride = async () => {
+export const buildTextFontOverride = async (pristineSource = null) => {
   let stored;
   try {
     stored = useTextFontStorage().value;
@@ -265,7 +267,7 @@ export const buildTextFontOverride = async () => {
   const glyphs = stored && stored.glyphs;
   if (!Array.isArray(glyphs) || glyphs.length !== TEXT_GLYPH_COUNT) return null;
 
-  const pristine = await getPristineText12b();
+  const pristine = pristineSource || await getPristineText12b();
   const leftStart = findLeftTextStart(pristine);
   const heightAt = leftStart >= 0 ? pristine.indexOf(HEIGHT_LABEL, leftStart) : -1;
   const rightStart = heightAt >= 0 ? pristine.indexOf(RIGHT_TABLE_LABEL, heightAt) : -1;

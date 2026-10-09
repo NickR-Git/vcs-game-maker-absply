@@ -3,7 +3,11 @@
 import {playfieldToMatrix} from '../../utils/pixels';
 import {useConfigurationStorage} from '../../hooks/project';
 import {fireObjectName} from '../../utils/fire-object';
-import {pfRowDivisorFor, MISSILE_BALL_PF_X_OFFSET} from '../../utils/playfield-coords';
+import {pfRowDivisorFor as exactRowDivisorFor, MISSILE_BALL_PF_X_OFFSET} from '../../utils/playfield-coords';
+
+// batari Basic can only multiply and divide by whole numbers, and with DPC+ a row is not always a whole number of
+// y steps, so the nearest whole number of steps is used.
+const pfRowDivisorFor = (config) => Math.max(1, Math.round(exactRowDivisorFor(config)));
 import {flagPoolVar, flagPoolBit} from './flag-pool';
 import {fadeFlagsVarName, fadeActiveBit, effectiveBackgroundRows} from '../../blocks/background';
 
@@ -277,19 +281,14 @@ export const ctrlpfShadowVarName = () => '_ctrlpf';
 export const missileWidthsVarName = () => '_missileWidths';
 // DPC+ only: which of a player's animation frames' graphics is in display RAM right now (0 = none), so a
 // frame already shown isn't copied in again every frame.
-export const dpcPlusShownVarName = (name) => `_${name}Shown`;
-export const dpcPlusColorShownVarName = (name) => `_${name}ColorShown`;
 export const reserveDpcPlusShownDevVars = (reserveDevVar, used, extraPlayers = []) => {
   if (!used) return;
-  ['player0', 'player1', ...extraPlayers.map((n) => `player${n}`)].forEach((name) =>
-    reserveDevVar(dpcPlusShownVarName(name), undefined, `Which ${name} animation frame's graphic is loaded (DPC+)`));
   // Players 2 to 9 are plain kernel sprites with no such state: their animation, frame and size/flip
   // live in variables of the same names the first two players use.
   extraPlayers.forEach((n) => {
     reserveDevVar(`player${n}animation`, undefined, `Which animation is playing on player${n} (DPC+)`);
     reserveDevVar(`player${n}frame`, undefined, `Which frame player${n} shows; 255 hides it (DPC+)`);
     reserveDevVar(`player${n}realcolor`, undefined, `player${n}'s color (DPC+)`);
-    reserveDevVar(dpcPlusColorShownVarName(`player${n}`), undefined, `Which color table player${n} uses (DPC+)`);
     reserveDevVar(`player${n}size`, undefined, `player${n}'s copies (bits 0-2), flip (bit 3) and animation flags (DPC+)`);
   });
 };
@@ -1848,6 +1847,18 @@ export const generateInertiaChecks = (Blockly) => {
 // site) - playerNsize's bits 4/5 (unlike 0-3, 6 - see bbasic.js's
 // processAnimation comment on the full layout) are otherwise unused, so
 // writing them for every OTHER property would be harmless but pointless.
+// DPC+ loads a player's graphic and color tables only when something changed, and bit 7 of the player's size
+// variable says they are loaded. A change of the animation or color has to clear it, and setting the value it
+// already has must not (the same block often runs every frame).
+const assignAndReload = (varName, valueCode) => {
+  if ((useConfigurationStorage().value || {}).kernel !== 'dpcplus') return `${varName} = ${valueCode}\n`;
+  const sizeVar = varName.replace(/(animation|realcolor)$/, 'size');
+  if (/^\s*\d+\s*$/.test(valueCode)) {
+    return `if ${varName} <> ${valueCode.trim()} then ${sizeVar}{7} = 0\n${varName} = ${valueCode}\n`;
+  }
+  return `temp1 = ${valueCode}\nif ${varName} <> temp1 then ${sizeVar}{7} = 0\n${varName} = temp1\n`;
+};
+
 const animationLoopBitsCode = (block, varName) => {
   const loopField = block.getField('LOOP');
   const loop = loopField ? block.getFieldValue('LOOP') === 'TRUE' : true;
@@ -1962,11 +1973,11 @@ export default (Blockly) => {
         const bitVarName = varName.replace('__', '').replace('_3_', '{3}');
         return `if ${argument0} then ${bitVarName} = 1 else ${bitVarName} = 0\n`;
       } else if (varName.endsWith('animation')) {
-        return `${varName} = ${argument0}\n` + animationLoopBitsCode(block, varName);
+        return assignAndReload(varName, argument0) + animationLoopBitsCode(block, varName);
       }
       // Players 2 to 9 are colored by a table in ROM per color, so each fixed color a block gives one is noted
       // (see generateAnimations); a color worked out while the game runs can not be shown on them.
-      const extraColor = /^(player[2-9])realcolor$/.exec(varName);
+      const extraColor = /^(player\d)realcolor$/.exec(varName);
       if (extraColor) {
         const literal = /^\s*(?:\$([0-9a-fA-F]{1,2})|(\d+))\s*$/.exec(argument0);
         if (literal) {
@@ -1975,6 +1986,7 @@ export default (Blockly) => {
           if (byte >= 0 && byte <= 255 && colors) (colors[extraColor[1]] = colors[extraColor[1]] || new Set()).add(byte);
         }
       }
+      if (extraColor && (useConfigurationStorage().value || {}).kernel === 'dpcplus') return assignAndReload(varName, argument0);
       // DPC+ counts a player's y in scanlines down to the sprite's top edge, the standard kernel in units of two
       // scanlines down to the sprite's bottom edge (line 2 * y + 4), and the DPC+ picture starts 4 lines higher, so
       // the same spot is 2 * y minus the sprite's height in lines.
@@ -1996,6 +2008,9 @@ export default (Blockly) => {
       const isNegativeConstant = /^\s*-\s*\d+\s*$/.test(argument0);
       const operator = isNegativeConstant ? '' : '+';
       const assignment = `${varName} = ${varName} ${operator} ${argument0}\n`;
+      if (varName.endsWith('animation') && (useConfigurationStorage().value || {}).kernel === 'dpcplus') {
+        return assignment + `${varName.replace('animation', 'size')}{7} = 0\n` + animationLoopBitsCode(block, varName);
+      }
       return varName.endsWith('animation') ? assignment + animationLoopBitsCode(block, varName) : assignment;
     };
   };
@@ -2029,7 +2044,7 @@ export default (Blockly) => {
       const varName = Blockly.BBasic.nameDB_.getName(
           `${resolvePlayerName(block)}animation`, Blockly.VARIABLE_CATEGORY_NAME);
       const index = block.getFieldValue('VAR') || '0';
-      return `${varName} = ${index}\n` + animationLoopBitsCode(block, varName);
+      return assignAndReload(varName, index) + animationLoopBitsCode(block, varName);
     };
 
     // Same assignment, for buildAnimationSetByIdBlock's VALUE-input sibling -
@@ -2038,7 +2053,7 @@ export default (Blockly) => {
       const varName = Blockly.BBasic.nameDB_.getName(
           `${resolvePlayerName(block)}animation`, Blockly.VARIABLE_CATEGORY_NAME);
       const argument0 = Blockly.BBasic.valueToCode(block, 'VALUE', Blockly.BBasic.ORDER_ASSIGNMENT) || '0';
-      return `${varName} = ${argument0}\n` + animationLoopBitsCode(block, varName);
+      return assignAndReload(varName, argument0) + animationLoopBitsCode(block, varName);
     };
 
     // One-step getter pairing with sprite_player_set_animation_id above -
@@ -2129,7 +2144,7 @@ export default (Blockly) => {
       const flagsVar = resolveVar(romNoiseFlagsVarName());
       // On DPC+ the animation only loads a frame's graphic when it changes, so it has to be told to load it again.
       const dpcPlus = (useConfigurationStorage().value || {}).kernel === 'dpcplus';
-      const reload = dpcPlus && name === 'player0' ? `${resolveVar(dpcPlusShownVarName(name))} = 0\n` : '';
+      const reload = dpcPlus && name === 'player0' ? `${name}size{7} = 0\n` : '';
       return `${flagsVar}{${romNoiseActiveBit(name)}} = 0\n${reload}`;
     };
 
